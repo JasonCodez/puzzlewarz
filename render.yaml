@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: kryptyk-labs-arg
+    env: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: "npm ci && npm run build"
+    startCommand: "npm run start"
+    autoDeploy: true
+    envVars:
+      # Add secrets in the Render dashboard instead of committing them here.
+      # - key: DATABASE_URL
+      #   sync: false
+      # - key: NEXTAUTH_URL
+      #   sync: false
+      # - key: NEXTAUTH_SECRET
+      #   sync: false
+
+# If you prefer a Docker-based deployment, replace the service above with a Docker service.
