@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate rankings with progress data
     const entries = await Promise.all(
-      users.map(async (user) => {
+      users.map(async (user: { id: string; name?: string | null; email?: string | null }) => {
         const progress = await prisma.userPuzzleProgress.findMany({
           where: { userId: user.id, solved: true },
           select: { pointsEarned: true },
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
           userName: user.name,
           email: user.email || "",
           puzzlesSolved: progress.length,
-          totalPoints: progress.reduce((sum, p) => sum + p.pointsEarned, 0),
+          totalPoints: progress.reduce((sum, p) => sum + (p.pointsEarned || 0), 0),
           rank: 0,
         };
       })

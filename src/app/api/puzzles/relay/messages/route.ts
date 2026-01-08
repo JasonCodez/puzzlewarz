@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'asc' },
     });
 
-    const formattedMessages = messages.map((msg: { id: string; userId: string; user?: { name?: string | null; email?: string | null }; message: string; createdAt: Date }) => ({
+    const formattedMessages = messages.map((msg: { id: string; userId?: string | null; user?: { name?: string | null; email?: string | null } | null; message: string; createdAt: Date }) => ({
       id: msg.id,
-      userId: msg.userId,
+      userId: msg.userId || undefined,
       userName: msg.user?.name || msg.user?.email || 'Unknown',
       message: msg.message,
       createdAt: msg.createdAt,

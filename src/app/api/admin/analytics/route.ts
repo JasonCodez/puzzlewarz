@@ -124,7 +124,7 @@ async function getUserEngagementStats() {
   });
 
   return users.map(
-    (u: { id: string; name: string | null; email: string; solvedPuzzles: { id: string }[] }) => ({
+    (u: { id: string; name: string | null; email: string | null; solvedPuzzles: { id: string }[] }) => ({
       userId: u.id,
       userName: u.name || u.email || "Unknown",
       puzzlesSolved: u.solvedPuzzles.length,
@@ -188,9 +188,9 @@ async function getTopSolvers() {
   });
 
   return topSolvers.map(
-    (u: { id: string; name: string | null; email: string; image: string | null; solvedPuzzles: { id: string }[] }) => ({
+    (u: { id: string; name: string | null; email: string | null; image: string | null; solvedPuzzles: { id: string }[] }) => ({
       userId: u.id,
-      userName: u.name || u.email,
+      userName: u.name || u.email || "Unknown",
       userImage: u.image,
       puzzlesSolved: u.solvedPuzzles.length,
     })
@@ -219,14 +219,14 @@ async function getRecentActivity() {
   return recentSolves.map(
     (s: {
       id: string;
-      user: { name?: string | null; email: string };
+      user: { name?: string | null; email?: string | null } | null;
       puzzle: { title: string };
-      solvedAt: Date;
+      solvedAt: Date | null;
     }) => ({
       id: s.id,
-      userName: s.user.name || s.user.email,
+      userName: s.user?.name || s.user?.email || "Unknown",
       puzzleTitle: s.puzzle.title,
-      solvedAt: s.solvedAt,
+      solvedAt: s.solvedAt || new Date(0),
     })
   );
 }
