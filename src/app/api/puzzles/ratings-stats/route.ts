@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Calculate average
-    const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
+    const sum = ratings.reduce((acc: number, r: { rating: number }) => acc + r.rating, 0);
     const average = sum / ratings.length;
 
     // Calculate distribution
