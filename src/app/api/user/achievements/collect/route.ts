@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
           .sort()
           .reverse();
 
-        const uniqueDates = [...new Set(solvedDates)].map((d: string) => new Date(d));
+        const uniqueDates = Array.from(new Set(solvedDates)).map((d) => new Date(d));
         
         if (uniqueDates.length > 0) {
           const today = new Date();
