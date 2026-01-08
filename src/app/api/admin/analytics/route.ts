@@ -147,7 +147,7 @@ async function getCategoryStats() {
   });
 
   const categoryIds = stats
-    .map((s) => s.categoryId)
+    .map((s: any) => s.categoryId)
     .filter((id) => id !== null) as string[];
   const categories = await prisma.puzzleCategory.findMany({
     where: { id: { in: categoryIds } },
