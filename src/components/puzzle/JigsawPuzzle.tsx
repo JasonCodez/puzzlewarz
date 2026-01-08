@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import gsap from "gsap";
 
 interface EdgeMap {
   top: number;
@@ -55,7 +56,8 @@ interface JigsawPuzzleSVGWithTrayProps {
   cornerInset?: number;
   smooth?: number;
   containerStyle?: React.CSSProperties;
-  onComplete?: (timeSpentSeconds?: number) => void;
+  onComplete?: (timeSpentSeconds?: number) => Promise<number | void> | number | void;
+  onShowRatingModal?: () => void;
 }
 
 interface Piece {
@@ -543,15 +545,22 @@ export default function JigsawPuzzleSVGWithTray({
   cornerInset = 0.05,
   smooth = 0.55,
   onComplete,
+  onShowRatingModal,
   containerStyle = {},
 }: JigsawPuzzleSVGWithTrayProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const shimmerOuterRef = useRef<HTMLDivElement>(null);
+  const shimmerInnerRef = useRef<HTMLDivElement>(null);
+  const messageRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(1);
   const [wrapperWidth, setWrapperWidth] = useState<number | null>(null);
   const [isStacked, setIsStacked] = useState<boolean>(false);
   const startTimeRef = useRef<number>(Date.now());
   const completedRef = useRef<boolean>(false);
+  const [showCongrats, setShowCongrats] = useState(false);
+  const [awardedPoints, setAwardedPoints] = useState<number | null>(null);
 
   const pieceW = boardWidth / cols;
   const pieceH = boardHeight / rows;
@@ -939,17 +948,143 @@ export default function JigsawPuzzleSVGWithTray({
   }, [pieces]);
 
   React.useEffect(() => {
-    if (solved && onComplete && !completedRef.current) {
-      completedRef.current = true;
-      const elapsedSeconds = Math.max(0, Math.round((Date.now() - startTimeRef.current) / 1000));
+    if (!solved || completedRef.current) return;
+    completedRef.current = true;
+    const elapsedSeconds = Math.max(0, Math.round((Date.now() - startTimeRef.current) / 1000));
+
+    const runCompletion = async () => {
       try {
-        onComplete(elapsedSeconds);
+        const boardEl = boardRef.current;
+        const stageEl = stageRef.current;
+        const shimmerOuter = shimmerOuterRef.current;
+        const shimmerInner = shimmerInnerRef.current;
+        const messageEl = messageRef.current;
+
+        console.log('[Jigsaw] runCompletion start');
+        console.log('[Jigsaw] refs', { boardEl, shimmerOuter, shimmerInner, messageEl });
+        const tl = gsap.timeline({ defaults: { ease: 'power2.inOut' } });
+
+        // Prefer applying glow to the stage so it won't be clipped by board overflow or transforms
+        if (stageEl) {
+          const prevOverflow = stageEl.style.overflow;
+          stageEl.style.overflow = 'visible';
+          tl.to(stageEl, { borderColor: '#FFD700', boxShadow: '0 0 60px 20px rgba(255,215,0,0.95)', duration: 0.9 });
+          tl.to(stageEl, { boxShadow: '0 0 0 0 rgba(255,215,0,0)', borderColor: 'rgba(255,255,255,0.14)', duration: 0.6 }, '+=0.15');
+          tl.call(() => { stageEl.style.overflow = prevOverflow; });
+        } else if (boardEl) {
+          tl.to(boardEl, { borderColor: '#FFD700', boxShadow: '0 0 40px 12px rgba(255,215,0,0.95)', duration: 0.8 });
+          tl.to(boardEl, { boxShadow: '0 0 0 0 rgba(255,215,0,0)', borderColor: 'rgba(255,255,255,0.14)', duration: 0.6 }, '+=0.15');
+        }
+
+        if (shimmerOuter && shimmerInner) {
+          shimmerOuter.style.zIndex = '50';
+          shimmerOuter.style.pointerEvents = 'none';
+          // Start shimmer after the glow finishes so it fully traverses the stage
+          tl.set(shimmerOuter, { autoAlpha: 1 });
+          // use xPercent animation for reliable motion across transforms and ensure it fully enters/exits
+          tl.fromTo(shimmerInner, { xPercent: -200 }, { xPercent: 200, duration: 1.2, ease: 'power2.inOut' });
+          // fade shimmer out after pass
+          tl.to(shimmerOuter, { autoAlpha: 0, duration: 0.18 }, '>-0.02');
+        }
+
+        // play timeline and wait
+        tl.play();
+        await new Promise((resolve) => tl.eventCallback('onComplete', resolve));
+
+        // Debug: verify overlays are visible; if not, force them and log
+        try {
+          const computedShimmerOpacity = shimmerOuter ? window.getComputedStyle(shimmerOuter).opacity : null;
+          const computedMessageOpacity = messageEl ? window.getComputedStyle(messageEl).opacity : null;
+          console.log('[Jigsaw] post-animation computed opacities', { computedShimmerOpacity, computedMessageOpacity });
+          if (shimmerOuter && (computedShimmerOpacity === '0' || computedShimmerOpacity === null)) {
+            console.warn('[Jigsaw] shimmerOuter still hidden — forcing visibility');
+            shimmerOuter.style.opacity = '1';
+            shimmerOuter.style.zIndex = '50';
+            shimmerOuter.style.pointerEvents = 'none';
+          }
+          if (stageEl) {
+            // fallback glow on stage (not clipped)
+            stageEl.style.boxShadow = '0 0 40px 12px rgba(255,215,0,0.95)';
+            setTimeout(() => {
+              if (stageEl) stageEl.style.boxShadow = '';
+            }, 900);
+          } else if (boardEl) {
+            boardEl.style.boxShadow = '0 0 40px 12px rgba(255,215,0,0.95)';
+            setTimeout(() => {
+              if (boardEl) {
+                boardEl.style.boxShadow = '';
+                boardEl.style.borderColor = 'rgba(255,255,255,0.14)';
+              }
+            }, 900);
+          }
+          if (messageEl && (computedMessageOpacity === '0' || computedMessageOpacity === null)) {
+            console.warn('[Jigsaw] messageEl still hidden — forcing visibility');
+            messageEl.style.opacity = '1';
+          }
+        } catch (dbgErr) {
+          console.error('[Jigsaw] debug/fallback error:', dbgErr);
+        }
+
+        // Call parent's onComplete to record progress/award points and await result if it returns one
+        let pointsResult: number | void | undefined = undefined;
+        if (onComplete) {
+          try {
+            const res = onComplete(elapsedSeconds);
+            pointsResult = res instanceof Promise ? await res : res;
+          } catch (err) {
+            console.error('Jigsaw onComplete handler error:', err);
+          }
+        }
+
+        setAwardedPoints(typeof pointsResult === 'number' ? pointsResult : null);
+
+        // Show congrats message
+        setShowCongrats(true);
+        if (messageEl) {
+          gsap.fromTo(
+            messageEl,
+            { autoAlpha: 0, y: 8 },
+            { autoAlpha: 1, y: 0, duration: 0.6, ease: 'power2.out' }
+          );
+        }
+
+        // Wait a moment so user can read message,
+        // then gracefully fade the congrats overlay out before opening the modal
+        await new Promise((r) => setTimeout(r, 1700));
+        if (messageEl) {
+          try {
+            await new Promise<void>((resolve) => {
+              gsap.to(messageEl, {
+                autoAlpha: 0,
+                y: 8,
+                duration: 0.45,
+                ease: 'power2.in',
+                onComplete: () => resolve(),
+              });
+            });
+          } catch (e) {
+            // ignore animation errors and proceed
+          }
+        }
+        // hide internal state so the overlay is removed from DOM flow
+        setShowCongrats(false);
+        if (onShowRatingModal) onShowRatingModal();
       } catch (err) {
-        // swallow errors from parent handler
-        console.error('Jigsaw onComplete handler error:', err);
+        console.error('Error during completion animation:', err);
+        // Fallback: still call onComplete if not called
+        if (onComplete) {
+          try {
+            onComplete(elapsedSeconds);
+          } catch (e) {
+            console.error('Fallback onComplete failed:', e);
+          }
+        }
+        if (onShowRatingModal) onShowRatingModal();
       }
-    }
-  }, [solved, onComplete]);
+    };
+
+    runCompletion();
+  }, [solved, onComplete, onShowRatingModal]);
 
   const sendLooseToTray = () => {
     setPieces((prev) => {
@@ -1074,6 +1209,7 @@ export default function JigsawPuzzleSVGWithTray({
       >
         {/* BOARD */}
         <div
+          ref={boardRef}
           style={{
             position: "absolute",
             left: boardLeft,
@@ -1096,6 +1232,25 @@ export default function JigsawPuzzleSVGWithTray({
               pointerEvents: "none",
             }}
           />
+          {/* Shimmer overlay (hidden until completion) */}
+          <div
+            ref={shimmerOuterRef}
+            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0 }}
+          >
+              <div
+                ref={shimmerInnerRef}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: '60%',
+                  height: '100%',
+                  background: 'linear-gradient(90deg, rgba(255,215,0,0) 0%, rgba(255,215,0,0.92) 52%, rgba(255,215,0,0) 100%)',
+                  transform: 'skewX(-20deg)',
+                  willChange: 'transform, opacity'
+                }}
+              />
+          </div>
         </div>
 
         {/* TRAY */}
@@ -1196,6 +1351,29 @@ export default function JigsawPuzzleSVGWithTray({
           Send loose to tray
         </button>
 
+      </div>
+      {/* Large congrats overlay at wrapper level (centered and prominent) */}
+      <div
+        ref={messageRef}
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: '100%',
+          height: '100%',
+          display: 'grid',
+          placeItems: 'center',
+          pointerEvents: 'none',
+          zIndex: 9999,
+          opacity: 0,
+        }}
+      >
+        <div style={{ background: 'rgba(0,0,0,0.7)', padding: '20px 28px', borderRadius: 14, textAlign: 'center', maxWidth: 'min(720px, 90%)' }}>
+          <div style={{ color: '#FDE74C', fontSize: 24, fontWeight: 800, marginBottom: 8 }}>Congratulations! Puzzle completed!</div>
+          <div style={{ color: '#DDDBF1', fontSize: 16 }}>
+            You've been awarded <span style={{ color: '#FDE74C', fontWeight: 800 }}>{awardedPoints ?? '...'}</span> points!
+          </div>
+        </div>
       </div>
     </div>
   );

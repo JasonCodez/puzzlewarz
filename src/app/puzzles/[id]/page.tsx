@@ -735,18 +735,31 @@ export default function PuzzleDetailPage() {
                       rows={jigsawPlayable.data.gridRows}
                       cols={jigsawPlayable.data.gridCols}
                       onComplete={async (timeSpentSeconds?: number) => {
+                        // Return awarded points to the caller so the puzzle component can display them
+                        const prevPoints = progress?.pointsEarned || 0;
                         try {
-                          await fetch(`/api/puzzles/${puzzleId}/progress`, {
+                          const resp = await fetch(`/api/puzzles/${puzzleId}/progress`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ action: 'attempt_success', durationSeconds: timeSpentSeconds || 0 }),
                           });
+
+                          if (resp.ok) {
+                            const updated = await resp.json();
+                            setProgress(updated);
+                            setSuccess(true);
+                            const newPoints = updated?.pointsEarned ?? prevPoints;
+                            const pointsAwarded = Math.max(0, newPoints - prevPoints);
+                            return pointsAwarded;
+                          }
                         } catch (err) {
                           console.error('Failed to log jigsaw success:', err);
                         }
+                        // Fallback: still mark success but return 0
                         setSuccess(true);
-                        setShowRatingModal(true);
+                        return 0;
                       }}
+                      onShowRatingModal={() => setShowRatingModal(true)}
                     />
                   </div>
                 )}
