@@ -152,7 +152,7 @@ async function getCategoryStats() {
 
   const categoryIds = stats
     .map((s: { categoryId: string | null; _count: number }) => s.categoryId)
-    .filter((id) => id !== null) as string[];
+    .filter((id): id is string => id !== null);
   const categories = await prisma.puzzleCategory.findMany({
     where: { id: { in: categoryIds } },
     select: { id: true, name: true },
