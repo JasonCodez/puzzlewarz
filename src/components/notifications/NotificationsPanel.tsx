@@ -2,7 +2,15 @@
 
 import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Activity } from "@prisma/client";
+
+// Local Activity type — Prisma does not export `Activity` here.
+interface Activity {
+  id: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  createdAt: string | Date;
+}
 import {
   X,
   CheckCircle,
