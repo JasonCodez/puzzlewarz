@@ -1044,7 +1044,7 @@ export default function JigsawPuzzleSVGWithTray({
           gsap.fromTo(
             messageEl,
             { autoAlpha: 0, y: 8 },
-            { autoAlpha: 1, y: 0, duration: 0.6, ease: 'power2.out' }
+            { autoAlpha: 1, y: 0, duration: 1.0, ease: 'power2.out' }
           );
         }
 

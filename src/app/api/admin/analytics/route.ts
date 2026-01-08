@@ -95,7 +95,7 @@ async function getPuzzleStats() {
     take: 5,
   });
 
-  return puzzles.map((p) => ({
+  return puzzles.map((p: any) => ({
     id: p.id,
     title: p.title,
     difficulty: p.difficulty,
