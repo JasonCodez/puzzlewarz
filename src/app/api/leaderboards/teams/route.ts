@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
         // Get progress for all team members
         const allProgress = await prisma.userPuzzleProgress.findMany({
           where: {
-            userId: { in: members.map((m) => m.userId) },
+            userId: { in: members.map((m: { userId: string }) => m.userId) },
             solved: true,
           },
           select: { pointsEarned: true },
