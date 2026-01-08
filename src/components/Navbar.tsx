@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import MessagesBell from "@/components/notifications/MessagesBell";
 
 function Hamburger({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
   return (
@@ -126,6 +127,7 @@ export default function Navbar() {
             {session && !loading ? (
               <>
                 <NotificationBell />
+                <MessagesBell />
                 {userInfo?.image && (
                   <img
                     src={userInfo.image}
@@ -199,6 +201,7 @@ export default function Navbar() {
           {session && !loading && (
             <div className="mt-auto flex items-center gap-3 border-t border-brand-teal pt-4">
               <NotificationBell />
+              <MessagesBell />
               {userInfo?.image && (
                 <img
                   src={userInfo.image}

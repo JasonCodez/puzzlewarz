@@ -18,23 +18,17 @@ export default function InviteTeamModal({
   onClose,
   onSuccess,
 }: InviteTeamModalProps) {
-  const [emails, setEmails] = useState<string[]>([""]);
+  const [names, setNames] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const addEmailField = () => {
-    setEmails([...emails, ""]);
-  };
-
-  const removeEmailField = (index: number) => {
-    setEmails(emails.filter((_, i) => i !== index));
-  };
-
-  const updateEmail = (index: number, value: string) => {
-    const newEmails = [...emails];
-    newEmails[index] = value;
-    setEmails(newEmails);
+  const addNameField = () => setNames([...names, ""]);
+  const removeNameField = (index: number) => setNames(names.filter((_, i) => i !== index));
+  const updateName = (index: number, value: string) => {
+    const newNames = [...names];
+    newNames[index] = value;
+    setNames(newNames);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,9 +36,9 @@ export default function InviteTeamModal({
     setError("");
     setSuccess("");
 
-    const validEmails = emails.filter((email) => email.trim().length > 0);
-    if (validEmails.length === 0) {
-      setError("Please enter at least one email address");
+    const validNames = names.filter((n) => n.trim().length > 0);
+    if (validNames.length === 0) {
+      setError("Please enter at least one display name");
       return;
     }
 
@@ -53,10 +47,7 @@ export default function InviteTeamModal({
       const response = await fetch("/api/teams/invitations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          teamId,
-          userEmails: validEmails,
-        }),
+        body: JSON.stringify({ teamId, userNames: validNames }),
       });
 
       const data = await response.json();
@@ -67,7 +58,7 @@ export default function InviteTeamModal({
       }
 
       setSuccess(`Successfully sent ${data.count} invitation(s)`);
-      setEmails([""]);
+      setNames([""]);
       setTimeout(() => {
         onClose();
         onSuccess?.();
@@ -147,30 +138,28 @@ export default function InviteTeamModal({
 
             {/* Email Fields */}
             <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-300">
-                Email Addresses
-              </label>
-              {emails.map((email, index) => (
-                <div key={index} className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => updateEmail(index, e.target.value)}
-                      placeholder="user@example.com"
-                      className="w-full pl-9 pr-4 py-2 rounded-lg text-white placeholder-gray-500 transition-colors"
-                      style={{
-                        backgroundColor: "rgba(56, 145, 166, 0.1)",
-                        borderColor: "#3891A6",
-                        borderWidth: "1px",
-                      }}
-                    />
-                  </div>
-                  {emails.length > 1 && (
+              <label className="block text-sm font-medium text-gray-300">Display Names</label>
+                {names.map((name, index) => (
+                  <div key={index} className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => updateName(index, e.target.value)}
+                        placeholder="Display name (exact)"
+                        className="w-full pl-9 pr-4 py-2 rounded-lg text-white placeholder-gray-500 transition-colors"
+                        style={{
+                          backgroundColor: "rgba(56, 145, 166, 0.1)",
+                          borderColor: "#3891A6",
+                          borderWidth: "1px",
+                        }}
+                      />
+                    </div>
+                  {names.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeEmailField(index)}
+                        onClick={() => removeNameField(index)}
                       className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-red-400"
                     >
                       <X className="w-5 h-5" />
@@ -181,13 +170,8 @@ export default function InviteTeamModal({
             </div>
 
             {/* Add Email Button */}
-            <button
-              type="button"
-              onClick={addEmailField}
-              className="text-sm font-medium transition-colors hover:text-blue-400"
-              style={{ color: "#3891A6" }}
-            >
-              + Add Another Email
+            <button type="button" onClick={addNameField} className="text-sm font-medium transition-colors hover:text-blue-400" style={{ color: "#3891A6" }}>
+              + Add Another Display Name
             </button>
 
             {/* Info Text */}

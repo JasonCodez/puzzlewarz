@@ -69,7 +69,8 @@ export async function GET(request: NextRequest) {
 // POST - Send team invitations
 const InviteSchema = z.object({
   teamId: z.string(),
-  userEmails: z.array(z.string().email()).min(1),
+  // Accept display names (unique per product assumption)
+  userNames: z.array(z.string().min(1)).min(1),
 });
 
 export async function POST(request: NextRequest) {
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { teamId, userEmails } = InviteSchema.parse(body);
+    const { teamId, userNames } = InviteSchema.parse(body);
 
     // Verify user is a team admin
     const teamMember = await prisma.teamMember.findUnique({
@@ -113,9 +114,11 @@ export async function POST(request: NextRequest) {
 
     // Find or create users and send invitations
     const invitations = [];
-    for (const email of userEmails) {
-      const invitedUser = await prisma.user.findUnique({
-        where: { email },
+    for (const name of userNames) {
+      // Find user by display name. Using findFirst because `name` is not enforced unique in Prisma schema,
+      // but the product assumes display names are unique.
+      const invitedUser = await prisma.user.findFirst({
+        where: { name },
       });
 
       if (!invitedUser) {
