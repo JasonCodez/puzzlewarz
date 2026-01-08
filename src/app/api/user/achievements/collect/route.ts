@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         where: { userId: user.id },
         select: { solved: true, attempts: true },
       });
-      const firstTrySolves = userPuzzleProgress.filter(p => p.solved && p.attempts === 1).length;
+      const firstTrySolves = userPuzzleProgress.filter((p: { solved?: boolean; attempts?: number }) => p.solved && p.attempts === 1).length;
       
       if (firstTrySolves < (achievement.conditionValue || 1)) {
         return NextResponse.json(
