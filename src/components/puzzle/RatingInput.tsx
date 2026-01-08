@@ -4,7 +4,7 @@ import React, { useState } from "react";
 
 interface RatingInputProps {
   puzzleId: string;
-  onSubmit?: (rating: number, review: string) => Promise<void>;
+  onSubmit?: (rating: number, review: string, pointsAwarded?: number) => Promise<void> | void;
   onCancel?: () => void;
   initialRating?: number;
   initialReview?: string;
@@ -52,10 +52,12 @@ export function RatingInput({
         const data = await response.json();
         throw new Error(data.error || "Failed to submit rating");
       }
+      const data = await response.json();
+      const pts = data?.pointsAwarded || 0;
 
       setSuccess(true);
       setTimeout(() => {
-        onSubmit?.(selectedRating, review);
+        onSubmit?.(selectedRating, review, pts);
       }, 500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit rating");

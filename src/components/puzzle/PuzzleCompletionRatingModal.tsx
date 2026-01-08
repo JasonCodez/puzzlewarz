@@ -18,6 +18,7 @@ export default function PuzzleCompletionRatingModal({
   onSubmit,
 }: PuzzleCompletionRatingModalProps) {
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [awardedPoints, setAwardedPoints] = useState<number | null>(null);
 
   const handleRatingSubmitted = () => {
     setIsSubmitted(true);
@@ -81,6 +82,9 @@ export default function PuzzleCompletionRatingModal({
               }}
             >
               ✓ Thanks for your rating!
+              {awardedPoints ? (
+                <div style={{ marginTop: 6, color: '#FDE74C', fontWeight: 700 }}>+{awardedPoints} points awarded</div>
+              ) : null}
             </div>
           )}
 
@@ -95,7 +99,10 @@ export default function PuzzleCompletionRatingModal({
               </p>
               <RatingInput
                 puzzleId={puzzleId}
-                onSubmit={async (rating, review) => {
+                onSubmit={async (rating, review, pointsAwarded) => {
+                  if (typeof pointsAwarded === 'number' && pointsAwarded > 0) {
+                    setAwardedPoints(pointsAwarded);
+                  }
                   handleRatingSubmitted();
                 }}
               />

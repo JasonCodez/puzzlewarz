@@ -264,6 +264,44 @@ export async function POST(
           });
         }
 
+          // Award points for solving the puzzle
+          try {
+            // Fetch puzzle with solutions/parts to derive point value (avoid relying on a non-existent `pointsReward` field)
+            const puzzleRecord = await prisma.puzzle.findUnique({
+              where: { id },
+              include: { solutions: true, parts: true },
+            });
+
+            let awardPoints = 100;
+            if (puzzleRecord) {
+              if (puzzleRecord.solutions && puzzleRecord.solutions.length > 0) {
+                awardPoints = puzzleRecord.solutions[0].points ?? awardPoints;
+              } else if (puzzleRecord.parts && puzzleRecord.parts.length > 0) {
+                // Sum part point values as a fallback for multi-part puzzles
+                awardPoints = puzzleRecord.parts.reduce((sum, part) => sum + (part.pointsValue ?? 0), 0) || awardPoints;
+              }
+            }
+
+            // Update user's progress points
+            await prisma.userPuzzleProgress.update({
+              where: { id: progress.id },
+              data: { pointsEarned: { increment: awardPoints } },
+            });
+
+            // Update or create global leaderboard entry
+            const existingLeaderboard = await prisma.globalLeaderboard.findFirst({ where: { userId: user.id } });
+            if (existingLeaderboard) {
+              await prisma.globalLeaderboard.update({
+                where: { id: existingLeaderboard.id },
+                data: { totalPoints: { increment: awardPoints } },
+              });
+            } else {
+              await prisma.globalLeaderboard.create({ data: { userId: user.id, totalPoints: awardPoints } });
+            }
+          } catch (err) {
+            console.error('Failed to award points on puzzle success:', err);
+          }
+
         break;
     }
 

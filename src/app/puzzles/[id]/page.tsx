@@ -375,23 +375,7 @@ export default function PuzzleDetailPage() {
           setShowSolvedMessage(false);
           setShowRatingModal(true);
         }, 1500);
-          }),
-        });
 
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to validate Sudoku");
-        }
-
-        const data = await response.json();
-        if (!data.isCorrect) {
-          setError("Sudoku is not completely or correctly solved. Please check for errors.");
-          setSubmitting(false);
-          return;
-        }
-
-        setSuccess(true);
-        
         // Submit for points (using a dummy answer string for Sudoku)
         try {
           const submitResponse = await fetch("/api/puzzles/submit", {
@@ -433,13 +417,6 @@ export default function PuzzleDetailPage() {
         }
 
         setShowRatingModal(true);
-      }
-    } catch (err) {
-      setError("An error occurred. Please try again.");
-      console.error(err);
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -757,6 +734,19 @@ export default function PuzzleDetailPage() {
                       imageUrl={jigsawPlayable.imageUrl}
                       rows={jigsawPlayable.data.gridRows}
                       cols={jigsawPlayable.data.gridCols}
+                      onComplete={async (timeSpentSeconds?: number) => {
+                        try {
+                          await fetch(`/api/puzzles/${puzzleId}/progress`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'attempt_success', durationSeconds: timeSpentSeconds || 0 }),
+                          });
+                        } catch (err) {
+                          console.error('Failed to log jigsaw success:', err);
+                        }
+                        setSuccess(true);
+                        setShowRatingModal(true);
+                      }}
                     />
                   </div>
                 )}

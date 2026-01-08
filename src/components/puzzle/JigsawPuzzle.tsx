@@ -54,7 +54,8 @@ interface JigsawPuzzleSVGWithTrayProps {
   shoulderDepth?: number;
   cornerInset?: number;
   smooth?: number;
-  onComplete?: () => void;
+  containerStyle?: React.CSSProperties;
+  onComplete?: (timeSpentSeconds?: number) => void;
 }
 
 interface Piece {
@@ -421,8 +422,7 @@ function JigsawPiece({
     [pieceW, pieceH, edges]
   );
 
-  // Drag scale effect with Framer Motion
-  const scale = isDragging ? 1.12 : 1;
+  // NOTE: removed drag scale animation — pieces no longer scale on pick/drop
 
   // Gold border animation state
   const [showGold, setShowGold] = useState(false);
@@ -460,7 +460,7 @@ function JigsawPiece({
   }, [snapped]);
 
   return (
-    <motion.div
+    <div
       style={{
         position: "absolute",
         left: pos.x,
@@ -471,9 +471,8 @@ function JigsawPiece({
         userSelect: "none",
         filter: !snapped && pos.x > boardW ? "drop-shadow(0px 14px 22px rgba(0,0,0,0.45))" : undefined,
         pointerEvents: snapped ? "none" : "auto",
+        transform: 'scale(1)'
       }}
-      animate={{ scale }}
-      transition={{ type: "spring", stiffness: 420, damping: 32 }}
     >
       <svg
         width={pieceW}
@@ -520,7 +519,7 @@ function JigsawPiece({
         )}
         <path d={d} fill="none" stroke="transparent" strokeWidth={16} style={{ pointerEvents: "none" }} />
       </svg>
-    </motion.div>
+    </div>
   );
 }
 
@@ -544,10 +543,15 @@ export default function JigsawPuzzleSVGWithTray({
   cornerInset = 0.05,
   smooth = 0.55,
   onComplete,
+  containerStyle = {},
 }: JigsawPuzzleSVGWithTrayProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(1);
+  const [wrapperWidth, setWrapperWidth] = useState<number | null>(null);
+  const [isStacked, setIsStacked] = useState<boolean>(false);
+  const startTimeRef = useRef<number>(Date.now());
+  const completedRef = useRef<boolean>(false);
 
   const pieceW = boardWidth / cols;
   const pieceH = boardHeight / rows;
@@ -557,14 +561,16 @@ export default function JigsawPuzzleSVGWithTray({
   // |  [ board ]   [ tray ]         |
   // +-------------------------------+
   const trayWidth = Math.round(boardWidth * 0.95);
-  const stageWidth = boardWidth + trayWidth;
-  const stageHeight = boardHeight;
+
+  // When the available wrapper width is small, stack the tray below the board
+  const stageWidth = isStacked ? Math.max(boardWidth, trayWidth) : boardWidth + trayWidth;
+  const stageHeight = isStacked ? boardHeight + trayHeight : boardHeight;
 
   const boardLeft = 0;
   const boardTop = 0;
 
-  const trayLeft = boardLeft + boardWidth;
-  const trayTop = boardTop;
+  const trayLeft = isStacked ? 0 : boardLeft + boardWidth;
+  const trayTop = isStacked ? boardTop + boardHeight : boardTop;
 
   const edgesMap = useMemo(() => buildEdges(rows, cols), [rows, cols]);
 
@@ -621,6 +627,14 @@ export default function JigsawPuzzleSVGWithTray({
   ]);
 
   const [pieces, setPieces] = useState(initialPieces);
+  // Reset pieces when initialPieces changes (e.g., layout switches stacked vs side-by-side)
+  // Initialize pieces when core puzzle inputs change (rows/cols/image).
+  // Avoid resetting pieces on layout/scale changes to prevent mid-play resets.
+  React.useEffect(() => {
+    setPieces(initialPieces);
+    completedRef.current = false;
+    startTimeRef.current = Date.now();
+  }, [rows, cols, imageUrl]);
   // Track which group is currently being dragged (for consistent re-render)
   const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
 
@@ -681,7 +695,7 @@ export default function JigsawPuzzleSVGWithTray({
 
   const translateGroup: TranslateGroupFn = (arr, groupId, dx, dy) =>
     arr.map((p) =>
-      p.groupId === groupId ? { ...p, pos: { x: p.pos.x + dx, y: p.pos.y + dy }, snapped: false } : p
+      p.groupId === groupId ? { ...p, pos: { x: p.pos.x + dx, y: p.pos.y + dy } } : p
     );
 
   interface MergeGroupsFn {
@@ -689,7 +703,15 @@ export default function JigsawPuzzleSVGWithTray({
   }
 
   const mergeGroups: MergeGroupsFn = (arr, aGroup, bGroup) =>
-    aGroup === bGroup ? arr : arr.map((p) => (p.groupId === bGroup ? { ...p, groupId: aGroup, snapped: false } : p));
+    aGroup === bGroup
+      ? arr
+      : (() => {
+          // If the target group (aGroup) is snapped, keep merged pieces snapped as well.
+          const aGroupSnapped = arr.some((p) => p.groupId === aGroup && p.snapped);
+          return arr.map((p) =>
+            p.groupId === bGroup ? { ...p, groupId: aGroup, snapped: aGroupSnapped || p.snapped } : p
+          );
+        })();
 
   interface NeighborIdFn {
     (row: number, col: number): string | null;
@@ -794,11 +816,15 @@ export default function JigsawPuzzleSVGWithTray({
     if (anchor.snapped) return;
 
     const rect: DOMRect = el.getBoundingClientRect();
-    const px: number = e.clientX - rect.left;
-    const py: number = e.clientY - rect.top;
+    const px: number = (e.clientX - rect.left) / scale;
+    const py: number = (e.clientY - rect.top) / scale;
 
     const groupId: string = anchor.groupId;
     const groupIds: string[] = getGroupPieceIds(current, groupId);
+
+    // Prevent dragging an entire group if any piece in the group is snapped to the board
+    const groupPieces = current.filter((p) => p.groupId === groupId);
+    if (groupPieces.some((p) => p.snapped)) return;
 
     const startPositions: Map<string, PiecePosition> = new Map();
     for (const id of groupIds) {
@@ -838,8 +864,8 @@ export default function JigsawPuzzleSVGWithTray({
     if (!el) return;
 
     const rect: DOMRect = el.getBoundingClientRect();
-    const px: number = e.clientX - rect.left;
-    const py: number = e.clientY - rect.top;
+    const px: number = (e.clientX - rect.left) / scale;
+    const py: number = (e.clientY - rect.top) / scale;
 
     const groupId: string | null = dragRef.current.groupId;
     const anchorId: string | null = dragRef.current.anchorPieceId;
@@ -902,6 +928,8 @@ export default function JigsawPuzzleSVGWithTray({
 
   const groupsCount = useMemo(() => new Set(pieces.map((p) => p.groupId)).size, [pieces]);
 
+  
+
   const solved = useMemo(() => {
     const g = pieces[0]?.groupId;
     if (!g) return false;
@@ -909,9 +937,19 @@ export default function JigsawPuzzleSVGWithTray({
     const eps = 0.8;
     return pieces.every((p) => hypot(p.pos.x - p.correct.x, p.pos.y - p.correct.y) <= eps);
   }, [pieces]);
-    if (solved && onComplete) {
-      onComplete();
+
+  React.useEffect(() => {
+    if (solved && onComplete && !completedRef.current) {
+      completedRef.current = true;
+      const elapsedSeconds = Math.max(0, Math.round((Date.now() - startTimeRef.current) / 1000));
+      try {
+        onComplete(elapsedSeconds);
+      } catch (err) {
+        // swallow errors from parent handler
+        console.error('Jigsaw onComplete handler error:', err);
+      }
     }
+  }, [solved, onComplete]);
 
   const sendLooseToTray = () => {
     setPieces((prev) => {
@@ -971,11 +1009,19 @@ export default function JigsawPuzzleSVGWithTray({
 
     const update = () => {
       const wrapperW = wrapper.clientWidth || 0;
+      setWrapperWidth(wrapperW || null);
+
+      // decide stacked layout: stack when wrapper width is less than 1200px
+      const wouldStack = wrapperW > 0 ? wrapperW < 1200 : false;
+      setIsStacked(wouldStack);
+
       const vw = typeof window !== 'undefined' ? window.innerWidth : wrapperW;
       // allow scaling down normally, but do not shrink beyond MIN_VIEWPORT
       const effectiveW = Math.max(wrapperW, Math.min(vw, MIN_VIEWPORT));
-      if (!effectiveW) return;
-      const next = Math.min(1, effectiveW / stageWidth);
+
+      const effectiveStageWidth = wouldStack ? Math.max(boardWidth, trayWidth) : boardWidth + trayWidth;
+      if (!effectiveW || !effectiveStageWidth) return;
+      const next = Math.min(1, effectiveW / effectiveStageWidth);
       setScale(next);
     };
 
@@ -987,10 +1033,21 @@ export default function JigsawPuzzleSVGWithTray({
       ro.disconnect();
       window.removeEventListener('resize', update);
     };
-  }, [stageWidth]);
+  }, [boardWidth, trayWidth]);
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative', fontFamily: "system-ui, sans-serif", width: '100%', height: Math.round(stageHeight * scale), overflow: 'hidden', maxWidth: '100%' }}>
+    <div
+      ref={wrapperRef}
+      style={{
+        position: 'relative',
+        fontFamily: "system-ui, sans-serif",
+        width: '100%',
+        height: Math.round(stageHeight * scale),
+        overflow: 'hidden',
+        maxWidth: '100%',
+        ...containerStyle,
+      }}
+    >
       <div
         ref={stageRef}
         onPointerMove={onPointerMove}
@@ -1107,6 +1164,8 @@ export default function JigsawPuzzleSVGWithTray({
           >
           </div>
         )}
+
+        
       </div>
 
       <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
@@ -1137,7 +1196,6 @@ export default function JigsawPuzzleSVGWithTray({
           Send loose to tray
         </button>
 
-        <div style={{ opacity: 0.75, color: "white" }}>Groups: {groupsCount}</div>
       </div>
     </div>
   );

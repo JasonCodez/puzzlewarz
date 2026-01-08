@@ -359,9 +359,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="text-xl font-bold text-white flex-1">{puzzle.title}</h3>
                       <div className="flex gap-2 flex-col items-end">
-                        <span className="text-xs font-semibold px-2 py-1 rounded" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
-                          #{puzzle.order}
-                        </span>
+                        {puzzle.order && puzzle.order > 0 ? (
+                          <span className="text-xs font-semibold px-2 py-1 rounded" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
+                            #{puzzle.order}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <p className="text-xs font-semibold" style={{ color: '#AB9F9D' }}>✓ Puzzle Complete</p>
@@ -410,9 +412,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="text-xl font-bold text-white flex-1">{puzzle.title}</h3>
                       <div className="flex gap-2 flex-col items-end">
-                        <span className="text-xs font-semibold px-2 py-1 rounded" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
-                          #{puzzle.order}
-                        </span>
+                        {puzzle.order && puzzle.order > 0 ? (
+                          <span className="text-xs font-semibold px-2 py-1 rounded" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
+                            #{puzzle.order}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <p className="text-sm mb-3" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
@@ -493,9 +497,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="text-xs font-semibold px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
-                          #{puzzle.order}
-                        </span>
+                        {puzzle.order && puzzle.order > 0 ? (
+                          <span className="text-xs font-semibold px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
+                            #{puzzle.order}
+                          </span>
+                        ) : null}
                         <h3 className="text-lg font-bold text-white truncate">{puzzle.title}</h3>
                         <span className="text-xs font-semibold px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(56, 201, 153, 0.2)', color: '#38D399' }}>
                           ✓ Complete
@@ -563,9 +569,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="text-xs font-semibold px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
-                          #{puzzle.order}
-                        </span>
+                        {puzzle.order && puzzle.order > 0 ? (
+                          <span className="text-xs font-semibold px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
+                            #{puzzle.order}
+                          </span>
+                        ) : null}
                         <h3 className="text-lg font-bold text-white truncate">{puzzle.title}</h3>
                       </div>
                       <p className="text-sm mb-2 line-clamp-2" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>

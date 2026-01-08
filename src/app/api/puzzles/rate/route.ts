@@ -71,12 +71,47 @@ export async function POST(req: NextRequest) {
         },
       });
       // Award 5 points in GlobalLeaderboard
-      await prisma.globalLeaderboard.upsert({
-        where: { userId: user.id },
-        update: { totalPoints: { increment: 5 } },
-        create: { userId: user.id, totalPoints: 5 },
-      });
+      // `userId` is not a unique field in the schema, so we can't upsert by it.
+      // Find existing leaderboard entry and update, otherwise create one.
+      const existingLeaderboard = await prisma.globalLeaderboard.findFirst({ where: { userId: user.id } });
+      if (existingLeaderboard) {
+        await prisma.globalLeaderboard.update({
+          where: { id: existingLeaderboard.id },
+          data: { totalPoints: { increment: 5 } },
+        });
+      } else {
+        await prisma.globalLeaderboard.create({ data: { userId: user.id, totalPoints: 5 } });
+      }
       pointsAwarded = 5;
+
+      // Also increment or create the user's UserPuzzleProgress so profile totals reflect awarded points
+      try {
+        const existingProgress = await prisma.userPuzzleProgress.findUnique({
+          where: {
+            userId_puzzleId: {
+              userId: user.id,
+              puzzleId,
+            },
+          },
+        });
+
+        if (existingProgress) {
+          await prisma.userPuzzleProgress.update({
+            where: { id: existingProgress.id },
+            data: { pointsEarned: { increment: 5 } },
+          });
+        } else {
+          await prisma.userPuzzleProgress.create({
+            data: {
+              userId: user.id,
+              puzzleId,
+              pointsEarned: 5,
+            },
+          });
+        }
+      } catch (err) {
+        console.error('Failed to update UserPuzzleProgress for rating award:', err);
+      }
     } else {
       // Update existing rating, no points
       puzzleRating = await prisma.puzzleRating.update({
