@@ -65,6 +65,7 @@ export default function AdminPuzzlesPage() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [jigsawImage, setJigsawImage] = useState<File | null>(null);
   const [jigsawImagePreview, setJigsawImagePreview] = useState<string>("");
+  const [jigsawImageUrl, setJigsawImageUrl] = useState<string>("");
   const [formData, setFormData] = useState<PuzzleFormData>({
     title: "",
     description: "",
@@ -170,6 +171,22 @@ export default function AdminPuzzlesPage() {
       console.log(`[JIGSAW IMAGE] Preview created`);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleJigsawImageUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setJigsawImageUrl(e.target.value);
+  };
+
+  const handleUseJigsawUrl = () => {
+    if (!jigsawImageUrl) return;
+    try {
+      // Validate URL
+      new URL(jigsawImageUrl);
+      setJigsawImage(null);
+      setJigsawImagePreview(jigsawImageUrl);
+    } catch (err) {
+      setFormError("Invalid image URL");
+    }
   };
 
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -363,6 +380,32 @@ export default function AdminPuzzlesPage() {
           const errorMsg = err instanceof Error ? err.message : String(err);
           console.error("[SUBMIT] Failed to upload jigsaw image:", errorMsg);
           setFormError(`Failed to upload jigsaw image: ${errorMsg}`);
+        }
+      }
+      // If a jigsaw image URL was provided instead of a file, post the URL to the media API
+      else if (formData.puzzleType === 'jigsaw' && jigsawImageUrl) {
+        try {
+          console.log("[SUBMIT] Posting jigsaw image URL to /api/admin/media:", jigsawImageUrl);
+          const formDataUpload = new FormData();
+          formDataUpload.append('url', jigsawImageUrl);
+          formDataUpload.append('puzzleId', createdPuzzle.id);
+
+          const uploadResponse = await fetch('/api/admin/media', {
+            method: 'POST',
+            body: formDataUpload,
+          });
+
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json().catch(() => ({ error: `HTTP ${uploadResponse.status}` }));
+            throw new Error(errorData.error || `Upload failed with status ${uploadResponse.status}`);
+          }
+
+          const uploadedMedia = await uploadResponse.json();
+          console.log('[SUBMIT] Jigsaw image URL uploaded successfully:', uploadedMedia);
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          console.error('[SUBMIT] Failed to upload jigsaw image URL:', errorMsg);
+          setFormError(`Failed to upload jigsaw image URL: ${errorMsg}`);
         }
       }
 
@@ -660,6 +703,18 @@ export default function AdminPuzzlesPage() {
                       <label className="block text-sm font-semibold text-gray-300 mb-2">Jigsaw Image {jigsawImage ? <span className="text-xs text-green-300">(selected)</span> : <span className="text-xs text-gray-400">(required)</span>}</label>
                       <div className="flex items-center gap-3">
                         <input type="file" accept="image/*" onChange={handleJigsawImageChange} />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Or paste an external image URL"
+                            value={jigsawImageUrl}
+                            onChange={handleJigsawImageUrlChange}
+                            className="px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+                            style={{ minWidth: 320 }}
+                          />
+                          <button type="button" onClick={handleUseJigsawUrl} className="px-3 py-1 rounded bg-blue-600 text-white text-sm">Use URL</button>
+                          <button type="button" onClick={() => { setJigsawImageUrl(''); setJigsawImagePreview(''); setJigsawImage(null); }} className="px-3 py-1 rounded bg-red-700 text-white text-sm">Clear</button>
+                        </div>
                         {jigsawImagePreview && (
                           <div className="flex items-center gap-2">
                             <img src={jigsawImagePreview} alt="preview" style={{ maxHeight: 80, maxWidth: 160, objectFit: 'contain', background: '#111', borderRadius: 4 }} />
