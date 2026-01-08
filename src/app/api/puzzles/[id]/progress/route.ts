@@ -278,7 +278,10 @@ export async function POST(
                 awardPoints = puzzleRecord.solutions[0].points ?? awardPoints;
               } else if (puzzleRecord.parts && puzzleRecord.parts.length > 0) {
                 // Sum part point values as a fallback for multi-part puzzles
-                awardPoints = puzzleRecord.parts.reduce((sum, part) => sum + (part.pointsValue ?? 0), 0) || awardPoints;
+                awardPoints = puzzleRecord.parts.reduce(
+                  (sum: number, part: { pointsValue?: number | null }) => sum + (part.pointsValue ?? 0),
+                  0
+                ) || awardPoints;
               }
             }
 
