@@ -159,7 +159,7 @@ async function getCategoryStats() {
   });
 
   return stats.map((s: { categoryId: string | null; _count: number }) => {
-    const category = categories.find((c) => c.id === s.categoryId);
+    const category = categories.find((c: { id: string; name?: string | null }) => c.id === s.categoryId);
     return {
       categoryId: s.categoryId,
       categoryName: category?.name || "Uncategorized",
