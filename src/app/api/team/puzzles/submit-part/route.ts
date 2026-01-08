@@ -169,14 +169,13 @@ export async function POST(req: NextRequest) {
 
         await prisma.teamPuzzleCompletion.create({
           data: {
-          const solvedPartIds = new Set(
-            (
-              await prisma.teamPuzzlePartSubmission.findMany({
-                where: { teamId, puzzleId, isCorrect: true },
-                distinct: ["partId"],
-              })
-            ).map((s: { partId: string }) => s.partId)
-          );
+            teamId,
+            puzzleId,
+            totalPointsEarned: totalPoints,
+          },
+        });
+
+        const teamMembers = await prisma.teamMember.findMany({
           where: { teamId },
           select: { userId: true },
         });
