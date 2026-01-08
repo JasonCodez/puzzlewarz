@@ -87,11 +87,11 @@ export async function GET(request: NextRequest) {
 
     // Sort if needed
     if (sortBy === "puzzles") {
-      formattedUsers.sort((a, b) => b.stats.puzzlesSolved - a.stats.puzzlesSolved);
+      formattedUsers.sort((a: { stats: { puzzlesSolved: number } }, b: { stats: { puzzlesSolved: number } }) => b.stats.puzzlesSolved - a.stats.puzzlesSolved);
     } else if (sortBy === "points") {
-      formattedUsers.sort((a, b) => b.stats.totalPoints - a.stats.totalPoints);
+      formattedUsers.sort((a: { stats: { totalPoints: number } }, b: { stats: { totalPoints: number } }) => b.stats.totalPoints - a.stats.totalPoints);
     } else if (sortBy === "followers") {
-      formattedUsers.sort((a, b) => b.stats.followers - a.stats.followers);
+      formattedUsers.sort((a: { stats: { followers: number } }, b: { stats: { followers: number } }) => b.stats.followers - a.stats.followers);
     }
 
     const total = await prisma.user.count({ where });
