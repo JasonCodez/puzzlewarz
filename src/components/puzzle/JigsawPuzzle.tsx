@@ -839,10 +839,13 @@ export default function JigsawPuzzleSVGWithTray({
       (e: React.PointerEvent<SVGSVGElement>, pieceId: string): void;
     }
   
-  const onPointerDown: OnPointerDownFn = (e, pieceId) => {
+    const onPointerDown: OnPointerDownFn = (e, pieceId) => {
     if (solved) return;
     const el = stageRef.current;
     if (!el) return;
+      // Prevent single-finger touch from scrolling the page while dragging pieces
+      // but allow multi-touch (pinch) gestures to reach the browser (pinch-to-zoom).
+      try { e.preventDefault(); } catch {}
 
     const current: Piece[] = pieces;
     const byId: Map<string, Piece> = indexById(current);
@@ -1221,7 +1224,7 @@ export default function JigsawPuzzleSVGWithTray({
           background: "#070a0f",
           border: "1px solid rgba(255,255,255,0.14)",
           userSelect: "none",
-          touchAction: "none",
+          touchAction: 'pan-x pan-y pinch-zoom',
           transformOrigin: 'top left',
           transform: `scale(${scale})`,
           // center scaled content within wrapper

@@ -127,7 +127,16 @@ export default function Navbar() {
               <>
                 <NotificationBell />
                 {userInfo?.image && (
-                  <img src={userInfo.image} alt="Avatar" className="h-8 w-8 rounded-full object-cover" />
+                  <img
+                    src={userInfo.image}
+                    alt="Avatar"
+                    className="h-8 w-8 rounded-full object-cover"
+                    onError={(e) => {
+                      const img = e.currentTarget as HTMLImageElement;
+                      img.onerror = null;
+                      img.src = '/images/logo.png';
+                    }}
+                  />
                 )}
                 <div className="hidden sm:block text-right">
                   <p className="text-white font-semibold text-sm">{session.user?.name || session.user?.email}</p>
@@ -191,7 +200,16 @@ export default function Navbar() {
             <div className="mt-auto flex items-center gap-3 border-t border-brand-teal pt-4">
               <NotificationBell />
               {userInfo?.image && (
-                <img src={userInfo.image} alt="Avatar" className="h-8 w-8 rounded-full object-cover" />
+                <img
+                  src={userInfo.image}
+                  alt="Avatar"
+                  className="h-8 w-8 rounded-full object-cover"
+                  onError={(e) => {
+                    const img = e.currentTarget as HTMLImageElement;
+                    img.onerror = null;
+                    img.src = '/images/logo.png';
+                  }}
+                />
               )}
               <div>
                 <p className="text-white font-semibold text-sm">{session.user?.name || session.user?.email}</p>

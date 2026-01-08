@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { Rarity, rarityColors } from '@/lib/rarity';
 import {
   UserPlus,
   UserMinus,
@@ -63,6 +64,7 @@ export default function PublicProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -82,6 +84,24 @@ export default function PublicProfilePage() {
       fetchProfile();
     }
   }, [userId]);
+
+  useEffect(() => {
+    // Fetch current authenticated user's id for accurate ownership checks
+    const fetchCurrentUser = async () => {
+      try {
+        const res = await fetch('/api/user/info');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.id) setCurrentUserId(data.id);
+        }
+      } catch (err) {
+        // ignore silently; ownership will fall back to session if available
+        console.debug('Could not fetch current user id', err);
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
 
   const fetchProfile = async () => {
     if (!userId) {
@@ -292,7 +312,7 @@ export default function PublicProfilePage() {
     );
   }
 
-  const isOwnProfile = (session?.user as any)?.id === userId;
+  const isOwnProfile = (currentUserId || (session?.user as any)?.id) === userId;
 
   return (
     <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen">
@@ -383,39 +403,42 @@ export default function PublicProfilePage() {
                   </div>
                 ) : isOwnProfile && isEditingName ? (
                   <div className="mb-2">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex flex-col sm:flex-row items-center gap-2 mb-2">
                       <input
                         type="text"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
                         maxLength={50}
-                        className="px-3 py-2 rounded border text-white text-2xl font-bold"
+                        className="w-full sm:flex-1 sm:min-w-0 px-3 py-2 rounded border text-white text-2xl sm:text-4xl font-bold"
                         style={{
                           backgroundColor: 'rgba(0, 0, 0, 0.5)',
                           borderColor: '#3891A6',
                         }}
                         placeholder="Enter your name"
                       />
-                      <button
-                        onClick={handleUpdateName}
-                        disabled={nameSaving}
-                        className="px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
-                        style={{ backgroundColor: '#4CAF50', color: 'white' }}
-                      >
-                        {nameSaving ? 'Saving...' : 'Save'}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setIsEditingName(false);
-                          setNewName("");
-                          setNameError("");
-                        }}
-                        disabled={nameSaving}
-                        className="px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
-                        style={{ backgroundColor: '#AB9F9D', color: 'white' }}
-                      >
-                        Cancel
-                      </button>
+
+                      <div className="flex w-full sm:w-auto gap-2">
+                        <button
+                          onClick={handleUpdateName}
+                          disabled={nameSaving}
+                          className="flex-1 sm:flex-none w-full sm:w-auto px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: '#4CAF50', color: 'white' }}
+                        >
+                          {nameSaving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsEditingName(false);
+                            setNewName("");
+                            setNameError("");
+                          }}
+                          disabled={nameSaving}
+                          className="flex-1 sm:flex-none w-full sm:w-auto px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: '#AB9F9D', color: 'white' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                     {nameError && (
                       <p className="text-sm" style={{ color: '#EF4444' }}>{nameError}</p>
@@ -565,52 +588,39 @@ export default function PublicProfilePage() {
               Achievements ({profile.achievements.length})
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {profile.achievements.map((ach) => (
-                <div
-                  key={ach.id}
-                  className="p-4 rounded-lg border text-center transition-all hover:shadow-lg"
-                  style={{
-                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                    borderColor:
-                      ach.achievement.rarity === "legendary"
-                        ? "#FFD700"
-                        : ach.achievement.rarity === "epic"
-                        ? "#9D4EDD"
-                        : "#3891A6",
-                  }}
-                  title={ach.achievement.description}
-                >
-                  <div className="text-4xl mb-2">{ach.achievement.icon}</div>
-                  <h3 className="font-semibold text-white text-sm mb-1">
-                    {ach.achievement.title}
-                  </h3>
-                  <p
-                    style={{ color: '#DDDBF1' }}
-                    className="text-xs mb-2"
-                  >
-                    {ach.achievement.category}
-                  </p>
-                  <span
-                    className="inline-block px-2 py-1 rounded text-xs font-bold capitalize"
+              {profile.achievements.map((ach) => {
+                const rarityKey = (ach.achievement.rarity || 'common') as Rarity;
+                const color = rarityColors[rarityKey] || rarityColors.common;
+                return (
+                  <div
+                    key={ach.id}
+                    className="p-4 rounded-lg border text-center transition-all hover:shadow-lg"
                     style={{
-                      backgroundColor:
-                        ach.achievement.rarity === "legendary"
-                          ? "rgba(255, 215, 0, 0.2)"
-                          : ach.achievement.rarity === "epic"
-                          ? "rgba(157, 78, 221, 0.2)"
-                          : "rgba(56, 145, 166, 0.2)",
-                      color:
-                        ach.achievement.rarity === "legendary"
-                          ? "#FFD700"
-                          : ach.achievement.rarity === "epic"
-                          ? "#9D4EDD"
-                          : "#3891A6",
+                      backgroundColor: color.bg,
+                      borderColor: color.border,
                     }}
+                    title={ach.achievement.description}
                   >
-                    {ach.achievement.rarity}
-                  </span>
-                </div>
-              ))}
+                    <div className="text-4xl mb-2">{ach.achievement.icon}</div>
+                    <h3 className="font-semibold text-sm mb-1" style={{ color: color.text }}>
+                      {ach.achievement.title}
+                    </h3>
+                    <p style={{ color: '#DDDBF1' }} className="text-xs mb-2">
+                      {ach.achievement.category}
+                    </p>
+                    <span
+                      className="inline-block px-2 py-1 rounded text-xs font-bold capitalize"
+                      style={{
+                        backgroundColor: color.bg,
+                        color: color.text,
+                        border: `1px solid ${color.border}`,
+                      }}
+                    >
+                      {ach.achievement.rarity}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
