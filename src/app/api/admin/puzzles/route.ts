@@ -252,18 +252,29 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid Sudoku grid or solution (must be 9x9 numbers 0-9)' }, { status: 400 });
       }
       try {
-        const sudokuData = {
+        // Create without `timeLimitSeconds` to avoid type mismatches in generated Prisma types.
+        const baseSudokuData = {
           puzzleId: puzzle.id,
           puzzleGrid: typeof sudokuGrid === 'string' ? sudokuGrid : JSON.stringify(sudokuGrid),
           solutionGrid: typeof sudokuSolution === 'string' ? sudokuSolution : JSON.stringify(sudokuSolution),
           difficulty: sudokuDifficulty || 'medium',
-          // Cast guard: some TS environments may complain about extra properties
-          timeLimitSeconds: typeof timeLimitSeconds !== 'undefined' && timeLimitSeconds !== null ? Number(timeLimitSeconds) : undefined,
-        } as any;
+        };
 
-        await prisma.sudokuPuzzle.create({
-          data: sudokuData,
+        const created = await prisma.sudokuPuzzle.create({
+          data: baseSudokuData,
         });
+
+        // If a time limit was provided, apply it in a separate update (best-effort, type-safe).
+        if (typeof timeLimitSeconds !== 'undefined' && timeLimitSeconds !== null) {
+          try {
+            await prisma.sudokuPuzzle.update({
+              where: { id: created.id },
+              data: { timeLimitSeconds: Number(timeLimitSeconds) },
+            });
+          } catch (updErr) {
+            console.warn('[PUZZLE CREATE] Failed to set timeLimitSeconds on sudoku record:', updErr);
+          }
+        }
       } catch (sudokuError) {
         console.error("Error creating Sudoku puzzle record:", sudokuError);
         return NextResponse.json({ error: "Failed to store Sudoku puzzle data", details: String(sudokuError) }, { status: 500 });

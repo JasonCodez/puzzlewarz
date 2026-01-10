@@ -51,7 +51,6 @@ export async function GET(
             puzzleGrid: true,
             solutionGrid: true,
             difficulty: true,
-            timeLimitSeconds: true,
           },
         },
         jigsaw: {
@@ -76,7 +75,24 @@ export async function GET(
 
     console.log(`[PUZZLE FETCH] Puzzle fetched, jigsaw:`, puzzle.jigsaw);
 
-    return NextResponse.json(puzzle);
+    // Some Prisma client generations may not include newly added fields
+    // (e.g., timeLimitSeconds) in nested select types. Fetch it separately
+    // when a sudoku record exists and attach to the payload for the client.
+    let outPayload: any = puzzle;
+    if (puzzle?.sudoku) {
+      try {
+        const extra = await prisma.sudokuPuzzle.findUnique({
+          where: { puzzleId: puzzle.id },
+          select: { timeLimitSeconds: true },
+        });
+        outPayload = { ...puzzle, sudoku: { ...puzzle.sudoku, timeLimitSeconds: extra?.timeLimitSeconds ?? null } };
+      } catch (e) {
+        // best-effort: if the extra lookup fails, return the original puzzle
+        console.warn('[PUZZLE FETCH] Failed to fetch sudoku.extra:', e);
+      }
+    }
+
+    return NextResponse.json(outPayload);
   } catch (error) {
     console.error("Error fetching puzzle:", error);
     return NextResponse.json(

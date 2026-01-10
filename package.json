@@ -17,6 +17,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/nodemailer": "^7.0.4",
     "bcryptjs": "^3.0.3",
+    "canvas-confetti": "^1.9.4",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.24.10",
