@@ -37,21 +37,25 @@ const isValid = (grid: number[][], row: number, col: number, num: number): boole
 
 // Helper: find empty cell with minimum remaining values (MRV heuristic)
 const findBestCell = (grid: number[][]): { row: number; col: number; candidates: number[] } | null => {
-  let best: { row: number; col: number; candidates: number[] } | null = null;
-
+  // Collect empty cells, shuffle to add randomness for tie-breaking
+  const emptyCells: { row: number; col: number }[] = [];
   for (let row = 0; row < 9; row++) {
     for (let col = 0; col < 9; col++) {
-      if (grid[row][col] === 0) {
-        const candidates: number[] = [];
-        for (let num = 1; num <= 9; num++) {
-          if (isValid(grid, row, col, num)) candidates.push(num);
-        }
+      if (grid[row][col] === 0) emptyCells.push({ row, col });
+    }
+  }
+  shuffleArray(emptyCells);
 
-        if (best === null || candidates.length < best.candidates.length) {
-          best = { row, col, candidates };
-          if (best.candidates.length === 0) return best; // dead end
-        }
-      }
+  let best: { row: number; col: number; candidates: number[] } | null = null;
+  for (const { row, col } of emptyCells) {
+    const candidates: number[] = [];
+    for (let num = 1; num <= 9; num++) {
+      if (isValid(grid, row, col, num)) candidates.push(num);
+    }
+
+    if (best === null || candidates.length < best.candidates.length) {
+      best = { row, col, candidates };
+      if (best.candidates.length === 0) return best; // dead end
     }
   }
 
@@ -97,7 +101,11 @@ const orderCandidatesByLCV = (grid: number[][], row: number, col: number, candid
   }
 
   // Higher impact is better (more choices for others) -> sort desc
-  scores.sort((a, b) => b.score - a.score);
+  // Break ties randomly to avoid deterministic number ordering
+  scores.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return Math.random() > 0.5 ? 1 : -1;
+  });
   return scores.map(s => s.num);
 };
 

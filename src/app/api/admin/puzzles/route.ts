@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
       sudokuGrid,
       sudokuSolution,
       sudokuDifficulty,
+      timeLimitSeconds,
       puzzleData,
     } = body;
 
@@ -232,6 +233,24 @@ export async function POST(request: NextRequest) {
 
     // Create Sudoku puzzle if applicable
     if (puzzleType === 'sudoku' && sudokuGrid && sudokuSolution) {
+      // Basic validation for grid shape and values to avoid DB errors
+      const validateGrid = (g: any) => {
+        if (!Array.isArray(g) || g.length !== 9) return false;
+        for (const row of g) {
+          if (!Array.isArray(row) || row.length !== 9) return false;
+          for (const v of row) {
+            if (v === null || typeof v === 'undefined') return false;
+            const n = Number(v);
+            if (!Number.isFinite(n) || n < 0 || n > 9) return false;
+          }
+        }
+        return true;
+      };
+
+      if (!validateGrid(sudokuGrid) || !validateGrid(sudokuSolution)) {
+        console.error('[PUZZLE CREATE] Invalid Sudoku grid/solution shape or values');
+        return NextResponse.json({ error: 'Invalid Sudoku grid or solution (must be 9x9 numbers 0-9)' }, { status: 400 });
+      }
       try {
         await prisma.sudokuPuzzle.create({
           data: {
@@ -239,11 +258,12 @@ export async function POST(request: NextRequest) {
             puzzleGrid: typeof sudokuGrid === 'string' ? sudokuGrid : JSON.stringify(sudokuGrid),
             solutionGrid: typeof sudokuSolution === 'string' ? sudokuSolution : JSON.stringify(sudokuSolution),
             difficulty: sudokuDifficulty || 'medium',
+            timeLimitSeconds: typeof timeLimitSeconds !== 'undefined' && timeLimitSeconds !== null ? Number(timeLimitSeconds) : undefined,
           },
         });
       } catch (sudokuError) {
         console.error("Error creating Sudoku puzzle record:", sudokuError);
-        throw new Error("Failed to store Sudoku puzzle data");
+        return NextResponse.json({ error: "Failed to store Sudoku puzzle data", details: String(sudokuError) }, { status: 500 });
       }
     }
 

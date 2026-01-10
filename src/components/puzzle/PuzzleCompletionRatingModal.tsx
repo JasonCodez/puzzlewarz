@@ -10,6 +10,7 @@ interface PuzzleCompletionRatingModalProps {
   onClose: () => void;
   onSubmit?: () => void;
   initialAwardedPoints?: number | null;
+  completionSeconds?: number | null;
 }
 
 export default function PuzzleCompletionRatingModal({
@@ -18,6 +19,7 @@ export default function PuzzleCompletionRatingModal({
   onClose,
   onSubmit,
   initialAwardedPoints = null,
+  completionSeconds = null,
 }: PuzzleCompletionRatingModalProps) {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [awardedPoints, setAwardedPoints] = useState<number | null>(initialAwardedPoints ?? null);
@@ -65,6 +67,11 @@ export default function PuzzleCompletionRatingModal({
               >
                 You solved "{puzzleTitle}"
               </p>
+              {typeof completionSeconds === 'number' ? (
+                <div className="text-sm mt-2" style={{ color: '#AB9F9D' }}>
+                  Completed in <span style={{ color: '#FDE74C', fontWeight: 700 }}>{Math.floor(completionSeconds/60).toString().padStart(2,'0')}:{(completionSeconds%60).toString().padStart(2,'0')}</span>
+                </div>
+              ) : null}
             </div>
             <button
               onClick={onClose}

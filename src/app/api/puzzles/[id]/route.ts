@@ -51,6 +51,7 @@ export async function GET(
             puzzleGrid: true,
             solutionGrid: true,
             difficulty: true,
+            timeLimitSeconds: true,
           },
         },
         jigsaw: {

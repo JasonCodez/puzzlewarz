@@ -5,21 +5,27 @@ import { motion } from "framer-motion";
 
 interface SudokuGridProps {
   puzzle: number[][];
+  givens?: number[][];
   onSubmit?: (solution: number[][]) => void;
+  onChange?: (grid: number[][]) => void;
   disabled?: boolean;
   solution?: number[][];
   validateOnChange?: boolean;
   maxAttempts?: number;
+  usedAttempts?: number;
   onAttempt?: (attemptNumber: number, locked: boolean) => void;
   // Called after successful validation/animation; defaults to onSubmit timing
   onValidatedSuccess?: (solution: number[][]) => void;
   onNotify?: (message: string, type?: 'info' | 'success' | 'error') => void;
+  onGiveUp?: () => void;
+  onRequestGiveUp?: () => void;
 }
 
-export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solution, validateOnChange = false, onValidatedSuccess, onNotify, maxAttempts = 5, onAttempt }: SudokuGridProps) {
+export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disabled = false, solution, validateOnChange = false, onValidatedSuccess, onNotify, maxAttempts = 5, usedAttempts, onAttempt, onGiveUp, onRequestGiveUp }: SudokuGridProps) {
   const [grid, setGrid] = useState<number[][]>(() => puzzle.map((row) => [...row]));
   const [incorrectMap, setIncorrectMap] = useState<boolean[][]>(() => Array(9).fill(null).map(() => Array(9).fill(false)));
   const [incorrectCount, setIncorrectCount] = useState(0);
+  const [submitMessage, setSubmitMessage] = useState<{ message: string; type?: 'info'|'success'|'error' } | null>(null);
   const [animating, setAnimating] = useState<'idle'|'validating'|'error'|'success'>('idle');
   const [reducedMotion, setReducedMotion] = useState(false);
   const [hasAttempted, setHasAttempted] = useState(false);
@@ -37,11 +43,14 @@ export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solutio
     const num = value === "" ? 0 : Number.parseInt(value, 10);
     if (Number.isNaN(num) || num < 0 || num > 9) return;
 
-    setGrid((prev) => {
-      const next = prev.map((r) => [...r]);
-      next[row][col] = num;
-      return next;
-    });
+    const next = (() => {
+      // compute next grid synchronously so we can notify parent immediately
+      const n = grid.map((r) => [...r]);
+      n[row][col] = num;
+      return n;
+    })();
+    setGrid(next);
+    if (typeof onChange === 'function') onChange(next.map((r) => [...r]));
   };
 
   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -50,9 +59,8 @@ export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solutio
     // Prevent submitting incomplete puzzles
     const isComplete = grid.flat().every((n) => n !== 0);
     if (!isComplete) {
-      // in-grid message exists already; also provide brief non-blocking notification
-      if (typeof onNotify === 'function') onNotify('Please fill all cells before submitting the Sudoku.', 'info');
-      else alert('Please fill all cells before submitting the Sudoku.');
+      // show inline message below submit button
+      setSubmitMessage({ message: 'Please fill all cells before submitting the Sudoku.', type: 'info' });
       return;
     }
 
@@ -68,10 +76,9 @@ export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solutio
         const isLocked = nextAttempts >= maxAttempts;
         if (isLocked) setLocked(true);
         if (typeof onAttempt === 'function') onAttempt(nextAttempts, isLocked);
-        if (typeof onNotify === 'function') {
-          if (isLocked) onNotify(`Maximum attempts reached. Puzzle locked.`, 'error');
-          else onNotify(`Incorrect. Attempts: ${nextAttempts}/${maxAttempts}`, 'error');
-        }
+        // show inline message below submit button (page-level handler will perform lock logic)
+        if (isLocked) setSubmitMessage({ message: `Maximum attempts reached. Puzzle locked.`, type: 'error' });
+        else setSubmitMessage({ message: `Incorrect. Attempts: ${nextAttempts}/${maxAttempts}`, type: 'error' });
         setAnimating('error');
         await sleep(800);
         setAnimating('idle');
@@ -98,6 +105,8 @@ export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solutio
       setAnimating('idle');
 
       // call validated success handler (page will award points / open modal)
+      // clear any submit message on success
+      setSubmitMessage(null);
       if (typeof onValidatedSuccess === 'function') {
         onValidatedSuccess(grid.map((r) => [...r]));
       } else {
@@ -108,7 +117,7 @@ export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solutio
     }
 
     // No solution provided: just submit
-    onSubmit(grid);
+    onSubmit?.(grid);
   };
 
   // Validation helpers
@@ -159,6 +168,9 @@ export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solutio
 
   const isComplete = grid.flat().every((n) => n !== 0);
 
+  const effectiveAttempts = typeof usedAttempts === 'number' ? usedAttempts : attempts;
+  const attemptsLeft = Math.max(0, (maxAttempts || 0) - (effectiveAttempts || 0));
+
   return (
     <div className="flex flex-col gap-4 items-center justify-center">
       <motion.div
@@ -170,7 +182,7 @@ export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solutio
           {grid.map((row, rowIdx) => (
             <div key={rowIdx} className="flex">
               {row.map((cell, colIdx) => {
-              const isGiven = puzzle[rowIdx]?.[colIdx] !== 0;
+              const isGiven = givens ? (givens[rowIdx]?.[colIdx] !== 0) : (puzzle[rowIdx]?.[colIdx] !== 0);
               const thickRight = colIdx === 2 || colIdx === 5;
               const thickBottom = rowIdx === 2 || rowIdx === 5;
 
@@ -228,7 +240,27 @@ export default function SudokuGrid({ puzzle, onSubmit, disabled = false, solutio
         >
           Submit Sudoku
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (disabled) return;
+            if (typeof onRequestGiveUp === 'function') onRequestGiveUp();
+            else if (typeof onGiveUp === 'function') onGiveUp();
+          }}
+          disabled={disabled}
+          className="ml-3 px-4 py-2 rounded bg-red-600 text-white hover:brightness-95 disabled:opacity-50"
+        >
+          I Give Up!
+        </button>
       </div>
+      <div className="w-full mt-2" style={{ maxWidth: 'min(90vw,720px)' }}>
+        <div className="text-sm text-left text-yellow-300">Attempts left: <span className="font-semibold text-white">{attemptsLeft}</span></div>
+      </div>
+      {submitMessage && (
+        <div className={`mt-2 text-sm ${submitMessage.type === 'error' ? 'text-red-400' : submitMessage.type === 'success' ? 'text-green-400' : 'text-yellow-300'}`}>
+          {submitMessage.message}
+        </div>
+      )}
       {!isComplete && !disabled && (
         <div className="text-sm text-yellow-300 text-center">Please complete all cells before submitting.</div>
       )}

@@ -37,6 +37,7 @@ export default function FilterBar({
   const statuses = [
     { value: "all", label: "All Statuses" },
     { value: "unsolved", label: "Unsolved" },
+    { value: "failed", label: "Failed" },
     { value: "in-progress", label: "In Progress" },
     { value: "solved", label: "Solved" },
   ];
@@ -190,7 +191,9 @@ export default function FilterBar({
                             ? "rgba(253, 231, 76, 0.8)"
                             : s.value === "unsolved"
                               ? "rgba(250, 126, 89, 0.8)"
-                              : "#3891A6"
+                              : s.value === "failed"
+                                ? "rgba(239, 68, 68, 0.8)"
+                                : "#3891A6"
                         : "rgba(171, 159, 157, 0.2)",
                     color: currentStatus === s.value ? "#020202" : "#DDDBF1",
                     boxShadow:

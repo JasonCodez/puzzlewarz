@@ -7,7 +7,7 @@ export interface PuzzleBase {
   title: string;
   description: string;
   type: PuzzleType;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: 'easy' | 'medium' | 'hard' | 'expert' | 'extreme';
   category: string;
   createdAt: Date;
   updatedAt: Date;
@@ -60,6 +60,7 @@ export interface SudokuPuzzle extends PuzzleBase {
   puzzleGrid: number[][];
   solutionGrid: number[][];
   difficulty: 'easy' | 'medium' | 'hard' | 'expert' | 'extreme';
+  timeLimitSeconds?: number;
 }
 
 export interface StoryPuzzleData {

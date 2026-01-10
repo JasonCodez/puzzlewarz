@@ -102,7 +102,42 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
 
       if (puzzlesRes.ok) {
         const puzzlesData = await puzzlesRes.json();
-        setPuzzles(puzzlesData);
+        // Annotate puzzles with local failed flag and reason (set when a Sudoku time-limit or max attempts occurs)
+        const annotated = puzzlesData.map((p: any) => {
+          let failedFlag = false;
+          let failedReason: string | null = null;
+          let completedElapsedSeconds: number | null = null;
+          try {
+            if (typeof window !== 'undefined') {
+              const raw = localStorage.getItem(`sudoku-failed:${p.id}`);
+              if (raw) {
+                failedFlag = true;
+                try {
+                  const parsed = JSON.parse(raw);
+                  if (parsed && parsed.reason) failedReason = parsed.reason;
+                } catch (e) {
+                  // older format: timestamp only
+                  failedReason = null;
+                }
+              }
+              // read completion elapsed seconds if present
+              const compRaw = localStorage.getItem(`sudoku-completed:${p.id}`);
+              if (compRaw) {
+                try {
+                  const cp = JSON.parse(compRaw);
+                  if (cp && typeof cp.elapsedSeconds === 'number') completedElapsedSeconds = cp.elapsedSeconds;
+                } catch (e) {
+                  // ignore
+                }
+              }
+            }
+          } catch (e) {
+            failedFlag = false;
+            failedReason = null;
+          }
+          return { ...p, failed: failedFlag, failedReason, completedElapsedSeconds };
+        });
+        setPuzzles(annotated);
         
         // Fetch ratings for all puzzles
         const ratingsData: Record<string, RatingStats> = {};
@@ -172,6 +207,8 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
             p.userProgress.length === 0 ||
             (!p.userProgress[0]?.solved && (p.userProgress[0]?.attempts || 0) === 0)
         );
+      } else if (selectedStatus === "failed") {
+        filtered = filtered.filter((p: any) => (p as any).failed === true);
       }
     }
 
@@ -339,6 +376,8 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
               // Treat puzzles with attempts >= 5 and not solved as 'failed'
               const status = progress?.solved
                 ? "solved"
+                : (puzzle as any).failed
+                ? "failed"
                 : (progress && (progress.attempts || 0) >= 5)
                 ? "failed"
                 : progress?.attempts
@@ -400,9 +439,14 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                       <p style={{ color: '#AB9F9D' }} className="text-xs mt-1">No ratings yet</p>
                     )}
                   </div>
-                  {puzzle.pointsReward && (
+                    {puzzle.pointsReward && (
                     <div style={{ color: '#FDE74C' }} className="text-xs font-semibold mb-2">
                       ⭐ {puzzle.pointsReward} points
+                    </div>
+                  )}
+                  {(puzzle as any).completedElapsedSeconds != null && (
+                    <div className="text-xs mt-2" style={{ color: '#AB9F9D' }}>
+                      Completed in <span style={{ color: '#FDE74C', fontWeight: 700 }}>{Math.floor(((puzzle as any).completedElapsedSeconds)/60).toString().padStart(2,'0')}:{((puzzle as any).completedElapsedSeconds%60).toString().padStart(2,'0')}</span>
                     </div>
                   )}
                 </div>
@@ -434,6 +478,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                         </div>
                       </div>
                       <p className="text-xs font-semibold" style={{ color: '#AB9F9D' }}>✗ Puzzle Failed</p>
+                      {((puzzle as any).failedReason) && (
+                        <p className="text-sm mt-1" style={{ color: '#FFB4B4' }}>
+                          Reason: {((puzzle as any).failedReason === 'time_limit') ? 'Time limit reached' : ((puzzle as any).failedReason === 'max_attempts' ? 'Maximum submissions reached' : ((puzzle as any).failedReason === 'given_up' ? 'Gave up' : 'Failed'))}
+                        </p>
+                      )}
                     </div>
                     <p className="text-sm mb-3" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
                     <div className="flex gap-2 flex-wrap mb-2">
@@ -534,12 +583,53 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
           <div className="space-y-3">
             {filteredPuzzles.map((puzzle) => {
               const progress = puzzle.userProgress?.[0];
-              const status = progress?.solved ? "solved" : progress?.attempts ? "in-progress" : "unsolved";
+              const status = progress?.solved ? "solved" : (puzzle as any).failed ? "failed" : progress?.attempts ? "in-progress" : "unsolved";
               const statusConfig: Record<string, { color: string; label: string }> = {
                 solved: { color: "#38D399", label: "✓ Solved" },
                 "in-progress": { color: "#FDE74C", label: "~ In Progress" },
                 unsolved: { color: "#AB9F9D", label: "○ Unsolved" },
               };
+
+              if (status === 'failed') {
+                return (
+                  <div
+                    key={puzzle.id}
+                    className="group rounded-lg border p-4 transition-all duration-300 block"
+                    style={{
+                      backgroundColor: 'rgba(170, 40, 40, 0.04)',
+                      borderColor: '#EF4444',
+                      borderWidth: '1px',
+                      opacity: 0.8,
+                      cursor: 'not-allowed'
+                    }}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          {puzzle.order && puzzle.order > 0 ? (
+                            <span className="text-xs font-semibold px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: '#FDE74C', color: '#020202' }}>
+                              #{puzzle.order}
+                            </span>
+                          ) : null}
+                          <h3 className="text-lg font-bold text-white truncate">{puzzle.title}</h3>
+                          <span className="text-xs font-semibold px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#EF4444' }}>
+                            ✗ Failed
+                          </span>
+                        </div>
+                        <p className="text-sm mb-2 line-clamp-2" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
+                        {((puzzle as any).failedReason) && (
+                          <p className="text-sm mt-1" style={{ color: '#FFB4B4' }}>
+                            Reason: {((puzzle as any).failedReason === 'time_limit') ? 'Time limit reached' : ((puzzle as any).failedReason === 'max_attempts' ? 'Maximum submissions reached' : ((puzzle as any).failedReason === 'given_up' ? 'Gave up' : 'Failed'))}
+                          </p>
+                        )}
+                      </div>
+                      <div style={{ color: '#AB9F9D' }} className="text-lg font-semibold flex-shrink-0">
+                        -
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
 
               return status === 'solved' ? (
                 <div
@@ -608,6 +698,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                           {' of attempted completed'}
                         </div>
                       </div>
+                      {(puzzle as any).completedElapsedSeconds != null && (
+                        <div className="text-xs mt-2" style={{ color: '#AB9F9D' }}>
+                          Completed in <span style={{ color: '#FDE74C', fontWeight: 700 }}>{Math.floor(((puzzle as any).completedElapsedSeconds)/60).toString().padStart(2,'0')}:{((puzzle as any).completedElapsedSeconds%60).toString().padStart(2,'0')}</span>
+                        </div>
+                      )}
                     </div>
                     <div style={{ color: '#AB9F9D' }} className="text-lg font-semibold flex-shrink-0">
                       -

@@ -69,6 +69,7 @@ export default function AdminPuzzlesPage() {
   const [jigsawImageUrl, setJigsawImageUrl] = useState<string>("");
   const [sudokuDifficulty, setSudokuDifficulty] = useState<'easy' | 'medium' | 'hard' | 'expert' | 'extreme'>('medium');
   const [sudokuPuzzle, setSudokuPuzzle] = useState<{ puzzle: number[][]; solution: number[][] } | null>(null);
+  const [sudokuTimeLimit, setSudokuTimeLimit] = useState<number | undefined>(15 * 60);
   const [formData, setFormData] = useState<PuzzleFormData>({
     title: "",
     description: "",
@@ -316,6 +317,7 @@ export default function AdminPuzzlesPage() {
         submitBody.sudokuGrid = sudokuPuzzle.puzzle;
         submitBody.sudokuSolution = sudokuPuzzle.solution;
         submitBody.sudokuDifficulty = sudokuDifficulty;
+        submitBody.timeLimitSeconds = sudokuTimeLimit;
         // Sudoku answers are entered on the board; don't send a separate correctAnswer
         delete submitBody.correctAnswer;
       }
@@ -666,6 +668,23 @@ export default function AdminPuzzlesPage() {
                         onDifficultyChange={setSudokuDifficulty}
                         onPuzzleGenerated={(puzzle, solution) => setSudokuPuzzle({ puzzle, solution })}
                       />
+                      <div className="mt-3">
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">Time Limit (minutes, optional)</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={sudokuTimeLimit ? String(Math.floor(sudokuTimeLimit / 60)) : ''}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === '') setSudokuTimeLimit(undefined);
+                              else setSudokuTimeLimit(Number(v) > 0 ? Number(v) * 60 : 0);
+                            }}
+                            className="w-32 px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white"
+                          />
+                          <div className="text-xs text-gray-400">Leave blank for no limit</div>
+                        </div>
+                      </div>
                     </div>
                   )}
 

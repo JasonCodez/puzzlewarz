@@ -277,6 +277,7 @@ model SudokuPuzzle {
   puzzleGrid            String       @db.Text // JSON array[9][9] - the given clues
   solutionGrid          String       @db.Text // JSON array[9][9] - the complete solution
   difficulty            String       @default("medium") // "easy", "medium", "hard", "expert"
+  timeLimitSeconds      Int?
   
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt

@@ -37,7 +37,7 @@ export default function Home() {
           <div className="mb-12">
             <span className="text-sm font-semibold" style={{ color: '#FDE74C' }}>PUZZLE SOLVING PLATFORM</span>
             <h1 className="text-6xl md:text-7xl font-bold text-white mt-4 leading-tight">
-              Solve Mysteries<br/>
+              Solve Puzzles<br/>
               <span style={{ color: '#3891A6' }}>Solo or Together</span>
             </h1>
             <p className="text-xl mt-6 max-w-2xl" style={{ color: '#DDDBF1' }}>
