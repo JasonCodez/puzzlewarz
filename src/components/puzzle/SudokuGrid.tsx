@@ -196,6 +196,7 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
                     }}
                     animate={animating === 'success' ? 'pop' : 'idle'}
                     className="flex-1"
+                    style={{ flex: '1 1 0%', minWidth: 0 }}
                   >
                     <input
                       inputMode="numeric"
@@ -209,7 +210,7 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
                         height: '100%',
                         boxSizing: 'border-box',
                         aspectRatio: '1 / 1',
-                        minWidth: 36,
+                        minWidth: 0,
                         minHeight: 36,
                         fontSize: 'clamp(16px, 4vw, 28px)',
                         borderRightWidth: thickRight ? "3px" : "1px",
