@@ -334,20 +334,20 @@ export default function PublicProfilePage() {
       {/* Profile Section */}
       <div className="max-w-4xl mx-auto px-4 py-12">
         {/* Profile Header */}
-        <div className="border rounded-lg p-8 mb-8" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-6">
-              <div className="relative">
+          <div className="border rounded-lg p-8 mb-8" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
+          <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between mb-6">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 w-full">
+              <div className="relative flex-shrink-0 mb-4 sm:mb-0">
                 {profile.image ? (
                   <img
                     src={profile.image}
                     alt={profile.name}
-                    className="w-24 h-24 rounded-full object-cover border-4"
+                    className="w-24 h-24 rounded-full object-cover border-4 flex-shrink-0"
                     style={{ borderColor: '#3891A6' }}
                   />
                 ) : (
                   <div
-                    className="w-24 h-24 rounded-full flex items-center justify-center text-4xl border-4"
+                    className="w-24 h-24 rounded-full flex items-center justify-center text-4xl border-4 flex-shrink-0"
                     style={{ backgroundColor: 'rgba(56, 145, 166, 0.2)', borderColor: '#3891A6' }}
                   >
                     👤
@@ -506,24 +506,44 @@ export default function PublicProfilePage() {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-4 gap-4">
-            <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
-              <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Puzzles Solved</p>
-              <p className="text-3xl font-bold text-white">{profile.stats.puzzlesSolved}</p>
+          <div className="grid justify-items-center grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
+              <div className="flex-shrink-0">
+                <Trophy className="w-8 h-8 text-white/80 mx-auto" />
+              </div>
+              <div>
+                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Puzzles Solved</p>
+                <p className="text-4xl font-extrabold text-white">{profile.stats.puzzlesSolved}</p>
+              </div>
             </div>
-            <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
-              <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Total Points</p>
-              <p className="text-3xl font-bold" style={{ color: '#FDE74C' }}>
-                {profile.stats.totalPoints}
-              </p>
+            <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
+              <div className="flex-shrink-0">
+                <Share2 className="w-8 h-8 text-yellow-400/80 mx-auto" />
+              </div>
+              <div>
+                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Total Points</p>
+                <p className="text-4xl font-extrabold" style={{ color: '#FDE74C' }}>
+                  {profile.stats.totalPoints}
+                </p>
+              </div>
             </div>
-            <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
-              <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Achievements</p>
-              <p className="text-3xl font-bold text-white">{profile.stats.achievementsCount}</p>
+            <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
+              <div className="flex-shrink-0">
+                <Trophy className="w-8 h-8 text-emerald-400/80 mx-auto" />
+              </div>
+              <div>
+                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Achievements</p>
+                <p className="text-4xl font-extrabold text-white">{profile.stats.achievementsCount}</p>
+              </div>
             </div>
-            <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
-              <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Teams</p>
-              <p className="text-3xl font-bold text-white">{profile.stats.teamsCount}</p>
+            <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
+              <div className="flex-shrink-0">
+                <Users className="w-8 h-8 text-sky-400/80 mx-auto" />
+              </div>
+              <div>
+                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Teams</p>
+                <p className="text-4xl font-extrabold text-white">{profile.stats.teamsCount}</p>
+              </div>
             </div>
           </div>
         </div>

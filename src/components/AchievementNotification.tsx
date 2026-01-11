@@ -57,7 +57,7 @@ export default function AchievementNotification({
           stiffness: 150,
           damping: 20,
         }}
-        className="relative bg-black border-2 rounded-lg p-8 max-w-md w-full shadow-2xl animate-pulse-slow"
+        className="relative bg-black border-2 rounded-lg p-8 w-full sm:max-w-md shadow-2xl animate-pulse-slow"
         style={{
           borderColor: color.border,
           backgroundColor: `rgba(0, 0, 0, 0.9)`,

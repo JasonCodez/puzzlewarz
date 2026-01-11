@@ -26,7 +26,7 @@ export default function ActionModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
 
-      <div className="relative max-w-lg w-full rounded-lg shadow-lg overflow-hidden">
+      <div className="relative w-full sm:max-w-lg rounded-lg shadow-lg overflow-hidden">
         <div className={`${bg} px-6 py-4`}> 
           <h3 className="text-white text-lg font-semibold">{title || (variant === 'success' ? 'Success' : variant === 'error' ? 'Error' : 'Notice')}</h3>
         </div>

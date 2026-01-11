@@ -214,7 +214,7 @@ export default function TeamDetailPage() {
         </div>
       </nav>
       
-      <div className="p-8">
+      <div className="px-4 py-6 sm:p-8">
       <div className="max-w-4xl mx-auto">
 
         {error && (
@@ -241,7 +241,7 @@ export default function TeamDetailPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               <div className="bg-slate-900/50 rounded-lg p-4">
                 <p className="text-slate-400 text-sm mb-1">Members</p>
                 <p className="text-2xl font-bold text-white">
@@ -269,23 +269,23 @@ export default function TeamDetailPage() {
               {team.members.map((member) => (
                 <div
                   key={member.user.id}
-                  className="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-teal-500/30"
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-teal-500/30"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
                     {member.user.image ? (
                       <img
                         src={member.user.image}
                         alt={member.user.name || "Member"}
-                        className="w-10 h-10 rounded-full"
+                        className="w-10 h-10 rounded-full flex-shrink-0"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center text-teal-300">
+                      <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center text-teal-300 flex-shrink-0">
                         👤
                       </div>
                     )}
 
-                    <div>
-                      <p className="text-white font-semibold">
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold truncate">
                         <Link href={`/profile/${member.user.id}`} className="hover:underline">
                           {member.user.name || "Member"}
                         </Link>
@@ -293,7 +293,7 @@ export default function TeamDetailPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="mt-3 sm:mt-0 flex items-center gap-2">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-semibold ${
                         member.role === "admin"
@@ -331,7 +331,7 @@ export default function TeamDetailPage() {
               ) : (
                 <div className="space-y-3">
                   {applications.map((app) => (
-                    <div key={app.id} className="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-teal-500/30">
+                    <div key={app.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-teal-500/30">
                       <div className="flex items-center gap-4">
                         {app.user?.image ? (
                           <img src={app.user.image} alt={app.user.name || 'Applicant'} className="w-10 h-10 rounded-full" />
@@ -343,7 +343,7 @@ export default function TeamDetailPage() {
                           <p className="text-xs text-teal-200">Applied {new Date(app.createdAt).toLocaleString()}</p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="mt-3 sm:mt-0 flex gap-2">
                         <button
                           onClick={async () => {
                             try {
@@ -414,11 +414,11 @@ export default function TeamDetailPage() {
           )}
 
           <div className="border-t border-teal-500/30 pt-8 mt-8">
-            <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
               {userRole ? (
                 <Link
                   href="/puzzles"
-                  className="flex-1 px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-center transition-colors"
+                  className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-center transition-colors"
                 >
                   Solve Puzzles as Team
                 </Link>
@@ -427,7 +427,7 @@ export default function TeamDetailPage() {
                 team.isPublic ? (
                     session?.user?.email ? (
                       inviteStatus === 'pending' ? (
-                        <button disabled className="flex-1 px-6 py-3 rounded-lg bg-yellow-500 text-black font-semibold text-center transition-colors opacity-70 cursor-not-allowed">
+                        <button disabled className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-yellow-500 text-black font-semibold text-center transition-colors opacity-70 cursor-not-allowed">
                           Application submitted!
                         </button>
                       ) : (
@@ -472,7 +472,7 @@ export default function TeamDetailPage() {
                               setModalOpen(true);
                             }
                           }}
-                          className="flex-1 px-6 py-3 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-black font-semibold text-center transition-colors"
+                          className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-black font-semibold text-center transition-colors"
                         >
                           Apply to Join
                         </button>
@@ -491,7 +491,7 @@ export default function TeamDetailPage() {
               {userRole && ["admin", "moderator"].includes(userRole) && (
                 <button
                   onClick={() => setShowInviteModal(true)}
-                  className="flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors"
+                  className="w-full sm:w-auto flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors"
                 >
                   <Mail className="w-5 h-5" />
                   Invite Members
@@ -500,13 +500,13 @@ export default function TeamDetailPage() {
               {userRole && (
                 <button
                   onClick={() => setConfirmLeaveOpen(true)}
-                  className="px-6 py-3 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold transition-colors"
+                  className="w-full sm:w-auto px-6 py-3 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold transition-colors"
                 >
                   Leave Team
                 </button>
               )}
 
-              <button className="px-6 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold transition-colors">
+              <button className="w-full sm:w-auto px-6 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold transition-colors">
                 Team Stats
               </button>
             </div>

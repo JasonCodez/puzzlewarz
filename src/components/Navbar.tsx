@@ -127,8 +127,8 @@ export default function Navbar() {
           <div className="desktop-nav hidden nav:flex items-center gap-4">
             {session && !loading ? (
               <>
-                <NotificationBell />
-                <MessagesBell />
+                <NotificationBell onActivate={() => setMobileOpen(false)} />
+                <MessagesBell onActivate={() => setMobileOpen(false)} />
                 {userInfo?.image && (
                   <img
                     src={userInfo.image}
@@ -166,7 +166,7 @@ export default function Navbar() {
       ></div>
       {/* Mobile Menu Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-72 max-w-full z-50 bg-[#181b1e] shadow-2xl transform transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed top-0 right-0 h-full w-full sm:w-72 max-w-full z-50 bg-[#181b1e] shadow-2xl transform transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}
         style={{ borderLeft: '2px solid #3891A6' }}
         role="dialog"
         aria-modal="true"
@@ -201,8 +201,8 @@ export default function Navbar() {
           </nav>
           {session && !loading && (
             <div className="mt-auto flex items-center gap-3 border-t border-brand-teal pt-4">
-              <NotificationBell />
-              <MessagesBell />
+              <NotificationBell onActivate={() => setMobileOpen(false)} />
+              <MessagesBell onActivate={() => setMobileOpen(false)} />
               {userInfo?.image && (
                 <img
                   src={userInfo.image}

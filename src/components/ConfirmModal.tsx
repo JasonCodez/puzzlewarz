@@ -25,7 +25,7 @@ export default function ConfirmModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
 
-      <div className="relative max-w-md w-full rounded-lg shadow-lg overflow-hidden bg-slate-900 border border-slate-700">
+      <div className="relative w-full sm:max-w-md rounded-lg shadow-lg overflow-hidden bg-slate-900 border border-slate-700">
         <div className="px-6 py-4 bg-slate-800">
           <h3 className="text-white text-lg font-semibold">{title || 'Confirm'}</h3>
         </div>

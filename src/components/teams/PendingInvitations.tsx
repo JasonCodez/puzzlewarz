@@ -95,7 +95,7 @@ export default function PendingInvitations({
       />
 
       {/* Panel */}
-      <div className="absolute right-0 top-0 h-screen w-full max-w-md bg-slate-900 border-l border-slate-700 shadow-xl flex flex-col">
+      <div className="fixed right-0 top-0 h-full w-full sm:max-w-md bg-slate-900 border-l border-slate-700 shadow-xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-700">
           <div>

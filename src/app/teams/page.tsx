@@ -88,18 +88,18 @@ export default function TeamsPage() {
       <Navbar />
       <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-16">
         <div className="max-w-6xl mx-auto px-4 py-12">
-          <div className="mb-8 flex items-center justify-between">
+          <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between">
             <div>
               <h1 className="text-4xl font-bold text-white mb-2">👥 Teams</h1>
               <p style={{ color: '#DDDBF1' }}>
                 Collaborate with other players and solve puzzles together
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
               {invitationCount > 0 && (
                 <button
                   onClick={() => setShowInvitations(true)}
-                  className="relative px-6 py-3 rounded-lg font-semibold transition-colors hover:opacity-90 flex items-center gap-2"
+                  className="relative w-full sm:w-auto px-6 py-3 rounded-lg font-semibold transition-colors hover:opacity-90 flex items-center gap-2"
                   style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}
                 >
                   <Mail className="w-5 h-5" />
@@ -111,7 +111,7 @@ export default function TeamsPage() {
               )}
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="px-6 py-3 rounded-lg text-white font-semibold transition-colors hover:opacity-90"
+                className="w-full sm:w-auto px-6 py-3 rounded-lg text-white font-semibold transition-colors hover:opacity-90"
                 style={{ backgroundColor: '#FDE74C', color: '#000' }}
               >
                 + Create Team

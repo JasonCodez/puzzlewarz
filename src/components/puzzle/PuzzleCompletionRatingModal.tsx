@@ -49,7 +49,7 @@ export default function PuzzleCompletionRatingModal({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.5, opacity: 0, y: 20 }}
           transition={{ type: "spring", stiffness: 200, damping: 25 }}
-          className="bg-gray-900 rounded-lg border p-8 w-full max-w-md mx-4 shadow-2xl"
+          className="bg-gray-900 rounded-lg border p-8 w-full sm:max-w-md mx-4 shadow-2xl"
           style={{
             backgroundColor: "rgba(2, 2, 2, 0.95)",
             borderColor: "#FDE74C",

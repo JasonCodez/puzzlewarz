@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-export default function MessagesBell() {
+export default function MessagesBell({ onActivate }: { onActivate?: () => void }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
@@ -42,7 +42,11 @@ export default function MessagesBell() {
 
   return (
     <button
-      onClick={() => router.push('/messages')}
+      onClick={(e) => {
+        e.stopPropagation();
+        onActivate?.();
+        router.push('/messages');
+      }}
       className="relative p-2 hover:bg-slate-800 rounded-lg transition-colors group"
       title="Messages"
     >

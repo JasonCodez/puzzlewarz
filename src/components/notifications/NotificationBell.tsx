@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Bell } from "lucide-react";
-import NotificationsPanel from "@/components/notifications/NotificationsPanel";
+import { useRouter } from "next/navigation";
 
-export default function NotificationBell() {
-  const [isOpen, setIsOpen] = useState(false);
+export default function NotificationBell({ onActivate }: { onActivate?: () => void }) {
+  const router = useRouter();
   const [unreadCount, setUnreadCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -57,7 +57,11 @@ export default function NotificationBell() {
   return (
     <>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onActivate?.();
+          router.push('/notifications');
+        }}
         className="relative p-2 hover:bg-slate-800 rounded-lg transition-colors group"
         title="Notifications"
       >
@@ -69,7 +73,7 @@ export default function NotificationBell() {
         )}
       </button>
 
-      <NotificationsPanel isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      {/* Notifications open via dedicated page */}
     </>
   );
 }

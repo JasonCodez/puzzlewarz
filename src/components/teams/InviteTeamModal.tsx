@@ -84,7 +84,7 @@ export default function InviteTeamModal({
       {/* Modal */}
       <div className="absolute inset-0 flex items-center justify-center p-4">
         <div
-          className="w-full max-w-md rounded-lg shadow-xl border"
+          className="w-full sm:max-w-md rounded-lg shadow-xl border"
           style={{
             backgroundColor: "rgba(2, 2, 2, 0.95)",
             borderColor: "#3891A6",

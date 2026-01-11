@@ -45,7 +45,7 @@ export function CreateTeamModal({ onClose, onSuccess }: CreateTeamModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-800 border rounded-lg p-8 w-full max-w-md" style={{ borderColor: 'rgba(56, 145, 166, 0.2)' }}>
+      <div className="bg-slate-800 border rounded-lg p-8 w-full sm:max-w-md" style={{ borderColor: 'rgba(56, 145, 166, 0.2)' }}>
         <h2 className="text-2xl font-bold text-white mb-6">Create New Team</h2>
 
         {error && (

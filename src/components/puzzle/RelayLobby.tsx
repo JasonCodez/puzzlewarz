@@ -37,7 +37,7 @@ export default function RelayLobby({
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
     >
       <div
-        className="rounded-lg p-8 max-w-md w-full border"
+        className="rounded-lg p-8 w-full sm:max-w-md border"
         style={{ backgroundColor: '#0f172a', borderColor: '#3891A6' }}
       >
         <h1 className="text-3xl font-bold text-white mb-2 text-center">🔁 Relay Riddle</h1>
