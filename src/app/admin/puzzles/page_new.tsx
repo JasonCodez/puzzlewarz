@@ -67,6 +67,9 @@ export default function AdminPuzzlesPage() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [jigsawImagePreview, setJigsawImagePreview] = useState<string>("");
   const [jigsawImageUrl, setJigsawImageUrl] = useState<string>("");
+  const [importingImage, setImportingImage] = useState(false);
+  const [importImageResult, setImportImageResult] = useState<string | null>(null);
+  const [importImageError, setImportImageError] = useState<string | null>(null);
   const [sudokuDifficulty, setSudokuDifficulty] = useState<'easy' | 'medium' | 'hard' | 'expert' | 'extreme'>('medium');
   const [sudokuPuzzle, setSudokuPuzzle] = useState<{ puzzle: number[][]; solution: number[][] } | null>(null);
   const [sudokuTimeLimit, setSudokuTimeLimit] = useState<number | undefined>(15 * 60);
@@ -367,6 +370,36 @@ export default function AdminPuzzlesPage() {
 
           const uploadedMedia = await uploadResponse.json();
           console.log('[SUBMIT] Jigsaw image URL uploaded successfully:', uploadedMedia);
+          // Automatically import the external image into uploads so admins don't need to reopen the editor
+          try {
+            console.log('[SUBMIT] Attempting automatic import to uploads for jigsaw image...');
+            const imp = await fetch('/api/admin/import-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ puzzleId: createdPuzzle.id, imageUrl: jigsawImageUrl }),
+            }).catch((e) => { throw new Error(`Network error: ${e?.message || e}`); });
+
+            const txt = await imp.text().catch(() => '');
+            let impData: any = null;
+            try { impData = txt ? JSON.parse(txt) : null; } catch (e) { impData = { raw: txt }; }
+            console.log('[SUBMIT] import-image response', imp.status, impData);
+            if (!imp.ok) {
+              const errMsg = (impData && (impData.error || impData.message)) || `Import failed (${imp.status})`;
+              console.error('[SUBMIT] automatic import failed:', errMsg);
+              setFormError(`Import failed: ${errMsg}`);
+            } else {
+              const publicUrl = (impData && impData.imageUrl) || null;
+              setImportImageResult(publicUrl);
+              if (publicUrl) {
+                setJigsawImagePreview(publicUrl);
+                setJigsawImageUrl(publicUrl);
+              }
+            }
+          } catch (impErr) {
+            console.error('[SUBMIT] automatic import error', impErr);
+            // non-fatal: leave uploaded external media record in place and show message
+            setFormError((impErr instanceof Error) ? impErr.message : String(impErr));
+          }
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err);
           console.error('[SUBMIT] Failed to upload jigsaw image URL:', errorMsg);
@@ -693,39 +726,92 @@ export default function AdminPuzzlesPage() {
                   {formData.puzzleType === 'jigsaw' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">Jigsaw Image {jigsawImagePreview ? <span className="text-xs text-green-300">(selected)</span> : <span className="text-xs text-gray-400">(required)</span>}</label>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
                           <input
                             type="text"
                             placeholder="Paste an external image URL"
                             value={jigsawImageUrl}
                             onChange={handleJigsawImageUrlChange}
-                            className="px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
-                            style={{ minWidth: 320 }}
+                            className="flex-1 min-w-0 px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
                           />
-                          <button type="button" onClick={handleUseJigsawUrl} className="px-3 py-1 rounded bg-blue-600 text-white text-sm">Use URL</button>
-                          <button type="button" onClick={() => { setJigsawImageUrl(''); setJigsawImagePreview(''); }} className="px-3 py-1 rounded bg-red-700 text-white text-sm">Clear</button>
+                          <div className="flex gap-2 mt-2 sm:mt-0">
+                            <button type="button" onClick={handleUseJigsawUrl} className="px-3 py-1 rounded bg-blue-600 text-white text-sm">Use URL</button>
+                            
+                            <button
+                              type="button"
+                              disabled={!jigsawImageUrl || !puzzleId || importingImage}
+                              onClick={async () => {
+                                setImportImageResult(null);
+                                setImportImageError(null);
+                                setImportingImage(true);
+                                try {
+                                  if (!jigsawImageUrl) throw new Error('No image URL provided');
+                                  if (!puzzleId) throw new Error('Save the puzzle first to import image');
+
+                                  console.log('[ADMIN] importing image for puzzle', puzzleId, jigsawImageUrl);
+                                  const res = await fetch('/api/admin/import-image', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ puzzleId, imageUrl: jigsawImageUrl }),
+                                  }).catch((e) => { throw new Error(`Network error: ${e?.message || e}`); });
+
+                                  let data: any = null;
+                                  const txt = await res.text().catch(() => '');
+                                  try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = { raw: txt }; }
+
+                                  console.log('[ADMIN] import-image response', res.status, data);
+
+                                  if (!res.ok) {
+                                    const errMsg = (data && (data.error || data.message)) || `Import failed (${res.status})`;
+                                    throw new Error(errMsg + (data && data.raw ? ` - ${String(data.raw).slice(0,200)}` : ''));
+                                  }
+
+                                  const imageUrlResp = (data && data.imageUrl) || null;
+                                  setImportImageResult(imageUrlResp);
+                                  if (imageUrlResp) {
+                                    setJigsawImagePreview(imageUrlResp);
+                                    setJigsawImageUrl(imageUrlResp);
+                                  }
+                                } catch (err) {
+                                  const msg = err instanceof Error ? err.message : String(err);
+                                  console.error('[ADMIN] import-image error', msg);
+                                  setImportImageError(msg);
+                                } finally {
+                                  setImportingImage(false);
+                                }
+                              }}
+                              className="px-3 py-1 rounded bg-amber-600 text-white text-sm"
+                            >
+                              {importingImage ? 'Importing…' : 'Import to uploads'}
+                            </button>
+                          </div>
                         </div>
                         {jigsawImagePreview && (
-                          <div className="flex items-center gap-2">
-                            <img src={jigsawImagePreview} alt="preview" style={{ maxHeight: 80, maxWidth: 160, objectFit: 'contain', background: '#111', borderRadius: 4 }} />
+                          <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                            <img src={jigsawImagePreview} alt="preview" className="max-h-20 max-w-[160px] object-contain bg-[#111] rounded" />
                             <button type="button" onClick={() => { setJigsawImagePreview(''); }} className="px-3 py-1 rounded bg-red-700 text-white text-sm">Clear</button>
                           </div>
                         )}
+                        {importImageResult && (
+                          <div className="mt-2 text-sm text-green-300">Imported: {importImageResult}</div>
+                        )}
+                        {importImageError && (
+                          <div className="mt-2 text-sm text-red-400">Error: {importImageError}</div>
+                        )}
                       </div>
                       <p className="text-xs text-gray-400 mt-2">Recommended: landscape images around 800×600 for best results. The image is required when creating a jigsaw puzzle.</p>
-
+ 
                       {/* Live Jigsaw Puzzle Preview */}
                       {jigsawImagePreview && (
                         <div className="mt-6">
                           <label className="block text-sm font-semibold text-gray-300 mb-2">Live Jigsaw Puzzle Preview</label>
-                          <div style={{ background: '#222', borderRadius: 8, padding: 12, width: '100%' }}>
+                          <div style={{ background: '#222', borderRadius: 8, padding: 12, width: '100%', minHeight: 260 }}>
                             <JigsawPuzzle
                               imageUrl={jigsawImagePreview}
                               rows={typeof formData.puzzleData.gridRows === 'number' && formData.puzzleData.gridRows > 1 ? formData.puzzleData.gridRows : 3}
                               cols={typeof formData.puzzleData.gridCols === 'number' && formData.puzzleData.gridCols > 1 ? formData.puzzleData.gridCols : 4}
                               onComplete={() => {}}
-                              containerStyle={{ width: '100%', height: 'auto', display: 'block' }}
                             />
                           </div>
                         </div>

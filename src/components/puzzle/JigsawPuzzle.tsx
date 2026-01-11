@@ -58,6 +58,7 @@ interface JigsawPuzzleSVGWithTrayProps {
   containerStyle?: React.CSSProperties;
   onComplete?: (timeSpentSeconds?: number) => Promise<number | void> | number | void;
   onShowRatingModal?: () => void;
+  suppressInternalCongrats?: boolean;
 }
 
 interface Piece {
@@ -417,7 +418,8 @@ function JigsawPiece({
   cornerInset,
   smooth,
   isDragging = false,
-}: JigsawPieceProps & { snapped?: boolean; tabRadius?: number; tabDepth?: number; neckWidth?: number; neckDepth?: number; shoulderLen?: number; shoulderDepth?: number; cornerInset?: number; smooth?: number; isDragging?: boolean }) {
+  imageOk = null,
+}: JigsawPieceProps & { snapped?: boolean; tabRadius?: number; tabDepth?: number; neckWidth?: number; neckDepth?: number; shoulderLen?: number; shoulderDepth?: number; cornerInset?: number; smooth?: number; isDragging?: boolean; imageOk?: boolean | null }) {
   const clipId = `clip-${id}`;
   const d = useMemo(
     () => piecePath(pieceW, pieceH, edges),
@@ -475,6 +477,8 @@ function JigsawPiece({
         pointerEvents: snapped ? "none" : "auto",
         transform: 'scale(1)'
       }}
+      data-piece-id={id}
+      data-piece-group={groupId}
     >
       <svg
         width={pieceW}
@@ -489,20 +493,22 @@ function JigsawPiece({
           </clipPath>
         </defs>
 
-        <image
-          href={imageUrl}
-          x={-(boardLeft + col * pieceW)}
-          y={-(boardTop + row * pieceH)}
-          width={boardW}
-          height={boardH}
-          preserveAspectRatio="none"
-          clipPath={`url(#${clipId})`}
-          style={{ pointerEvents: "none" }}
-        />
+        {imageOk && (
+          <image
+            href={imageUrl}
+            x={-(boardLeft + col * pieceW)}
+            y={-(boardTop + row * pieceH)}
+            width={boardW}
+            height={boardH}
+            preserveAspectRatio="none"
+            clipPath={`url(#${clipId})`}
+            style={{ pointerEvents: "none" }}
+          />
+        )}
 
         <path
           d={d}
-          fill="rgba(0,128,255,0.25)"
+          fill={imageOk === false ? "rgba(255,255,255,0.06)" : "rgba(0,128,255,0.25)"}
           stroke={highlight ? "rgba(0,255,255,0.55)" : "rgba(255,255,255,0.18)"}
           strokeWidth={1.4}
           style={{ pointerEvents: "none" }}
@@ -546,6 +552,7 @@ export default function JigsawPuzzleSVGWithTray({
   smooth = 0.55,
   onComplete,
   onShowRatingModal,
+  suppressInternalCongrats = false,
   containerStyle = {},
 }: JigsawPuzzleSVGWithTrayProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -554,6 +561,7 @@ export default function JigsawPuzzleSVGWithTray({
   const shimmerOuterRef = useRef<HTMLDivElement>(null);
   const shimmerInnerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
+  const normalizedPositionsRef = useRef<Record<string, PiecePosition> | null>(null);
   const [scale, setScale] = useState<number>(1);
   const [wrapperWidth, setWrapperWidth] = useState<number | null>(null);
   const [isStacked, setIsStacked] = useState<boolean>(false);
@@ -564,6 +572,60 @@ export default function JigsawPuzzleSVGWithTray({
 
   const pieceW = boardWidth / cols;
   const pieceH = boardHeight / rows;
+  const [imageOk, setImageOk] = useState<boolean | null>(null);
+  const [imageReloadKey, setImageReloadKey] = useState(0);
+  const [proxyAttempted, setProxyAttempted] = useState(false);
+  const [effectiveImageUrl, setEffectiveImageUrl] = useState<string | null>(imageUrl || null);
+
+  React.useEffect(() => {
+    // If the app build sets NEXT_PUBLIC_FORCE_IMAGE_PROXY=true, prefer loading
+    // images through the server proxy immediately to avoid CSP/CORS issues.
+    const forceProxy = typeof process !== 'undefined' && (process.env.NEXT_PUBLIC_FORCE_IMAGE_PROXY === '1' || process.env.NEXT_PUBLIC_FORCE_IMAGE_PROXY === 'true');
+    if (imageUrl && forceProxy) {
+      setEffectiveImageUrl(`/api/image-proxy?url=${encodeURIComponent(imageUrl)}`);
+    } else {
+      setEffectiveImageUrl(imageUrl || null);
+    }
+    setImageOk(null);
+    setProxyAttempted(false);
+  }, [imageUrl]);
+
+  React.useEffect(() => {
+    const target = effectiveImageUrl;
+    if (!target) {
+      setImageOk(false);
+      return;
+    }
+
+    let cancelled = false;
+    const tryLoad = (src: string, onSuccess: () => void, onError: () => void) => {
+      const img = new Image();
+      try { img.crossOrigin = 'anonymous'; } catch {}
+      img.onload = () => { if (!cancelled) onSuccess(); };
+      img.onerror = () => { if (!cancelled) onError(); };
+      img.src = src;
+      return () => { cancelled = true; img.onload = null; img.onerror = null; };
+    };
+
+    // First, try direct load
+    let cleanup = tryLoad(target, () => setImageOk(true), async () => {
+      console.warn('[Jigsaw] direct image load failed for', target);
+      if (!proxyAttempted && imageUrl) {
+        // attempt proxy
+        setProxyAttempted(true);
+        const proxy = `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+        setEffectiveImageUrl(proxy);
+        // Let the proxy attempt run in its own effect (by updating effectiveImageUrl)
+      } else {
+        setImageOk(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      if (cleanup) cleanup();
+    };
+  }, [effectiveImageUrl, imageReloadKey, proxyAttempted]);
 
   // Stage layout:
   // +-------------------------------+
@@ -730,7 +792,12 @@ export default function JigsawPuzzleSVGWithTray({
 
   const translateGroup: TranslateGroupFn = (arr, groupId, dx, dy) =>
     arr.map((p) =>
-      p.groupId === groupId ? { ...p, pos: { x: p.pos.x + dx, y: p.pos.y + dy } } : p
+      p.groupId === groupId
+        ? {
+            ...p,
+            pos: { x: Math.round((p.pos.x + dx) || 0), y: Math.round((p.pos.y + dy) || 0) },
+          }
+        : p
     );
 
   interface MergeGroupsFn {
@@ -741,10 +808,18 @@ export default function JigsawPuzzleSVGWithTray({
     aGroup === bGroup
       ? arr
       : (() => {
-          // If the target group (aGroup) is snapped, keep merged pieces snapped as well.
+          // If the target group (aGroup) is snapped, mark merged pieces as snapped too.
+          // Avoid forcing per-piece absolute positions here (they will have been
+          // translated into place by the caller), which reduces visual jumps.
           const aGroupSnapped = arr.some((p) => p.groupId === aGroup && p.snapped);
           return arr.map((p) =>
-            p.groupId === bGroup ? { ...p, groupId: aGroup, snapped: aGroupSnapped || p.snapped } : p
+            p.groupId === bGroup
+              ? {
+                  ...p,
+                  groupId: aGroup,
+                  snapped: aGroupSnapped || p.snapped,
+                }
+              : p
           );
         })();
 
@@ -767,11 +842,12 @@ export default function JigsawPuzzleSVGWithTray({
       const dx: number = p.correct.x - p.pos.x;
       const dy: number = p.correct.y - p.pos.y;
       if (hypot(dx, dy) <= boardSnapTolerance) {
-        // Snap group and mark as snapped
-        return translateGroup(arr, groupId, dx, dy).map((piece) =>
-          piece.groupId === groupId
-            ? { ...piece, snapped: true }
-            : piece
+        // Instead of forcing absolute positions (which can cause visual jerk),
+        // translate the whole group by the offset for this piece so the group's
+        // relative layout is preserved and movement is smooth.
+        const next = translateGroup(arr, groupId, dx, dy);
+        return next.map((piece) =>
+          piece.groupId === groupId ? { ...piece, snapped: true } : piece
         );
       }
     }
@@ -955,13 +1031,65 @@ export default function JigsawPuzzleSVGWithTray({
 
     setDraggingGroupId(null); // trigger re-render for drag scale
 
+    // Compute new piece positions and mark snapped groups; also record exact target positions
+    const normalizedPositions: Record<string, PiecePosition> = {};
     setPieces((prev: Piece[]) => {
       let next = prev;
       next = snapGroupToBoardIfClose(next, activeGroupId as string);
       next = snapAndMergeNeighbors(next, activeGroupId as string);
       next = snapGroupToBoardIfClose(next, activeGroupId as string);
+
+      // Collect exact correct positions for any pieces that are snapped in the resulting state
+      for (const p of next) {
+        if (p.snapped) {
+          normalizedPositions[p.id] = { x: p.correct.x, y: p.correct.y };
+        }
+      }
+
+      // Store normalized positions for the animation step
+      normalizedPositionsRef.current = normalizedPositions;
       return next;
     });
+
+    // After React updates the DOM, animate snapped pieces to their exact correct coords
+    setTimeout(() => {
+      try {
+        const norm = normalizedPositionsRef.current;
+        if (!norm) return;
+        const ids = Object.keys(norm);
+        if (ids.length === 0) return;
+
+        const els: HTMLElement[] = [];
+        for (const id of ids) {
+          const el = stageRef.current?.querySelector(`[data-piece-id="${id}"]`) as HTMLElement | null;
+          if (el) els.push(el);
+        }
+
+        if (els.length === 0) return;
+
+        // Animate DOM positions to target exact coords to avoid visible nudges
+        gsap.to(els, {
+          left: (i, targetEl) => {
+            const id = (targetEl as HTMLElement).getAttribute('data-piece-id') || '';
+            return (norm[id]?.x ?? 0) + 'px';
+          },
+          top: (i, targetEl) => {
+            const id = (targetEl as HTMLElement).getAttribute('data-piece-id') || '';
+            return (norm[id]?.y ?? 0) + 'px';
+          },
+          duration: 0.12,
+          ease: 'power2.out',
+          onComplete: () => {
+            // Commit normalized positions into React state to keep DOM and state in sync
+            setPieces((prev) => prev.map((p) => (norm[p.id] ? { ...p, pos: { x: norm[p.id].x, y: norm[p.id].y } } : p)));
+            normalizedPositionsRef.current = null;
+          },
+        });
+      } catch (err) {
+        console.error('[Jigsaw] finalize snap animation failed', err);
+        normalizedPositionsRef.current = null;
+      }
+    }, 0);
   };
 
   const groupsCount = useMemo(() => new Set(pieces.map((p) => p.groupId)).size, [pieces]);
@@ -994,21 +1122,75 @@ export default function JigsawPuzzleSVGWithTray({
         const tl = gsap.timeline({ defaults: { ease: 'power2.inOut' } });
 
         // Prefer applying glow to the stage so it won't be clipped by board overflow or transforms
-        if (stageEl) {
+        // Prefer animating the board element so the gold glow stays inside the puzzle container
+        if (boardEl) {
+          // Temporarily allow glow to escape clipping and bring board above siblings
+          const prevBox = boardEl.style.boxShadow || '';
+          const prevBorder = boardEl.style.borderColor || '';
+          const prevZ = boardEl.style.zIndex || '';
+          const prevOverflow = stageEl ? stageEl.style.overflow : '';
+          if (stageEl) stageEl.style.overflow = 'visible';
+          boardEl.style.zIndex = '100';
+
+          // Brighten the board border color (no outer glow or scale)
+          tl.to(boardEl, {
+            borderColor: '#FFD700',
+            duration: 0.6,
+            ease: 'power2.out',
+          });
+          tl.to(boardEl, {
+            borderColor: prevBorder || 'rgba(255,255,255,0.14)',
+            duration: 0.6,
+            ease: 'power2.in',
+          }, '+=0.15');
+
+          tl.call(() => {
+            if (stageEl) stageEl.style.overflow = prevOverflow;
+            boardEl.style.zIndex = prevZ;
+          });
+        } else if (stageEl) {
+          // Fallback: animate glow on stage only using box-shadow so layout isn't affected
           const prevOverflow = stageEl.style.overflow;
           stageEl.style.overflow = 'visible';
-          tl.to(stageEl, { borderColor: '#FFD700', boxShadow: '0 0 60px 20px rgba(255,215,0,0.95)', duration: 0.9 });
-          tl.to(stageEl, { boxShadow: '0 0 0 0 rgba(255,215,0,0)', borderColor: 'rgba(255,255,255,0.14)', duration: 0.6 }, '+=0.15');
+          tl.to(stageEl, {
+            boxShadow: '0 0 60px 20px rgba(255,215,0,0.95)',
+            duration: 0.9,
+            ease: 'power2.inOut',
+          });
+          tl.to(stageEl, {
+            boxShadow: '0 0 0 0 rgba(255,215,0,0)',
+            duration: 0.6,
+            ease: 'power2.inOut',
+          }, '+=0.15');
           tl.call(() => { stageEl.style.overflow = prevOverflow; });
-        } else if (boardEl) {
-          tl.to(boardEl, { borderColor: '#FFD700', boxShadow: '0 0 40px 12px rgba(255,215,0,0.95)', duration: 0.8 });
-          tl.to(boardEl, { boxShadow: '0 0 0 0 rgba(255,215,0,0)', borderColor: 'rgba(255,255,255,0.14)', duration: 0.6 }, '+=0.15');
+        }
+
+        // Add piece-pop to timeline (runs before shimmer). Respect prefers-reduced-motion.
+        try {
+          const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          if (!prefersReduced && stageEl) {
+            const piecesEls = stageEl.querySelectorAll('[data-piece-id]');
+            if (piecesEls && piecesEls.length > 0) {
+              // staggered pop from center
+              tl.to(piecesEls as any, {
+                scale: 1.06,
+                duration: 0.12,
+                ease: 'power2.out',
+                stagger: { each: 0.03, from: 'center' },
+                yoyo: true,
+                repeat: 1,
+              });
+            }
+          }
+        } catch (e) {
+          console.warn('[Jigsaw] failed to add piece-pop to timeline', e);
         }
 
         if (shimmerOuter && shimmerInner) {
-          shimmerOuter.style.zIndex = '50';
+          // Ensure shimmer sits above pieces
+          shimmerOuter.style.zIndex = '999';
           shimmerOuter.style.pointerEvents = 'none';
-          // Start shimmer after the glow finishes so it fully traverses the stage
+          // Start shimmer after the piece-pop finishes so it fully traverses the board
           tl.set(shimmerOuter, { autoAlpha: 1 });
           // use xPercent animation for reliable motion across transforms and ensure it fully enters/exits
           tl.fromTo(shimmerInner, { xPercent: -200 }, { xPercent: 200, duration: 1.2, ease: 'power2.inOut' });
@@ -1031,21 +1213,7 @@ export default function JigsawPuzzleSVGWithTray({
             shimmerOuter.style.zIndex = '50';
             shimmerOuter.style.pointerEvents = 'none';
           }
-          if (stageEl) {
-            // fallback glow on stage (not clipped)
-            stageEl.style.boxShadow = '0 0 40px 12px rgba(255,215,0,0.95)';
-            setTimeout(() => {
-              if (stageEl) stageEl.style.boxShadow = '';
-            }, 900);
-          } else if (boardEl) {
-            boardEl.style.boxShadow = '0 0 40px 12px rgba(255,215,0,0.95)';
-            setTimeout(() => {
-              if (boardEl) {
-                boardEl.style.boxShadow = '';
-                boardEl.style.borderColor = 'rgba(255,255,255,0.14)';
-              }
-            }, 900);
-          }
+          // No glow fallback — border change handled above
           if (messageEl && (computedMessageOpacity === '0' || computedMessageOpacity === null)) {
             console.warn('[Jigsaw] messageEl still hidden — forcing visibility');
             messageEl.style.opacity = '1';
@@ -1065,20 +1233,50 @@ export default function JigsawPuzzleSVGWithTray({
           }
         }
 
-        setAwardedPoints(typeof pointsResult === 'number' ? pointsResult : null);
+        // Call parent's onComplete to record progress/award points and await result if it returns one
+        let pointsResultAfter: number | void | undefined = pointsResult;
 
-        // Show congrats message
-        setShowCongrats(true);
-        if (messageEl) {
-          gsap.fromTo(
-            messageEl,
-            { autoAlpha: 0, y: 8 },
-            { autoAlpha: 1, y: 0, duration: 1.0, ease: 'power2.out' }
-          );
+        // Wait 1s after the timeline (shimmer finished), then show the congrats popup
+        await new Promise((r) => setTimeout(r, 1000));
+
+        // Show congrats message (unless parent asked us to suppress internal overlay)
+        if (!suppressInternalCongrats) {
+          setShowCongrats(true);
+          if (messageEl) {
+            gsap.fromTo(
+              messageEl,
+              { autoAlpha: 0, y: 8 },
+              { autoAlpha: 1, y: 0, duration: 1.0, ease: 'power2.out' }
+            );
+          }
         }
 
-        // Wait a moment so user can read message,
-        // then gracefully fade the congrats overlay out before opening the modal
+        // Animate points count-up while message is visible (if numeric)
+        if (typeof pointsResultAfter === 'number') {
+          try {
+            setAwardedPoints(0);
+            await new Promise<void>((resolve) => {
+              const obj: { val: number } = { val: 0 };
+              gsap.to(obj, {
+                val: pointsResultAfter as number,
+                duration: 0.9,
+                ease: 'power2.out',
+                onUpdate: () => setAwardedPoints(Math.round(obj.val)),
+                onComplete: () => {
+                  setAwardedPoints(pointsResultAfter as number);
+                  resolve();
+                },
+              });
+            });
+          } catch (e) {
+            console.error('[Jigsaw] points countup failed', e);
+            setAwardedPoints(pointsResultAfter as number);
+          }
+        } else {
+          setAwardedPoints(null);
+        }
+
+        // Wait a moment so user can read message, then fade the congrats overlay out
         await new Promise((r) => setTimeout(r, 1700));
         if (messageEl) {
           try {
@@ -1095,8 +1293,8 @@ export default function JigsawPuzzleSVGWithTray({
             // ignore animation errors and proceed
           }
         }
-        // hide internal state so the overlay is removed from DOM flow
-        setShowCongrats(false);
+        // hide internal state so the overlay is removed from DOM flow (if it was shown)
+        if (!suppressInternalCongrats) setShowCongrats(false);
         if (onShowRatingModal) onShowRatingModal();
       } catch (err) {
         console.error('Error during completion animation:', err);
@@ -1219,7 +1417,7 @@ export default function JigsawPuzzleSVGWithTray({
           top: 0,
           width: stageWidth,
           height: stageHeight,
-          borderRadius: 18,
+          borderRadius: 0,
           overflow: "hidden",
           background: "#070a0f",
           border: "1px solid rgba(255,255,255,0.14)",
@@ -1241,7 +1439,7 @@ export default function JigsawPuzzleSVGWithTray({
             top: boardTop,
             width: boardWidth,
             height: boardHeight,
-            borderRadius: 14,
+            borderRadius: 0,
             border: "1px solid rgba(255,255,255,0.14)",
             background: "rgba(255,255,255,0.03)",
             overflow: "hidden",
@@ -1251,31 +1449,33 @@ export default function JigsawPuzzleSVGWithTray({
             style={{
               position: "absolute",
               inset: 0,
-              backgroundImage: `url(${imageUrl})`,
+              backgroundImage: imageOk === true && effectiveImageUrl ? `url(${effectiveImageUrl})` : undefined,
               backgroundSize: "100% 100%",
-              opacity: 0.11,
+              backgroundColor: imageOk === false ? 'rgba(255,255,255,0.02)' : undefined,
+              opacity: imageOk === true ? 0.11 : 1,
               pointerEvents: "none",
             }}
           />
-          {/* Shimmer overlay (hidden until completion) */}
-          <div
-            ref={shimmerOuterRef}
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0 }}
-          >
-              <div
-                ref={shimmerInnerRef}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  width: '60%',
-                  height: '100%',
-                  background: 'linear-gradient(90deg, rgba(255,215,0,0) 0%, rgba(255,215,0,0.92) 52%, rgba(255,215,0,0) 100%)',
-                  transform: 'skewX(-20deg)',
-                  willChange: 'transform, opacity'
-                }}
-              />
-          </div>
+
+          {imageOk === false && (
+            <div style={{ position: 'absolute', left: 12, top: 12, zIndex: 40 }}>
+              <div style={{ background: 'rgba(0,0,0,0.6)', color: 'white', padding: '6px 10px', borderRadius: 8, fontSize: 12 }}>
+                Image failed to load.
+                <button
+                  onClick={() => {
+                    setImageOk(null);
+                    setImageReloadKey((k) => k + 1);
+                    setProxyAttempted(false);
+                    setEffectiveImageUrl(imageUrl || null);
+                  }}
+                  style={{ marginLeft: 8, background: '#2b6cb0', color: 'white', border: 'none', padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+          {/* Shimmer overlay originally here — moved below so it renders above pieces */}
         </div>
 
         {/* TRAY */}
@@ -1286,7 +1486,7 @@ export default function JigsawPuzzleSVGWithTray({
             top: trayTop,
             width: trayWidth,
             height: trayHeight,
-            borderRadius: 14,
+            borderRadius: 0,
             border: "1px dashed rgba(255,255,255,0.18)",
             background: "rgba(255,255,255,0.02)",
           }}
@@ -1320,16 +1520,37 @@ export default function JigsawPuzzleSVGWithTray({
             boardH={boardHeight}
             boardLeft={boardLeft}
             boardTop={boardTop}
-            imageUrl={imageUrl}
+            imageUrl={effectiveImageUrl ?? ''}
             pos={p.pos}
             z={p.z}
             groupId={p.groupId}
             onPointerDown={onPointerDown}
+            imageOk={imageOk}
             highlight={!!activeGroup && p.groupId === activeGroup}
             snapped={p.snapped || solved}
             isDragging={!!activeGroup && p.groupId === activeGroup}
           />
         ))}
+
+        {/* Shimmer overlay (hidden until completion) - placed after pieces so it sits on top */}
+        <div
+          ref={shimmerOuterRef}
+          style={{ position: 'absolute', left: boardLeft, top: boardTop, width: boardWidth, height: boardHeight, pointerEvents: 'none', opacity: 0, zIndex: 999 }}
+        >
+          <div
+            ref={shimmerInnerRef}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: '60%',
+              height: '100%',
+              background: 'linear-gradient(90deg, rgba(255,215,0,0) 0%, rgba(255,215,0,0.92) 52%, rgba(255,215,0,0) 100%)',
+              transform: 'skewX(-20deg)',
+              willChange: 'transform, opacity'
+            }}
+          />
+        </div>
 
         {solved && (
           <div

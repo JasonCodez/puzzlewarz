@@ -1085,7 +1085,7 @@ export default function PuzzleDetailPage() {
                   </div>
                 ) : (
                   <div 
-                    className="h-[calc(100vh-16rem)] min-h-[820px] rounded-xl overflow-hidden border border-gray-700 bg-gray-900"
+                    className="h-[calc(100vh-16rem)] min-h-[820px] rounded-none overflow-hidden border border-gray-700 bg-gray-900"
                     style={{
                       height: 'calc(100vh - 16rem)',
                       minHeight: '820px',
@@ -1096,6 +1096,7 @@ export default function PuzzleDetailPage() {
                       imageUrl={jigsawPlayable.imageUrl}
                       rows={jigsawPlayable.data.gridRows}
                       cols={jigsawPlayable.data.gridCols}
+                      suppressInternalCongrats={true}
                       onComplete={async (timeSpentSeconds?: number) => {
                         // Return awarded points to the caller so the puzzle component can display them
                         const prevPoints = progress?.pointsEarned || 0;
