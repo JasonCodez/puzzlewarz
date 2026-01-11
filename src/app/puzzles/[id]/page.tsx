@@ -191,6 +191,15 @@ export default function PuzzleDetailPage() {
   const [revealingHint, setRevealingHint] = useState<string | null>(null);
   const [usedHintIds, setUsedHintIds] = useState<string[]>([]);
 
+  type JigsawControlsApi = {
+    reset: () => void;
+    sendLooseToTray: () => void;
+    enterFullscreen: () => void;
+    exitFullscreen: () => void;
+    isFullscreen: boolean;
+  };
+  const [jigsawControls, setJigsawControls] = useState<JigsawControlsApi | null>(null);
+
   const jigsawPlayable: JigsawPuzzleType | null = (() => {
     if (!puzzle || puzzle.puzzleType !== 'jigsaw') return null;
     if (!puzzle.jigsaw?.imageUrl) return null;
@@ -1076,6 +1085,32 @@ export default function PuzzleDetailPage() {
 
             {puzzle?.puzzleType === 'jigsaw' ? (
               <div className="mb-8">
+                {jigsawPlayable && (
+                  <div className="mb-4 flex flex-col items-stretch gap-3">
+                    <div className="flex items-center justify-center gap-3">
+                      <button
+                        onClick={() => jigsawControls?.enterFullscreen?.()}
+                        className="px-3 py-1 rounded bg-gray-800 text-white border border-gray-600 hover:opacity-90"
+                      >
+                        Fullscreen
+                      </button>
+                      <button
+                        onClick={() => jigsawControls?.reset?.()}
+                        className="px-3 py-1 rounded bg-red-600 text-white border border-red-700 hover:opacity-90"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                    <div className="flex">
+                      <button
+                        onClick={() => jigsawControls?.sendLooseToTray?.()}
+                        className="w-full px-3 py-2 rounded bg-yellow-400 text-black border border-yellow-500 hover:opacity-90"
+                      >
+                        Send loose to tray
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {!jigsawPlayable ? (
                   <div
                     className="p-4 rounded-lg border text-white"
@@ -1084,18 +1119,14 @@ export default function PuzzleDetailPage() {
                     This jigsaw puzzle is missing its image. Upload an image in the admin puzzle creator.
                   </div>
                 ) : (
-                  <div 
-                    className="h-[calc(100vh-16rem)] min-h-[820px] rounded-none overflow-hidden border border-gray-700 bg-gray-900"
-                    style={{
-                      height: 'calc(100vh - 16rem)',
-                      minHeight: '820px',
-                      display: 'flex',
-                    }}
+                  <div
+                    className="rounded-none overflow-hidden border border-gray-700 bg-gray-900 w-full"
                   >
                     <JigsawPuzzle
                       imageUrl={jigsawPlayable.imageUrl}
                       rows={jigsawPlayable.data.gridRows}
                       cols={jigsawPlayable.data.gridCols}
+                      onControlsReady={(api) => setJigsawControls(api)}
                       suppressInternalCongrats={true}
                       onComplete={async (timeSpentSeconds?: number) => {
                         // Return awarded points to the caller so the puzzle component can display them

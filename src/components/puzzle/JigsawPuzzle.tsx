@@ -59,6 +59,7 @@ interface JigsawPuzzleSVGWithTrayProps {
   onComplete?: (timeSpentSeconds?: number) => Promise<number | void> | number | void;
   onShowRatingModal?: () => void;
   suppressInternalCongrats?: boolean;
+  onControlsReady?: (api: { reset: () => void; sendLooseToTray: () => void; enterFullscreen: () => void; exitFullscreen: () => void; isFullscreen: boolean }) => void;
 }
 
 interface Piece {
@@ -554,14 +555,21 @@ export default function JigsawPuzzleSVGWithTray({
   onShowRatingModal,
   suppressInternalCongrats = false,
   containerStyle = {},
+  onControlsReady,
 }: JigsawPuzzleSVGWithTrayProps) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const shimmerOuterRef = useRef<HTMLDivElement>(null);
   const shimmerInnerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   const normalizedPositionsRef = useRef<Record<string, PiecePosition> | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fsScale, setFsScale] = useState<number>(1);
+  const [fsPan, setFsPan] = useState<PiecePosition>({ x: 0, y: 0 });
+  const pointersRef = useRef<Map<number, { x: number; y: number; targetIsPiece: boolean }>>(new Map());
+  const pinchRef = useRef<{ active: boolean; startDist: number; startScale: number; startPan: PiecePosition; centerClientX: number; centerClientY: number } | null>(null);
   const [scale, setScale] = useState<number>(1);
   const [wrapperWidth, setWrapperWidth] = useState<number | null>(null);
   const [isStacked, setIsStacked] = useState<boolean>(false);
@@ -795,7 +803,7 @@ export default function JigsawPuzzleSVGWithTray({
       p.groupId === groupId
         ? {
             ...p,
-            pos: { x: Math.round((p.pos.x + dx) || 0), y: Math.round((p.pos.y + dy) || 0) },
+            pos: { x: (p.pos.x + dx) || 0, y: (p.pos.y + dy) || 0 },
           }
         : p
     );
@@ -930,8 +938,10 @@ export default function JigsawPuzzleSVGWithTray({
     if (anchor.snapped) return;
 
     const rect: DOMRect = el.getBoundingClientRect();
-    const px: number = (e.clientX - rect.left) / scale;
-    const py: number = (e.clientY - rect.top) / scale;
+    const effectiveScale = isFullscreen ? fsScale : scale;
+    const pan = isFullscreen ? fsPan : { x: 0, y: 0 };
+    const px: number = (e.clientX - rect.left) / effectiveScale - pan.x;
+    const py: number = (e.clientY - rect.top) / effectiveScale - pan.y;
 
     const groupId: string = anchor.groupId;
     const groupIds: string[] = getGroupPieceIds(current, groupId);
@@ -974,12 +984,15 @@ export default function JigsawPuzzleSVGWithTray({
     if (!dragRef.current.active) return;
     if (e.pointerId !== dragRef.current.pointerId) return;
 
-    const el = stageRef.current;
-    if (!el) return;
+    const outer = stageRef.current;
+    if (!outer) return;
 
-    const rect: DOMRect = el.getBoundingClientRect();
-    const px: number = (e.clientX - rect.left) / scale;
-    const py: number = (e.clientY - rect.top) / scale;
+    const rect: DOMRect = outer.getBoundingClientRect();
+    const effectiveScale = isFullscreen ? fsScale : scale;
+    const pan = isFullscreen ? fsPan : { x: 0, y: 0 };
+
+    const px: number = (e.clientX - rect.left) / effectiveScale - pan.x;
+    const py: number = (e.clientY - rect.top) / effectiveScale - pan.y;
 
     const groupId: string | null = dragRef.current.groupId;
     const anchorId: string | null = dragRef.current.anchorPieceId;
@@ -1090,9 +1103,118 @@ export default function JigsawPuzzleSVGWithTray({
         normalizedPositionsRef.current = null;
       }
     }, 0);
+    // release any stage pointer captures related to gestures
+    try {
+      if (stageRef.current) {
+        // release any pointer captures we might have set on the stage
+        for (const p of Array.from(pointersRef.current.keys())) {
+          try { stageRef.current.releasePointerCapture(p); } catch {}
+        }
+        pointersRef.current.clear();
+        pinchRef.current = null;
+      }
+    } catch (e) {
+      // ignore
+    }
   };
 
   const groupsCount = useMemo(() => new Set(pieces.map((p) => p.groupId)).size, [pieces]);
+
+  // Stage gesture handlers (pan / pinch-to-zoom)
+  const onStagePointerDown = (e: React.PointerEvent) => {
+    const outer = stageRef.current;
+    if (!outer) return;
+    try { outer.setPointerCapture(e.pointerId); } catch {}
+    const targetIsPiece = (e.target as HTMLElement).closest('[data-piece-id]') !== null;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY, targetIsPiece });
+
+    const pts = Array.from(pointersRef.current.values()).filter(p => !p.targetIsPiece);
+    if (pts.length === 1) {
+      // start pan
+      pinchRef.current = { active: false, startDist: 0, startScale: fsScale, startPan: fsPan, centerClientX: pts[0].x, centerClientY: pts[0].y };
+    } else if (pts.length >= 2) {
+      // start pinch
+      const p1 = pts[0];
+      const p2 = pts[1];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const centerX = (p1.x + p2.x) / 2;
+      const centerY = (p1.y + p2.y) / 2;
+      pinchRef.current = { active: true, startDist: dist, startScale: fsScale, startPan: fsPan, centerClientX: centerX, centerClientY: centerY };
+    }
+  };
+
+  const onStagePointerMove = (e: React.PointerEvent) => {
+    const outer = stageRef.current;
+    if (!outer) return;
+    if (!pointersRef.current.has(e.pointerId)) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY, targetIsPiece: pointersRef.current.get(e.pointerId)!.targetIsPiece });
+
+    const pts = Array.from(pointersRef.current.values()).filter(p => !p.targetIsPiece);
+    const rect = outer.getBoundingClientRect();
+    if (pts.length >= 2 && pinchRef.current && pinchRef.current.startDist > 0) {
+      const p1 = pts[0];
+      const p2 = pts[1];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const scaleFactor = dist / pinchRef.current.startDist;
+        const FS_SCALE_MIN = 0.25;
+        const FS_SCALE_MAX = 4;
+        const newScale = clamp(pinchRef.current.startScale * scaleFactor, FS_SCALE_MIN, FS_SCALE_MAX);
+
+      // keep focal point stable
+      const centerX = (p1.x + p2.x) / 2;
+      const centerY = (p1.y + p2.y) / 2;
+      const contentLocalX = (centerX - rect.left) / pinchRef.current.startScale - pinchRef.current.startPan.x;
+      const contentLocalY = (centerY - rect.top) / pinchRef.current.startScale - pinchRef.current.startPan.y;
+      const newPanX = (centerX - rect.left) / newScale - contentLocalX;
+      const newPanY = (centerY - rect.top) / newScale - contentLocalY;
+
+      setFsScale(newScale);
+      setFsPan({ x: newPanX, y: newPanY });
+      pinchRef.current.active = true;
+    } else if (pts.length === 1 && pinchRef.current && !pinchRef.current.active) {
+      // handle pan with single finger
+      const p = pts[0];
+      const startCenterX = pinchRef.current.centerClientX;
+      const startCenterY = pinchRef.current.centerClientY;
+      const deltaX = (p.x - startCenterX) / fsScale;
+      const deltaY = (p.y - startCenterY) / fsScale;
+      setFsPan({ x: pinchRef.current.startPan.x + deltaX, y: pinchRef.current.startPan.y + deltaY });
+    }
+  };
+
+  const onStagePointerUp = (e: React.PointerEvent) => {
+    try { if (stageRef.current) stageRef.current.releasePointerCapture(e.pointerId); } catch {}
+    pointersRef.current.delete(e.pointerId);
+    const remaining = Array.from(pointersRef.current.values()).filter(p => !p.targetIsPiece);
+    if (remaining.length < 2) pinchRef.current = null;
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    if (!isFullscreen) return;
+    e.preventDefault();
+    const outer = stageRef.current;
+    if (!outer) return;
+    const rect = outer.getBoundingClientRect();
+    const delta = -e.deltaY;
+    const factor = Math.exp(delta * 0.001);
+    const FS_SCALE_MIN = 0.25;
+    const FS_SCALE_MAX = 4;
+    const newScale = clamp(fsScale * factor, FS_SCALE_MIN, FS_SCALE_MAX);
+
+    // zoom to mouse position
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+    const contentLocalX = (mouseX - rect.left) / fsScale - fsPan.x;
+    const contentLocalY = (mouseY - rect.top) / fsScale - fsPan.y;
+    const newPanX = (mouseX - rect.left) / newScale - contentLocalX;
+    const newPanY = (mouseY - rect.top) / newScale - contentLocalY;
+    setFsScale(newScale);
+    setFsPan({ x: newPanX, y: newPanY });
+  };
 
   
 
@@ -1295,6 +1417,12 @@ export default function JigsawPuzzleSVGWithTray({
         }
         // hide internal state so the overlay is removed from DOM flow (if it was shown)
         if (!suppressInternalCongrats) setShowCongrats(false);
+        // Exit fullscreen so parent can present the rating modal without being clipped
+        if (isFullscreen) {
+          setIsFullscreen(false);
+          // give the browser a moment to exit fullscreen/adjust layout
+          await new Promise((r) => setTimeout(r, 200));
+        }
         if (onShowRatingModal) onShowRatingModal();
       } catch (err) {
         console.error('Error during completion animation:', err);
@@ -1305,6 +1433,10 @@ export default function JigsawPuzzleSVGWithTray({
           } catch (e) {
             console.error('Fallback onComplete failed:', e);
           }
+        }
+        if (isFullscreen) {
+          setIsFullscreen(false);
+          await new Promise((r) => setTimeout(r, 200));
         }
         if (onShowRatingModal) onShowRatingModal();
       }
@@ -1367,7 +1499,7 @@ export default function JigsawPuzzleSVGWithTray({
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
 
-    const update = () => {
+      const update = () => {
       const wrapperW = wrapper.clientWidth || 0;
       setWrapperWidth(wrapperW || null);
 
@@ -1378,9 +1510,29 @@ export default function JigsawPuzzleSVGWithTray({
       const effectiveStageWidth = wouldStack ? Math.max(boardWidth, trayWidth) : boardWidth + trayWidth;
       if (!wrapperW || !effectiveStageWidth) return;
 
-      // Simple, robust scale: fit stage to wrapper width, never scale above 1
-      const next = Math.min(1, wrapperW / effectiveStageWidth);
+      // On narrow screens, prefer a scale that fits by height as well as width
+      // so the stage isn't tiny in portrait mode. Reserve some UI chrome space.
+      const wrapperH = wrapper.clientHeight || 0;
+      const reservedChrome = 140; // space for headers/controls when fullscreening
+      const availableHeight = wrapperH ? Math.max(200, wrapperH - reservedChrome) : null;
+      const stageH = isStacked ? boardHeight + trayHeight : boardHeight;
+
+      const widthScale = wrapperW / effectiveStageWidth;
+      const heightScale = availableHeight ? availableHeight / stageH : 1;
+
+      // Choose the best fit but never upscale beyond 1
+      const next = Math.min(1, widthScale, heightScale);
       setScale(next);
+      // If we're fullscreen, initialize fullscreen scale/pan to fit
+      if (isFullscreen) {
+        const viewportH = typeof window !== 'undefined' ? window.innerHeight : null;
+        const wrapperH = wrapper.clientHeight || 0;
+        const availableHeight = wrapperH ? Math.max(200, wrapperH - 140) : (viewportH ? Math.max(200, viewportH - 140) : null);
+        const stageH = isStacked ? boardHeight + trayHeight : boardHeight;
+        const fitScale = Math.min(1, wrapperW / (isStacked ? Math.max(boardWidth, trayWidth) : (boardWidth + trayWidth)), availableHeight ? availableHeight / stageH : 1);
+        setFsScale(fitScale);
+        setFsPan({ x: 0, y: 0 });
+      }
     };
 
     update();
@@ -1393,43 +1545,111 @@ export default function JigsawPuzzleSVGWithTray({
     };
   }, [boardWidth, trayWidth]);
 
+  const controlBarHeight = 56; // px
+  const controlBarTop = -Math.round(controlBarHeight / 2);
+  const controlsAssignedRef = useRef(false);
+  const initialPiecesRef = useRef(initialPieces);
+  useEffect(() => {
+    initialPiecesRef.current = initialPieces;
+  }, [initialPieces]);
+
+  const sendLooseToTrayRef = useRef(sendLooseToTray);
+  useEffect(() => {
+    sendLooseToTrayRef.current = sendLooseToTray;
+  }, [sendLooseToTray]);
+
+  React.useEffect(() => {
+    if (!onControlsReady) return;
+    if (controlsAssignedRef.current) return;
+
+    const api = {
+      reset: () => {
+        setPieces(initialPiecesRef.current);
+        completedRef.current = false;
+        startTimeRef.current = Date.now();
+      },
+      sendLooseToTray: () => {
+        // Delegate to the live implementation so it uses current layout/tray coords
+        sendLooseToTrayRef.current();
+      },
+      enterFullscreen: () => setIsFullscreen(true),
+      exitFullscreen: () => setIsFullscreen(false),
+      get isFullscreen() {
+        return isFullscreen;
+      },
+    } as const;
+
+    try {
+      onControlsReady(api as any);
+      controlsAssignedRef.current = true;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('onControlsReady threw', e);
+    }
+    // Intentionally only run once per mount/parent callback change
+  }, [onControlsReady]);
+
   return (
     <div
       ref={wrapperRef}
       style={{
-        position: 'relative',
+        position: isFullscreen ? 'fixed' : 'relative',
+        left: isFullscreen ? 0 : undefined,
+        top: isFullscreen ? 0 : undefined,
+        zIndex: isFullscreen ? 12000 : undefined,
+        inset: isFullscreen ? '0px' : undefined,
+        padding: isFullscreen ? 24 : undefined,
+        background: isFullscreen ? 'rgba(0,0,0,0.85)' : undefined,
         fontFamily: "system-ui, sans-serif",
         width: '100%',
-        height: Math.round(stageHeight * scale),
-        overflow: 'hidden',
+        height: isFullscreen ? '100vh' : Math.round(stageHeight * scale),
+        overflow: isFullscreen ? 'hidden' : 'visible',
         maxWidth: '100%',
         ...containerStyle,
       }}
     >
       <div
         ref={stageRef}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-          style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: stageWidth,
-          height: stageHeight,
-          borderRadius: 0,
-          overflow: "hidden",
-          background: "#070a0f",
-          border: "1px solid rgba(255,255,255,0.14)",
-          userSelect: "none",
-          touchAction: 'pan-x pan-y pinch-zoom',
-          transformOrigin: 'top left',
-          transform: `scale(${scale})`,
-          // center scaled content within wrapper
-          display: 'block',
-          marginLeft: 0,
-        }}
+        onPointerDown={onStagePointerDown}
+        onPointerMove={(e) => { onStagePointerMove(e); onPointerMove(e as any); }}
+        onPointerUp={(e) => { onStagePointerUp(e); onPointerUp(e as any); }}
+        onPointerCancel={(e) => { onStagePointerUp(e); onPointerUp(e as any); }}
+        onWheel={onWheel}
+        style={{
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: stageWidth,
+        height: stageHeight,
+        borderRadius: 0,
+        overflow: "hidden",
+        background: "#070a0f",
+        border: "1px solid rgba(255,255,255,0.14)",
+        userSelect: "none",
+        touchAction: 'none',
+        transformOrigin: 'top left',
+        display: 'block',
+        marginLeft: 0,
+        zIndex: 1,
+        transform: isFullscreen ? 'none' : `scale(${scale})`,
+      }}
       >
+        {/* contentRef sits inside the static outer stage and receives transform for pan/zoom */}
+        <div
+          ref={contentRef}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: stageWidth,
+            height: stageHeight,
+            transformOrigin: 'top left',
+            transform: isFullscreen
+              ? `translate(${fsPan.x}px, ${fsPan.y}px) scale(${fsScale})`
+              : 'none',
+            willChange: 'transform',
+          }}
+        >
         {/* BOARD */}
         <div
           ref={boardRef}
@@ -1566,39 +1786,13 @@ export default function JigsawPuzzleSVGWithTray({
           </div>
         )}
 
+        </div>{/* end contentRef */}
+
         
       </div>
 
-      <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
-        <button
-          onClick={() => setPieces(initialPieces)}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(0,0,0,0.15)",
-            background: "white",
-            cursor: "pointer",
-          }}
-        >
-          Reset
-        </button>
-
-        <button
-          onClick={sendLooseToTray}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(255,255,255,0.06)",
-            color: "white",
-            cursor: "pointer",
-          }}
-        >
-          Send loose to tray
-        </button>
-
-      </div>
-      {/* Large congrats overlay at wrapper level (centered and prominent) */}
+      
+        {/* Large congrats overlay at wrapper level (centered and prominent) */}
       <div
         ref={messageRef}
         style={{
@@ -1621,6 +1815,16 @@ export default function JigsawPuzzleSVGWithTray({
           </div>
         </div>
       </div>
+
+      {/* Fullscreen toggle: overlay only in fullscreen; in normal mode render in the control bar below */}
+      {isFullscreen && (
+        <button
+          onClick={() => setIsFullscreen(false)}
+          style={{ position: 'absolute', right: 12, top: 12, zIndex: 13000, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer' }}
+        >
+          Exit Fullscreen
+        </button>
+      )}
     </div>
   );
 }
