@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import ConfirmModal from '@/components/ConfirmModal';
+import ActionModal from '@/components/ActionModal';
 
 type Thread = {
   userId: string;
@@ -17,15 +19,22 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [activeThread, setActiveThread] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/user/inbox')
-      .then((r) => r.json())
-      .then((j) => {
+  const fetchThreads = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/user/inbox');
+      if (res.ok) {
+        const j = await res.json();
         setThreads(j.threads || []);
-      })
-      .catch((e) => console.error('Failed to load inbox', e))
-      .finally(() => setLoading(false));
-  }, []);
+      }
+    } catch (e) {
+      console.error('Failed to load inbox', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchThreads(); }, []);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#020202' }}>
@@ -67,7 +76,11 @@ export default function MessagesPage() {
 
         {activeThread && (
           <div className="mt-6">
-            <ConversationPanel userId={activeThread} onClose={() => setActiveThread(null)} />
+            <ConversationPanel
+              userId={activeThread}
+              onClose={() => setActiveThread(null)}
+              onDeleted={() => { setActiveThread(null); fetchThreads(); }}
+            />
           </div>
         )}
       </div>
@@ -75,10 +88,13 @@ export default function MessagesPage() {
   );
 }
 
-function ConversationPanel({ userId, onClose }: { userId: string; onClose: () => void }) {
+function ConversationPanel({ userId, onClose, onDeleted }: { userId: string; onClose: () => void; onDeleted?: () => void }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchConv = async () => {
     setLoading(true);
@@ -113,7 +129,10 @@ function ConversationPanel({ userId, onClose }: { userId: string; onClose: () =>
     <div className="border rounded p-4 bg-slate-900">
       <div className="flex justify-between items-center mb-3">
         <div className="text-white font-semibold">Conversation</div>
-        <button onClick={onClose} className="text-sm text-gray-300">Close</button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowConfirm(true)} className="text-sm text-red-400">Delete history</button>
+          <button onClick={onClose} className="text-sm text-gray-300">Close</button>
+        </div>
       </div>
 
       {loading ? <div className="text-white">Loading...</div> : (
@@ -132,6 +151,41 @@ function ConversationPanel({ userId, onClose }: { userId: string; onClose: () =>
         <input value={text} onChange={(e) => setText(e.target.value)} className="flex-1 px-3 py-2 rounded bg-black text-white border" placeholder="Write a message..." />
         <button type="submit" className="px-4 py-2 rounded bg-sky-500 text-white">Send</button>
       </form>
+      <ConfirmModal
+        isOpen={showConfirm}
+        title="Delete conversation"
+        message="Delete conversation history? This cannot be undone."
+        confirmLabel={deleting ? 'Deleting...' : 'Delete'}
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          setDeleting(true);
+          try {
+            const res = await fetch(`/api/users/${userId}/messages`, { method: 'DELETE' });
+            if (res.ok) {
+              setShowConfirm(false);
+              setShowSuccess(true);
+              onDeleted?.();
+            } else {
+              const j = await res.json().catch(() => ({}));
+              alert('Failed to delete conversation: ' + (j?.error || res.statusText));
+            }
+          } catch (err) {
+            console.error(err);
+            alert('Failed to delete conversation');
+          } finally {
+            setDeleting(false);
+          }
+        }}
+        onCancel={() => setShowConfirm(false)}
+      />
+
+      <ActionModal
+        isOpen={showSuccess}
+        variant="success"
+        title="Conversation deleted"
+        message="The conversation history was deleted successfully."
+        onClose={() => setShowSuccess(false)}
+      />
     </div>
   );
 }

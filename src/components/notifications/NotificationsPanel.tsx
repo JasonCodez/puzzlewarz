@@ -219,6 +219,34 @@ export default function NotificationsPanel({
                           </a>
                         )}
 
+                        {notification.type === "team_lobby_invite" && notification.relatedId && (
+                          (() => {
+                            const parts = (notification.relatedId || "").split("::");
+                            const teamId = parts[0];
+                            const puzzleId = parts[1];
+                            return (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  onClose();
+                                  try {
+                                    router.push(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}`);
+                                  } catch (err) {
+                                    setModalTitle('Unable to open lobby');
+                                    setModalMessage('There was a problem navigating to the lobby.');
+                                    setModalVariant('error');
+                                    setModalOpen(true);
+                                  }
+                                }}
+                                className="px-2 py-0.5 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                                title="Join lobby"
+                              >
+                                Join
+                              </button>
+                            );
+                          })()
+                        )}
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

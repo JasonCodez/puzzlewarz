@@ -16,99 +16,100 @@ datasource db {
 
 // ===== Users & Authentication =====
 model User {
-  id                    String       @id @default(cuid())
-  email                 String?      @unique
-  emailVerified         DateTime?
-  name                  String?      @unique
-  image                 String?
-  password              String?
-  role                  String       @default("user") // "user" or "admin"
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  emailVerified DateTime?
+  name          String?   @unique
+  image         String?
+  password      String?
+  role          String    @default("user") // "user" or "admin"
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   // Relations
-  accounts              Account[]
-  sessions              Session[]
-  teams                 TeamMember[]
-  solvedPuzzles         UserPuzzleProgress[]
-  submissions           PuzzleSubmission[]
-  hints                 HintUsage[]
-  hintHistory           HintHistory[]        @relation("HintHistoryUser")
-  sessionLogs           PuzzleSessionLog[]    @relation("SessionLogUser")
-  teamInvites           TeamInvite[]
-  achievements          UserAchievement[]
-  notifications         Notification[]
+  accounts               Account[]
+  sessions               Session[]
+  teams                  TeamMember[]
+  solvedPuzzles          UserPuzzleProgress[]
+  submissions            PuzzleSubmission[]
+  hints                  HintUsage[]
+  hintHistory            HintHistory[]           @relation("HintHistoryUser")
+  sessionLogs            PuzzleSessionLog[]      @relation("SessionLogUser")
+  teamInvites            TeamInvite[]
+  achievements           UserAchievement[]
+  notifications          Notification[]
   notificationPreference NotificationPreference?
-  userPreferences       UserPreferences?
-  activities            Activity[]
-  followers             Follow[]              @relation("Followers")
-  following             Follow[]              @relation("Following")
-  sentMessages          DirectMessage[]       @relation("SentMessages")
-  receivedMessages      DirectMessage[]       @relation("ReceivedMessages")
-  referrals             UserReferral[]        @relation("Referrer")
-  referredBy            UserReferral[]        @relation("Referee")
-  forumPosts            ForumPost[]           @relation("ForumPostsAuthor")
-  forumComments         ForumComment[]        @relation("ForumCommentsAuthor")
-  relayRiddlesSolver    RelayRiddle[]         @relation("RelayRiddleSolver")
-  relayRiddlesDecoder   RelayRiddle[]         @relation("RelayRiddleDecoder")
-  relayMessages         RelayMessage[]
-  forumPostVotes        ForumPostVote[]       @relation("ForumPostVotes")
-  forumCommentVotes     ForumCommentVote[]    @relation("ForumCommentVotes")
-  forumPostViews        ForumPostView[]       @relation("ForumPostViews")
-  streak                UserStreak?
-  
+  userPreferences        UserPreferences?
+  activities             Activity[]
+  followers              Follow[]                @relation("Followers")
+  following              Follow[]                @relation("Following")
+  sentMessages           DirectMessage[]         @relation("SentMessages")
+  receivedMessages       DirectMessage[]         @relation("ReceivedMessages")
+  lobbyMessages          LobbyMessage[]
+  referrals              UserReferral[]          @relation("Referrer")
+  referredBy             UserReferral[]          @relation("Referee")
+  forumPosts             ForumPost[]             @relation("ForumPostsAuthor")
+  forumComments          ForumComment[]          @relation("ForumCommentsAuthor")
+  relayRiddlesSolver     RelayRiddle[]           @relation("RelayRiddleSolver")
+  relayRiddlesDecoder    RelayRiddle[]           @relation("RelayRiddleDecoder")
+  relayMessages          RelayMessage[]
+  forumPostVotes         ForumPostVote[]         @relation("ForumPostVotes")
+  forumCommentVotes      ForumCommentVote[]      @relation("ForumCommentVotes")
+  forumPostViews         ForumPostView[]         @relation("ForumPostViews")
+  streak                 UserStreak?
+
   // Team puzzle relations
-  puzzlePartAssignments TeamPuzzlePartAssignment[]  @relation("PuzzlePartAssignments")
-  puzzlePartSubmissions TeamPuzzlePartSubmission[]  @relation("PuzzlePartSubmissions")
-  
+  puzzlePartAssignments TeamPuzzlePartAssignment[] @relation("PuzzlePartAssignments")
+  puzzlePartSubmissions TeamPuzzlePartSubmission[] @relation("PuzzlePartSubmissions")
+
   // Ratings
-  puzzleRatings         PuzzleRating[]
-  
+  puzzleRatings PuzzleRating[]
+
   // ARG Puzzle Progress
-  argPuzzleProgress     ARGPuzzleProgress[]
-  argPhaseProgress      ARGPhaseProgress[]
-  
+  argPuzzleProgress ARGPuzzleProgress[]
+  argPhaseProgress  ARGPhaseProgress[]
+
   // Escape Room Progress
-  escapeRoomProgress    UserEscapeProgress[]
+  escapeRoomProgress UserEscapeProgress[]
 
   @@map("users")
 }
 
 // NextAuth.js models
 model Account {
-  id                    String       @id @default(cuid())
-  userId                String
-  type                  String
-  provider              String
-  providerAccountId     String
-  refresh_token         String?      @db.Text
-  access_token          String?      @db.Text
-  expires_at            Int?
-  token_type            String?
-  scope                 String?
-  id_token              String?      @db.Text
-  session_state         String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
 }
 
 model Session {
-  id                    String       @id @default(cuid())
-  sessionToken          String       @unique
-  userId                String
-  expires               DateTime
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
 }
 
 model VerificationToken {
-  identifier            String
-  token                 String       @unique
-  expires               DateTime
+  identifier String
+  token      String   @unique
+  expires    DateTime
 
   @@unique([identifier, token])
   @@map("verification_tokens")
@@ -116,39 +117,39 @@ model VerificationToken {
 
 // ===== Team System for Multiplayer =====
 model Team {
-  id                    String       @id @default(cuid())
-  name                  String
-  description           String?
-  createdBy             String
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   // Privacy settings
-  isPublic              Boolean      @default(true)
-  joinCode              String?      @unique @default(cuid())
-  
-  members               TeamMember[]
-  invites               TeamInvite[]
-  progress              TeamProgress[]
-  
+  isPublic Boolean @default(true)
+  joinCode String? @unique @default(cuid())
+
+  members  TeamMember[]
+  invites  TeamInvite[]
+  progress TeamProgress[]
+
   // Team puzzle relations
-  puzzleAssignments     TeamPuzzlePartAssignment[]  @relation("TeamPuzzleAssignments")
-  puzzleSubmissions     TeamPuzzlePartSubmission[]  @relation("TeamPuzzleSubmissions")
-  puzzleCompletions     TeamPuzzleCompletion[]      @relation("TeamPuzzleCompletions")
+  puzzleAssignments TeamPuzzlePartAssignment[] @relation("TeamPuzzleAssignments")
+  puzzleSubmissions TeamPuzzlePartSubmission[] @relation("TeamPuzzleSubmissions")
+  puzzleCompletions TeamPuzzleCompletion[]     @relation("TeamPuzzleCompletions")
 
   @@index([createdBy])
   @@map("teams")
 }
 
 model TeamMember {
-  id                    String       @id @default(cuid())
-  teamId                String
-  userId                String
-  role                  String       @default("member") // "admin", "moderator", "member"
-  joinedAt              DateTime     @default(now())
+  id       String   @id @default(cuid())
+  teamId   String
+  userId   String
+  role     String   @default("member") // "admin", "moderator", "member"
+  joinedAt DateTime @default(now())
 
-  team                  Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
   @@index([teamId])
@@ -157,16 +158,16 @@ model TeamMember {
 }
 
 model TeamInvite {
-  id                    String       @id @default(cuid())
-  teamId                String
-  userId                String
-  invitedBy             String
-  status                String       @default("pending") // "pending", "accepted", "declined"
-  expiresAt             DateTime
-  createdAt             DateTime     @default(now())
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  invitedBy String
+  status    String   @default("pending") // "pending", "accepted", "declined"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
-  team                  Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
   @@index([teamId])
@@ -175,76 +176,76 @@ model TeamInvite {
 
 // ===== Puzzle System =====
 model PuzzleCategory {
-  id                    String       @id @default(cuid())
-  name                  String       @unique
-  description           String?
-  color                 String?
-  icon                  String?
-  createdAt             DateTime     @default(now())
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  color       String?
+  icon        String?
+  createdAt   DateTime @default(now())
 
-  puzzles               Puzzle[]
+  puzzles Puzzle[]
 
   @@map("puzzle_categories")
 }
 
 model Puzzle {
-  id                    String       @id @default(cuid())
-  title                 String
-  description           String?      @db.Text
-  content               String?      @db.Text // The actual puzzle content/HTML
-  categoryId            String
-  category              PuzzleCategory @relation(fields: [categoryId], references: [id])
-  
+  id          String         @id @default(cuid())
+  title       String
+  description String?        @db.Text
+  content     String?        @db.Text // The actual puzzle content/HTML
+  categoryId  String
+  category    PuzzleCategory @relation(fields: [categoryId], references: [id])
+
   // Puzzle progression
-  order                 Int          @default(0) // Display order
-  difficulty            String       @default("medium") // "easy", "medium", "hard", "extreme"
-  rarity                String       @default("common") // "common", "uncommon", "rare", "epic", "legendary"
-  requiredPreviousPuzzleId String?    // Required to solve before this puzzle
-  isActive              Boolean      @default(true)
-  isTeamPuzzle          Boolean      @default(false) // Whether this is a collaborative team puzzle
-  minTeamSize           Int          @default(1) // Minimum team members for team puzzle
-  puzzleType            String       @default("general") // "general", "sudoku", "cipher", etc.
-  
+  order                    Int     @default(0) // Display order
+  difficulty               String  @default("medium") // "easy", "medium", "hard", "extreme"
+  rarity                   String  @default("common") // "common", "uncommon", "rare", "epic", "legendary"
+  requiredPreviousPuzzleId String? // Required to solve before this puzzle
+  isActive                 Boolean @default(true)
+  isTeamPuzzle             Boolean @default(false) // Whether this is a collaborative team puzzle
+  minTeamSize              Int     @default(1) // Minimum team members for team puzzle
+  puzzleType               String  @default("general") // "general", "sudoku", "cipher", etc.
+
   // Timing
-  unlocksAt             DateTime?    // When this puzzle becomes available
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  unlocksAt DateTime? // When this puzzle becomes available
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   // Riddle answer for riddle/answer puzzles
-  riddleAnswer        String?
+  riddleAnswer           String?
   // Relations
-  requiredPreviousPuzzle Puzzle?     @relation("PuzzleDependency", fields: [requiredPreviousPuzzleId], references: [id])
-  nextPuzzles           Puzzle[]     @relation("PuzzleDependency")
-  sudoku                SudokuPuzzle?
-  jigsaw                JigsawPuzzle?
-  escapeRoom            EscapeRoomPuzzle?
-  solutions             PuzzleSolution[]
-  parts                 PuzzlePart[]
-  userProgress          UserPuzzleProgress[]
-  teamProgress          TeamProgress[]
-  submissions           PuzzleSubmission[]
-  hints                 PuzzleHint[]
-  media                 PuzzleMedia[]
-  leaderboard           LeaderboardEntry[]
-  forumPosts            ForumPost[]
-  
+  requiredPreviousPuzzle Puzzle?              @relation("PuzzleDependency", fields: [requiredPreviousPuzzleId], references: [id])
+  nextPuzzles            Puzzle[]             @relation("PuzzleDependency")
+  sudoku                 SudokuPuzzle?
+  jigsaw                 JigsawPuzzle?
+  escapeRoom             EscapeRoomPuzzle?
+  solutions              PuzzleSolution[]
+  parts                  PuzzlePart[]
+  userProgress           UserPuzzleProgress[]
+  teamProgress           TeamProgress[]
+  submissions            PuzzleSubmission[]
+  hints                  PuzzleHint[]
+  media                  PuzzleMedia[]
+  leaderboard            LeaderboardEntry[]
+  forumPosts             ForumPost[]
+
   // Team puzzle relations
-  partAssignments       TeamPuzzlePartAssignment[]  @relation("PuzzlePartAssignments")
-  partSubmissions       TeamPuzzlePartSubmission[]  @relation("PuzzleSubmissions")
-  completions           TeamPuzzleCompletion[]      @relation("TeamCompletions")
-  
+  partAssignments TeamPuzzlePartAssignment[] @relation("PuzzlePartAssignments")
+  partSubmissions TeamPuzzlePartSubmission[] @relation("PuzzleSubmissions")
+  completions     TeamPuzzleCompletion[]     @relation("TeamCompletions")
+
   // Ratings
-  ratings               PuzzleRating[]
-  
+  ratings PuzzleRating[]
+
   // New feature relations
-  versions              PuzzleVersion[]            @relation("PuzzleVersions")
-  schedule              PuzzleSchedule?            @relation("PuzzleSchedule")
-  hintTiers             HintTier[]                 @relation("HintTiers")
-  hintUsageLogs         HintUsageLog[]             @relation("HintUsageLogs")
-  analytics             PuzzleAnalytics?           @relation("PuzzleAnalytics")
-  customValidators      CustomValidator[]          @relation("CustomValidators")
-  relationshipsA        PuzzleRelationship[]       @relation("RelationshipA")
-  relationshipsB        PuzzleRelationship[]       @relation("RelationshipB")
+  versions         PuzzleVersion[]      @relation("PuzzleVersions")
+  schedule         PuzzleSchedule?      @relation("PuzzleSchedule")
+  hintTiers        HintTier[]           @relation("HintTiers")
+  hintUsageLogs    HintUsageLog[]       @relation("HintUsageLogs")
+  analytics        PuzzleAnalytics?     @relation("PuzzleAnalytics")
+  customValidators CustomValidator[]    @relation("CustomValidators")
+  relationshipsA   PuzzleRelationship[] @relation("RelationshipA")
+  relationshipsB   PuzzleRelationship[] @relation("RelationshipB")
 
   @@index([categoryId])
   @@index([order])
@@ -252,103 +253,103 @@ model Puzzle {
 }
 
 model JigsawPuzzle {
-  id               String   @id @default(cuid())
-  puzzleId         String   @unique
-  puzzle           Puzzle   @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  puzzleId String @unique
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
 
-  imageUrl         String?  @db.Text
-  gridRows         Int      @default(3)
-  gridCols         Int      @default(4)
-  snapTolerance    Int      @default(12)
-  rotationEnabled  Boolean  @default(false)
+  imageUrl        String? @db.Text
+  gridRows        Int     @default(3)
+  gridCols        Int     @default(4)
+  snapTolerance   Int     @default(12)
+  rotationEnabled Boolean @default(false)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([puzzleId])
   @@map("jigsaw_puzzles")
 }
 
 model SudokuPuzzle {
-  id                    String       @id @default(cuid())
-  puzzleId              String       @unique
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  puzzleGrid            String       @db.Text // JSON array[9][9] - the given clues
-  solutionGrid          String       @db.Text // JSON array[9][9] - the complete solution
-  difficulty            String       @default("medium") // "easy", "medium", "hard", "expert"
-  timeLimitSeconds      Int?
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  
+  id       String @id @default(cuid())
+  puzzleId String @unique
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  puzzleGrid       String @db.Text // JSON array[9][9] - the given clues
+  solutionGrid     String @db.Text // JSON array[9][9] - the complete solution
+  difficulty       String @default("medium") // "easy", "medium", "hard", "expert"
+  timeLimitSeconds Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([puzzleId])
   @@map("sudoku_puzzles")
 }
 
 model EscapeRoomPuzzle {
-  id                    String       @id @default(cuid())
-  puzzleId              String       @unique
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  roomTitle             String       // e.g., "The Detective's Office"
-  roomDescription       String       @db.Text // Story/atmosphere
-  timeLimitSeconds      Int?         // Optional timer (null = no limit)
-  
-  stages                EscapeStage[]
-  userProgress          UserEscapeProgress[]
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  
+  id       String @id @default(cuid())
+  puzzleId String @unique
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  roomTitle        String // e.g., "The Detective's Office"
+  roomDescription  String @db.Text // Story/atmosphere
+  timeLimitSeconds Int? // Optional timer (null = no limit)
+
+  stages       EscapeStage[]
+  userProgress UserEscapeProgress[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([puzzleId])
   @@map("escape_room_puzzles")
 }
 
 model EscapeStage {
-  id                    String       @id @default(cuid())
-  escapeRoomId          String
-  escapeRoom            EscapeRoomPuzzle @relation(fields: [escapeRoomId], references: [id], onDelete: Cascade)
-  
-  order                 Int          // Sequence (1, 2, 3...)
-  title                 String       // e.g., "Find the Key"
-  description           String       @db.Text // Puzzle description/clue
-  puzzleType            String       // "text", "cipher", "image", etc.
-  puzzleData            String       @db.Text // JSON with type-specific data
-  
-  correctAnswer         String       // Solution
-  hints                 String       @default("[]") @db.Text // JSON array of hints
-  
+  id           String           @id @default(cuid())
+  escapeRoomId String
+  escapeRoom   EscapeRoomPuzzle @relation(fields: [escapeRoomId], references: [id], onDelete: Cascade)
+
+  order       Int // Sequence (1, 2, 3...)
+  title       String // e.g., "Find the Key"
+  description String @db.Text // Puzzle description/clue
+  puzzleType  String // "text", "cipher", "image", etc.
+  puzzleData  String @db.Text // JSON with type-specific data
+
+  correctAnswer String // Solution
+  hints         String @default("[]") @db.Text // JSON array of hints
+
   // Inventory items gained by solving this stage
-  rewardItem            String?      // e.g., "golden_key"
-  rewardDescription     String?      // Display text
-  
-  createdAt             DateTime     @default(now())
-  
+  rewardItem        String? // e.g., "golden_key"
+  rewardDescription String? // Display text
+
+  createdAt DateTime @default(now())
+
   @@unique([escapeRoomId, order])
   @@index([escapeRoomId])
   @@map("escape_stages")
 }
 
 model UserEscapeProgress {
-  id                    String       @id @default(cuid())
-  userId                String
-  escapeRoomId          String
-  
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  escapeRoom            EscapeRoomPuzzle @relation(fields: [escapeRoomId], references: [id], onDelete: Cascade)
-  
+  id           String @id @default(cuid())
+  userId       String
+  escapeRoomId String
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  escapeRoom EscapeRoomPuzzle @relation(fields: [escapeRoomId], references: [id], onDelete: Cascade)
+
   // Tracking
-  currentStageIndex     Int          @default(0) // Which stage solving
-  solvedStages          String       @default("[]") @db.Text // JSON array of solved stage IDs
-  inventory             String       @default("[]") @db.Text // Collected items JSON
-  
+  currentStageIndex Int    @default(0) // Which stage solving
+  solvedStages      String @default("[]") @db.Text // JSON array of solved stage IDs
+  inventory         String @default("[]") @db.Text // Collected items JSON
+
   // Engagement
-  startedAt             DateTime     @default(now())
-  completedAt           DateTime?
-  totalTimeSpent        Int          @default(0) // Seconds
-  hintsUsed             Int          @default(0)
-  
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  totalTimeSpent Int       @default(0) // Seconds
+  hintsUsed      Int       @default(0)
+
   @@unique([userId, escapeRoomId])
   @@index([userId])
   @@index([escapeRoomId])
@@ -356,46 +357,46 @@ model UserEscapeProgress {
 }
 
 model PuzzleSolution {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  answer                String       // Case-insensitive comparison
-  isCorrect             Boolean      @default(true)
-  points                Int          @default(100)
-  
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  answer    String // Case-insensitive comparison
+  isCorrect Boolean @default(true)
+  points    Int     @default(100)
+
   // Pattern matching support
-  isRegex               Boolean      @default(false)
-  ignoreCase            Boolean      @default(true)
-  ignoreWhitespace      Boolean      @default(false)
-  
-  createdAt             DateTime     @default(now())
+  isRegex          Boolean @default(false)
+  ignoreCase       Boolean @default(true)
+  ignoreWhitespace Boolean @default(false)
+
+  createdAt DateTime @default(now())
 
   @@index([puzzleId])
   @@map("puzzle_solutions")
 }
 
 model PuzzleHint {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  text                  String       @db.Text
-  order                 Int          @default(0)
-  costPoints            Int          @default(10) // Points deducted for using hint
-  maxUsesPerTeam        Int?         // null = unlimited
-  maxUsesPerUser        Int?         // null = unlimited
-  
-  // Hint effectiveness tracking
-  totalUsages           Int          @default(0) // Total times hint has been used
-  timesLeadToSolve      Int          @default(0) // Times user solved after using this hint
-  averageTimeToSolve    Float?       // Average seconds from hint reveal to solve
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
 
-  usages                HintUsage[]
-  history               HintHistory[]
+  text           String @db.Text
+  order          Int    @default(0)
+  costPoints     Int    @default(10) // Points deducted for using hint
+  maxUsesPerTeam Int? // null = unlimited
+  maxUsesPerUser Int? // null = unlimited
+
+  // Hint effectiveness tracking
+  totalUsages        Int    @default(0) // Total times hint has been used
+  timesLeadToSolve   Int    @default(0) // Times user solved after using this hint
+  averageTimeToSolve Float? // Average seconds from hint reveal to solve
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usages  HintUsage[]
+  history HintHistory[]
 
   @@index([puzzleId])
   @@index([order])
@@ -404,24 +405,24 @@ model PuzzleHint {
 
 // Track individual hint usage with history
 model HintHistory {
-  id                    String       @id @default(cuid())
-  hintId                String
-  hint                  PuzzleHint   @relation(fields: [hintId], references: [id], onDelete: Cascade)
-  
-  userId                String
-  user                  User         @relation("HintHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String     @id @default(cuid())
+  hintId String
+  hint   PuzzleHint @relation(fields: [hintId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("HintHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
   // Cost and penalty info
-  pointsCost            Int          // Points deducted for this hint reveal
-  
+  pointsCost Int // Points deducted for this hint reveal
+
   // Timeline tracking
-  revealedAt            DateTime     @default(now())
-  solvedAt              DateTime?    // When puzzle was solved (if at all)
-  timeToSolve           Int?         // Seconds from reveal to solve
-  
+  revealedAt  DateTime  @default(now())
+  solvedAt    DateTime? // When puzzle was solved (if at all)
+  timeToSolve Int? // Seconds from reveal to solve
+
   // Was this hint helpful?
-  leadToSolve           Boolean      @default(false) // Did user solve after this hint?
-  wasHelpful            Boolean?     // User-rated helpfulness (optional feedback)
+  leadToSolve Boolean  @default(false) // Did user solve after this hint?
+  wasHelpful  Boolean? // User-rated helpfulness (optional feedback)
 
   @@index([hintId])
   @@index([userId])
@@ -430,31 +431,31 @@ model HintHistory {
 }
 
 model PuzzleMedia {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
   // Media properties
-  type                  String       // "image", "video", "audio", "document", "file"
-  url                   String       @db.Text // URL to the uploaded file
-  fileName              String       // Original file name
-  fileSize              Int          // Size in bytes
-  mimeType              String       // e.g., "image/png", "video/mp4", "audio/mpeg"
-  
+  type     String // "image", "video", "audio", "document", "file"
+  url      String @db.Text // URL to the uploaded file
+  fileName String // Original file name
+  fileSize Int // Size in bytes
+  mimeType String // e.g., "image/png", "video/mp4", "audio/mpeg"
+
   // Display properties
-  title                 String?      // Display title
-  description           String?      @db.Text // Alt text or description
-  order                 Int          @default(0) // Display order
-  
+  title       String? // Display title
+  description String? @db.Text // Alt text or description
+  order       Int     @default(0) // Display order
+
   // Metadata
-  duration              Int?         // Duration in seconds for audio/video
-  width                 Int?         // Width for images/video
-  height                Int?         // Height for images/video
-  thumbnail             String?      @db.Text // Thumbnail URL for video/document
-  
-  uploadedBy            String       // User ID who uploaded
-  uploadedAt            DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  duration  Int? // Duration in seconds for audio/video
+  width     Int? // Width for images/video
+  height    Int? // Height for images/video
+  thumbnail String? @db.Text // Thumbnail URL for video/document
+
+  uploadedBy String // User ID who uploaded
+  uploadedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([puzzleId])
   @@index([type])
@@ -462,14 +463,14 @@ model PuzzleMedia {
 }
 
 model HintUsage {
-  id                    String       @id @default(cuid())
-  hintId                String
-  hint                  PuzzleHint   @relation(fields: [hintId], references: [id], onDelete: Cascade)
-  
-  userId                String
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  usedAt                DateTime     @default(now())
+  id     String     @id @default(cuid())
+  hintId String
+  hint   PuzzleHint @relation(fields: [hintId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  usedAt DateTime @default(now())
 
   @@index([hintId])
   @@index([userId])
@@ -478,37 +479,37 @@ model HintUsage {
 
 // ===== Progress Tracking =====
 model UserPuzzleProgress {
-  id                    String       @id @default(cuid())
-  userId                String
-  puzzleId              String
-  
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  // Solve tracking
-  solved                Boolean      @default(false)
-  solvedAt              DateTime?
-  
-  // Attempt tracking
-  attempts              Int          @default(0)
-  successfulAttempts    Int          @default(0)
-  lastAttemptAt         DateTime?
-  averageTimePerAttempt Float?       // Average seconds per attempt
-  
-  // Time tracking
-  totalTimeSpent        Int          @default(0) // Total seconds spent on puzzle
-  currentSessionStart   DateTime?    // When user started current session
-  
-  // Points and completion
-  pointsEarned          Int          @default(0)
-  completionPercentage  Float        @default(0) // 0-100 for multi-part puzzles
-  
-  // Metadata
-  viewedAt              DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id       String @id @default(cuid())
+  userId   String
+  puzzleId String
 
-  sessionLogs           PuzzleSessionLog[]
-  partProgress          PuzzlePartProgress[]
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  // Solve tracking
+  solved   Boolean   @default(false)
+  solvedAt DateTime?
+
+  // Attempt tracking
+  attempts              Int       @default(0)
+  successfulAttempts    Int       @default(0)
+  lastAttemptAt         DateTime?
+  averageTimePerAttempt Float? // Average seconds per attempt
+
+  // Time tracking
+  totalTimeSpent      Int       @default(0) // Total seconds spent on puzzle
+  currentSessionStart DateTime? // When user started current session
+
+  // Points and completion
+  pointsEarned         Int   @default(0)
+  completionPercentage Float @default(0) // 0-100 for multi-part puzzles
+
+  // Metadata
+  viewedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessionLogs  PuzzleSessionLog[]
+  partProgress PuzzlePartProgress[]
 
   @@unique([userId, puzzleId])
   @@index([userId])
@@ -518,22 +519,22 @@ model UserPuzzleProgress {
 
 // Track individual sessions (time spent tracking)
 model PuzzleSessionLog {
-  id                    String       @id @default(cuid())
-  progressId            String
-  progress              UserPuzzleProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
-  
-  userId                String
-  user                  User         @relation("SessionLogUser", fields: [userId], references: [id], onDelete: Cascade)
-  
-  puzzleId              String
-  
-  sessionStart          DateTime     @default(now())
-  sessionEnd            DateTime?
-  durationSeconds       Int?         // Seconds spent in this session
-  
-  hintUsed              Boolean      @default(false)
-  attemptMade           Boolean      @default(false)
-  wasSuccessful         Boolean      @default(false)
+  id         String             @id @default(cuid())
+  progressId String
+  progress   UserPuzzleProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("SessionLogUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  puzzleId String
+
+  sessionStart    DateTime  @default(now())
+  sessionEnd      DateTime?
+  durationSeconds Int? // Seconds spent in this session
+
+  hintUsed      Boolean @default(false)
+  attemptMade   Boolean @default(false)
+  wasSuccessful Boolean @default(false)
 
   @@index([progressId])
   @@index([userId])
@@ -543,27 +544,27 @@ model PuzzleSessionLog {
 
 // For multi-part puzzles - track individual parts
 model PuzzlePart {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  title                 String
-  description           String?      @db.Text
-  content               String       @db.Text
-  order                 Int          @default(0)
-  
-  // Each part can have its own point value
-  pointsValue           Int          @default(50)
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
 
-  solutions             PuzzlePartSolution[]
-  userProgress          PuzzlePartProgress[]
-  
+  title       String
+  description String? @db.Text
+  content     String  @db.Text
+  order       Int     @default(0)
+
+  // Each part can have its own point value
+  pointsValue Int @default(50)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  solutions    PuzzlePartSolution[]
+  userProgress PuzzlePartProgress[]
+
   // Team puzzle relations
-  assignments           TeamPuzzlePartAssignment[]  @relation("PartAssignments")
-  submissions           TeamPuzzlePartSubmission[]  @relation("PartSubmissions")
+  assignments TeamPuzzlePartAssignment[] @relation("PartAssignments")
+  submissions TeamPuzzlePartSubmission[] @relation("PartSubmissions")
 
   @@index([puzzleId])
   @@index([order])
@@ -572,19 +573,19 @@ model PuzzlePart {
 
 // Solutions for individual puzzle parts
 model PuzzlePartSolution {
-  id                    String       @id @default(cuid())
-  partId                String
-  part                  PuzzlePart   @relation(fields: [partId], references: [id], onDelete: Cascade)
-  
-  answer                String
-  isCorrect             Boolean      @default(true)
-  points                Int          @default(50)
-  
-  isRegex               Boolean      @default(false)
-  ignoreCase            Boolean      @default(true)
-  ignoreWhitespace      Boolean      @default(false)
-  
-  createdAt             DateTime     @default(now())
+  id     String     @id @default(cuid())
+  partId String
+  part   PuzzlePart @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  answer    String
+  isCorrect Boolean @default(true)
+  points    Int     @default(50)
+
+  isRegex          Boolean @default(false)
+  ignoreCase       Boolean @default(true)
+  ignoreWhitespace Boolean @default(false)
+
+  createdAt DateTime @default(now())
 
   @@index([partId])
   @@map("puzzle_part_solutions")
@@ -592,20 +593,20 @@ model PuzzlePartSolution {
 
 // Track progress on individual puzzle parts
 model PuzzlePartProgress {
-  id                    String       @id @default(cuid())
-  partId                String
-  part                  PuzzlePart   @relation(fields: [partId], references: [id], onDelete: Cascade)
-  
-  progressId            String
-  progress              UserPuzzleProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
-  
-  solved                Boolean      @default(false)
-  solvedAt              DateTime?
-  attempts              Int          @default(0)
-  pointsEarned          Int          @default(0)
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id     String     @id @default(cuid())
+  partId String
+  part   PuzzlePart @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  progressId String
+  progress   UserPuzzleProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+
+  solved       Boolean   @default(false)
+  solvedAt     DateTime?
+  attempts     Int       @default(0)
+  pointsEarned Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([partId, progressId])
   @@index([partId])
@@ -614,21 +615,21 @@ model PuzzlePartProgress {
 }
 
 model TeamProgress {
-  id                    String       @id @default(cuid())
-  teamId                String
-  puzzleId              String
-  
-  team                  Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  solved                Boolean      @default(false)
-  solvedAt              DateTime?
-  solvedBy              String?      // User ID who solved it
-  attempts              Int          @default(0)
-  pointsEarned          Int          @default(0)
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id       String @id @default(cuid())
+  teamId   String
+  puzzleId String
+
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  solved       Boolean   @default(false)
+  solvedAt     DateTime?
+  solvedBy     String? // User ID who solved it
+  attempts     Int       @default(0)
+  pointsEarned Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([teamId, puzzleId])
   @@index([teamId])
@@ -637,18 +638,18 @@ model TeamProgress {
 }
 
 model PuzzleSubmission {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  userId                String
-  
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  answer                String       @db.Text
-  isCorrect             Boolean
-  feedback              String?      @db.Text
-  
-  submittedAt           DateTime     @default(now())
+  id       String @id @default(cuid())
+  puzzleId String
+  userId   String
+
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  answer    String  @db.Text
+  isCorrect Boolean
+  feedback  String? @db.Text
+
+  submittedAt DateTime @default(now())
 
   @@index([puzzleId])
   @@index([userId])
@@ -658,19 +659,19 @@ model PuzzleSubmission {
 
 // ===== Leaderboards =====
 model LeaderboardEntry {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  userId                String?
-  teamId                String?
-  
-  rank                  Int
-  points                Int
-  solvedAt              DateTime
-  timeTaken             Int?         // In seconds
-  
-  createdAt             DateTime     @default(now())
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  userId String?
+  teamId String?
+
+  rank      Int
+  points    Int
+  solvedAt  DateTime
+  timeTaken Int? // In seconds
+
+  createdAt DateTime @default(now())
 
   @@unique([puzzleId, userId, teamId])
   @@index([puzzleId])
@@ -679,45 +680,45 @@ model LeaderboardEntry {
 }
 
 model GlobalLeaderboard {
-  id                    String       @id @default(cuid())
-  userId                String?
-  teamId                String?
-  
-  totalPoints           Int          @default(0)
-  puzzlesSolved         Int          @default(0)
-  rank                  Int?
-  
-  updatedAt             DateTime     @updatedAt
+  id     String  @id @default(cuid())
+  userId String?
+  teamId String?
+
+  totalPoints   Int  @default(0)
+  puzzlesSolved Int  @default(0)
+  rank          Int?
+
+  updatedAt DateTime @updatedAt
 
   @@map("global_leaderboard")
 }
 
 // ===== Announcements & Events =====
 model Announcement {
-  id                    String       @id @default(cuid())
-  title                 String
-  content               String       @db.Text
-  type                  String       @default("info") // "info", "warning", "achievement"
-  
-  publishedAt           DateTime     @default(now())
-  expiresAt             DateTime?
-  createdAt             DateTime     @default(now())
+  id      String @id @default(cuid())
+  title   String
+  content String @db.Text
+  type    String @default("info") // "info", "warning", "achievement"
+
+  publishedAt DateTime  @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
 
   @@index([publishedAt])
   @@map("announcements")
 }
 
 model Event {
-  id                    String       @id @default(cuid())
-  name                  String
-  description           String?      @db.Text
-  
-  startDate             DateTime
-  endDate               DateTime
-  
-  isActive              Boolean      @default(true)
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id          String  @id @default(cuid())
+  name        String
+  description String? @db.Text
+
+  startDate DateTime
+  endDate   DateTime
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([startDate, endDate])
   @@map("events")
@@ -725,36 +726,36 @@ model Event {
 
 // ===== Achievements & Badges =====
 model Achievement {
-  id                    String       @id @default(cuid())
-  name                  String       @unique
-  title                 String
-  description           String       @db.Text
-  icon                  String       // emoji or icon name
-  category              String       // "milestone", "speed", "collaboration", "exploration", "mastery", "special"
-  rarity                String       @default("common") // "common", "uncommon", "rare", "epic", "legendary"
-  requirement           String       // description of how to unlock
-  
-  // Achievement condition logic
-  conditionType         String       // "puzzles_solved", "points_earned", "streak", "team_size", "puzzle_category", "time_based", "submission_accuracy", "custom"
-  conditionValue        Int?         // threshold value (e.g., 100 for 100 puzzles solved)
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id          String @id @default(cuid())
+  name        String @unique
+  title       String
+  description String @db.Text
+  icon        String // emoji or icon name
+  category    String // "milestone", "speed", "collaboration", "exploration", "mastery", "special"
+  rarity      String @default("common") // "common", "uncommon", "rare", "epic", "legendary"
+  requirement String // description of how to unlock
 
-  userAchievements      UserAchievement[]
+  // Achievement condition logic
+  conditionType  String // "puzzles_solved", "points_earned", "streak", "team_size", "puzzle_category", "time_based", "submission_accuracy", "custom"
+  conditionValue Int? // threshold value (e.g., 100 for 100 puzzles solved)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userAchievements UserAchievement[]
 
   @@map("achievements")
 }
 
 model UserAchievement {
-  id                    String       @id @default(cuid())
-  userId                String
-  achievementId         String
-  
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achievement           Achievement  @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-  
-  unlockedAt            DateTime     @default(now())
+  id            String @id @default(cuid())
+  userId        String
+  achievementId String
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  unlockedAt DateTime @default(now())
 
   @@unique([userId, achievementId])
   @@index([userId])
@@ -764,42 +765,42 @@ model UserAchievement {
 
 // ===== Streak Tracking =====
 model UserStreak {
-  id                    String       @id @default(cuid())
-  userId                String       @unique
-  
-  currentStreak         Int          @default(0) // Current consecutive days
-  longestStreak         Int          @default(0) // All-time longest streak
-  
-  lastSolveDate         DateTime?    // Last date a puzzle was solved
-  streakStartDate       DateTime?    // When current streak started
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String @unique
+
+  currentStreak Int @default(0) // Current consecutive days
+  longestStreak Int @default(0) // All-time longest streak
+
+  lastSolveDate   DateTime? // Last date a puzzle was solved
+  streakStartDate DateTime? // When current streak started
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@map("user_streaks")
 }
 
 // ===== Referral System =====
 model UserReferral {
-  id                    String       @id @default(cuid())
-  referrerId            String       // Who made the invite
-  refereeId             String?      // Who was invited (null until they sign up)
-  
-  inviteCode            String       @unique @default(cuid())
-  inviteEmail           String?      // Email invited before signup
-  
-  refereeJoinedAt       DateTime?    // When referee signed up
+  id         String  @id @default(cuid())
+  referrerId String // Who made the invite
+  refereeId  String? // Who was invited (null until they sign up)
+
+  inviteCode  String  @unique @default(cuid())
+  inviteEmail String? // Email invited before signup
+
+  refereeJoinedAt            DateTime? // When referee signed up
   refereeFirstPuzzleSolvedAt DateTime? // When referee solved first puzzle
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  
-  referrer              User         @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
-  referee               User?        @relation("Referee", fields: [refereeId], references: [id], onDelete: SetNull)
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  referrer User  @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referee  User? @relation("Referee", fields: [refereeId], references: [id], onDelete: SetNull)
+
   @@index([referrerId])
   @@index([refereeId])
   @@index([inviteCode])
@@ -808,27 +809,27 @@ model UserReferral {
 
 // ===== Notifications & Activity Feed =====
 model Notification {
-  id                    String       @id @default(cuid())
-  userId                String
-  type                  String       // "puzzle_released", "achievement_unlocked", "team_update", "leaderboard_change", "system"
-  title                 String
-  message               String       @db.Text
-  icon                  String?      // emoji or icon identifier
-  relatedId             String?      // ID of related object (puzzle, team, etc.)
-  
-  // Email notification tracking
-  emailSent             Boolean      @default(false)
-  emailSentAt           DateTime?
-  emailRead             Boolean      @default(false)
-  emailReadAt           DateTime?
-  
-  isRead                Boolean      @default(false)
-  readAt                DateTime?
-  
-  createdAt             DateTime     @default(now())
-  expiresAt             DateTime?    // Optional: auto-delete after expiration
+  id        String  @id @default(cuid())
+  userId    String
+  type      String // "puzzle_released", "achievement_unlocked", "team_update", "leaderboard_change", "system"
+  title     String
+  message   String  @db.Text
+  icon      String? // emoji or icon identifier
+  relatedId String? // ID of related object (puzzle, team, etc.)
 
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Email notification tracking
+  emailSent   Boolean   @default(false)
+  emailSentAt DateTime?
+  emailRead   Boolean   @default(false)
+  emailReadAt DateTime?
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // Optional: auto-delete after expiration
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([isRead])
@@ -838,69 +839,69 @@ model Notification {
 }
 
 model NotificationPreference {
-  id                    String       @id @default(cuid())
-  userId                String       @unique
-  
+  id     String @id @default(cuid())
+  userId String @unique
+
   // Email notification settings
-  emailOnPuzzleRelease  Boolean      @default(true)
-  emailOnAchievement    Boolean      @default(true)
-  emailOnTeamUpdate     Boolean      @default(true)
-  emailOnLeaderboard    Boolean      @default(true)
-  emailOnSystem         Boolean      @default(false)
-  
+  emailOnPuzzleRelease Boolean @default(true)
+  emailOnAchievement   Boolean @default(true)
+  emailOnTeamUpdate    Boolean @default(true)
+  emailOnLeaderboard   Boolean @default(true)
+  emailOnSystem        Boolean @default(false)
+
   // Digest settings
-  enableDigest          Boolean      @default(false)
-  digestFrequency       String       @default("weekly") // daily, weekly, monthly
-  
+  enableDigest    Boolean @default(false)
+  digestFrequency String  @default("weekly") // daily, weekly, monthly
+
   // General settings
-  emailNotificationsEnabled Boolean   @default(true)
-  updatedAt             DateTime     @updatedAt
-  
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  emailNotificationsEnabled Boolean  @default(true)
+  updatedAt                 DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("notification_preferences")
 }
 
 model UserPreferences {
-  id                    String       @id @default(cuid())
-  userId                String       @unique
-  
+  id     String @id @default(cuid())
+  userId String @unique
+
   // Theme settings
-  themeBrightness       String       @default("medium") // "light", "medium", "dark"
-  
+  themeBrightness String @default("medium") // "light", "medium", "dark"
+
   // Font preferences
-  fontSize              String       @default("medium") // "small", "medium", "large", "extra-large"
-  
+  fontSize String @default("medium") // "small", "medium", "large", "extra-large"
+
   // Spacing mode
-  spacingMode           String       @default("comfortable") // "compact", "comfortable", "spacious"
-  
+  spacingMode String @default("comfortable") // "compact", "comfortable", "spacious"
+
   // Additional UI preferences
-  reduceAnimations      Boolean      @default(false)
-  colorContrast         String       @default("normal") // "normal", "high"
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  reduceAnimations Boolean @default(false)
+  colorContrast    String  @default("normal") // "normal", "high"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("user_preferences")
 }
 
 model Activity {
-  id                    String       @id @default(cuid())
-  userId                String
-  type                  String       // "puzzle_solved", "puzzle_attempted", "team_created", "team_joined", "achievement_unlocked", "leaderboard_milestone"
-  title                 String
-  description           String       @db.Text
-  icon                  String?      // emoji or icon identifier
-  relatedId             String?      // ID of related object
-  relatedType           String?      // Type of related object: "puzzle", "team", "achievement"
-  
-  metadata              String?      @db.Text // JSON metadata for flexible data storage
-  
-  createdAt             DateTime     @default(now())
+  id          String  @id @default(cuid())
+  userId      String
+  type        String // "puzzle_solved", "puzzle_attempted", "team_created", "team_joined", "achievement_unlocked", "leaderboard_milestone"
+  title       String
+  description String  @db.Text
+  icon        String? // emoji or icon identifier
+  relatedId   String? // ID of related object
+  relatedType String? // Type of related object: "puzzle", "team", "achievement"
 
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metadata String? @db.Text // JSON metadata for flexible data storage
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([type])
@@ -910,14 +911,14 @@ model Activity {
 
 // ===== Social Features =====
 model Follow {
-  id                    String       @id @default(cuid())
-  followerId            String       // User doing the following
-  followingId           String       // User being followed
-  
-  follower              User         @relation("Followers", fields: [followerId], references: [id], onDelete: Cascade)
-  following             User         @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
-  
-  createdAt             DateTime     @default(now())
+  id          String @id @default(cuid())
+  followerId  String // User doing the following
+  followingId String // User being followed
+
+  follower  User @relation("Followers", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 
   @@unique([followerId, followingId])
   @@index([followerId])
@@ -926,18 +927,18 @@ model Follow {
 }
 
 model DirectMessage {
-  id                    String       @id @default(cuid())
-  senderId              String
-  recipientId           String
-  content               String       @db.Text
-  isRead                Boolean      @default(false)
-  readAt                DateTime?
-  
-  sender                User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  recipient             User         @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id          String    @id @default(cuid())
+  senderId    String
+  recipientId String
+  content     String    @db.Text
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+
+  sender    User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([senderId])
   @@index([recipientId])
@@ -945,34 +946,50 @@ model DirectMessage {
   @@map("direct_messages")
 }
 
+// ===== Lobby Chat Messages =====
+model LobbyMessage {
+  id        String   @id @default(cuid())
+  teamId    String
+  puzzleId  String
+  userId    String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, puzzleId])
+  @@index([userId])
+  @@map("lobby_messages")
+}
+
 // ===== Forum Discussion System =====
 model ForumPost {
-  id                    String       @id @default(cuid())
-  title                 String
-  content               String       @db.Text
-  authorId              String
-  author                User         @relation("ForumPostsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  title    String
+  content  String @db.Text
+  authorId String
+  author   User   @relation("ForumPostsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
   // Optional puzzle association
-  puzzleId              String?
-  puzzle                Puzzle?      @relation(fields: [puzzleId], references: [id], onDelete: SetNull)
-  
+  puzzleId String?
+  puzzle   Puzzle? @relation(fields: [puzzleId], references: [id], onDelete: SetNull)
+
   // Engagement metrics
-  viewCount             Int          @default(0)
-  replyCount            Int          @default(0)
-  upvotes               Int          @default(0)
-  downvotes             Int          @default(0)
-  
+  viewCount  Int @default(0)
+  replyCount Int @default(0)
+  upvotes    Int @default(0)
+  downvotes  Int @default(0)
+
   // Metadata
-  isPinned              Boolean      @default(false)
-  isClosed              Boolean      @default(false)
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  isPinned  Boolean  @default(false)
+  isClosed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  comments              ForumComment[]
-  userVotes             ForumPostVote[]
-  views                 ForumPostView[]
+  comments  ForumComment[]
+  userVotes ForumPostVote[]
+  views     ForumPostView[]
 
   @@index([authorId])
   @@index([puzzleId])
@@ -982,29 +999,29 @@ model ForumPost {
 }
 
 model ForumComment {
-  id                    String       @id @default(cuid())
-  content               String       @db.Text
-  authorId              String
-  author                User         @relation("ForumCommentsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  
-  postId                String
-  post                  ForumPost    @relation(fields: [postId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  content  String @db.Text
+  authorId String
+  author   User   @relation("ForumCommentsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
   // Optional reply to another comment
-  replyToId             String?
-  replyTo               ForumComment? @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: Cascade)
-  replies               ForumComment[] @relation("CommentReplies")
-  
+  replyToId String?
+  replyTo   ForumComment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: Cascade)
+  replies   ForumComment[] @relation("CommentReplies")
+
   // Engagement metrics
-  upvotes               Int          @default(0)
-  downvotes             Int          @default(0)
-  
+  upvotes   Int @default(0)
+  downvotes Int @default(0)
+
   // Metadata
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  userVotes             ForumCommentVote[]
+  userVotes ForumCommentVote[]
 
   @@index([authorId])
   @@index([postId])
@@ -1014,15 +1031,15 @@ model ForumComment {
 }
 
 model ForumPostVote {
-  id                    String       @id @default(cuid())
-  userId                String
-  postId                String
-  voteType              String       @default("up") // "up" or "down"
-  
-  user                  User         @relation("ForumPostVotes", fields: [userId], references: [id], onDelete: Cascade)
-  post                  ForumPost    @relation(fields: [postId], references: [id], onDelete: Cascade)
-  
-  createdAt             DateTime     @default(now())
+  id       String @id @default(cuid())
+  userId   String
+  postId   String
+  voteType String @default("up") // "up" or "down"
+
+  user User      @relation("ForumPostVotes", fields: [userId], references: [id], onDelete: Cascade)
+  post ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 
   @@unique([userId, postId])
   @@index([userId])
@@ -1031,15 +1048,15 @@ model ForumPostVote {
 }
 
 model ForumCommentVote {
-  id                    String       @id @default(cuid())
-  userId                String
-  commentId             String
-  voteType              String       @default("up") // "up" or "down"
-  
-  user                  User         @relation("ForumCommentVotes", fields: [userId], references: [id], onDelete: Cascade)
-  comment               ForumComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  
-  createdAt             DateTime     @default(now())
+  id        String @id @default(cuid())
+  userId    String
+  commentId String
+  voteType  String @default("up") // "up" or "down"
+
+  user    User         @relation("ForumCommentVotes", fields: [userId], references: [id], onDelete: Cascade)
+  comment ForumComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 
   @@unique([userId, commentId])
   @@index([userId])
@@ -1048,14 +1065,14 @@ model ForumCommentVote {
 }
 
 model ForumPostView {
-  id                    String       @id @default(cuid())
-  userId                String?       // nullable for anonymous views
-  postId                String
-  viewedAt              DateTime     @default(now())
-  
-  user                  User?        @relation("ForumPostViews", fields: [userId], references: [id], onDelete: Cascade)
-  post                  ForumPost    @relation(fields: [postId], references: [id], onDelete: Cascade)
-  
+  id       String   @id @default(cuid())
+  userId   String? // nullable for anonymous views
+  postId   String
+  viewedAt DateTime @default(now())
+
+  user User?     @relation("ForumPostViews", fields: [userId], references: [id], onDelete: Cascade)
+  post ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
   @@unique([userId, postId])
   @@index([userId])
   @@index([postId])
@@ -1064,20 +1081,20 @@ model ForumPostView {
 
 // Team puzzle part assignments - tracks which team member is assigned to which puzzle part
 model TeamPuzzlePartAssignment {
-  id                    String       @id @default(cuid())
-  teamId                String
-  puzzleId              String
-  partId                String
-  assignedToUserId      String
-  
-  team                  Team         @relation("TeamPuzzleAssignments", fields: [teamId], references: [id], onDelete: Cascade)
-  puzzle                Puzzle       @relation("PuzzlePartAssignments", fields: [puzzleId], references: [id], onDelete: Cascade)
-  part                  PuzzlePart   @relation("PartAssignments", fields: [partId], references: [id], onDelete: Cascade)
-  assignedToUser        User         @relation("PuzzlePartAssignments", fields: [assignedToUserId], references: [id], onDelete: Cascade)
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  
+  id               String @id @default(cuid())
+  teamId           String
+  puzzleId         String
+  partId           String
+  assignedToUserId String
+
+  team           Team       @relation("TeamPuzzleAssignments", fields: [teamId], references: [id], onDelete: Cascade)
+  puzzle         Puzzle     @relation("PuzzlePartAssignments", fields: [puzzleId], references: [id], onDelete: Cascade)
+  part           PuzzlePart @relation("PartAssignments", fields: [partId], references: [id], onDelete: Cascade)
+  assignedToUser User       @relation("PuzzlePartAssignments", fields: [assignedToUserId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([teamId, puzzleId, partId])
   @@index([teamId])
   @@index([puzzleId])
@@ -1088,24 +1105,24 @@ model TeamPuzzlePartAssignment {
 
 // Team puzzle part submissions - tracks each attempt at solving a puzzle part
 model TeamPuzzlePartSubmission {
-  id                    String       @id @default(cuid())
-  teamId                String
-  puzzleId              String
-  partId                String
-  submittedByUserId     String
-  
-  team                  Team         @relation("TeamPuzzleSubmissions", fields: [teamId], references: [id], onDelete: Cascade)
-  puzzle                Puzzle       @relation("PuzzleSubmissions", fields: [puzzleId], references: [id], onDelete: Cascade)
-  part                  PuzzlePart   @relation("PartSubmissions", fields: [partId], references: [id], onDelete: Cascade)
-  submittedByUser       User         @relation("PuzzlePartSubmissions", fields: [submittedByUserId], references: [id], onDelete: Cascade)
-  
-  answer                String
-  isCorrect             Boolean      @default(false)
-  attempts              Int          @default(1)
-  solvedAt              DateTime?
-  
-  createdAt             DateTime     @default(now())
-  
+  id                String @id @default(cuid())
+  teamId            String
+  puzzleId          String
+  partId            String
+  submittedByUserId String
+
+  team            Team       @relation("TeamPuzzleSubmissions", fields: [teamId], references: [id], onDelete: Cascade)
+  puzzle          Puzzle     @relation("PuzzleSubmissions", fields: [puzzleId], references: [id], onDelete: Cascade)
+  part            PuzzlePart @relation("PartSubmissions", fields: [partId], references: [id], onDelete: Cascade)
+  submittedByUser User       @relation("PuzzlePartSubmissions", fields: [submittedByUserId], references: [id], onDelete: Cascade)
+
+  answer    String
+  isCorrect Boolean   @default(false)
+  attempts  Int       @default(1)
+  solvedAt  DateTime?
+
+  createdAt DateTime @default(now())
+
   @@index([teamId])
   @@index([puzzleId])
   @@index([partId])
@@ -1115,16 +1132,16 @@ model TeamPuzzlePartSubmission {
 
 // Team puzzle completion tracking
 model TeamPuzzleCompletion {
-  id                    String       @id @default(cuid())
-  teamId                String
-  puzzleId              String
-  
-  team                  Team         @relation("TeamPuzzleCompletions", fields: [teamId], references: [id], onDelete: Cascade)
-  puzzle                Puzzle       @relation("TeamCompletions", fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  totalPointsEarned     Int          @default(0)
-  completedAt           DateTime     @default(now())
-  
+  id       String @id @default(cuid())
+  teamId   String
+  puzzleId String
+
+  team   Team   @relation("TeamPuzzleCompletions", fields: [teamId], references: [id], onDelete: Cascade)
+  puzzle Puzzle @relation("TeamCompletions", fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  totalPointsEarned Int      @default(0)
+  completedAt       DateTime @default(now())
+
   @@unique([teamId, puzzleId])
   @@index([teamId])
   @@index([puzzleId])
@@ -1133,67 +1150,68 @@ model TeamPuzzleCompletion {
 
 // Puzzle ratings - tracks user ratings after completing puzzles
 model PuzzleRating {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  userId                String
-  
-  puzzle                Puzzle       @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  rating                Int          @db.SmallInt // 1-5 stars
-  review                String?      @db.Text // Optional written review
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  
+  id       String @id @default(cuid())
+  puzzleId String
+  userId   String
+
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  rating    Int      @db.SmallInt // 1-5 stars
+  review    String?  @db.Text // Optional written review
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([puzzleId, userId]) // Each user can only rate each puzzle once
   @@index([puzzleId])
   @@index([userId])
   @@map("puzzle_ratings")
 }
+
 // Relay Riddle - asymmetric multiplayer puzzle
 model RelayRiddle {
-  id            String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Room & metadata
-  roomId        String   @unique
-  puzzleId      String?  // Optional: link to Puzzle if stored as puzzle type
-  createdAt     DateTime @default(now())
-  expiresAt     DateTime // 30 min expiry for real-time sync
-  status        String   @default("waiting") // "waiting", "in_progress", "solved", "expired"
-  
+  roomId    String   @unique
+  puzzleId  String? // Optional: link to Puzzle if stored as puzzle type
+  createdAt DateTime @default(now())
+  expiresAt DateTime // 30 min expiry for real-time sync
+  status    String   @default("waiting") // "waiting", "in_progress", "solved", "expired"
+
   // Puzzle data
-  solverClues   String   @db.Text  // JSON: [{ id, clue, hint, difficulty }]
-  solverAnswer  String   // Expected answer/key from player A (e.g., "3" for shift)
-  encryptedMsg  String   @db.Text  // Encrypted message (e.g., "KHOOR ZRUOG")
-  cipherType    String   @default("shift") // "shift", "reverse", "substitution"
-  
+  solverClues  String @db.Text // JSON: [{ id, clue, hint, difficulty }]
+  solverAnswer String // Expected answer/key from player A (e.g., "3" for shift)
+  encryptedMsg String @db.Text // Encrypted message (e.g., "KHOOR ZRUOG")
+  cipherType   String @default("shift") // "shift", "reverse", "substitution"
+
   // Players
   solverUserId  String?
   decoderUserId String?
-  solver        User?    @relation("RelayRiddleSolver", fields: [solverUserId], references: [id], onDelete: SetNull)
-  decoder       User?    @relation("RelayRiddleDecoder", fields: [decoderUserId], references: [id], onDelete: SetNull)
-  
+  solver        User?   @relation("RelayRiddleSolver", fields: [solverUserId], references: [id], onDelete: SetNull)
+  decoder       User?   @relation("RelayRiddleDecoder", fields: [decoderUserId], references: [id], onDelete: SetNull)
+
   // Solution tracking
   solverSubmittedAt DateTime?
-  solvedAt      DateTime?
-  
+  solvedAt          DateTime?
+
   // Messages
-  messages      RelayMessage[]
-  
+  messages RelayMessage[]
+
   @@index([roomId])
   @@index([status])
   @@map("relay_riddles")
 }
 
 model RelayMessage {
-  id          String   @id @default(cuid())
-  relayId     String
-  relay       RelayRiddle @relation(fields: [relayId], references: [id], onDelete: Cascade)
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  message     String   @db.Text
-  createdAt   DateTime @default(now())
-  
+  id        String      @id @default(cuid())
+  relayId   String
+  relay     RelayRiddle @relation(fields: [relayId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  message   String      @db.Text
+  createdAt DateTime    @default(now())
+
   @@index([relayId])
   @@index([userId])
   @@map("relay_messages")
@@ -1201,49 +1219,49 @@ model RelayMessage {
 
 // ===== ARG Puzzle System =====
 model ARGPhase {
-  id            String        @id @default(cuid())
-  name          String        // "Phase 1: The Awakening", etc.
-  description   String?       @db.Text
-  orderIndex    Int           // Display order
-  isActive      Boolean       @default(false)
-  startDate     DateTime?
-  endDate       DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  
+  id          String    @id @default(cuid())
+  name        String // "Phase 1: The Awakening", etc.
+  description String?   @db.Text
+  orderIndex  Int // Display order
+  isActive    Boolean   @default(false)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
   // Relations
-  puzzles       ARGPuzzle[]
-  progress      ARGPhaseProgress[]
-  
+  puzzles  ARGPuzzle[]
+  progress ARGPhaseProgress[]
+
   @@index([isActive])
   @@map("arg_phases")
 }
 
 model ARGPuzzle {
-  id              String          @id @default(cuid())
-  phaseId         String
-  phase           ARGPhase        @relation(fields: [phaseId], references: [id], onDelete: Cascade)
-  
-  title           String
-  description     String?         @db.Text
-  puzzleType      String          // "cipher", "image-analysis", "audio-spectrum", "text-extraction", "coordinates", "multi-step"
-  difficulty      String          // "easy", "medium", "hard"
-  orderIndex      Int             // Order within phase
-  
+  id      String   @id @default(cuid())
+  phaseId String
+  phase   ARGPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String? @db.Text
+  puzzleType  String // "cipher", "image-analysis", "audio-spectrum", "text-extraction", "coordinates", "multi-step"
+  difficulty  String // "easy", "medium", "hard"
+  orderIndex  Int // Order within phase
+
   // Puzzle-specific data stored as JSON
-  puzzleData      Json            // Type-specific puzzle configuration
-  solution        String          // The correct answer/solution
-  hints           String[]        // Array of hints
-  
+  puzzleData Json // Type-specific puzzle configuration
+  solution   String // The correct answer/solution
+  hints      String[] // Array of hints
+
   // Metadata
-  isPublished     Boolean         @default(false)
-  createdBy       String
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
+  isPublished Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   // Relations
-  progress        ARGPuzzleProgress[]
-  
+  progress ARGPuzzleProgress[]
+
   @@index([phaseId])
   @@index([puzzleType])
   @@index([isPublished])
@@ -1251,20 +1269,20 @@ model ARGPuzzle {
 }
 
 model ARGPuzzleProgress {
-  id          String      @id @default(cuid())
-  userId      String
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  puzzleId    String
-  puzzle      ARGPuzzle   @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  completed   Boolean     @default(false)
-  attempts    Int         @default(0)
-  hintsUsed   Int         @default(0)
-  solution    String?     // User's submitted solution
-  
-  startedAt   DateTime    @default(now())
+  id       String    @id @default(cuid())
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  puzzleId String
+  puzzle   ARGPuzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  completed Boolean @default(false)
+  attempts  Int     @default(0)
+  hintsUsed Int     @default(0)
+  solution  String? // User's submitted solution
+
+  startedAt   DateTime  @default(now())
   completedAt DateTime?
-  
+
   @@unique([userId, puzzleId])
   @@index([userId])
   @@index([puzzleId])
@@ -1273,16 +1291,16 @@ model ARGPuzzleProgress {
 }
 
 model ARGPhaseProgress {
-  id          String      @id @default(cuid())
-  userId      String
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phaseId     String
-  phase       ARGPhase    @relation(fields: [phaseId], references: [id], onDelete: Cascade)
-  
-  completed   Boolean     @default(false)
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phaseId String
+  phase   ARGPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  completed   Boolean   @default(false)
   completedAt DateTime?
-  startedAt   DateTime    @default(now())
-  
+  startedAt   DateTime  @default(now())
+
   @@unique([userId, phaseId])
   @@index([userId])
   @@index([phaseId])
@@ -1292,23 +1310,23 @@ model ARGPhaseProgress {
 
 // ===== Puzzle Templates =====
 model PuzzleTemplate {
-  id                    String       @id @default(cuid())
-  name                  String
-  description           String?      @db.Text
-  puzzleType            String       // The puzzle type this template is for
-  
+  id          String  @id @default(cuid())
+  name        String
+  description String? @db.Text
+  puzzleType  String // The puzzle type this template is for
+
   // Template configuration
-  content               Json         // Pre-filled form data
-  tags                  String[]     // "beginner", "intermediate", "advanced", etc.
-  difficulty            String       // Suggested difficulty
-  category              String?
-  
+  content    Json // Pre-filled form data
+  tags       String[] // "beginner", "intermediate", "advanced", etc.
+  difficulty String // Suggested difficulty
+  category   String?
+
   // Template metadata
-  isPublic              Boolean      @default(true) // Can other admins use it?
-  usageCount            Int          @default(0) // Times this template has been used
-  createdBy             String
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  isPublic   Boolean  @default(true) // Can other admins use it?
+  usageCount Int      @default(0) // Times this template has been used
+  createdBy  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([puzzleType])
   @@index([isPublic])
@@ -1317,26 +1335,26 @@ model PuzzleTemplate {
 
 // ===== Puzzle Versioning =====
 model PuzzleVersion {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation("PuzzleVersions", fields: [puzzleId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation("PuzzleVersions", fields: [puzzleId], references: [id], onDelete: Cascade)
+
   // Version info
-  versionNumber         Int
-  status                String       @default("draft") // "draft", "published", "archived"
-  
+  versionNumber Int
+  status        String @default("draft") // "draft", "published", "archived"
+
   // Full puzzle snapshot at this version
-  title                 String
-  description           String?      @db.Text
-  content               Json         // Complete puzzle configuration
-  solutions             Json         // All solutions for this version
-  
+  title       String
+  description String? @db.Text
+  content     Json // Complete puzzle configuration
+  solutions   Json // All solutions for this version
+
   // Metadata
-  createdAt             DateTime     @default(now())
-  createdBy             String
-  publishedAt           DateTime?
-  notes                 String?      @db.Text
-  
+  createdAt   DateTime  @default(now())
+  createdBy   String
+  publishedAt DateTime?
+  notes       String?   @db.Text
+
   @@unique([puzzleId, versionNumber])
   @@index([puzzleId])
   @@index([status])
@@ -1345,28 +1363,28 @@ model PuzzleVersion {
 
 // ===== Puzzle Scheduling =====
 model PuzzleSchedule {
-  id                    String       @id @default(cuid())
-  puzzleId              String       @unique
-  puzzle                Puzzle       @relation("PuzzleSchedule", fields: [puzzleId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  puzzleId String @unique
+  puzzle   Puzzle @relation("PuzzleSchedule", fields: [puzzleId], references: [id], onDelete: Cascade)
+
   // Release timing
-  releaseAt             DateTime?    // When puzzle becomes available
-  unlocksAt             DateTime?    // Alternative to releaseAt
-  
+  releaseAt DateTime? // When puzzle becomes available
+  unlocksAt DateTime? // Alternative to releaseAt
+
   // Timed puzzles
-  timedDuration         Int?         // Duration in seconds (null = not timed)
-  countdownStartsAt     DateTime?    // When countdown begins
-  
+  timedDuration     Int? // Duration in seconds (null = not timed)
+  countdownStartsAt DateTime? // When countdown begins
+
   // Availability window
-  expiresAt             DateTime?    // When puzzle is no longer playable
-  timezone              String?      // User's timezone for scheduled releases
-  
+  expiresAt DateTime? // When puzzle is no longer playable
+  timezone  String? // User's timezone for scheduled releases
+
   // Scheduling strategy
-  schedulingType        String       @default("immediate") // "immediate", "scheduled", "event-based", "rolling"
-  isLive                Boolean      @default(true)
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  schedulingType String  @default("immediate") // "immediate", "scheduled", "event-based", "rolling"
+  isLive         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([puzzleId])
   @@index([releaseAt])
@@ -1375,26 +1393,26 @@ model PuzzleSchedule {
 
 // ===== Advanced Hints System =====
 model HintTier {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation("HintTiers", fields: [puzzleId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation("HintTiers", fields: [puzzleId], references: [id], onDelete: Cascade)
+
   // Tier info
-  tierNumber            Int          // 1, 2, 3, etc.
-  title                 String?      // "First Hint", "Major Clue", etc.
-  content               String       @db.Text
-  
+  tierNumber Int // 1, 2, 3, etc.
+  title      String? // "First Hint", "Major Clue", etc.
+  content    String  @db.Text
+
   // Hint mechanics
-  costPoints            Int          @default(0)
-  progressRequired      Int?         // Min % completion before available
-  delaySeconds          Int?         // Seconds to wait before allowing this tier
-  maxUsesPerPlayer      Int          @default(1)
-  
+  costPoints       Int  @default(0)
+  progressRequired Int? // Min % completion before available
+  delaySeconds     Int? // Seconds to wait before allowing this tier
+  maxUsesPerPlayer Int  @default(1)
+
   // Progressive reveal
-  revealType            String       @default("full") // "full", "partial", "hint"
-  isProgressive         Boolean      @default(false)
-  
-  createdAt             DateTime     @default(now())
+  revealType    String  @default("full") // "full", "partial", "hint"
+  isProgressive Boolean @default(false)
+
+  createdAt DateTime @default(now())
 
   @@unique([puzzleId, tierNumber])
   @@index([puzzleId])
@@ -1402,16 +1420,16 @@ model HintTier {
 }
 
 model HintUsageLog {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation("HintUsageLogs", fields: [puzzleId], references: [id], onDelete: Cascade)
-  
-  userId                String
-  hintTierId            String
-  
-  usedAt                DateTime     @default(now())
-  costPaid              Int
-  leadToSolve           Boolean      @default(false)
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation("HintUsageLogs", fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  userId     String
+  hintTierId String
+
+  usedAt      DateTime @default(now())
+  costPaid    Int
+  leadToSolve Boolean  @default(false)
 
   @@index([puzzleId])
   @@index([userId])
@@ -1420,32 +1438,32 @@ model HintUsageLog {
 
 // ===== Puzzle Analytics =====
 model PuzzleAnalytics {
-  id                    String       @id @default(cuid())
-  puzzleId              String       @unique
-  puzzle                Puzzle       @relation("PuzzleAnalytics", fields: [puzzleId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  puzzleId String @unique
+  puzzle   Puzzle @relation("PuzzleAnalytics", fields: [puzzleId], references: [id], onDelete: Cascade)
+
   // Stats
-  totalAttempts         Int          @default(0)
-  totalCompletions      Int          @default(0)
-  totalPlayers          Int          @default(0)
-  averageSolveTime      Float?       // Average seconds to solve
-  medianSolveTime       Float?       // Median seconds to solve
-  
+  totalAttempts    Int    @default(0)
+  totalCompletions Int    @default(0)
+  totalPlayers     Int    @default(0)
+  averageSolveTime Float? // Average seconds to solve
+  medianSolveTime  Float? // Median seconds to solve
+
   // Difficulty feedback
-  tooEasy               Int          @default(0)
-  perfectDifficulty     Int          @default(0)
-  tooDifficult          Int          @default(0)
-  
+  tooEasy           Int @default(0)
+  perfectDifficulty Int @default(0)
+  tooDifficult      Int @default(0)
+
   // Engagement
-  averageHintsUsed      Float?
-  abandonmentRate       Float?       // % of players who started but didn't finish
-  playersWhoUsedHints   Int          @default(0)
-  
+  averageHintsUsed    Float?
+  abandonmentRate     Float? // % of players who started but didn't finish
+  playersWhoUsedHints Int    @default(0)
+
   // Time-based tracking
-  dailyAttempts         Json?        // {"2025-12-30": 5, "2025-12-29": 3}
-  hourlyEngagement      Json?        // Peak hours data
-  
-  lastUpdated           DateTime     @default(now()) @updatedAt
+  dailyAttempts    Json? // {"2025-12-30": 5, "2025-12-29": 3}
+  hourlyEngagement Json? // Peak hours data
+
+  lastUpdated DateTime @default(now()) @updatedAt
 
   @@index([puzzleId])
   @@map("puzzle_analytics")
@@ -1453,33 +1471,33 @@ model PuzzleAnalytics {
 
 // ===== Custom Validation =====
 model CustomValidator {
-  id                    String       @id @default(cuid())
-  puzzleId              String
-  puzzle                Puzzle       @relation("CustomValidators", fields: [puzzleId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  puzzleId String
+  puzzle   Puzzle @relation("CustomValidators", fields: [puzzleId], references: [id], onDelete: Cascade)
+
   // Validator config
-  validationType        String       // "regex", "script", "api", "custom"
-  name                  String?      // Description of this validator
-  
+  validationType String // "regex", "script", "api", "custom"
+  name           String? // Description of this validator
+
   // Regex validation
-  pattern               String?      @db.Text
-  flags                 String?      // "i" for case-insensitive, "g" for global, etc.
-  
+  pattern String? @db.Text
+  flags   String? // "i" for case-insensitive, "g" for global, etc.
+
   // Custom script (if using "script" type)
-  scriptCode            String?      @db.Text // JavaScript code that returns true/false
-  
+  scriptCode String? @db.Text // JavaScript code that returns true/false
+
   // API validation (if using "api" type)
-  apiEndpoint           String?
-  apiMethod             String?      @default("POST")
-  apiHeaders            Json?
-  
+  apiEndpoint String?
+  apiMethod   String? @default("POST")
+  apiHeaders  Json?
+
   // Validation rules
-  priority              Int          @default(1) // Order of execution
-  isRequired            Boolean      @default(true)
-  errorMessage          String?      // Custom error message
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  priority     Int     @default(1) // Order of execution
+  isRequired   Boolean @default(true)
+  errorMessage String? // Custom error message
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([puzzleId])
   @@map("custom_validators")
@@ -1487,25 +1505,25 @@ model CustomValidator {
 
 // ===== Puzzle Relationships & Chains =====
 model PuzzleRelationship {
-  id                    String       @id @default(cuid())
-  puzzleIdA             String
-  puzzleA               Puzzle       @relation("RelationshipA", fields: [puzzleIdA], references: [id], onDelete: Cascade)
-  
-  puzzleIdB             String
-  puzzleB               Puzzle       @relation("RelationshipB", fields: [puzzleIdB], references: [id], onDelete: Cascade)
-  
+  id        String @id @default(cuid())
+  puzzleIdA String
+  puzzleA   Puzzle @relation("RelationshipA", fields: [puzzleIdA], references: [id], onDelete: Cascade)
+
+  puzzleIdB String
+  puzzleB   Puzzle @relation("RelationshipB", fields: [puzzleIdB], references: [id], onDelete: Cascade)
+
   // Relationship type
-  relationshipType      String       // "prerequisite", "sequel", "alternative", "bonus", "campaign"
-  description           String?
-  
+  relationshipType String // "prerequisite", "sequel", "alternative", "bonus", "campaign"
+  description      String?
+
   // Campaign/sequence info
-  campaignId            String?
-  sequenceOrder         Int?         // Position in sequence/campaign
-  
-  isRequired            Boolean      @default(false) // Must complete A to do B?
-  unlocksOn             String?      // "immediate", "completion", "time", "user_choice"
-  
-  createdAt             DateTime     @default(now())
+  campaignId    String?
+  sequenceOrder Int? // Position in sequence/campaign
+
+  isRequired Boolean @default(false) // Must complete A to do B?
+  unlocksOn  String? // "immediate", "completion", "time", "user_choice"
+
+  createdAt DateTime @default(now())
 
   @@unique([puzzleIdA, puzzleIdB])
   @@index([puzzleIdA])
@@ -1515,25 +1533,25 @@ model PuzzleRelationship {
 }
 
 model PuzzleCampaign {
-  id                    String       @id @default(cuid())
-  name                  String
-  description           String?      @db.Text
-  
+  id          String  @id @default(cuid())
+  name        String
+  description String? @db.Text
+
   // Campaign metadata
-  theme                 String?
-  targetDifficulty      String?
-  estimatedPlaytime     Int?         // Minutes
-  
+  theme             String?
+  targetDifficulty  String?
+  estimatedPlaytime Int? // Minutes
+
   // Campaign progression
-  isLinear              Boolean      @default(true) // Must complete in order?
-  maxConcurrent         Int?         // Max puzzles player can work on simultaneously
-  
+  isLinear      Boolean @default(true) // Must complete in order?
+  maxConcurrent Int? // Max puzzles player can work on simultaneously
+
   // Reward/tracking
-  totalReward           Int          @default(0)
-  badge                 String?      // Badge awarded on completion
-  
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  totalReward Int     @default(0)
+  badge       String? // Badge awarded on completion
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([isLinear])
   @@map("puzzle_campaigns")
@@ -1541,23 +1559,23 @@ model PuzzleCampaign {
 
 // ===== Bulk Operations Tracking =====
 model BulkOperation {
-  id                    String       @id @default(cuid())
-  operationType         String       // "duplicate", "batch_edit", "batch_delete", "import"
-  status                String       @default("pending") // "pending", "processing", "completed", "failed"
-  
+  id            String @id @default(cuid())
+  operationType String // "duplicate", "batch_edit", "batch_delete", "import"
+  status        String @default("pending") // "pending", "processing", "completed", "failed"
+
   // Operation details
-  sourceData            Json         // Source IDs, configs, etc.
-  results               Json?        // Results/IDs created
-  
+  sourceData Json // Source IDs, configs, etc.
+  results    Json? // Results/IDs created
+
   // User info
-  createdBy             String
-  createdAt             DateTime     @default(now())
-  completedAt           DateTime?
-  
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
   // Error tracking
-  errorMessage          String?
-  itemsProcessed        Int          @default(0)
-  itemsTotal            Int          @default(0)
+  errorMessage   String?
+  itemsProcessed Int     @default(0)
+  itemsTotal     Int     @default(0)
 
   @@index([status])
   @@index([operationType])

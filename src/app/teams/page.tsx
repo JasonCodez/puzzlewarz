@@ -37,6 +37,7 @@ export default function TeamsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showInvitations, setShowInvitations] = useState(false);
   const [invitationCount, setInvitationCount] = useState(0);
+  const [viewMode, setViewMode] = useState<'mine' | 'public'>('mine');
 
   useEffect(() => {
     // Allow unauthenticated users to view public teams - do not redirect to sign-in.
@@ -49,6 +50,13 @@ export default function TeamsPage() {
       if (session?.user?.email) fetchInvitationCount();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session?.user?.email]);
+
+  // Ensure viewMode is set consistently for unauthenticated users
+  useEffect(() => {
+    if (status !== 'loading') {
+      if (!session?.user?.email) setViewMode('public');
+    }
   }, [status, session?.user?.email]);
 
   const fetchInvitationCount = async () => {
@@ -83,6 +91,11 @@ export default function TeamsPage() {
     );
   }
 
+  // determine filtered teams based on viewMode
+  const filteredTeams = teams.filter((team) => (viewMode === 'mine' ? team.members.some((m) => m.user?.email === session?.user?.email) : team.isPublic));
+
+  
+
   return (
     <>
       <Navbar />
@@ -96,6 +109,23 @@ export default function TeamsPage() {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              {/* View mode buttons */}
+              <div className="flex gap-2 mr-2">
+                {session?.user?.email && (
+                  <button
+                    onClick={() => setViewMode('mine')}
+                    className={`px-4 py-2 rounded-lg font-semibold ${viewMode === 'mine' ? 'bg-indigo-600 text-white' : 'bg-transparent text-white border border-white/10'}`}
+                  >
+                    My teams
+                  </button>
+                )}
+                <button
+                  onClick={() => setViewMode('public')}
+                  className={`px-4 py-2 rounded-lg font-semibold ${viewMode === 'public' ? 'bg-indigo-600 text-white' : 'bg-transparent text-white border border-white/10'}`}
+                >
+                  View public teams
+                </button>
+              </div>
               {invitationCount > 0 && (
                 <button
                   onClick={() => setShowInvitations(true)}
@@ -126,10 +156,11 @@ export default function TeamsPage() {
           )}
 
           {teams.length === 0 ? (
+            // when filtered list is empty
             <div className="text-center py-16">
               <div className="text-6xl mb-4">👥</div>
               <p style={{ color: '#DDDBF1' }} className="text-lg mb-6">
-                You haven't joined any teams yet
+                {viewMode === 'mine' ? "You haven't joined any teams yet" : "No public teams found"}
               </p>
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -141,7 +172,9 @@ export default function TeamsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {teams.map((team) => (
+              {teams
+                .filter((team) => (viewMode === 'mine' ? team.members.some((m) => m.user?.email === session?.user?.email) : team.isPublic))
+                .map((team) => (
                 <Link key={team.id} href={`/teams/${team.id}`}>
                   <div className="h-full border rounded-lg p-6 hover:shadow-lg transition-all cursor-pointer group" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
                     <div className="mb-4">

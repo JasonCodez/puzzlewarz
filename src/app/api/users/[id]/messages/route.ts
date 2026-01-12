@@ -156,3 +156,42 @@ export async function POST(
     );
   }
 }
+
+// DELETE conversation history between current user and target user
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const currentUser = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const targetUserId = id;
+
+    // Delete all direct messages exchanged between the two users
+    await prisma.directMessage.deleteMany({
+      where: {
+        OR: [
+          { senderId: currentUser.id, recipientId: targetUserId },
+          { senderId: targetUserId, recipientId: currentUser.id },
+        ],
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete conversation:', error);
+    return NextResponse.json({ error: 'Failed to delete conversation' }, { status: 500 });
+  }
+}

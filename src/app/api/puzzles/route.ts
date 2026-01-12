@@ -21,6 +21,9 @@ export async function GET(request: NextRequest) {
     const skip = parseInt(searchParams.get("skip") || "0");
 
     const where: any = { isActive: true };
+    // Optional filter for team puzzles
+    const isTeam = searchParams.get("isTeam");
+    if (isTeam === "true") where.isTeamPuzzle = true;
     
     if (categoryId) where.categoryId = categoryId;
     if (difficulty) where.difficulty = difficulty.toUpperCase();
@@ -71,6 +74,10 @@ export async function GET(request: NextRequest) {
             name: true,
           },
         },
+        // include team-related metadata when requested by client
+        isTeamPuzzle: true,
+        minTeamSize: true,
+        parts: isTeam === "true" ? { select: { id: true } } : false,
         solutions: {
           select: {
             points: true,

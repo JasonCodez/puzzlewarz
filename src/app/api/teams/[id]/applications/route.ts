@@ -22,8 +22,16 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Exclude pending invites for users who are already members of the team
+    const members = await prisma.teamMember.findMany({ where: { teamId }, select: { userId: true } });
+    const memberIds = members.map((m) => m.userId);
+
     const applications = await prisma.teamInvite.findMany({
-      where: { teamId, status: "pending" },
+      where: {
+        teamId,
+        status: "pending",
+        NOT: memberIds.length > 0 ? { userId: { in: memberIds } } : undefined,
+      },
       include: { user: { select: { id: true, name: true, image: true, email: true } } },
       orderBy: { createdAt: "desc" },
     });

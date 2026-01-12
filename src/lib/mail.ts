@@ -151,6 +151,34 @@ export function generateTeamUpdateEmail(
   `;
 }
 
+export function generateTeamLobbyInviteEmail(
+  userName: string,
+  inviterName: string,
+  teamName: string,
+  puzzleTitle: string,
+  joinUrl: string
+): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #020202 0%, #0a0a0a 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #FDE74C; margin: 0;">🔔 Lobby Invitation</h1>
+      </div>
+      <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 8px 8px; color: #DDDBF1;">
+        <p>Hi <strong>${userName}</strong>,</p>
+        <p><strong>${inviterName}</strong> has invited you to join a team lobby for <strong>${teamName}</strong>.</p>
+        <div style="background: rgba(56, 145, 166, 0.05); padding: 16px; border-left: 4px solid #3891A6; margin: 16px 0; border-radius: 4px;">
+          <h3 style="color: #FDE74C; margin-top: 0;">${puzzleTitle}</h3>
+          <p style="margin: 0; color: #AB9F9D;">Click the button below to open the lobby and join the game.</p>
+        </div>
+        <p style="text-align:center; margin: 20px 0;">
+          <a href="${joinUrl}" style="display: inline-block; background: #3891A6; color: #020202; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">Join Lobby →</a>
+        </p>
+        <p style="color: #AB9F9D; font-size: 12px; margin-top: 10px;">You received this because you have notifications enabled in your preferences.</p>
+      </div>
+    </div>
+  `;
+}
+
 export function generateLeaderboardEmail(
   userName: string,
   leaderboardType: "global" | "category" | "team",

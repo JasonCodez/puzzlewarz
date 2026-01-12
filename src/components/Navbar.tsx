@@ -82,6 +82,7 @@ export default function Navbar() {
 
   return (
     <nav
+      id="global-nav"
       className={`fixed w-full top-0 z-50${mobileOpen ? ' nav-mobile-open' : ''}`}
       style={{
         backgroundColor: "rgba(2, 2, 2, 0.95)",

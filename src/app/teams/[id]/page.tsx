@@ -416,68 +416,74 @@ export default function TeamDetailPage() {
           <div className="border-t border-teal-500/30 pt-8 mt-8">
               <div className="flex flex-col sm:flex-row gap-3">
               {userRole ? (
-                <Link
-                  href="/puzzles"
-                  className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-center transition-colors"
-                >
-                  Solve Puzzles as Team
-                </Link>
+                // If user is a member: only admins/moderators can open the team lobby
+                ["admin", "moderator"].includes(userRole) ? (
+                  <Link
+                    href={`/teams/${teamId}/lobby`}
+                    className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-center transition-colors"
+                  >
+                    Solve Puzzles as Team
+                  </Link>
+                ) : (
+                  // regular team members: no action shown
+                  null
+                )
               ) : (
                 // Not a member: allow applying to public teams, otherwise prompt to sign in
                 team.isPublic ? (
-                    session?.user?.email ? (
-                      inviteStatus === 'pending' ? (
-                        <button disabled className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-yellow-500 text-black font-semibold text-center transition-colors opacity-70 cursor-not-allowed">
-                          Application submitted!
-                        </button>
-                      ) : (
-                        <button
-                          onClick={async () => {
-                            // optimistic UI: mark as pending immediately
-                            setInviteStatus('pending');
-                            try {
-                              const res = await fetch(`/api/teams/${team.id}/apply`, { method: "POST" });
-                              if (res.ok) {
-                                setModalTitle('Application submitted');
-                                setModalMessage('Your application was submitted. Team admins will be notified.');
-                                setModalVariant('success');
-                                setModalOpen(true);
-                                return;
-                              }
-
-                              // Try parse json body for error details
-                              let body: any = null;
-                              try { body = await res.json(); } catch (e) { /* ignore */ }
-
-                              const errorMsg = body?.error || (await res.text().catch(() => null)) || 'Failed to apply';
-
-                              // If server indicates there's already a pending application, treat as pending
-                              if (typeof errorMsg === 'string' && /pending|already/i.test(errorMsg)) {
-                                setInviteStatus('pending');
-                                setModalTitle('Application pending');
-                                setModalMessage('You already have a pending application or invitation.');
-                                setModalVariant('info');
-                                setModalOpen(true);
-                                return;
-                              }
-
-                              throw new Error(errorMsg);
-                            } catch (err: any) {
-                              console.error(err);
-                              // Revert optimistic pending state if apply actually failed
-                              setInviteStatus('none');
-                              setModalTitle('Application failed');
-                              setModalMessage(err?.message || 'Failed to submit application.');
-                              setModalVariant('error');
-                              setModalOpen(true);
-                            }
-                          }}
-                          className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-black font-semibold text-center transition-colors"
-                        >
-                          Apply to Join
-                        </button>
-                      )
+                  session?.user?.email ? (
+                    inviteStatus === 'pending' ? (
+                      <button disabled className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-yellow-500 text-black font-semibold text-center transition-colors opacity-70 cursor-not-allowed">
+                        Application submitted!
+                      </button>
                     ) : (
+                      <button
+                        onClick={async () => {
+                          // optimistic UI: mark as pending immediately
+                          setInviteStatus('pending');
+                          try {
+                            const res = await fetch(`/api/teams/${team.id}/apply`, { method: "POST" });
+                            if (res.ok) {
+                              setModalTitle('Application submitted');
+                              setModalMessage('Your application was submitted. Team admins will be notified.');
+                              setModalVariant('success');
+                              setModalOpen(true);
+                              return;
+                            }
+
+                            // Try parse json body for error details
+                            let body: any = null;
+                            try { body = await res.json(); } catch (e) { /* ignore */ }
+
+                            const errorMsg = body?.error || (await res.text().catch(() => null)) || 'Failed to apply';
+
+                            // If server indicates there's already a pending application, treat as pending
+                            if (typeof errorMsg === 'string' && /pending|already/i.test(errorMsg)) {
+                              setInviteStatus('pending');
+                              setModalTitle('Application pending');
+                              setModalMessage('You already have a pending application or invitation.');
+                              setModalVariant('info');
+                              setModalOpen(true);
+                              return;
+                            }
+
+                            throw new Error(errorMsg);
+                          } catch (err: any) {
+                            console.error(err);
+                            // Revert optimistic pending state if apply actually failed
+                            setInviteStatus('none');
+                            setModalTitle('Application failed');
+                            setModalMessage(err?.message || 'Failed to submit application.');
+                            setModalVariant('error');
+                            setModalOpen(true);
+                          }
+                        }}
+                        className="w-full sm:flex-1 px-6 py-3 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-black font-semibold text-center transition-colors"
+                      >
+                        Apply to Join
+                      </button>
+                    )
+                  ) : (
                     <Link
                       href="/auth/signin"
                       className="flex-1 px-6 py-3 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-black font-semibold text-center transition-colors"

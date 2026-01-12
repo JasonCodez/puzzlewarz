@@ -77,6 +77,13 @@ export async function createNotification(options: CreateNotificationOptions) {
       },
     });
 
+    // Log creation for debugging lobby invite flows
+    try {
+      console.log(`Created notification: id=${notification.id} user=${notification.userId} type=${notification.type} relatedId=${notification.relatedId}`);
+    } catch (e) {
+      // ignore logging failures
+    }
+
     return notification;
   } catch (error) {
     console.error("Failed to create notification:", error);
