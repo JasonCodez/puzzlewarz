@@ -23,6 +23,7 @@ export default function TeamLobbyPage() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState("");
   const chatAbortRef = useRef<AbortController | null>(null);
+  const socketRef = useRef<any>(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<null | "create" | "ready" | "unready" | "start" | "refresh" | "invite" | "leave" | "destroy">(null);
@@ -117,6 +118,14 @@ export default function TeamLobbyPage() {
       }
       setChatInput('');
       await fetchChat();
+      // emit via socket so other clients see it immediately
+      try {
+        if (socketRef.current) {
+          socketRef.current.emit('chatMessage', { teamId, puzzleId, message: { userId: currentUserId, content, createdAt: new Date().toISOString() } });
+        }
+      } catch (e) {
+        // ignore
+      }
     } catch (e) {
       console.error('Failed to post chat', e);
       openActionModal('error', 'Chat Error', (e as any).message || 'Failed to post message');
@@ -202,6 +211,62 @@ export default function TeamLobbyPage() {
     if (!lobby || !currentUserId) return;
     setIsReady(!!lobby.ready?.[currentUserId]);
   }, [lobby, currentUserId]);
+
+  
+  // Socket.IO realtime sync
+  useEffect(() => {
+    let mounted = true;
+    if (!teamId || !puzzleId || !currentUserId) return;
+
+    (async () => {
+      try {
+        const { io } = await import('socket.io-client');
+        const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', { transports: ['websocket'] });
+        socketRef.current = socket;
+
+        socket.on('connect', () => {
+          try {
+            const member = members.find((m: any) => m.user?.id === currentUserId);
+            const adminFlag = !!member && ["admin", "moderator"].includes(member.role);
+            socket.emit('joinLobby', { teamId, puzzleId, userId: currentUserId, name: '', isAdmin: adminFlag });
+          } catch (e) {
+            socket.emit('joinLobby', { teamId, puzzleId, userId: currentUserId, name: '', isAdmin: false });
+          }
+        });
+
+        socket.on('lobbyState', (state: any) => {
+          if (!mounted) return;
+          // merge into local lobby shape minimally
+          setLobby((prev: any) => ({ ...(prev || {}), participants: (state.participants || []).map((p: any) => p.userId), ready: state.ready }));
+        });
+
+        socket.on('chatMessage', (msg: any) => {
+          if (!mounted) return;
+          setChatMessages((prev) => (prev || []).concat(msg));
+        });
+
+        socket.on('puzzleStarting', ({ teamId: t, puzzleId: p }) => {
+          if (!mounted) return;
+          // navigate to planning/role assignment screen
+          router.push(`/teams/${teamId}/puzzle/${puzzleId}/planning`);
+        });
+
+        socket.on('startFailed', (err: any) => {
+          if (!mounted) return;
+          openActionModal('error', 'Start Failed', err?.error || 'Failed to start puzzle');
+        });
+      } catch (e) {
+        console.error('Socket setup failed', e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      try { socketRef.current?.disconnect(); } catch (e) {}
+      socketRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId, puzzleId, currentUserId, members]);
 
   // Notify when participants are removed (someone left)
   const prevParticipantsRef = useRef<string[] | null>(null);

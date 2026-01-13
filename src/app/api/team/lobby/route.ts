@@ -204,6 +204,11 @@ export async function POST(req: NextRequest) {
     if (action === 'start') {
       // Enforce team size matches puzzle parts (exact match required to start)
       try {
+        // only team admins/moderators may start the puzzle
+        const membership = await prisma.teamMember.findUnique({ where: { teamId_userId: { teamId, userId } }, select: { role: true } });
+        if (!membership || !["admin", "moderator"].includes(membership.role)) {
+          return NextResponse.json({ error: 'Only team admins/moderators can start the puzzle' }, { status: 403 });
+        }
         // Use lobby participants as the intended players for start validation
         const participants = lobby.participants || [];
         const puzzle = await prisma.puzzle.findUnique({ where: { id: puzzleId }, include: { parts: { select: { id: true } } } });
@@ -327,6 +332,37 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error('lobby invite error', err);
         return NextResponse.json({ error: 'Failed to create invite' }, { status: 500 });
+      }
+    }
+
+    if (action === 'assignRoles') {
+      // allow admins/moderators to assign roles for planning
+      try {
+        const membership = await prisma.teamMember.findUnique({ where: { teamId_userId: { teamId, userId } }, select: { role: true } });
+        if (!membership || !["admin", "moderator"].includes(membership.role)) {
+          return NextResponse.json({ error: 'Only team admins/moderators can assign roles' }, { status: 403 });
+        }
+
+        const { assignments } = body as any; // { userId: role }
+        if (!assignments || typeof assignments !== 'object') {
+          return NextResponse.json({ error: 'assignments object required' }, { status: 400 });
+        }
+
+        // Persist in in-memory lobby state so other clients can poll it
+        if (!lobby) {
+          lobby = { teamId, puzzleId, ready: {}, participants: [], invites: [], started: false, createdAt: Date.now() };
+          lobbies.set(key, lobby);
+        }
+        lobby.assignments = lobby.assignments || {};
+        for (const uid of Object.keys(assignments)) {
+          const role = assignments[uid];
+          if (typeof role === 'string') lobby.assignments[uid] = role;
+        }
+
+        return NextResponse.json({ success: true, lobby });
+      } catch (err) {
+        console.error('lobby assignRoles error', err);
+        return NextResponse.json({ error: 'Failed to assign roles' }, { status: 500 });
       }
     }
 

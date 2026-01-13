@@ -84,6 +84,23 @@ export async function createNotification(options: CreateNotificationOptions) {
       // ignore logging failures
     }
 
+    // Try to push the notification to the user's open sockets via the socket server
+    (async () => {
+      try {
+        const socketUrl = process.env.SOCKET_URL || process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000';
+        const resp = await fetch(`${socketUrl}/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: notification.userId, notification }),
+        }).catch(() => null);
+        if (!resp || !resp.ok) {
+          // not fatal — socket server may not be running
+        }
+      } catch (e) {
+        // ignore push failures
+      }
+    })();
+
     return notification;
   } catch (error) {
     console.error("Failed to create notification:", error);

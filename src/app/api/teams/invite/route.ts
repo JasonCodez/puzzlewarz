@@ -69,10 +69,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if team is full (max 4 members)
-    if (team.members.length >= 4) {
+    // Check if team is full (max 8 members)
+    if (team.members.length >= 8) {
       return NextResponse.json(
-        { error: "Team is full (maximum 4 members)" },
+        { error: "Team is full (maximum 8 members)" },
         { status: 400 }
       );
     }

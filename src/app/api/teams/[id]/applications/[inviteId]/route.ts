@@ -36,10 +36,10 @@ export async function POST(
     const applicant = await prisma.user.findUnique({ where: { id: invite.userId }, select: { id: true, name: true, email: true } });
 
     if (action === "approve") {
-      // Check team size limit (max 4)
+      // Check team size limit (max 8)
       const team = await prisma.team.findUnique({ where: { id: teamId }, include: { members: { select: { userId: true } } } });
       if (!team) return NextResponse.json({ error: "Team not found" }, { status: 404 });
-      if (team.members.length >= 4) return NextResponse.json({ error: "Team is full" }, { status: 400 });
+      if (team.members.length >= 8) return NextResponse.json({ error: "Team is full" }, { status: 400 });
 
       // Add member
       await prisma.teamMember.create({ data: { teamId, userId: invite.userId, role: "member" } });

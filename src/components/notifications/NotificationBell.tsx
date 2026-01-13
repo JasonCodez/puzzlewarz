@@ -12,14 +12,24 @@ export default function NotificationBell({ onActivate }: { onActivate?: () => vo
   useEffect(() => {
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000); // Refresh every 30s
-
     const onRead = () => fetchUnreadCount();
+    const onNotif = (e: any) => {
+      try {
+        // Increment immediately and also refresh to be safe
+        setUnreadCount((n) => n + 1);
+        fetchUnreadCount();
+      } catch (err) {
+        // ignore
+      }
+    };
     window.addEventListener("notificationsRead", onRead);
+    window.addEventListener("notificationReceived", onNotif as EventListener);
     return () => {
       clearInterval(interval);
       abortRef.current?.abort();
       abortRef.current = null;
       window.removeEventListener("notificationsRead", onRead);
+      window.removeEventListener("notificationReceived", onNotif as EventListener);
     };
   }, []);
 
