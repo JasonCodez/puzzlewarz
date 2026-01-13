@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
         }
 
         // require all participants to be marked ready
-        const notReady = participants.filter((p) => !lobby.ready?.[p]);
+        const notReady = participants.filter((p) => !(lobby?.ready?.[p]));
         if (notReady.length > 0) {
           return NextResponse.json({ error: `Not all participants are ready: ${notReady.length} not ready` }, { status: 400 });
         }
