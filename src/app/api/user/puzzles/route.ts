@@ -19,7 +19,12 @@ export async function GET(request: NextRequest) {
     });
 
     // archived = solved OR failed (attempts >= 5 and not solved)
-    const archived = progress.filter(p => p.solved === true || ((p.attempts ?? 0) >= 5 && p.solved !== true));
+    const archived = progress.filter((p) => {
+      const attempts = p.attempts ?? 0;
+      const solved = p.solved === true;
+      const failed = attempts >= 5 && solved === false;
+      return solved || failed;
+    });
 
     const mapped = archived.map((p) => ({
       id: p.puzzle.id,
