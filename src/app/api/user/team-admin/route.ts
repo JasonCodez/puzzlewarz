@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const user = await prisma.user.findUnique({ where: { email: session.user?.email } });
+    const email = session.user?.email ?? undefined;
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     // Check if the user is an admin of any team
