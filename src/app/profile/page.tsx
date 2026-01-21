@@ -187,9 +187,9 @@ export default function ProfilePage() {
       <nav className="fixed w-full top-0 z-50" style={{ backgroundColor: 'rgba(2, 2, 2, 0.95)', borderBottomColor: '#3891A6', borderBottomWidth: '1px' }}>
         <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
           <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-8 w-auto" />
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
             <div className="text-xl font-bold" style={{ color: '#3891A6' }}>
-              Kryptyk Labs
+              Puzzle Warz
             </div>
           </Link>
           <div className="flex items-center gap-4">

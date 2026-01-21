@@ -10,6 +10,14 @@ export async function GET(
     const { id: puzzleId } = await params;
 
     console.log(`[PUZZLE FETCH] Fetching puzzle: ${puzzleId}`);
+    try {
+      const ua = request.headers.get('user-agent') || '<none>';
+      const accept = request.headers.get('accept') || '<none>';
+      const cookiePresent = request.headers.get('cookie') ? 'yes' : 'no';
+      console.log(`[PUZZLE FETCH] Req meta: ua="${ua}", accept="${accept}", cookie=${cookiePresent}`);
+    } catch (e) {
+      console.warn('[PUZZLE FETCH] Failed to read request headers for debug', e);
+    }
 
     const puzzle = await prisma.puzzle.findUnique({
       where: { id: puzzleId },

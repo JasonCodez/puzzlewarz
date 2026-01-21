@@ -323,9 +323,9 @@ export default function PublicProfilePage() {
       <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-10 w-auto" />
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
             <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Kryptyk Labs
+              Puzzle Warz
             </div>
           </Link>
           <Link href="/dashboard" style={{ color: '#3891A6' }} className="hover:opacity-80">

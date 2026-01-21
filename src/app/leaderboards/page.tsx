@@ -78,9 +78,9 @@ export default function LeaderboardsPage() {
       <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-10 w-auto" />
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
             <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Kryptyk Labs
+              Puzzle Warz
             </div>
           </Link>
         </div>
@@ -168,7 +168,7 @@ export default function LeaderboardsPage() {
                     className={`hover:bg-slate-700/30 transition-colors`}
                     style={{
                       borderBottom: `1px solid rgba(56, 145, 166, 0.2)`,
-                      backgroundColor: entry.email === session?.user?.email ? 'rgba(56, 145, 166, 0.15)' : 'transparent'
+                      backgroundColor: entry.userId === (session?.user as any)?.id ? 'rgba(56, 145, 166, 0.15)' : 'transparent'
                     }}
                   >
                     <td className={`px-6 py-4 font-bold ${getRankColor(entry.rank)}`}>
@@ -181,7 +181,6 @@ export default function LeaderboardsPage() {
                         <p className="text-white font-semibold">
                           {entry.userName || "Anonymous"}
                         </p>
-                        <p className="text-slate-400 text-sm">{entry.email}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-slate-300">

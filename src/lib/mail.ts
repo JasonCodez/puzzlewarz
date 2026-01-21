@@ -25,8 +25,8 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       return false;
     }
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `Kryptyk Labs <${process.env.SMTP_USER}>`,
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || `Puzzle Warz <${process.env.SMTP_USER}>`,
       to: options.to,
       subject: options.subject,
       html: options.html,
@@ -57,7 +57,7 @@ export function generatePuzzleReleaseEmail(
       <div style="background: #1a1a1a; padding: 40px; border-radius: 0 0 8px 8px; color: #DDDBF1;">
         <p>Hi <strong>${userName}</strong>,</p>
         
-        <p>A new puzzle has been released on Kryptyk Labs!</p>
+          <p>A new puzzle has been released on Puzzle Warz!</p>
         
         <div style="background: rgba(56, 145, 166, 0.1); padding: 20px; border-left: 4px solid #3891A6; margin: 20px 0; border-radius: 4px;">
           <h3 style="color: #FDE74C; margin-top: 0;">📋 ${puzzleTitle}</h3>

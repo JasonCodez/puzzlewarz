@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kryptyk Labs - ARG Puzzle Platform",
+  title: "Puzzle Warz - ARG Puzzle Platform",
   description: "An Alternate Reality Game puzzle platform with multiplayer collaboration, real-time leaderboards, and progressive challenges.",
-  icons: {
-    icon: "/images/logo.png",
+  icons: { 
+    icon: "/images/puzzle_warz_logo.png",
   },
 };
 

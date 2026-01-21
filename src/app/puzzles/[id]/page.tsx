@@ -911,9 +911,9 @@ export default function PuzzleDetailPage() {
       >
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/puzzles" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-10 w-auto" />
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
             <div className="text-2xl font-bold" style={{ color: "#FDE74C" }}>
-              Kryptyk Labs
+              Puzzle Warz
             </div>
           </Link>
           <button

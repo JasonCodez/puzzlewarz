@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw') {
+    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room') {
       if (!correctAnswer) {
         return NextResponse.json(
           { error: "Single-part puzzles must have a correct answer" },
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
         },
         difficulty: puzzleDifficulty,
         puzzleType: puzzleType || 'general',
-        riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' ? correctAnswer : undefined,
+        riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' ? correctAnswer : undefined,
         jigsaw:
           puzzleType === 'jigsaw'
             ? {
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
                 },
               }
             : undefined,
-        solutions: isMultiPart || puzzleType === 'sudoku' ? undefined : {
+        solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' ? undefined : {
           create: [
             {
               answer: correctAnswer,
@@ -291,6 +291,81 @@ export async function POST(request: NextRequest) {
       console.log(`[PUZZLE CREATE] Jigsaw record:`, jigsawRecord);
     }
 
+    // If this is an escape room, persist rooms/stages/layouts/hotspots
+    if (puzzle.puzzleType === 'escape_room' && puzzleData && Array.isArray(puzzleData.rooms)) {
+      try {
+        // Create escape room and related records in a transaction
+        const rooms = puzzleData.rooms as any[];
+        await prisma.$transaction(async (tx) => {
+          const escapeRoom = await tx.escapeRoomPuzzle.create({
+            data: {
+              puzzleId: puzzle.id,
+              roomTitle: puzzleData.roomTitle || (puzzle.title || 'Escape Room'),
+              roomDescription: puzzleData.roomDescription || (puzzle.description || ''),
+              timeLimitSeconds: typeof puzzleData.timeLimitSeconds !== 'undefined' && puzzleData.timeLimitSeconds !== null ? Number(puzzleData.timeLimitSeconds) : undefined,
+            },
+          });
+
+          let stageOrder = 1;
+          for (const r of rooms) {
+            // Persist layout if present
+            if (r.layout) {
+              const layout = r.layout;
+              const createdLayout = await tx.roomLayout.create({
+                data: {
+                  escapeRoomId: escapeRoom.id,
+                  title: layout.title || null,
+                  backgroundUrl: layout.backgroundUrl || null,
+                  width: layout.width ? Number(layout.width) : null,
+                  height: layout.height ? Number(layout.height) : null,
+                },
+              });
+
+              // Persist hotspots if provided
+              if (Array.isArray(layout.hotspots)) {
+                for (const hs of layout.hotspots) {
+                  await tx.hotspot.create({
+                    data: {
+                      layoutId: createdLayout.id,
+                      x: Number(hs.x) || 0,
+                      y: Number(hs.y) || 0,
+                      w: Number(hs.w) || 32,
+                      h: Number(hs.h) || 32,
+                      type: hs.type || 'interactive',
+                      targetId: hs.targetId || null,
+                      meta: hs.meta ? (typeof hs.meta === 'string' ? hs.meta : JSON.stringify(hs.meta)) : null,
+                    },
+                  });
+                }
+              }
+            }
+
+            // Persist stages for this room
+            if (Array.isArray(r.stages)) {
+              for (const s of r.stages) {
+                await tx.escapeStage.create({
+                  data: {
+                    escapeRoomId: escapeRoom.id,
+                    order: stageOrder++,
+                    title: s.title || `Stage ${stageOrder}`,
+                    description: s.description || '',
+                    puzzleType: s.puzzleType || 'text',
+                    puzzleData: s.puzzleData && typeof s.puzzleData !== 'string' ? JSON.stringify(s.puzzleData) : (s.puzzleData || '{}'),
+                    correctAnswer: s.correctAnswer || '',
+                    hints: s.hints && Array.isArray(s.hints) ? JSON.stringify(s.hints) : (s.hints || '[]'),
+                    rewardItem: s.rewardItem || null,
+                    rewardDescription: s.rewardDescription || null,
+                  },
+                });
+              }
+            }
+          }
+        });
+      } catch (roomErr) {
+        console.error('[PUZZLE CREATE] Failed to persist escape-room rooms/stages:', roomErr);
+      }
+    }
+
     // Send puzzle release notification if active
     if (puzzle.isActive) {
       const allUsers = await prisma.user.findMany({
@@ -310,6 +385,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Return puzzle; include escape-room data separately if desired by client
     return NextResponse.json(puzzle, { status: 201 });
   } catch (error) {
     console.error("Error creating puzzle:", error);

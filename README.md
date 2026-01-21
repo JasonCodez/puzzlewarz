@@ -1,4 +1,4 @@
-# Kryptyk Labs ARG - Puzzle Platform
+# Puzzle Warz - Puzzle Platform
 
 A fully-featured Alternate Reality Game (ARG) puzzle platform with multiplayer collaboration, real-time leaderboards, and progressive puzzle unlocking.
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type EscapeRoomStage = {
   id: string;
@@ -21,173 +21,148 @@ type EscapeRoomResponse = {
     title: string;
     description: string | null;
   };
+  layouts?: Array<{
+    id: string;
+    title?: string | null;
+    backgroundUrl?: string | null;
+    width?: number | null;
+    height?: number | null;
+    hotspots?: Array<any>;
+  }>;
 };
 
-export function EscapeRoomPuzzle({
-  puzzleId,
-  onComplete,
-}: {
-  puzzleId: string;
-  onComplete: () => void;
-}) {
-  const [data, setData] = useState<EscapeRoomResponse | null>(null);
+export function EscapeRoomPuzzle({ puzzleId, onComplete }: { puzzleId: string; onComplete?: () => void }) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<EscapeRoomResponse | null>(null);
   const [stageIndex, setStageIndex] = useState(1);
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<string>("");
-
+  const [message, setMessage] = useState("");
+  const [inventory, setInventory] = useState<string[]>([]);
   const completedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
-
-    async function load() {
+    (async () => {
       try {
         setLoading(true);
-        setError("");
-
         const res = await fetch(`/api/puzzles/escape-room/${puzzleId}`);
-        if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error || "Failed to load escape room");
-        }
+        if (!res.ok) throw new Error("Failed to load escape room");
+        const j = await res.json();
+        if (cancelled) return;
+        setData(j as EscapeRoomResponse);
 
-        const json = (await res.json()) as EscapeRoomResponse;
-        if (!cancelled) {
-          setData(json);
+        const st = await fetch(`/api/puzzles/escape-room/${puzzleId}/state`);
+        if (st.ok) {
+          const sj = await st.json().catch(() => null);
+          if (sj && sj.inventory) setInventory(sj.inventory || []);
         }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load escape room");
-        }
+      } catch (e: any) {
+        setError(e?.message || String(e));
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
+    })();
+    return () => { cancelled = true; };
   }, [puzzleId]);
 
   const stage = useMemo(() => {
     if (!data) return null;
-    return (
-      data.stages.find((s) => s.order === stageIndex) ??
-      data.stages[stageIndex] ??
-      data.stages[stageIndex - 1] ??
-      null
-    );
+    return data.stages?.find((s) => s.order === stageIndex) ?? data.stages?.[0] ?? null;
   }, [data, stageIndex]);
 
   useEffect(() => {
     if (!loading && data && !stage && !completedRef.current) {
       completedRef.current = true;
-      onComplete();
+      onComplete?.();
     }
   }, [loading, data, stage, onComplete]);
 
   const hints = useMemo(() => {
     if (!stage) return [] as string[];
     const raw = stage.hints;
-    if (Array.isArray(raw)) {
-      return raw.map((h) => (typeof h === "string" ? h : JSON.stringify(h)));
-    }
-    return [];
+    if (Array.isArray(raw)) return raw.map((h) => (typeof h === "string" ? h : JSON.stringify(h)));
+    try { return typeof raw === "string" ? JSON.parse(raw) : []; } catch { return [] as string[]; }
   }, [stage]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(e?: React.FormEvent) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     if (!stage || !answer.trim() || submitting) return;
-
     try {
       setSubmitting(true);
       setMessage("");
-
       const res = await fetch(`/api/puzzles/escape-room/${puzzleId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stageIndex, answer: answer.trim() }),
       });
-
-      const body = (await res.json().catch(() => null)) as
-        | {
-            correct?: boolean;
-            message?: string;
-            nextStageIndex?: number;
-          }
-        | { error?: string }
-        | null;
-
-      if (!res.ok) {
-        throw new Error((body as { error?: string } | null)?.error || "Failed to submit answer");
-      }
-
-      if (body && "correct" in body && body.correct) {
-        setMessage(body.message || "Correct! Moving to next stage...");
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((body && (body as any).error) || "Submit failed");
+      if (body && (body as any).correct) {
+        setMessage((body as any).message || "Correct!");
         setAnswer("");
-        setStageIndex(typeof body.nextStageIndex === "number" ? body.nextStageIndex : stageIndex + 1);
+        setStageIndex(typeof (body as any).nextStageIndex === "number" ? (body as any).nextStageIndex : stageIndex + 1);
       } else {
-        setMessage((body as { message?: string } | null)?.message || "Incorrect answer. Try again.");
+        setMessage((body as any)?.message || "Incorrect");
       }
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Failed to submit answer");
+    } catch (e: any) {
+      setMessage(e?.message || String(e));
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (loading) {
-    return <div className="text-gray-300">Loading escape room…</div>;
-  }
+  const layout = data?.layouts && data.layouts.length > 0 ? data.layouts[0] : null;
+  const PixiRoom = React.lazy(() => import("./PixiRoom"));
 
-  if (error) {
-    return <div className="text-red-300">{error}</div>;
-  }
+  const handleHotspotAction = async (hotspotId: string) => {
+    try {
+      const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pickup', hotspotId }),
+      });
+      const jb = await r.json().catch(() => null);
+      if (r.ok && jb?.inventory) setInventory(jb.inventory || []);
+    } catch (e) {
+      console.error('Hotspot action failed', e);
+    }
+  };
 
-  if (!data || !stage) {
-    return <div className="text-green-300">Escape room complete!</div>;
-  }
+  if (loading) return <div className="text-gray-300">Loading escape room…</div>;
+  if (error) return <div className="text-red-300">{error}</div>;
+  if (!data || !stage) return <div className="text-green-300">Escape room complete!</div>;
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
       <div className="mb-3">
-        <div className="text-white font-semibold">
-          Stage {stage.order}: {stage.title}
-        </div>
+        <div className="text-white font-semibold">Stage {stage.order}: {stage.title}</div>
         {stage.description && <div className="text-gray-300 text-sm mt-1">{stage.description}</div>}
       </div>
 
       {hints.length > 0 && (
-        <div className="mb-3 text-sm text-gray-400">
-          Hints: {hints.join(" • ")}
-        </div>
+        <div className="mb-3 text-sm text-gray-400">Hints: {hints.join(" • ")}</div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex gap-2 items-center">
-        <input
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          disabled={submitting}
-          placeholder="Enter stage answer…"
-          className="flex-1 px-3 py-2 rounded bg-slate-800 border border-slate-700 text-white placeholder-gray-500"
-        />
-        <button
-          type="submit"
-          disabled={submitting || !answer.trim()}
-          className="px-4 py-2 rounded bg-slate-700 text-white disabled:opacity-50"
-        >
-          {submitting ? "Checking…" : "Submit"}
-        </button>
+      <form onSubmit={(e) => void handleSubmit(e)} className="flex gap-2 items-center">
+        <input value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={submitting} placeholder="Enter stage answer…" className="flex-1 px-3 py-2 rounded bg-slate-800 border border-slate-700 text-white placeholder-gray-500" />
+        <button type="submit" disabled={submitting || !answer.trim()} className="px-4 py-2 rounded bg-slate-700 text-white disabled:opacity-50">{submitting ? "Checking…" : "Submit"}</button>
       </form>
 
       {message && <div className="mt-3 text-sm text-gray-200">{message}</div>}
+
+      {layout ? (
+        <div className="mt-4" style={{ width: '100%', height: layout.height || 600 }}>
+          <React.Suspense fallback={<div className="text-gray-400">Loading room...</div>}>
+            <PixiRoom puzzleId={puzzleId} layout={layout} hotspots={layout.hotspots || []} onHotspotAction={handleHotspotAction} />
+          </React.Suspense>
+        </div>
+      ) : null}
+
+      {inventory.length > 0 && <div className="mt-2 text-sm text-gray-200">Inventory: {inventory.join(', ')}</div>}
     </div>
   );
 }
+
+export default EscapeRoomPuzzle;

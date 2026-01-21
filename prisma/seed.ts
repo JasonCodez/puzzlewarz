@@ -372,22 +372,180 @@ const achievements = [
 async function seedAchievements() {
   console.log("🌱 Seeding achievements...");
 
+  let seededCount = 0;
   for (const achievement of achievements) {
-    await prisma.achievement.upsert({
-      where: { name: achievement.name },
-      update: {},
-      create: achievement,
-    });
+    console.log(`- Seeding achievement: ${achievement.name}`);
+    try {
+      await prisma.achievement.upsert({
+        where: { name: achievement.name },
+        update: {
+          title: achievement.title,
+          description: achievement.description,
+          icon: achievement.icon,
+          category: achievement.category,
+          rarity: achievement.rarity,
+          requirement: achievement.requirement,
+          conditionType: achievement.conditionType,
+          conditionValue: achievement.conditionValue === null ? undefined : achievement.conditionValue,
+        },
+        create: {
+          name: achievement.name,
+          title: achievement.title,
+          description: achievement.description,
+          icon: achievement.icon,
+          category: achievement.category,
+          rarity: achievement.rarity,
+          requirement: achievement.requirement,
+          conditionType: achievement.conditionType,
+          conditionValue: achievement.conditionValue === null ? undefined : achievement.conditionValue,
+        },
+      });
+      seededCount += 1;
+    } catch (e) {
+      console.error(`❌ Error seeding achievement ${achievement.name}:`, e);
+    }
   }
 
-  console.log(`✅ Seeded ${achievements.length} achievements!`);
+  console.log(`✅ Seeded ${seededCount}/${achievements.length} achievements!`);
 }
 
-seedAchievements()
-  .catch((e) => {
-    console.error("❌ Error seeding achievements:", e);
-    process.exit(1);
-  })
-  .finally(async () => {
+// Run seeding in a single flow so we only disconnect once
+async function main() {
+  try {
+    await seedAchievements();
+    await seedEscapeRoomExample();
+    console.log('🎉 All seeds completed successfully.');
+  } catch (e) {
+    console.error('❌ Seed run failed:', e);
+    process.exitCode = 1;
+  } finally {
     await prisma.$disconnect();
+  }
+}
+
+main();
+
+// --- Escape room example seed ---
+async function seedEscapeRoomExample() {
+  console.log("🌱 Seeding escape room example...");
+
+  // Ensure an author user exists
+  const author = await prisma.user.upsert({
+    where: { email: 'seed@author.local' },
+    update: { name: 'Seed Author' },
+    create: { email: 'seed@author.local', name: 'Seed Author', role: 'admin' },
   });
+
+  // Create or reuse a category for escape rooms
+  const category = await prisma.puzzleCategory.upsert({
+    where: { name: 'Escape' },
+    update: {},
+    create: { name: 'Escape', description: 'Escape room style puzzles', color: '#7C3AED' },
+  });
+
+  // Create a puzzle entry
+  const puzzle = await prisma.puzzle.create({
+    data: {
+      title: 'Seed: The Detective Office',
+      description: 'A short demo escape room: find the key and unlock the drawer.',
+      content: '<p>Start in the Detective\'s Office.</p>',
+      categoryId: category.id,
+      difficulty: 'easy',
+      isActive: true,
+      isTeamPuzzle: false,
+    },
+  });
+
+  // Create escape room metadata
+  const escapeRoom = await prisma.escapeRoomPuzzle.create({
+    data: {
+      puzzleId: puzzle.id,
+      roomTitle: "Detective's Office (Seed)",
+      roomDescription: 'Find the hidden key and unlock the drawer to retrieve the clue.',
+      timeLimitSeconds: 600,
+    },
+  });
+
+  // Layout
+  const layout = await prisma.roomLayout.create({
+    data: {
+      escapeRoomId: escapeRoom.id,
+      title: 'Office Layout',
+      backgroundUrl: '',
+      width: 1200,
+      height: 800,
+    },
+  });
+
+  // Items
+  const goldenKey = await prisma.itemDefinition.upsert({
+    where: { key: 'golden_key' },
+    update: {
+      name: 'Golden Key',
+      description: 'A small brass key with an ornate head.',
+      imageUrl: '',
+      consumable: true,
+      escapeRoomId: escapeRoom.id,
+    },
+    create: {
+      escapeRoomId: escapeRoom.id,
+      key: 'golden_key',
+      name: 'Golden Key',
+      description: 'A small brass key with an ornate head.',
+      imageUrl: '',
+      consumable: true,
+    },
+  });
+
+  // Hotspots: a pickup hotspot for the key
+  await prisma.hotspot.create({
+    data: {
+      layoutId: layout.id,
+      x: 320,
+      y: 420,
+      w: 48,
+      h: 24,
+      type: 'pickup',
+      targetId: goldenKey.id,
+      meta: JSON.stringify({ label: 'Golden Key on desk' }),
+    },
+  });
+
+  // A locked drawer that requires the golden_key
+  await prisma.escapeLock.create({
+    data: {
+      layoutId: layout.id,
+      lockType: 'item',
+      requirement: JSON.stringify({ type: 'item', key: 'golden_key' }),
+      secret: null,
+      isLocked: true,
+      requiredItemKey: 'golden_key',
+    },
+  });
+
+  // Portal hotspot for a drawer (display)
+  await prisma.hotspot.create({
+    data: {
+      layoutId: layout.id,
+      x: 520,
+      y: 500,
+      w: 180,
+      h: 80,
+      type: 'interactive',
+      targetId: null,
+      meta: JSON.stringify({ label: 'Locked Drawer', lockKey: 'golden_key' }),
+    },
+  });
+
+  // Create a player state record for the author (so playtest can start with empty state)
+  await prisma.playerRoomState.upsert({
+    where: { userId_escapeRoomId: { userId: author.id, escapeRoomId: escapeRoom.id } },
+    update: { state: '{}' },
+    create: { userId: author.id, escapeRoomId: escapeRoom.id, state: '{}' },
+  });
+
+  console.log('✅ Seeded escape room example.');
+}
+
+// Run the escape room seed after the achievements
+// (seedEscapeRoomExample is invoked from `main`)

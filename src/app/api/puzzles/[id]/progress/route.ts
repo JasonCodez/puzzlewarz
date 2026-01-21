@@ -109,9 +109,20 @@ export async function POST(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const body = await request.json();
+    // Debug: log request headers and body to help diagnose 500s observed from the browser
+    try {
+      const ua = request.headers.get('user-agent') || '<none>';
+      const cookiePresent = request.headers.get('cookie') ? 'yes' : 'no';
+      console.log(`[PROGRESS] puzzle=${id} user=${user.id} ua="${ua}" cookie=${cookiePresent}`);
+    } catch (e) {
+      console.warn('[PROGRESS] failed reading request headers', e);
+    }
+
+    const rawBody = await request.json().catch(() => null);
+    console.log('[PROGRESS] rawBody:', rawBody);
+
     const { action, durationSeconds, hintUsed, successful } =
-      UpdateProgressSchema.parse(body);
+      UpdateProgressSchema.parse(rawBody || {});
 
     // Get or create progress
     let progress = await prisma.userPuzzleProgress.findUnique({

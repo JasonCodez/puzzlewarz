@@ -80,7 +80,7 @@ function RegisterForm() {
       <div className="w-full max-w-md">
         <div className="border rounded-lg p-8" style={{ backgroundColor: 'rgba(76, 91, 92, 0.6)', borderColor: '#3891A6' }}>
           <h1 className="text-3xl font-bold text-white mb-2 text-center">
-            🔐 Kryptyk Labs
+            🔐 Puzzle Warz
           </h1>
           <p style={{ color: '#3891A6' }} className="text-center mb-8">Create your account</p>
 

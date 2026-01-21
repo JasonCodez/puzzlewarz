@@ -94,16 +94,16 @@ export default function Navbar() {
         {/* Logo: disabled link when signed in */}
         {session ? (
           <div className="flex items-center gap-3 opacity-80 select-none" aria-disabled="true" role="img" tabIndex={-1}>
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-8 w-auto" />
+              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
             <div className="text-lg font-bold" style={{ color: "#3891A6" }}>
-              Kryptyk Labs
+              Puzzle Warz
             </div>
           </div>
         ) : (
           <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-8 w-auto" />
+              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
             <div className="text-lg font-bold" style={{ color: "#3891A6" }}>
-              Kryptyk Labs
+              Puzzle Warz
             </div>
           </Link>
         )}
@@ -138,7 +138,7 @@ export default function Navbar() {
                     onError={(e) => {
                       const img = e.currentTarget as HTMLImageElement;
                       img.onerror = null;
-                      img.src = '/images/logo.png';
+                      img.src = '/images/puzzle_warz_logo.png';
                     }}
                   />
                 )}
@@ -176,8 +176,8 @@ export default function Navbar() {
         <div className="flex flex-col h-full p-6 gap-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-7 w-auto" />
-              <span className="text-lg font-bold" style={{ color: '#3891A6' }}>Kryptyk Labs</span>
+              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
+              <span className="text-lg font-bold" style={{ color: '#3891A6' }}>Puzzle Warz</span>
             </div>
             <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="text-white text-2xl focus:outline-none">&times;</button>
           </div>
@@ -212,7 +212,7 @@ export default function Navbar() {
                   onError={(e) => {
                     const img = e.currentTarget as HTMLImageElement;
                     img.onerror = null;
-                    img.src = '/images/logo.png';
+                    img.src = '/images/puzzle_warz_logo.png';
                   }}
                 />
               )}

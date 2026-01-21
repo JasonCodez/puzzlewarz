@@ -585,9 +585,9 @@ export default function AdminPuzzlesPage() {
       <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-10 w-auto" />
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-10 w-auto" />
             <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Kryptyk Labs
+              Puzzle Warz
             </div>
           </Link>
           <div className="flex items-center gap-3">
@@ -858,7 +858,7 @@ export default function AdminPuzzlesPage() {
                   </div>
 
                   {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
-                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && (
+                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">
                         Correct Answer *

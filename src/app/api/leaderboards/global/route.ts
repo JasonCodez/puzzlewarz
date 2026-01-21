@@ -25,13 +25,12 @@ export async function GET(request: NextRequest) {
           select: { pointsEarned: true },
         });
         return {
-          userId: user.id,
-          userName: user.name,
-          email: user.email || "",
-          puzzlesSolved: progress.length,
-          totalPoints: progress.reduce((sum: number, p: { pointsEarned?: number | null }) => sum + (p.pointsEarned || 0), 0),
-          rank: 0,
-        };
+              userId: user.id,
+              userName: user.name,
+              puzzlesSolved: progress.length,
+              totalPoints: progress.reduce((sum: number, p: { pointsEarned?: number | null }) => sum + (p.pointsEarned || 0), 0),
+              rank: 0,
+            };
       })
     );
 
@@ -43,8 +42,8 @@ export async function GET(request: NextRequest) {
       entry.rank = index + 1;
     });
 
-    // Find user's rank
-    const userRank = entries.find((e: { email?: string }) => e.email === session.user?.email) || null;
+    // Find user's rank by id (avoid revealing emails in API)
+    const userRank = entries.find((e: { userId: string }) => e.userId === (session.user as any)?.id) || null;
 
     return NextResponse.json({
       entries: entries.slice(0, 100), // Top 100

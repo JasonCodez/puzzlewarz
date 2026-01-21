@@ -521,43 +521,174 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
 
   const renderEscapeRoomFields = () => (
     <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-semibold text-gray-300 mb-2">Room Title</label>
-        <input
-          type="text"
-          value={asString(puzzleData.roomTitle, '')}
-          onChange={(e) => onDataChange('roomTitle', e.target.value)}
-          placeholder="e.g., The Mysterious Library"
-          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-300 mb-2">Room Description</label>
-        <textarea
-          value={asString(puzzleData.roomDescription, '')}
-          onChange={(e) => onDataChange('roomDescription', e.target.value)}
-          placeholder="Describe the escape room scenario"
-          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-20"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-300 mb-2">Time Limit (seconds, optional)</label>
-        <input
-          type="number"
-          value={asNumberOrEmpty(puzzleData.timeLimitSeconds)}
-          onChange={(e) => onDataChange('timeLimitSeconds', e.target.value === '' ? null : parseInt(e.target.value, 10))}
-          placeholder="e.g., 3600 for 1 hour (leave empty for no time limit)"
-          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
-        />
-      </div>
-        <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
-          <p className="text-gray-300 text-sm mb-3">📝 Note: Use the Hints section to add individual stages for this escape room. Each hint becomes a stage with:</p>
-          <ul className="text-gray-400 text-sm space-y-1 list-disc list-inside">
-            <li>Title: Stage name (e.g., &quot;Find the Key&quot;)</li>
-            <li>Text: Stage description and puzzle content</li>
-            <li>Additional metadata for puzzle type, hints, and rewards</li>
-          </ul>
-        </div>
+      {(() => {
+        const rooms = Array.isArray(puzzleData.rooms) ? (puzzleData.rooms as Array<any>) : [];
+
+        const addRoom = () => {
+          const newRoom = {
+            title: `Room ${rooms.length + 1}`,
+            description: '',
+            timeLimitSeconds: null,
+            layoutId: '',
+            stages: [],
+            customHtml: '',
+            customCss: '',
+            customJs: '',
+          };
+          onDataChange('rooms', [...rooms, newRoom]);
+        };
+
+        const updateRoom = (index: number, key: string, value: any) => {
+          const newRooms = rooms.map((r, i) => (i === index ? { ...r, [key]: value } : r));
+          onDataChange('rooms', newRooms);
+        };
+
+        const removeRoom = (index: number) => {
+          if (!confirm('Remove this room?')) return;
+          const newRooms = rooms.filter((_, i) => i !== index);
+          onDataChange('rooms', newRooms);
+        };
+
+        const moveRoom = (index: number, dir: number) => {
+          const newIndex = index + dir;
+          if (newIndex < 0 || newIndex >= rooms.length) return;
+          const newRooms = [...rooms];
+          const [item] = newRooms.splice(index, 1);
+          newRooms.splice(newIndex, 0, item);
+          onDataChange('rooms', newRooms);
+        };
+
+        return (
+          <div className="space-y-4">
+            {rooms.length === 0 && (
+              <div className="p-3 rounded bg-slate-700/40 border border-slate-600 text-sm text-gray-300">No rooms yet. Click <strong>Add Room</strong> to create the first room.</div>
+            )}
+
+            {rooms.map((room: any, idx: number) => (
+              <div key={idx} className="border rounded-lg p-4 bg-slate-800/30" style={{ borderColor: '#475569' }}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">Room Title</label>
+                    <input type="text" value={asString(room.title, `Room ${idx + 1}`)} onChange={(e) => updateRoom(idx, 'title', e.target.value)} className="w-full px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white" />
+
+                    <label className="block text-sm font-semibold text-gray-300 mb-2 mt-3">Room Description</label>
+                    <textarea value={asString(room.description, '')} onChange={(e) => updateRoom(idx, 'description', e.target.value)} className="w-full px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white h-20" />
+
+                    <label className="block text-sm font-semibold text-gray-300 mb-2 mt-3">Time Limit (seconds, optional)</label>
+                    <input type="number" value={room.timeLimitSeconds == null ? '' : String(room.timeLimitSeconds)} onChange={(e) => updateRoom(idx, 'timeLimitSeconds', e.target.value === '' ? null : parseInt(e.target.value, 10))} className="w-full px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white" placeholder="e.g., 3600" />
+
+                    <label className="block text-sm font-semibold text-gray-300 mb-2 mt-3">Layout / Background (optional)</label>
+                    <input type="text" value={asString(room.layoutId, '')} onChange={(e) => updateRoom(idx, 'layoutId', e.target.value)} placeholder="Enter layout id or media reference" className="w-full px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white" />
+
+                    <div className="mt-4 border border-slate-600 rounded-lg p-3 bg-slate-800/30">
+                      <h5 className="text-sm font-semibold text-white mb-2">Custom Room HTML / CSS / JS (optional)</h5>
+                      <p className="text-sm text-gray-400 mb-2">Enter room-specific markup, styles, or scripts. Scripts are stored as entered — do not paste untrusted code into production.</p>
+
+                      <label className="block text-xs font-semibold text-gray-300 mt-2">Custom HTML</label>
+                      <textarea value={asString(room.customHtml, '')} onChange={(e) => updateRoom(idx, 'customHtml', e.target.value)} className="w-full px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-white h-28" placeholder="Optional: HTML markup for this room" />
+
+                      <label className="block text-xs font-semibold text-gray-300 mt-2">Custom CSS</label>
+                      <textarea value={asString(room.customCss, '')} onChange={(e) => updateRoom(idx, 'customCss', e.target.value)} className="w-full px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-white h-24" placeholder="Optional: CSS scoped to this room" />
+
+                      <label className="block text-xs font-semibold text-gray-300 mt-2">Custom JS</label>
+                      <textarea value={asString(room.customJs, '')} onChange={(e) => updateRoom(idx, 'customJs', e.target.value)} className="w-full px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-white h-28" placeholder="Optional: JavaScript for this room (be careful)" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 ml-4 w-40">
+                    <button type="button" onClick={() => moveRoom(idx, -1)} className="px-3 py-2 rounded bg-slate-700 text-white">↑</button>
+                    <button type="button" onClick={() => moveRoom(idx, 1)} className="px-3 py-2 rounded bg-slate-700 text-white">↓</button>
+                    <button type="button" onClick={() => removeRoom(idx)} className="px-3 py-2 rounded bg-red-600 text-white">Remove</button>
+                  </div>
+                </div>
+
+                {/* Stages editor for this room */}
+                <div className="mt-3">
+                  {(() => {
+                    const stages = Array.isArray(room.stages) ? room.stages as Array<any> : [];
+
+                    const addStage = () => {
+                      const newStage = { title: `Stage ${stages.length + 1}`, description: '', puzzleType: 'text', hints: [] };
+                      updateRoom(idx, 'stages', [...stages, newStage]);
+                    };
+
+                    const updateStage = (sIndex: number, key: string, value: any) => {
+                      const newStages = stages.map((s, i) => i === sIndex ? { ...s, [key]: value } : s);
+                      updateRoom(idx, 'stages', newStages);
+                    };
+
+                    const removeStage = (sIndex: number) => {
+                      if (!confirm('Remove this stage?')) return;
+                      const newStages = stages.filter((_, i) => i !== sIndex);
+                      updateRoom(idx, 'stages', newStages);
+                    };
+
+                    const moveStage = (sIndex: number, dir: number) => {
+                      const newIndex = sIndex + dir;
+                      if (newIndex < 0 || newIndex >= stages.length) return;
+                      const newStages = [...stages];
+                      const [item] = newStages.splice(sIndex, 1);
+                      newStages.splice(newIndex, 0, item);
+                      updateRoom(idx, 'stages', newStages);
+                    };
+
+                    return (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-semibold text-white mb-2">Stages</h4>
+                        {stages.length === 0 && <div className="text-sm text-gray-400">No stages yet. Add stages for this room.</div>}
+                        {stages.map((stage: any, sIdx: number) => (
+                          <div key={sIdx} className="border rounded p-3 bg-slate-800/40" style={{ borderColor: '#475569' }}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <label className="block text-xs font-semibold text-gray-300">Stage Title</label>
+                                <input type="text" value={asString(stage.title, `Stage ${sIdx+1}`)} onChange={(e) => updateStage(sIdx, 'title', e.target.value)} className="w-full px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-white" />
+
+                                <label className="block text-xs font-semibold text-gray-300 mt-2">Description</label>
+                                <textarea value={asString(stage.description, '')} onChange={(e) => updateStage(sIdx, 'description', e.target.value)} className="w-full px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-white h-20" />
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                                  <div>
+                                    <label className="block text-xs text-gray-300">Type</label>
+                                    <select value={asString(stage.puzzleType, 'text')} onChange={(e) => updateStage(sIdx, 'puzzleType', e.target.value)} className="w-full px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-white">
+                                      <option value="text">Text</option>
+                                      <option value="cipher">Cipher</option>
+                                      <option value="image">Image</option>
+                                      <option value="jigsaw">Jigsaw</option>
+                                      <option value="coordinates">Coordinates</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs text-gray-300">Hints (one per line)</label>
+                                    <textarea value={Array.isArray(stage.hints) ? (stage.hints as string[]).join('\n') : ''} onChange={(e) => updateStage(sIdx, 'hints', e.target.value.split('\n').map(s=>s.trim()).filter(Boolean))} className="w-full px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-white h-20" />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col gap-2 w-28">
+                                <button type="button" onClick={() => moveStage(sIdx, -1)} className="px-2 py-1 rounded bg-slate-700 text-white">↑</button>
+                                <button type="button" onClick={() => moveStage(sIdx, 1)} className="px-2 py-1 rounded bg-slate-700 text-white">↓</button>
+                                <button type="button" onClick={() => removeStage(sIdx)} className="px-2 py-1 rounded bg-red-600 text-white">Remove</button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div>
+                          <button type="button" onClick={addStage} className="px-3 py-1 rounded bg-[#3891A6] text-white">+ Add Stage</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            ))}
+
+            <div>
+              <button type="button" onClick={addRoom} className="px-4 py-2 rounded bg-[#3891A6] text-white">+ Add Room</button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 

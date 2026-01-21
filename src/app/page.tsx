@@ -7,9 +7,9 @@ export default function Home() {
       <nav className="fixed w-full top-0 z-50" style={{ backgroundColor: 'rgba(2, 2, 2, 0.95)', borderBottomColor: '#3891A6', borderBottomWidth: '1px' }}>
         <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
           <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-8 w-auto" />
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
             <div className="text-xl font-bold" style={{ color: '#3891A6' }}>
-              Kryptyk Labs
+              Puzzle Warz
             </div>
           </Link>
           <div className="flex gap-3">
@@ -67,7 +67,7 @@ export default function Home() {
 
       {/* Features Grid - Redesigned */}
       <div className="px-4 py-20 max-w-6xl mx-auto">
-        <h2 className="text-4xl font-bold text-white mb-4 text-center">Why Kryptyk Labs?</h2>
+        <h2 className="text-4xl font-bold text-white mb-4 text-center">Why Puzzle Warz?</h2>
         <p className="text-center mb-16" style={{ color: '#DDDBF1' }}>Challenge yourself solo, collaborate with friends, or do both—the choice is yours</p>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -133,10 +133,10 @@ export default function Home() {
       {/* Footer */}
       <footer className="py-12 px-4 text-center" style={{ borderTopColor: '#3891A6', borderTopWidth: '1px', color: '#DDDBF1' }}>
         <div className="max-w-6xl mx-auto">
-          <div className="flex justify-center mb-4">
-            <img src="/images/logo.png" alt="Kryptyk Labs Logo" className="h-8 w-auto" />
+            <div className="flex justify-center mb-4">
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
           </div>
-          <p className="text-sm">Kryptyk Labs • Collaborative Puzzle Platform</p>
+          <p className="text-sm">Puzzle Warz • Collaborative Puzzle Platform</p>
           <p className="text-xs mt-2" style={{ color: '#AB9F9D' }}>© 2025 All rights reserved</p>
         </div>
       </footer>
