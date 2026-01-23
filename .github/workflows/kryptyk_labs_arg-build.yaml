@@ -1,0 +1,55 @@
+# To better understand this file read this:
+# https://docs.ionos.space/docs/github-actions-customization/
+
+name: "Deploy Now: Execute Build"
+
+on:
+  workflow_call:
+    inputs:
+      site-url:
+        required: true
+        type: string
+      branch-id:
+        required: true
+        type: string
+
+env:
+  DEPLOYMENT_FOLDER: ./
+
+jobs:
+# Please do not rename this job
+  build-project:
+    name: build kryptyk_labs_arg
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Run script
+        env:
+          DATABASE_URL: mysql://dbu1581612:Arm4469nine2686tee!@db5019454707.hosting-data.io:3306/dbs15222973?sslaccept=strict
+          NEXT_PUBLIC_SOCKET_URL: wss://kryptyk-socket.onrender.com
+          NEXT_TELEMETRY_DISABLED: 1
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          NEXTAUTH_URL: https://puzzlewarz.com
+          NODE_ENV: production
+        run: |
+          npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run build
+
+# Please do not touch the following action
+      - name: Store deployment content
+        uses: ionos-deploy-now/artifact-action@v1
+        with:
+          api-key: ${{ secrets.IONOS_API_KEY }}
+          service-host: api-us.ionos.space
+          project-id: ab91e314-1183-474a-9760-d5097c62ac71
+          branch-id: ${{ inputs.branch-id }}
+          version: ${{ github.sha }}
+          folder: ${{ env.DEPLOYMENT_FOLDER }}
+          config-file: .deploy-now/kryptyk_labs_arg/config.yaml
+          action: upload
