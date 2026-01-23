@@ -5,16 +5,8 @@ import prisma from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
-    // Development helper: allow specifying a dev user via header
-    // `x-dev-user` so we can exercise authenticated routes without
-    // performing a full NextAuth sign-in flow during local testing.
-    // Only enable the header when running in development.
-    const devEmail = request.headers.get("x-dev-user");
-    const allowDevHeader = process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_DEV_HEADER === "true";
-
-    const session = devEmail && allowDevHeader
-      ? ({ user: { email: devEmail } } as any)
-      : await getServerSession(authOptions);
+    // Use the real NextAuth server session; remove dev-header shortcut.
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
