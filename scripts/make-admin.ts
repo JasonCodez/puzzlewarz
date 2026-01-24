@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-async function upsertAdmin(email, password) {
+async function upsertAdmin(email: string, password: string) {
   try {
     if (!email || !password) {
       console.error("❌ Email and password are required. Usage: npx tsx scripts/make-admin.ts <email> <password>");
