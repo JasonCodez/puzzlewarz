@@ -416,34 +416,6 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     </div>
   );
 
-  const renderRiddleFields = () => (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-semibold text-gray-300 mb-2">Riddle Category</label>
-        <select
-          value={asString(puzzleData.riddleCategory, 'general')}
-          onChange={(e) => onDataChange('riddleCategory', e.target.value)}
-          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-        >
-          <option value="general">General Riddle</option>
-          <option value="wordplay">Wordplay</option>
-          <option value="logic">Logic Riddle</option>
-          <option value="lateral">Lateral Thinking</option>
-          <option value="cryptic">Cryptic Riddle</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-300 mb-2">Alternative Answers (comma-separated)</label>
-        <input
-          type="text"
-          value={asString(puzzleData.alternativeAnswers, '')}
-          onChange={(e) => onDataChange('alternativeAnswers', e.target.value)}
-          placeholder="e.g., 'egg, eggs, EGG'"
-          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
-        />
-      </div>
-    </div>
-  );
 
   const renderMathFields = () => (
     <div className="space-y-4">
@@ -701,7 +673,6 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     morse_code: renderMorseCodeFields,
     steganography: renderSteganographyFields,
     multi_step: renderMultiStepFields,
-    riddle: renderRiddleFields,
     math: renderMathFields,
     pattern: renderPatternFields,
     escape_room: renderEscapeRoomFields,

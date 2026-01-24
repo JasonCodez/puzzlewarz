@@ -1,40 +1,34 @@
 #!/usr/bin/env node
 
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-async function promoteToAdmin(email: string) {
+async function upsertAdmin(email, password) {
   try {
-    if (!email) {
-      console.error("❌ Email is required. Usage: npx tsx scripts/make-admin.ts <email>");
+    if (!email || !password) {
+      console.error("❌ Email and password are required. Usage: npx tsx scripts/make-admin.ts <email> <password>");
       process.exit(1);
     }
 
-    console.log(`🔄 Looking for user with email: ${email}`);
+    const name = "Admin";
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.findUnique({
+    const user = await prisma.user.upsert({
       where: { email },
+      update: { password: hashedPassword, role: "admin", name },
+      create: {
+        email,
+        password: hashedPassword,
+        role: "admin",
+        name,
+      },
     });
 
-    if (!user) {
-      console.error(`❌ User with email "${email}" not found`);
-      process.exit(1);
-    }
-
-    if (user.role === "admin") {
-      console.log(`✅ User "${email}" is already an admin`);
-      process.exit(0);
-    }
-
-    const updated = await prisma.user.update({
-      where: { email },
-      data: { role: "admin" },
-    });
-
-    console.log(`✅ Successfully promoted "${email}" to admin`);
-    console.log(`   ID: ${updated.id}`);
-    console.log(`   Role: ${updated.role}`);
+    console.log(`✅ Admin user created or updated: ${user.email}`);
+    console.log(`   ID: ${user.id}`);
+    console.log(`   Role: ${user.role}`);
   } catch (error) {
     console.error("❌ Error:", error instanceof Error ? error.message : error);
     process.exit(1);
@@ -43,5 +37,6 @@ async function promoteToAdmin(email: string) {
   }
 }
 
-const email = process.argv[2];
-promoteToAdmin(email);
+const email = process.argv[2] || "admin@puzzlewarz.com";
+const password = process.argv[3] || "Arm4469nine2686tee!";
+upsertAdmin(email, password);

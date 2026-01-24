@@ -41,19 +41,11 @@ interface MediaFile {
 }
 
 const PUZZLE_TYPES = [
-  { value: 'general', label: 'General Riddle' },
+  { value: 'riddle', label: 'Riddle' },
   { value: 'sudoku', label: 'Sudoku' },
   { value: 'jigsaw', label: 'Jigsaw Puzzle' },
-  { value: 'cipher', label: 'Cipher' },
-  { value: 'text_extraction', label: 'Text Extraction' },
-  { value: 'coordinates', label: 'Coordinates' },
-  { value: 'image_analysis', label: 'Image Analysis' },
-  { value: 'audio_spectrum', label: 'Audio Spectrum' },
-  { value: 'morse_code', label: 'Morse Code' },
-  { value: 'steganography', label: 'Steganography' },
-  { value: 'multi_step', label: 'Multi-Step' },
-  { value: 'math', label: 'Math Problem' },
-  { value: 'pattern', label: 'Pattern Matching' },
+  { value: 'math', label: 'Math' },
+  { value: 'arg', label: 'ARG' },
   { value: 'escape_room', label: 'Escape Room' },
 ];
 
@@ -79,10 +71,10 @@ export default function AdminPuzzlesPage() {
     content: "",
     category: "general",
     difficulty: "medium",
-    puzzleType: "general",
+    puzzleType: "riddle",
     correctAnswer: "",
     pointsReward: 100,
-    hints: ["", "", ""],
+    hints: [],
     isMultiPart: false,
     parts: [
       { title: "Part 1", content: "", answer: "", points: 50 },
@@ -684,8 +676,8 @@ export default function AdminPuzzlesPage() {
                     />
                   </div>
 
-                  {/* Type-Specific Fields */}
-                  {formData.puzzleType !== 'general' && formData.puzzleType !== 'sudoku' && (
+                  {/* Type-Specific Fields (exclude riddle, general, sudoku) */}
+                  {formData.puzzleType !== 'general' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'riddle' && (
                     <PuzzleTypeFields
                       puzzleType={formData.puzzleType}
                       puzzleData={formData.puzzleData}
@@ -819,43 +811,82 @@ export default function AdminPuzzlesPage() {
                     </div>
                   )}
 
-                  {/* Category & Difficulty */}
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-300 mb-2">
-                        Category
-                      </label>
-                      <select
-                        name="category"
-                        value={formData.category}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                      >
-                        <option value="general">General</option>
-                        <option value="sudoku">Sudoku</option>
-                        <option value="arg">ARG</option>
-                        <option value="puzzle">Puzzle</option>
-                        <option value="challenge">Challenge</option>
-                        <option value="riddle">Riddle</option>
-                      </select>
+                  {/* Show Difficulty only for math, and show Category+Difficulty for other types except riddle */}
+                  {formData.puzzleType === 'math' ? (
+                    <div className="grid md:grid-cols-1 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">
+                          Difficulty
+                        </label>
+                        <select
+                          name="difficulty"
+                          value={formData.difficulty}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                        >
+                          <option value="easy">Easy</option>
+                          <option value="medium">Medium</option>
+                          <option value="hard">Hard</option>
+                          <option value="extreme">Extreme</option>
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-300 mb-2">
-                        Difficulty
-                      </label>
-                      <select
-                        name="difficulty"
-                        value={formData.difficulty}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                      >
-                        <option value="easy">Easy</option>
-                        <option value="medium">Medium</option>
-                        <option value="hard">Hard</option>
-                        <option value="extreme">Extreme</option>
-                      </select>
+                  ) : formData.puzzleType === 'riddle' ? (
+                    <div className="grid md:grid-cols-1 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">
+                          Difficulty
+                        </label>
+                        <select
+                          name="difficulty"
+                          value={formData.difficulty}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                        >
+                          <option value="easy">Easy</option>
+                          <option value="medium">Medium</option>
+                          <option value="hard">Hard</option>
+                          <option value="extreme">Extreme</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">
+                          Category
+                        </label>
+                        <select
+                          name="category"
+                          value={formData.category}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                        >
+                          <option value="general">General</option>
+                          <option value="sudoku">Sudoku</option>
+                          <option value="arg">ARG</option>
+                          <option value="puzzle">Puzzle</option>
+                          <option value="challenge">Challenge</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">
+                          Difficulty
+                        </label>
+                        <select
+                          name="difficulty"
+                          value={formData.difficulty}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                        >
+                          <option value="easy">Easy</option>
+                          <option value="medium">Medium</option>
+                          <option value="hard">Hard</option>
+                          <option value="extreme">Extreme</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
                   {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && (
@@ -905,7 +936,7 @@ export default function AdminPuzzlesPage() {
                             placeholder={`Hint ${index + 1}`}
                             className="flex-1 px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
                           />
-                          {formData.hints.length > 1 && (
+                          {formData.hints.length > 0 && (
                             <button
                               type="button"
                               onClick={() => handleRemoveHint(index)}

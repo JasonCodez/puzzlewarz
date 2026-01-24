@@ -8,6 +8,9 @@ datasource db {
   // change this back to "mysql" and update DATABASE_URL accordingly.
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Prisma 7+ no longer supports `url` in schema files; move connection URLs for Migrate
+  // to prisma.config.ts and provide an `adapter` or `accelerateUrl` to PrismaClient.
+  // See: https://pris.ly/d/config-datasource and https://pris.ly/d/prisma7-client-config
 }
 
 model User {
@@ -148,6 +151,18 @@ model TeamInvite {
   @@index([teamId])
   @@map("team_invites")
 }
+model PuzzleSubcategory {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  categoryId  String
+  category    PuzzleCategory @relation(fields: [categoryId], references: [id])
+  puzzles     Puzzle[]
+  createdAt   DateTime @default(now())
+
+  @@unique([name, categoryId])
+  @@map("puzzle_subcategories")
+}
 
 model PuzzleCategory {
   id          String   @id @default(cuid())
@@ -157,6 +172,7 @@ model PuzzleCategory {
   icon        String?
   createdAt   DateTime @default(now())
   puzzles     Puzzle[]
+  subcategories PuzzleSubcategory[]
 
   @@map("puzzle_categories")
 }
@@ -168,6 +184,8 @@ model Puzzle {
   content                  String?
   categoryId               String
   order                    Int                        @default(0)
+  subcategoryId            String?
+  subcategory              PuzzleSubcategory?         @relation(fields: [subcategoryId], references: [id])
   difficulty               String                     @default("medium")
   requiredPreviousPuzzleId String?
   isActive                 Boolean                    @default(true)

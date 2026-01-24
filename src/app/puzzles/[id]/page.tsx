@@ -932,27 +932,58 @@ export default function PuzzleDetailPage() {
             className="border rounded-lg p-8 mb-8"
             style={{ backgroundColor: "rgba(253, 231, 76, 0.08)", borderColor: "#FDE74C" }}
           >
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex-1">
-                <h1 className="text-4xl font-bold text-white mb-2">{puzzle.title}</h1>
-                <p style={{ color: "#DDDBF1" }}>{puzzle.description}</p>
-              </div>
-              <span
-                className={`px-4 py-2 rounded-full text-sm font-semibold border whitespace-nowrap ${
-                  difficultyColors[puzzle.difficulty] ||
-                  "bg-slate-500/20 text-slate-300 border-slate-500/30"
-                }`}
-              >
+            {/* Puzzle Title (single display) */}
+            <h1 className="text-4xl font-bold text-white mb-4">{puzzle.title}</h1>
+            <div className="flex items-center gap-4 mb-6">
+              <span className={`px-4 py-2 rounded-full text-sm font-semibold border whitespace-nowrap ${
+                difficultyColors[puzzle.difficulty] ||
+                "bg-slate-500/20 text-slate-300 border-slate-500/30"
+              }`}>
                 {puzzle.difficulty}
               </span>
+              {puzzle.puzzleType !== 'riddle' && (
+                <span className="text-sm" style={{ color: "#3891A6" }}>
+                  Category: {puzzle.category.name}
+                </span>
+              )}
             </div>
+            {/* puzzle.description removed as requested */}
 
-            <div className="mb-6 pb-6" style={{ borderBottomColor: "#3891A6", borderBottomWidth: "1px" }}>
-              <span className="text-sm" style={{ color: "#3891A6" }}>
-                Category: {puzzle.category.name}
-              </span>
-            </div>
-
+            {/* Math Problem Configuration (if present) */}
+            {puzzle.puzzleType === 'math' && puzzle.math && (
+              <div className="prose prose-invert max-w-none mb-8">
+                <div
+                  className="whitespace-pre-wrap rounded-lg p-6 border"
+                  style={{
+                    color: "#FDE74C",
+                    backgroundColor: "rgba(56, 145, 166, 0.18)",
+                    borderColor: "#FDE74C",
+                  }}
+                >
+                  <strong>Math Problem Configuration</strong>
+                  <div className="mt-2">
+                    {puzzle.math.problemStatement && (
+                      <div className="mb-2">
+                        <strong>Problem Statement:</strong><br />
+                        {puzzle.math.problemStatement}
+                      </div>
+                    )}
+                    {puzzle.math.workingExample && (
+                      <div className="mb-2">
+                        <strong>Working Example:</strong><br />
+                        {puzzle.math.workingExample}
+                      </div>
+                    )}
+                    {puzzle.math.mathType && (
+                      <div className="mb-2">
+                        <strong>Math Type:</strong> {puzzle.math.mathType}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Main Puzzle Content */}
             <div className="prose prose-invert max-w-none mb-8">
               <div
                 className="whitespace-pre-wrap rounded-lg p-6 border"

@@ -79,9 +79,9 @@ function RegisterForm() {
       <main className="min-h-screen flex items-center justify-center px-4 pt-16" style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }}>
       <div className="w-full max-w-md">
         <div className="border rounded-lg p-8" style={{ backgroundColor: 'rgba(76, 91, 92, 0.6)', borderColor: '#3891A6' }}>
-          <h1 className="text-3xl font-bold text-white mb-2 text-center">
-            🔐 Puzzle Warz
-          </h1>
+          <div className="flex justify-center mb-2">
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-48 w-auto max-w-md" />
+          </div>
           <p style={{ color: '#3891A6' }} className="text-center mb-8">Create your account</p>
 
           {error && (
@@ -93,7 +93,7 @@ function RegisterForm() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: '#3891A6' }}>
-                Name
+                Display Name
               </label>
               <input
                 type="text"
@@ -101,7 +101,7 @@ function RegisterForm() {
                 onChange={(e) => setName(e.target.value)}
                 required
                 className="w-full px-4 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none transition"
-                placeholder="Your name"
+                placeholder="Display name"
                 style={{ backgroundColor: '#2a3a3b', borderWidth: '2px', borderColor: '#3891A6' }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#FDE74C'}
                 onBlur={(e) => e.currentTarget.style.borderColor = '#3891A6'}

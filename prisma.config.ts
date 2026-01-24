@@ -12,6 +12,9 @@ const __dirname = path.dirname(__filename);
 config({ path: path.join(__dirname, ".env.local") });
 config({ path: path.join(__dirname, ".env") });
 
+
+console.log("[prisma.config.ts] Loaded DATABASE_URL:", process.env["DATABASE_URL"]);
+
 import { defineConfig } from "prisma/config";
 
 export default defineConfig({
