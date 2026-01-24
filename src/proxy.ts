@@ -38,7 +38,7 @@ export async function proxy(request: NextRequest) {
     "worker-src 'self' blob:",
     // Allow websocket/connect to backend Socket.IO server in development
     process.env.NODE_ENV === 'production' ? "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com" : "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    process.env.NODE_ENV === 'production' ? "connect-src 'self' https:" : "connect-src 'self' https: ws: http://localhost:4000 ws://localhost:4000",
+    process.env.NODE_ENV === 'production' ? "connect-src 'self' https: wss:" : "connect-src 'self' https: ws: http://localhost:4000 ws://localhost:4000",
     "frame-ancestors 'none'",
   ].join('; ');
 
