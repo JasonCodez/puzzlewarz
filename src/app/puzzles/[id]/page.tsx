@@ -44,6 +44,11 @@ interface Puzzle {
     snapTolerance: number;
     rotationEnabled: boolean;
   };
+  math?: {
+    problemStatement: string;
+    workingExample?: string;
+    mathType?: string;
+  };
   media?: PuzzleMedia[];
   userHistory: Array<{
     id: string;
