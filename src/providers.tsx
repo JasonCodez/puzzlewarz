@@ -1,15 +1,87 @@
-"use client";
 
+"use client";
 import { SessionProvider } from "next-auth/react";
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
-
-// socket.io-client is only used on client
-let globalSocket: any = null;
+import { useEffect, useState } from "react";
+import AchievementNotification from "@/components/AchievementNotification";
+import { rarityColors } from "@/lib/rarity";
+import { useSession } from "next-auth/react";
+import { useAchievementModalStore } from "@/lib/achievement-modal-store";
 
 const Navbar = dynamic(() => import("@/components/Navbar"), { ssr: false });
 
-// TourLauncher removed — tutorial feature disabled
+let globalSocket: any = null;
+
+function GlobalAchievementModal() {
+  const { data: session } = useSession();
+  const notificationAchievement = useAchievementModalStore((s) => s.notificationAchievement);
+  const setNotificationAchievement = useAchievementModalStore((s) => s.setNotificationAchievement);
+  const shownAchievements = useAchievementModalStore((s) => s.shownAchievements);
+  const addShownAchievement = useAchievementModalStore((s) => s.addShownAchievement);
+  const [collecting, setCollecting] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!session?.user?.email) return;
+    let interval: any;
+    let mounted = true;
+    const fetchAchievements = async () => {
+      try {
+        const response = await fetch("/api/user/achievements");
+        if (response.ok) {
+          const result = await response.json();
+          result.achievements.forEach((achievement: any) => {
+            const autoUnlockTypes = ["puzzles_solved", "submission_accuracy", "points_earned", "streak", "custom"];
+            const canAutoCollect = autoUnlockTypes.includes(achievement.conditionType || "");
+            const isReady = !achievement.unlocked && achievement.progressPercentage === 100 && canAutoCollect;
+            if (isReady && !shownAchievements.has(achievement.id) && mounted) {
+              setNotificationAchievement(achievement);
+              addShownAchievement(achievement.id);
+            }
+          });
+        }
+      } catch (error) {
+        // ignore
+      }
+    };
+    fetchAchievements();
+    interval = setInterval(fetchAchievements, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [session?.user?.email, shownAchievements, setNotificationAchievement, addShownAchievement]);
+
+  const collectAchievement = async (achievementId: string) => {
+    setCollecting(achievementId);
+    try {
+      const response = await fetch("/api/user/achievements/collect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ achievementId }),
+      });
+      if (response.ok) {
+        setTimeout(() => {
+          setNotificationAchievement(null);
+        }, 2000);
+      }
+    } catch (error) {
+      // ignore
+    } finally {
+      setCollecting(null);
+    }
+  };
+
+  if (!notificationAchievement) return null;
+  return (
+    <AchievementNotification
+      achievement={notificationAchievement}
+      rarityColors={rarityColors}
+      isCollecting={collecting === notificationAchievement.id}
+      onClose={() => setNotificationAchievement(null)}
+      onCollect={() => collectAchievement(notificationAchievement.id)}
+    />
+  );
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -56,6 +128,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <Navbar />
+      <GlobalAchievementModal />
       {children}
     </SessionProvider>
   );
