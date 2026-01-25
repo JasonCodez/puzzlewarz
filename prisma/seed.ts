@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import path from "path";
 import { config } from "dotenv";
 
@@ -437,14 +438,15 @@ async function seedEscapeRoomExample() {
   });
 
   // Ensure the production admin user exists
+  const adminPassword = await bcrypt.hash('Arm4469nine2686tee!', 10);
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@puzzlewarz.com' },
-    update: { name: 'Admin', role: 'admin' },
+    update: { name: 'Admin', role: 'admin', password: adminPassword },
     create: {
       email: 'admin@puzzlewarz.com',
       name: 'Admin',
       role: 'admin',
-      // You may want to set a password or other fields if your schema requires it
+      password: adminPassword,
     },
   });
 
