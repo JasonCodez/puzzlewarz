@@ -178,9 +178,16 @@ export default function LeaderboardsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="text-white font-semibold">
-                          {entry.userName || "Anonymous"}
-                        </p>
+                        {entry.userId ? (
+                          <Link
+                            href={`/profile/${entry.userId}`}
+                            className="text-white font-semibold hover:underline hover:text-[#3891A6]"
+                          >
+                            {entry.userName || "Anonymous"}
+                          </Link>
+                        ) : (
+                          <span className="text-white font-semibold">{entry.userName || "Anonymous"}</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-slate-300">

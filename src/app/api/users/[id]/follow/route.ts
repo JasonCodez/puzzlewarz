@@ -56,6 +56,21 @@ export async function POST(
         },
       });
 
+      // Send notification to the followed user
+      try {
+        const { createNotification } = await import("@/lib/notification-service");
+        await createNotification({
+          userId: targetUserId,
+          type: "system",
+          title: "New Follower!",
+          message: `${currentUser.name || currentUser.email || "Someone"} started following you!`,
+          icon: "👥",
+          relatedId: currentUser.id,
+        });
+      } catch (e) {
+        console.error("Failed to send follow notification:", e);
+      }
+
       return NextResponse.json({ message: "Successfully followed user" });
     } else if (action === "unfollow") {
       // Delete follow relationship

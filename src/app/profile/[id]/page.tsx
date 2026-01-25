@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import "./profile-actions.css";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -462,22 +463,24 @@ export default function PublicProfilePage() {
             </div>
 
             {!isOwnProfile && (
-              <div className="flex gap-2">
+              <div className="profile-action-buttons flex flex-row gap-2 mt-2 items-center whitespace-nowrap">
                 <button
                   onClick={handleFollowToggle}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium transition-colors"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-sm"
                   style={{
-                    backgroundColor: isFollowing ? '#EF4444' : '#3891A6',
+                    backgroundColor: isFollowing ? '#EF4444' : '#38A169', // red for unfollow, green for follow
+                    color: 'white',
+                    minWidth: 90,
                   }}
                 >
                   {isFollowing ? (
                     <>
-                      <UserMinus className="w-5 h-5" />
+                      <UserMinus className="w-4 h-4" />
                       Unfollow
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-5 h-5" />
+                      <UserPlus className="w-4 h-4" />
                       Follow
                     </>
                   )}
@@ -487,20 +490,20 @@ export default function PublicProfilePage() {
                     setShowInviteModal(true);
                     fetchUserTeams();
                   }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium transition-colors"
-                  style={{ backgroundColor: '#3891A6' }}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-sm"
+                  style={{ backgroundColor: '#2563EB', color: 'white', minWidth: 110 }}
                   title="Invite to your team"
                 >
-                  <Users className="w-5 h-5" />
+                  <Users className="w-4 h-4" />
                   Invite to Team
                 </button>
                 {!isOwnProfile && session && (
                   <button
                     onClick={() => setShowMessageModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium transition-colors"
-                    style={{ backgroundColor: '#3891A6' }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-sm"
+                    style={{ backgroundColor: '#FDE74C', color: '#222', minWidth: 90 }}
                   >
-                    <MessageCircle className="w-5 h-5" />
+                    <MessageCircle className="w-4 h-4" />
                     Message
                   </button>
                 )}
