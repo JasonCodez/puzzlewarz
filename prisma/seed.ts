@@ -436,6 +436,18 @@ async function seedEscapeRoomExample() {
     create: { email: 'seed@author.local', name: 'Seed Author', role: 'admin' },
   });
 
+  // Ensure the production admin user exists
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@puzzlewarz.com' },
+    update: { name: 'Admin', role: 'admin' },
+    create: {
+      email: 'admin@puzzlewarz.com',
+      name: 'Admin',
+      role: 'admin',
+      // You may want to set a password or other fields if your schema requires it
+    },
+  });
+
   // Create or reuse a category for escape rooms
   const category = await prisma.puzzleCategory.upsert({
     where: { name: 'Escape' },
