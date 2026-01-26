@@ -217,12 +217,13 @@ export async function POST(request: NextRequest) {
     // intended transient state without relying on the create input type.
     if (!puzzleId) {
       try {
+        const updateData: any = { temporary: true };
         await prisma.puzzleMedia.update({
           where: { id: media.id },
-          data: { temporary: true },
+          data: updateData,
         });
         // reflect update in `media` variable for response
-        media.temporary = true as any;
+        (media as any).temporary = true;
       } catch (err) {
         console.warn('[MEDIA UPLOAD] Failed to mark media as temporary:', err);
       }
