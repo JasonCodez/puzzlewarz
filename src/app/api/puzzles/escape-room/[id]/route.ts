@@ -17,9 +17,10 @@ export async function GET(
 
     if (!puzzle) return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
 
-    // Get the escape room data from the puzzle
-    const escapeRoomData = puzzle.data && typeof puzzle.data === 'object' && 'escapeRoomData' in puzzle.data
-      ? (puzzle.data as any).escapeRoomData
+    // Get the escape room data from the puzzle (cast to any to avoid generated client type mismatches)
+    const pAny: any = puzzle;
+    const escapeRoomData = pAny.data && typeof pAny.data === 'object' && 'escapeRoomData' in pAny.data
+      ? pAny.data.escapeRoomData
       : null;
 
     if (!escapeRoomData) return NextResponse.json({ error: "Escape room data not found" }, { status: 404 });
