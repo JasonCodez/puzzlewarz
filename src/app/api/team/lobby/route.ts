@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
         // initialize team escape progress for escape room puzzles
         if (puzzle.escapeRoom) {
           try {
-            await prisma.teamEscapeProgress.create({ data: { teamId, escapeRoomId: puzzle.escapeRoom.id, currentStageIndex: 0 } });
+            await (prisma as any).teamEscapeProgress.create({ data: { teamId, escapeRoomId: puzzle.escapeRoom.id, currentStageIndex: 0 } });
           } catch (e) {
             // if already exists, ignore
             console.warn('teamEscapeProgress create ignored', e);
