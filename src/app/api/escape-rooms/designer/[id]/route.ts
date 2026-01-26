@@ -53,12 +53,13 @@ export async function GET(req: NextRequest) {
         };
       }),
     }));
+    const er: any = escapeRoom;
     return NextResponse.json({
-      title: escapeRoom.roomTitle,
-      description: escapeRoom.roomDescription,
-      minPlayers: escapeRoom.minTeamSize,
-      maxPlayers: escapeRoom.maxTeamSize,
-      timeLimit: escapeRoom.timeLimitSeconds,
+      title: er.roomTitle,
+      description: er.roomDescription,
+      minPlayers: er.minTeamSize,
+      maxPlayers: er.maxTeamSize,
+      timeLimit: er.timeLimitSeconds,
       scenes,
       userSpecialties: [], // Not implemented yet
     });

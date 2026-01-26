@@ -24,6 +24,7 @@ export default function TeamLobbyPage() {
   const [chatInput, setChatInput] = useState("");
   const chatAbortRef = useRef<AbortController | null>(null);
   const socketRef = useRef<any>(null);
+  const prevParticipantsRef = useRef<string[]>([]);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<null | "create" | "ready" | "unready" | "start" | "refresh" | "invite" | "leave" | "destroy">(null);
