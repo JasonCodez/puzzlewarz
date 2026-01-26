@@ -61,7 +61,8 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const puzzleId = formData.get("puzzleId") as string | null;
+    const puzzleIdRaw = formData.get("puzzleId") as string | null;
+    const puzzleId = puzzleIdRaw || undefined;
     const externalUrl = (formData.get("url") as string) || null;
 
     if (!file && !externalUrl) {
@@ -71,24 +72,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!puzzleId) {
-      return NextResponse.json(
-        { error: "Puzzle ID required" },
-        { status: 400 }
-      );
-    }
 
-    // Verify puzzle exists
-    const puzzle = await prisma.puzzle.findUnique({
-      where: { id: puzzleId },
-      select: { id: true, puzzleType: true },
-    });
-
-    if (!puzzle) {
-      return NextResponse.json(
-        { error: "Puzzle not found" },
-        { status: 404 }
-      );
+    // If puzzleId is provided, verify puzzle exists. If not, allow as unattached/temporary media.
+    let puzzle = null;
+    if (puzzleId) {
+      puzzle = await prisma.puzzle.findUnique({
+        where: { id: puzzleId },
+        select: { id: true, puzzleType: true },
+      });
+      if (!puzzle) {
+        return NextResponse.json(
+          { error: "Puzzle not found" },
+          { status: 404 }
+        );
+      }
     }
 
     // We'll support two modes:
@@ -138,7 +135,7 @@ export async function POST(request: NextRequest) {
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 8);
       const ext = file.name.substring(file.name.lastIndexOf(".")) || ".bin";
-      const uniqueFileName = `${puzzleId}-${timestamp}-${random}${ext}`;
+      const uniqueFileName = `${puzzleId || 'temp'}-${timestamp}-${random}${ext}`;
       const filePath = join(uploadDir, uniqueFileName);
 
       await writeFile(filePath, Buffer.from(buffer));
@@ -196,6 +193,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Store media metadata in database
+
     const media = await prisma.puzzleMedia.create({
       data: {
         puzzleId,
@@ -205,28 +203,27 @@ export async function POST(request: NextRequest) {
         fileSize: fileSize,
         mimeType,
         uploadedBy: user.id,
+        temporary: !puzzleId,
       },
     });
 
     console.log(`[MEDIA UPLOAD] Media created: ${media.id}, type: ${mediaType}, url: ${media.url}`);
 
     // If this is a jigsaw puzzle, auto-wire the first uploaded image as the puzzle image.
-    if (puzzle.puzzleType === 'jigsaw' && mediaType === 'image') {
+    if (puzzle && puzzle.puzzleType === 'jigsaw' && mediaType === 'image') {
       console.log(`[MEDIA UPLOAD] Processing jigsaw image for puzzle: ${puzzleId}`);
       console.log(`[MEDIA UPLOAD] Setting imageUrl to: ${media.url}`);
-      
       try {
         // First check if jigsaw exists
         const existingJigsaw = await prisma.jigsawPuzzle.findUnique({
-          where: { puzzleId },
+          where: { puzzleId: puzzleId as string },
         });
         console.log(`[MEDIA UPLOAD] Existing jigsaw record:`, JSON.stringify(existingJigsaw, null, 2));
-
         if (!existingJigsaw) {
           console.log(`[MEDIA UPLOAD] Jigsaw record not found, creating...`);
           const createdJigsaw = await prisma.jigsawPuzzle.create({
             data: {
-              puzzleId,
+              puzzleId: puzzleId as string,
               imageUrl: media.url,
               gridRows: 3,
               gridCols: 4,
@@ -238,28 +235,30 @@ export async function POST(request: NextRequest) {
         } else {
           console.log(`[MEDIA UPLOAD] Jigsaw exists, updating imageUrl...`);
           const updatedJigsaw = await prisma.jigsawPuzzle.update({
-            where: { puzzleId },
+            where: { puzzleId: puzzleId as string },
             data: {
               imageUrl: media.url,
             },
           });
           console.log(`[MEDIA UPLOAD] Updated jigsaw, imageUrl now:`, updatedJigsaw.imageUrl);
         }
-
         // Verify it was updated
         const verifyJigsaw = await prisma.jigsawPuzzle.findUnique({
-          where: { puzzleId },
+          where: { puzzleId: puzzleId as string },
         });
         console.log(`[MEDIA UPLOAD] Verification - jigsaw imageUrl: ${verifyJigsaw?.imageUrl}`);
       } catch (err) {
         console.error('[MEDIA UPLOAD] Failed to update jigsaw imageUrl:', err);
         throw err; // Re-throw to notify client
       }
-    } else {
+    } else if (puzzle) {
       console.log(`[MEDIA UPLOAD] Skipping jigsaw update: puzzleType=${puzzle.puzzleType}, mediaType=${mediaType}`);
+    } else {
+      console.log(`[MEDIA UPLOAD] No puzzleId provided, skipping jigsaw logic.`);
     }
 
-    return NextResponse.json(media, { status: 201 });
+    // Always return mediaUrl for frontend compatibility
+    return NextResponse.json({ ...media, mediaUrl: media.url }, { status: 201 });
   } catch (error) {
     console.error("Error uploading file:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to upload file";

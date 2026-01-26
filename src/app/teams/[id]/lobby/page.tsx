@@ -85,6 +85,7 @@ export default function TeamLobbyPage() {
           return;
         }
         setLobby(j);
+        return j;
       }
     } catch (e) {
       console.error("Failed load lobby", e);
@@ -199,7 +200,9 @@ export default function TeamLobbyPage() {
         const participants = j?.participants || [];
         if (participants.includes(currentUserId)) return;
         await fetch("/api/team/lobby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", teamId, puzzleId }) });
-        await fetchLobby();
+        // refresh lobby and seed prevParticipants to avoid false "removed" modal during immediate join
+        const newLobby = await fetchLobby();
+        try { prevParticipantsRef.current = (newLobby?.participants || []).slice(); } catch (e) {}
       } catch (e) {
         console.error("Auto-join failed", e);
       }
@@ -245,6 +248,15 @@ export default function TeamLobbyPage() {
           setChatMessages((prev) => (prev || []).concat(msg));
         });
 
+        socket.on('lobbyDestroyed', ({ teamId: t, puzzleId: p, reason }: any) => {
+          if (!mounted) return;
+          setActionModalVariant('info');
+          setActionModalTitle('Lobby Closed');
+          setActionModalMessage('The team leader left the lobby. Click Close to go to the dashboard.');
+          setRedirectOnClose(true);
+          setActionModalOpen(true);
+        });
+
         socket.on('puzzleStarting', ({ teamId: t, puzzleId: p }) => {
           if (!mounted) return;
           // navigate to planning/role assignment screen
@@ -268,52 +280,40 @@ export default function TeamLobbyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, puzzleId, currentUserId, members]);
 
-  // Notify when participants are removed (someone left)
-  const prevParticipantsRef = useRef<string[] | null>(null);
+  // Listen for explicit server-side removal events rather than inferring removals from state diffs.
   useEffect(() => {
-    const prev = prevParticipantsRef.current || [];
-    const now = lobby?.participants || [];
-
-    // If the current user was removed (or left), handle appropriately
+    // 'kicked' will be emitted by the lobby API when an admin removes a participant
     try {
-      if (currentUserId && prev.includes(currentUserId) && !now.includes(currentUserId)) {
-        // If the user voluntarily left via the UI, we suppress the removed-modal.
-        if (selfLeaving) {
-          setSelfLeaving(false);
-          prevParticipantsRef.current = now.slice();
-          return;
+      const handler = (payload: any) => {
+        try {
+          const target = payload?.targetUserId;
+          if (target && target === currentUserId) {
+            setActionModalVariant('info');
+            setActionModalTitle('Removed from Lobby');
+            setActionModalMessage('An admin removed you from the puzzle lobby. Click Close to go to the dashboard.');
+            setRedirectOnClose(true);
+            setActionModalOpen(true);
+          } else {
+            // someone else was kicked — show a small info modal
+            const removedMember = members.find((m: any) => m.user?.id === target);
+            const label = removedMember ? (removedMember.user.name || removedMember.user.email) : target;
+            setActionModalVariant('info');
+            setActionModalTitle('Player Removed');
+            setActionModalMessage(`${label} has been removed from the lobby.`);
+            setActionModalOpen(true);
+          }
+        } catch (e) {
+          // ignore
         }
+      };
 
-        // Show modal informing user they were removed; require confirmation to redirect
-        setActionModalVariant('info');
-        setActionModalTitle('Removed from Lobby');
-        setActionModalMessage('An admin removed you from the puzzle lobby. Click Close to go to the dashboard.');
-        setRedirectOnClose(true);
-        setActionModalOpen(true);
-
-        prevParticipantsRef.current = now.slice();
-        return;
-      }
+      socketRef.current?.on('kicked', handler);
+      return () => { try { socketRef.current?.off('kicked', handler); } catch (e) {} };
     } catch (e) {
-      // ignore router errors
+      // ignore
     }
-
-    // detect removed participants (others)
-    const removed = prev.filter((id) => !now.includes(id));
-    if (removed.length > 0) {
-      const removedId = removed[0];
-      if (removedId !== currentUserId) {
-        const removedMember = members.find((m: any) => m.user?.id === removedId);
-        const label = removedMember ? (removedMember.user.name || removedMember.user.email) : removedId;
-        setActionModalVariant('info');
-        setActionModalTitle('Player Left');
-        setActionModalMessage(`${label} has left the lobby.`);
-        setActionModalOpen(true);
-      }
-    }
-
-    prevParticipantsRef.current = now.slice();
-  }, [lobby?.participants, members, currentUserId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId, members]);
 
   // determine if current user is admin/moderator of the team
   const currentMember = members.find((m: any) => m.user?.id === currentUserId);
@@ -322,6 +322,7 @@ export default function TeamLobbyPage() {
   const participantsCount = (lobby?.participants || []).length;
   const requiredPlayers = selectedPuzzle?.partsCount || 0;
   const requiredMet = selectedPuzzle && participantsCount >= requiredPlayers;
+  const allReady = (lobby?.participants || []).length > 0 && (lobby?.participants || []).every((p: string) => !!(lobby?.ready && lobby.ready[p]));
 
   const openActionModal = (variant: "success" | "error" | "info", title?: string, message?: string) => {
     setActionModalVariant(variant);
@@ -624,7 +625,14 @@ export default function TeamLobbyPage() {
         <div className="flex flex-col sm:flex-row gap-3">
           <button onClick={onToggleReadyClick} className="w-full sm:w-auto text-sm px-3 py-2 bg-amber-500 text-black rounded">Ready / Unready</button>
           {isAdmin && (
-            <button onClick={onStartClick} disabled={!selectedPuzzle || (lobby?.participants || []).length !== (selectedPuzzle?.partsCount || 0)} className="w-full sm:w-auto text-sm px-3 py-2 bg-emerald-600 text-white rounded disabled:opacity-50">Start Puzzle</button>
+            <button
+              onClick={onStartClick}
+              disabled={!selectedPuzzle || (lobby?.participants || []).length !== (selectedPuzzle?.partsCount || 0) || !allReady}
+              className="w-full sm:w-auto text-sm px-3 py-2 bg-emerald-600 text-white rounded disabled:opacity-50"
+              title={!allReady ? 'All participants must be marked ready before starting' : undefined}
+            >
+              Start Puzzle
+            </button>
           )}
           {(lobby?.participants || []).includes(currentUserId) && (
             <button onClick={onLeaveClick} className="w-full sm:w-auto text-sm px-3 py-2 bg-red-600 text-white rounded">Leave Lobby</button>

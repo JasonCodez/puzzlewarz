@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
       puzzleData,
     } = body;
 
-    // Validate input - title is required for most puzzle types but optional for Sudoku
-    if (!title && puzzleType !== 'sudoku') {
+    // Validate input - title is required for most puzzle types but optional for Sudoku and Escape Room
+    if (!title && puzzleType !== 'sudoku' && puzzleType !== 'escape_room') {
       return NextResponse.json(
         { error: "Missing required field: title" },
         { status: 400 }
@@ -160,6 +160,7 @@ export async function POST(request: NextRequest) {
         title: finalTitle,
         description: puzzleDescription,
         content: puzzleContent,
+        data: puzzleType === 'escape_room' ? puzzleData : undefined,
         category: {
           connect: { id: categoryRecord.id }
         },

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 export default function PlanningPage() {
@@ -13,14 +13,68 @@ export default function PlanningPage() {
   const [lobby, setLobby] = useState<any>(null);
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [assignmentsDirty, setAssignmentsDirty] = useState(false);
+  const assignmentsDirtyRef = useRef(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const socketRef = useRef<any>(null);
   const roles = ["Navigator", "Solver", "Researcher", "Observer"];
 
   useEffect(() => {
+    fetchCurrentUser();
     fetchMembers();
     fetchLobby();
     const t = setInterval(fetchLobby, 3000);
-    return () => clearInterval(t);
+
+    // setup socket to receive live assignment updates
+    (async () => {
+      try {
+        const { io } = await import('socket.io-client');
+        const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', { transports: ['websocket'] });
+        socketRef.current = socket;
+        socket.on('connect', () => {
+          // joinLobby will be emitted once currentUserId is available (see effect below)
+        });
+        socket.on('rolesAssigned', (payload: any) => {
+          if (!payload) return;
+          if (payload.assignments) {
+            setAssignments(payload.assignments || {});
+            setAssignmentsDirty(false);
+            assignmentsDirtyRef.current = false;
+          }
+        });
+      } catch (e) {
+        // ignore socket errors
+      }
+    })();
+
+    return () => {
+      clearInterval(t);
+      try { socketRef.current?.disconnect(); } catch (e) {}
+    };
   }, [teamId, puzzleId]);
+
+  useEffect(() => {
+    try {
+      const member = members.find((m: any) => m.user?.id === currentUserId);
+      const adminFlag = !!member && ["admin", "moderator"].includes(member.role);
+      setIsAdmin(adminFlag);
+      if (socketRef.current && socketRef.current.connected) {
+        try {
+          socketRef.current.emit('joinLobby', { teamId, puzzleId, userId: currentUserId || '', name: '', isAdmin: adminFlag });
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }, [members, currentUserId]);
+
+  async function fetchCurrentUser() {
+    try {
+      const res = await fetch('/api/user/info');
+      if (!res.ok) return;
+      const j = await res.json();
+      setCurrentUserId(j.id || null);
+    } catch (e) {}
+  }
 
   async function fetchMembers() {
     try {
@@ -39,7 +93,8 @@ export default function PlanningPage() {
       if (!res.ok) return;
       const j = await res.json();
       setLobby(j);
-      if (j && j.assignments) setAssignments(j.assignments || {});
+      // Only update assignments from server if local edits are not in progress
+      if (j && j.assignments && !assignmentsDirtyRef.current) setAssignments(j.assignments || {});
     } catch (e) {
       // ignore
     }
@@ -47,6 +102,8 @@ export default function PlanningPage() {
 
   function setRoleFor(userId: string, role: string) {
     setAssignments((s) => ({ ...(s || {}), [userId]: role }));
+    setAssignmentsDirty(true);
+    assignmentsDirtyRef.current = true;
   }
 
   async function saveAssignments() {
@@ -59,6 +116,8 @@ export default function PlanningPage() {
         return;
       }
       await fetchLobby();
+      setAssignmentsDirty(false);
+      assignmentsDirtyRef.current = false;
       alert('Roles saved');
     } catch (e) {
       alert('Failed to save roles');
@@ -79,14 +138,23 @@ export default function PlanningPage() {
           {members.filter((m: any) => (lobby?.participants || []).includes(m.user?.id)).map((m: any) => {
             const uid = m.user.id;
             const current = assignments?.[uid] || '';
+            // compute roles taken by others
+            const takenByOthers = new Set(Object.entries(assignments || {})
+              .filter(([k, v]) => k !== uid && !!v)
+              .map(([k, v]) => v));
+            const availableRoles = roles.filter((r) => !takenByOthers.has(r) || r === current);
             return (
               <div key={uid} className="flex items-center justify-between p-3 bg-slate-800 rounded">
                 <div className="text-white">{m.user.name || m.user.email}</div>
                 <div className="flex items-center gap-2">
-                  <select value={current} onChange={(e) => setRoleFor(uid, e.target.value)} className="px-2 py-1 bg-black text-white border rounded">
-                    <option value="">(unassigned)</option>
-                    {roles.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  {isAdmin ? (
+                    <select value={current} onChange={(e) => setRoleFor(uid, e.target.value)} className="px-2 py-1 bg-black text-white border rounded">
+                      <option value="">(unassigned)</option>
+                      {availableRoles.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  ) : (
+                    <div className="px-2 py-1 text-sm text-gray-300 bg-black border rounded">{current || '(unassigned)'}</div>
+                  )}
                 </div>
               </div>
             );
@@ -94,7 +162,7 @@ export default function PlanningPage() {
         </div>
 
         <div className="mt-6 flex gap-2">
-          <button disabled={saving} onClick={saveAssignments} className="px-4 py-2 bg-emerald-600 text-white rounded">Save Roles</button>
+          {isAdmin && <button disabled={saving} onClick={saveAssignments} className="px-4 py-2 bg-emerald-600 text-white rounded">Save Roles</button>}
           <button onClick={() => router.back()} className="px-4 py-2 bg-slate-700 text-white rounded">Back</button>
         </div>
       </div>

@@ -145,13 +145,20 @@ export default function AdminPuzzlesPage() {
   };
 
   const handlePuzzleDataChange = (key: string, value: unknown) => {
-    setFormData((prev) => ({
-      ...prev,
-      puzzleData: {
-        ...prev.puzzleData,
-        [key]: value,
-      },
-    }));
+    setFormData((prev) => {
+      let next = {
+        ...prev,
+        puzzleData: {
+          ...prev.puzzleData,
+          [key]: value,
+        },
+      };
+      // If the designerData (value) is an object with a title, sync it to formData.title
+      if ((key === undefined || key === null) && value && typeof value === 'object' && 'title' in value && typeof (value as any).title === 'string') {
+        next.title = (value as any).title;
+      }
+      return next;
+    });
   };
 
   // File uploads removed — images are provided via external URL only
@@ -298,6 +305,8 @@ export default function AdminPuzzlesPage() {
         }
       }
 
+      // Title is now optional for all puzzle types
+
       const filteredHints = formData.hints.filter((h) => h.trim() !== "");
 
       console.log("[SUBMIT] Submitting puzzle data:", {
@@ -307,7 +316,19 @@ export default function AdminPuzzlesPage() {
         hasContent: !!formData.content,
       });
 
-      const submitBody: any = { ...formData, hints: filteredHints };
+      // Remove any non-serializable properties from items in puzzleData
+      let cleanedPuzzleData = formData.puzzleData;
+      if (formData.puzzleType === 'escape_room' && formData.puzzleData && Array.isArray(formData.puzzleData.scenes)) {
+        cleanedPuzzleData = {
+          ...formData.puzzleData,
+          scenes: formData.puzzleData.scenes.map((scene: any) => ({
+            ...scene,
+            items: Array.isArray(scene.items) ? scene.items : [],
+            interactiveZones: Array.isArray(scene.interactiveZones) ? scene.interactiveZones : [],
+          })),
+        };
+      }
+      const submitBody: any = { ...formData, hints: filteredHints, puzzleData: cleanedPuzzleData };
       if (formData.puzzleType === 'sudoku' && sudokuPuzzle) {
         submitBody.sudokuGrid = sudokuPuzzle.puzzle;
         submitBody.sudokuSolution = sudokuPuzzle.solution;
@@ -644,45 +665,102 @@ export default function AdminPuzzlesPage() {
                     </select>
                   </div>
 
-                  {/* Title (optional for Sudoku) */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">
-                      Puzzle Title {formData.puzzleType === 'sudoku' ? <span className="text-xs text-gray-400">(optional)</span> : <span>*</span>}
-                    </label>
-                    <input
-                      type="text"
-                      name="title"
-                      value={formData.title}
-                      onChange={handleInputChange}
-                      placeholder="Give your puzzle a captivating title"
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
-                      {...(formData.puzzleType === 'sudoku' ? {} : { required: true })}
-                    />
-                  </div>
 
-                  {/* Description */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">
-                      Description
-                    </label>
-
-                    <textarea
-
-                      name="description"
-                      value={formData.description}
-                      onChange={handleInputChange}
-                      placeholder="Describe your puzzle (optional)"
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
-                    />
-                  </div>
-
-                  {/* Type-Specific Fields (exclude riddle, general, sudoku) */}
-                  {formData.puzzleType !== 'general' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'riddle' && (
-                    <PuzzleTypeFields
-                      puzzleType={formData.puzzleType}
-                      puzzleData={formData.puzzleData}
-                      onDataChange={handlePuzzleDataChange}
-                    />
+                  {/* Only show the Escape Room Designer, Points, and Hints for escape_room */}
+                  {formData.puzzleType === 'escape_room' ? (
+                    <>
+                      <PuzzleTypeFields
+                        puzzleType={formData.puzzleType}
+                        puzzleData={formData.puzzleData}
+                        onDataChange={handlePuzzleDataChange}
+                      />
+                      {/* Submit button directly after designer for escape rooms */}
+                      <div className="mt-8">
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className="w-full px-6 py-3 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold transition"
+                        >
+                          {submitting ? "Creating..." : "🚀 Create Puzzle"}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Title is now always optional */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">
+                          Puzzle Title <span className="text-xs text-gray-400">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="title"
+                          value={formData.title}
+                          onChange={handleInputChange}
+                          placeholder="Give your puzzle a captivating title"
+                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+                        />
+                      </div>
+                      {/* Category and Difficulty Pickers (not for escape_room) */}
+                      {formData.puzzleType !== 'escape_room' && (
+                        <>
+                          {/* Category Picker */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-300 mb-2">Category</label>
+                            <select
+                              name="category"
+                              value={formData.category}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                            >
+                              <option value="general">General</option>
+                              <option value="logic">Logic</option>
+                              <option value="math">Math</option>
+                              <option value="visual">Visual</option>
+                              <option value="word">Word</option>
+                              <option value="story">Story</option>
+                              <option value="arg">ARG</option>
+                            </select>
+                          </div>
+                          {/* Difficulty Picker */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-300 mb-2">Difficulty</label>
+                            <select
+                              name="difficulty"
+                              value={formData.difficulty}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                            >
+                              <option value="easy">Easy</option>
+                              <option value="medium">Medium</option>
+                              <option value="hard">Hard</option>
+                              <option value="expert">Expert</option>
+                            </select>
+                          </div>
+                        </>
+                      )}
+                      {/* Description */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">
+                          Description
+                        </label>
+                        <textarea
+                          name="description"
+                          value={formData.description}
+                          onChange={handleInputChange}
+                          placeholder="Describe your puzzle (optional)"
+                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+                        />
+                      </div>
+                      {/* Type-Specific Fields (exclude riddle, general, sudoku) */}
+                      {formData.puzzleType !== 'general' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'riddle' && (
+                        <PuzzleTypeFields
+                          puzzleType={formData.puzzleType}
+                          puzzleData={formData.puzzleData}
+                          onDataChange={handlePuzzleDataChange}
+                        />
+                      )}
+                    </>
                   )}
 
                   {/* Sudoku generator (admin) */}
@@ -811,81 +889,83 @@ export default function AdminPuzzlesPage() {
                     </div>
                   )}
 
-                  {/* Show Difficulty only for math, and show Category+Difficulty for other types except riddle */}
-                  {formData.puzzleType === 'math' ? (
-                    <div className="grid md:grid-cols-1 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">
-                          Difficulty
-                        </label>
-                        <select
-                          name="difficulty"
-                          value={formData.difficulty}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                        >
-                          <option value="easy">Easy</option>
-                          <option value="medium">Medium</option>
-                          <option value="hard">Hard</option>
-                          <option value="extreme">Extreme</option>
-                        </select>
+                  {/* Show Difficulty/Category for non-escape_room types only */}
+                  {formData.puzzleType !== 'escape_room' && (
+                    formData.puzzleType === 'math' ? (
+                      <div className="grid md:grid-cols-1 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-300 mb-2">
+                            Difficulty
+                          </label>
+                          <select
+                            name="difficulty"
+                            value={formData.difficulty}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                          >
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                            <option value="extreme">Extreme</option>
+                          </select>
+                        </div>
                       </div>
-                    </div>
-                  ) : formData.puzzleType === 'riddle' ? (
-                    <div className="grid md:grid-cols-1 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">
-                          Difficulty
-                        </label>
-                        <select
-                          name="difficulty"
-                          value={formData.difficulty}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                        >
-                          <option value="easy">Easy</option>
-                          <option value="medium">Medium</option>
-                          <option value="hard">Hard</option>
-                          <option value="extreme">Extreme</option>
-                        </select>
+                    ) : formData.puzzleType === 'riddle' ? (
+                      <div className="grid md:grid-cols-1 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-300 mb-2">
+                            Difficulty
+                          </label>
+                          <select
+                            name="difficulty"
+                            value={formData.difficulty}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                          >
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                            <option value="extreme">Extreme</option>
+                          </select>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">
-                          Category
-                        </label>
-                        <select
-                          name="category"
-                          value={formData.category}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                        >
-                          <option value="general">General</option>
-                          <option value="sudoku">Sudoku</option>
-                          <option value="arg">ARG</option>
-                          <option value="puzzle">Puzzle</option>
-                          <option value="challenge">Challenge</option>
-                        </select>
+                    ) : (
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-300 mb-2">
+                            Category
+                          </label>
+                          <select
+                            name="category"
+                            value={formData.category}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                          >
+                            <option value="general">General</option>
+                            <option value="sudoku">Sudoku</option>
+                            <option value="arg">ARG</option>
+                            <option value="puzzle">Puzzle</option>
+                            <option value="challenge">Challenge</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-300 mb-2">
+                            Difficulty
+                          </label>
+                          <select
+                            name="difficulty"
+                            value={formData.difficulty}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                          >
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                            <option value="extreme">Extreme</option>
+                          </select>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">
-                          Difficulty
-                        </label>
-                        <select
-                          name="difficulty"
-                          value={formData.difficulty}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                        >
-                          <option value="easy">Easy</option>
-                          <option value="medium">Medium</option>
-                          <option value="hard">Hard</option>
-                          <option value="extreme">Extreme</option>
-                        </select>
-                      </div>
-                    </div>
+                    )
                   )}
 
                   {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
@@ -957,15 +1037,16 @@ export default function AdminPuzzlesPage() {
                     </button>
                   </div>
 
-                  {/* Submit */}
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full px-6 py-3 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold transition"
-
-                  >
-                    {submitting ? "Creating..." : "🚀 Create Puzzle"}
-                  </button>
+                  {/* Submit button for non-escape_room types */}
+                  {formData.puzzleType !== 'escape_room' && (
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="w-full px-6 py-3 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold transition"
+                    >
+                      {submitting ? "Creating..." : "🚀 Create Puzzle"}
+                    </button>
+                  )}
                 </form>
             </div>
 

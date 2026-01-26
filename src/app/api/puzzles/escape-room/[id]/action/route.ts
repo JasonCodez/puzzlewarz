@@ -117,19 +117,15 @@ export async function POST(
 
               // Push a team-level socket event if socket server configured
               try {
-                const socketUrl = process.env.SOCKET_URL || process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000';
-                await fetch(`${socketUrl}/team-event`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    teamId: membership.teamId,
-                    event: 'pickup',
-                    userId: user.id,
-                    itemId: item.id,
-                    itemName: item.name,
-                    puzzleId,
-                  }),
-                }).catch(() => null);
+                const { postToSocket } = await import('@/lib/socket-client');
+                await postToSocket('/team-event', {
+                  teamId: membership.teamId,
+                  event: 'pickup',
+                  userId: user.id,
+                  itemId: item.id,
+                  itemName: item.name,
+                  puzzleId,
+                });
               } catch (socketErr) {
                 // non-fatal
               }

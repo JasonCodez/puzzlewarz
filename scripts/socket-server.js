@@ -1,5 +1,14 @@
 const http = require('http');
 const { Server } = require('socket.io');
+let createAdapter;
+let createRedisClient;
+try {
+  // optional Redis adapter (install `redis` and `@socket.io/redis-adapter` in production)
+  createAdapter = require('@socket.io/redis-adapter').createAdapter;
+  createRedisClient = require('redis').createClient;
+} catch (e) {
+  // not installed in all environments; adapter is optional
+}
 
 const DEFAULT_PORT = 4000;
 
@@ -27,6 +36,16 @@ const server = http.createServer(async (req, res) => {
   // simple admin endpoint for server-side emits: POST /notify { userId, notification }
   if (req.method === 'POST' && req.url === '/notify') {
     try {
+      // optional secret protection for admin endpoints
+      const secret = process.env.SOCKET_SECRET;
+      if (secret) {
+        const provided = (req.headers['x-socket-secret'] || '') + '';
+        if (provided !== secret) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'forbidden' }));
+          return;
+        }
+      }
       let body = '';
       for await (const chunk of req) body += chunk;
       const parsed = JSON.parse(body || '{}');
@@ -47,6 +66,45 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'failed to emit notification' }));
+      return;
+    }
+  }
+
+  // admin endpoint to emit arbitrary socket events to a room: POST /emit { room, event, payload }
+  if (req.method === 'POST' && req.url === '/emit') {
+    try {
+      // optional secret protection for admin endpoints
+      const secret = process.env.SOCKET_SECRET;
+      if (secret) {
+        const provided = (req.headers['x-socket-secret'] || '') + '';
+        if (provided !== secret) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'forbidden' }));
+          return;
+        }
+      }
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      const parsed = JSON.parse(body || '{}');
+      const { room, event, payload } = parsed;
+      if (!event) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'event required' }));
+        return;
+      }
+
+      if (room) {
+        io.to(room).emit(event, payload);
+      } else {
+        io.emit(event, payload);
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to emit event' }));
       return;
     }
   }
@@ -72,6 +130,24 @@ function originsFromEnv() {
 const io = new Server(server, {
   cors: { origin: originsFromEnv(), methods: ['GET', 'POST'] },
 });
+
+// If REDIS_URL is set and redis adapter is available, configure adapter so multiple
+// socket server instances can share rooms and broadcasts.
+(async () => {
+  const url = process.env.REDIS_URL;
+  if (url && createAdapter && createRedisClient) {
+    try {
+      const pubClient = createRedisClient({ url });
+      const subClient = pubClient.duplicate();
+      await pubClient.connect();
+      await subClient.connect();
+      io.adapter(createAdapter(pubClient, subClient));
+      console.log('Socket.IO Redis adapter configured');
+    } catch (err) {
+      console.error('Failed to configure Redis adapter:', err);
+    }
+  }
+})();
 
 // In-memory lobby state (lightweight sync). Keyed by `${teamId}::${puzzleId}`
 const lobbies = new Map();

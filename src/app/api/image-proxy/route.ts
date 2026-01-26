@@ -28,8 +28,11 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'invalid url' }, { status: 400 });
       }
     } else if (/^https?:\/\//i.test(target)) {
-      // no allowlist and target is absolute -> block for safety
-      return NextResponse.json({ error: 'proxying remote hosts is disabled (set ALLOWED_IMAGE_HOSTS)' }, { status: 403 });
+      // no allowlist and target is absolute -> block for safety in production
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'proxying remote hosts is disabled (set ALLOWED_IMAGE_HOSTS)' }, { status: 403 });
+      }
+      // allow in development for easier testing (beware security risks)
     }
 
     // Use native fetch on server

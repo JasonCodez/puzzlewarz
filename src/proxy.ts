@@ -33,7 +33,7 @@ export async function proxy(request: NextRequest) {
     "default-src 'self'",
     "base-uri 'self'",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data:",
+    process.env.NODE_ENV === 'production' ? "img-src 'self' data:" : "img-src 'self' data: https: blob:",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "worker-src 'self' blob:",
     // Allow websocket/connect to backend Socket.IO server in development

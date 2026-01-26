@@ -152,6 +152,16 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: true, removed: targetUserId, destroyed: true });
         }
 
+        // notify socket server that a participant was kicked
+        (async () => {
+        try {
+          const { postToSocket } = await import('@/lib/socket-client');
+          await postToSocket('/emit', { room: key, event: 'kicked', payload: { teamId, puzzleId, targetUserId } });
+        } catch (e) {
+          // ignore
+        }
+        })();
+
         // Optionally clean up persistent invites/notifications for this user
         try {
           await prisma.teamInvite.deleteMany({ where: { teamId, userId: targetUserId } });
@@ -176,11 +186,35 @@ export async function POST(req: NextRequest) {
         if (lobby.ready) {
           delete lobby.ready[userId];
         }
+
+        // If the leaving user is the team leader, destroy the lobby and notify remaining participants
+        try {
+          const team = await prisma.team.findUnique({ where: { id: teamId }, select: { createdBy: true } });
+          if (team && team.createdBy === userId) {
+            // destroy in-memory lobby
+            lobbies.delete(key);
+            // notify socket server so connected clients can be redirected
+            (async () => {
+              try {
+                const { postToSocket } = await import('@/lib/socket-client');
+                await postToSocket('/emit', { room: key, event: 'lobbyDestroyed', payload: { teamId, puzzleId, reason: 'leader_left' } });
+              } catch (e) {
+                // ignore
+              }
+            })();
+
+            return NextResponse.json({ success: true, destroyed: true });
+          }
+        } catch (e) {
+          console.warn('leave: failed to check team leader', e);
+        }
+
         // if no participants remain, destroy the lobby
         if (!lobby.participants || lobby.participants.length === 0) {
           lobbies.delete(key);
           return NextResponse.json({ success: true, destroyed: true });
         }
+
         return NextResponse.json({ success: true, lobby });
       } catch (e) {
         console.error('lobby leave error', e);
@@ -206,23 +240,27 @@ export async function POST(req: NextRequest) {
     if (action === 'start') {
       // Enforce team size matches puzzle parts (exact match required to start)
       try {
-        // only team admins/moderators may start the puzzle
-        const membership = await prisma.teamMember.findUnique({ where: { teamId_userId: { teamId, userId } }, select: { role: true } });
-        if (!membership || !["admin", "moderator"].includes(membership.role)) {
-          return NextResponse.json({ error: 'Only team admins/moderators can start the puzzle' }, { status: 403 });
+        // only the team leader (team.createdBy) may start the puzzle
+        const team = await prisma.team.findUnique({ where: { id: teamId }, select: { createdBy: true } });
+        if (!team) return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+        if (team.createdBy !== userId) {
+          return NextResponse.json({ error: 'Only the team leader can start the puzzle' }, { status: 403 });
         }
+
         // Use lobby participants as the intended players for start validation
         const participants = lobby.participants || [];
-        const puzzle = await prisma.puzzle.findUnique({ where: { id: puzzleId }, include: { parts: { select: { id: true } } } });
+        const puzzle = await prisma.puzzle.findUnique({ where: { id: puzzleId }, include: { parts: { select: { id: true } }, escapeRoom: true } });
         if (!puzzle) return NextResponse.json({ error: 'Puzzle not found' }, { status: 404 });
-        const requiredPlayers = (puzzle.parts || []).length;
 
-        if (participants.length < requiredPlayers) {
-          return NextResponse.json({ error: `Not enough players: puzzle requires ${requiredPlayers} players but lobby has ${participants.length}` }, { status: 400 });
+        // Determine required players. For escape rooms, use the escapeRoom minTeamSize (expects exact match).
+        let requiredPlayers = (puzzle.parts || []).length || puzzle.minTeamSize || 1;
+        if (puzzle.escapeRoom) {
+          requiredPlayers = puzzle.escapeRoom.minTeamSize || requiredPlayers;
         }
 
-        if (participants.length > requiredPlayers) {
-          return NextResponse.json({ error: `Too many players: puzzle requires ${requiredPlayers} players but lobby has ${participants.length}` }, { status: 400 });
+        // enforce exact match for start
+        if (participants.length !== requiredPlayers) {
+          return NextResponse.json({ error: `Player count mismatch: puzzle requires exactly ${requiredPlayers} players but lobby has ${participants.length}` }, { status: 400 });
         }
 
         // require all participants to be marked ready
@@ -231,8 +269,29 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: `Not all participants are ready: ${notReady.length} not ready` }, { status: 400 });
         }
 
-        // mark started
+        // initialize team escape progress for escape room puzzles
+        if (puzzle.escapeRoom) {
+          try {
+            await prisma.teamEscapeProgress.create({ data: { teamId, escapeRoomId: puzzle.escapeRoom.id, currentStageIndex: 0 } });
+          } catch (e) {
+            // if already exists, ignore
+            console.warn('teamEscapeProgress create ignored', e);
+          }
+        }
+
+        // mark started in in-memory lobby
         lobby.started = true;
+
+        // attempt to notify the socket server so connected clients transition immediately
+        (async () => {
+        try {
+          const { postToSocket } = await import('@/lib/socket-client');
+          await postToSocket('/emit', { room: `${teamId}::${puzzleId}`, event: 'puzzleStarting', payload: { teamId, puzzleId } });
+        } catch (e) {
+          // ignore socket notify failures (clients will pick up via polling)
+        }
+        })();
+
         return NextResponse.json({ success: true, lobby });
       } catch (err) {
         console.error('lobby start validation error', err);
@@ -356,10 +415,31 @@ export async function POST(req: NextRequest) {
           lobbies.set(key, lobby);
         }
         lobby.assignments = lobby.assignments || {};
+        // Validate uniqueness: no two users may have the same non-empty role
+        try {
+          const assignedRoles = Object.values(assignments || {}).filter((r: any) => !!r);
+          const uniqueRoles = new Set(assignedRoles);
+          if (uniqueRoles.size !== assignedRoles.length) {
+            return NextResponse.json({ error: 'Each role must be unique; duplicate role assignments detected' }, { status: 400 });
+          }
+        } catch (e) {
+          // ignore validation failure path and let later code handle it
+        }
+
         for (const uid of Object.keys(assignments)) {
           const role = assignments[uid];
           if (typeof role === 'string') lobby.assignments[uid] = role;
         }
+
+        // notify connected clients via socket server that roles have been assigned
+        (async () => {
+        try {
+          const { postToSocket } = await import('@/lib/socket-client');
+          await postToSocket('/emit', { room: key, event: 'rolesAssigned', payload: { teamId, puzzleId, assignments: lobby.assignments } });
+        } catch (e) {
+          // ignore
+        }
+        })();
 
         return NextResponse.json({ success: true, lobby });
       } catch (err) {

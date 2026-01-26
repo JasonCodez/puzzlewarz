@@ -116,6 +116,7 @@ model Team {
   puzzleCompletions TeamPuzzleCompletion[]     @relation("TeamPuzzleCompletions")
   puzzleAssignments TeamPuzzlePartAssignment[] @relation("TeamPuzzleAssignments")
   puzzleSubmissions TeamPuzzlePartSubmission[] @relation("TeamPuzzleSubmissions")
+  escapeProgress    TeamEscapeProgress[]
 
   @@index([createdBy])
   @@map("teams")
@@ -182,6 +183,7 @@ model Puzzle {
   title                    String
   description              String?
   content                  String?
+  data                     Json?
   categoryId               String
   order                    Int                        @default(0)
   subcategoryId            String?
@@ -267,6 +269,8 @@ model EscapeRoomPuzzle {
   roomTitle        String
   roomDescription  String
   timeLimitSeconds Int?
+  minTeamSize      Int                   @default(4)
+  maxTeamSize      Int                   @default(4)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   puzzle           Puzzle               @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
@@ -275,9 +279,33 @@ model EscapeRoomPuzzle {
   playerRoomStates PlayerRoomState[]
   layouts          RoomLayout[]
   userProgress     UserEscapeProgress[]
+  teamProgress     TeamEscapeProgress[]
 
   @@index([puzzleId])
   @@map("escape_room_puzzles")
+}
+
+model RoleDefinition {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  specialty    String
+  abilities    String?
+  createdAt    DateTime @default(now())
+}
+
+model TeamEscapeProgress {
+  id           String   @id @default(cuid())
+  teamId       String
+  escapeRoomId String
+  currentStageIndex Int @default(0)
+  solvedStages String  @default("[]")
+  inventory    String  @default("[]")
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+  escapeRoom   EscapeRoomPuzzle @relation(fields: [escapeRoomId], references: [id], onDelete: Cascade)
+  team         Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  @@unique([teamId, escapeRoomId])
 }
 
 model EscapeStage {
@@ -486,9 +514,10 @@ model HintHistory {
   @@map("hint_history")
 }
 
+
 model PuzzleMedia {
   id          String   @id @default(cuid())
-  puzzleId    String
+  puzzleId    String?
   type        String
   url         String
   fileName    String
@@ -504,7 +533,8 @@ model PuzzleMedia {
   uploadedBy  String
   uploadedAt  DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  puzzle      Puzzle   @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  temporary   Boolean  @default(false)
+  puzzle      Puzzle?  @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
 
   @@index([puzzleId])
   @@index([type])
