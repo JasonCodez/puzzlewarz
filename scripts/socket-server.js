@@ -26,9 +26,14 @@ function portFromUrl(url) {
 const PORT = Number(process.env.PORT) || Number(process.env.SOCKET_PORT) || portFromUrl(process.env.NEXT_PUBLIC_SOCKET_URL) || DEFAULT_PORT;
 
 const server = http.createServer(async (req, res) => {
-  // health endpoint for platform health checks
-  if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
+  // health endpoint for platform health checks (support GET + HEAD and /healthz)
+  if ((req.method === 'GET' || req.method === 'HEAD') && (req.url === '/' || req.url === '/health' || req.url === '/healthz')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
+    // For HEAD requests, do not send a body
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
     res.end(JSON.stringify({ ok: true }));
     return;
   }
@@ -262,4 +267,5 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => console.log(`Socket server listening on :${PORT}`));
+// Explicitly bind to 0.0.0.0 so platforms like Render can reach the process
+server.listen(PORT, '0.0.0.0', () => console.log(`Socket server listening on :${PORT} (0.0.0.0)`));
