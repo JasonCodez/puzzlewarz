@@ -194,16 +194,21 @@ export async function POST(request: NextRequest) {
 
     // Store media metadata in database
 
+    const createData: any = {
+      type: mediaType,
+      url: mediaUrl,
+      fileName: fileName || (file ? file.name : ""),
+      fileSize: fileSize,
+      mimeType,
+      uploadedBy: user.id,
+    };
+
+    if (puzzleId) {
+      createData.puzzleId = puzzleId;
+    }
+
     const media = await prisma.puzzleMedia.create({
-      data: {
-        puzzleId,
-        type: mediaType,
-        url: mediaUrl,
-        fileName: fileName || (file ? file.name : ""),
-        fileSize: fileSize,
-        mimeType,
-        uploadedBy: user.id,
-      },
+      data: createData,
     });
 
     // Some generated Prisma client types may not include the `temporary` field
