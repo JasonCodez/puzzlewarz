@@ -29,7 +29,7 @@ async function updatePuzzleData() {
     };
 
     // Update the puzzle
-    const updated = await prisma.puzzle.update({
+    const updated = await (prisma as any).puzzle.update({
       where: { id: puzzleId },
       data: {
         data: testData
