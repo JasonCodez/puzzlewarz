@@ -107,7 +107,8 @@ async function main() {
       });
       console.log('Created hotspot id=', hotspot.id);
     } catch (err) {
-      console.warn('Could not create layout/item/hotspot (possibly older schema):', err?.message || err);
+      const message = (err && typeof err === 'object' && 'message' in err) ? (err as any).message : String(err);
+      console.warn('Could not create layout/item/hotspot (possibly older schema):', message);
     }
   } else {
     console.log('Skipping layout/item/hotspot creation because escapeRoom record was not created');

@@ -4,8 +4,8 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 describe('Escape Room API', () => {
-  let puzzleId;
-  let categoryId;
+  let puzzleId: string;
+  let categoryId: string;
   beforeAll(async () => {
     // Create a test category
     const category = await prisma.puzzleCategory.create({
@@ -44,7 +44,7 @@ describe('Escape Room API', () => {
   it('should create a new escape room', async () => {
     jest.setTimeout(15000);
     // Wait for DB transaction to commit
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise<void>(resolve => setTimeout(resolve, 500));
     try {
       const response = await axios.post('http://localhost:3000/api/escape-rooms/create', {
         puzzleId,
@@ -57,8 +57,8 @@ describe('Escape Room API', () => {
       expect(response.status).toBe(201);
       expect(response.data.escapeRoom).toBeDefined();
       expect(response.data.escapeRoom.roomTitle).toBe('Test Room');
-    } catch (error) {
-      if (error.response) {
+    } catch (error: any) {
+      if (error && error.response) {
         console.error('API Error Response:', error.response.data);
       } else {
         console.error('Unexpected Error:', error);
