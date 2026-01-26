@@ -155,72 +155,77 @@ export async function POST(request: NextRequest) {
     const finalTitle = title || (puzzleType === 'sudoku' ? `Sudoku (${(sudokuDifficulty || 'medium').toString().toUpperCase()})` : 'Untitled Puzzle');
 
     // Create puzzle
-    const puzzle = await prisma.puzzle.create({
-      data: {
-        title: finalTitle,
-        description: puzzleDescription,
-        content: puzzleContent,
-        data: puzzleType === 'escape_room' ? puzzleData : undefined,
-        category: {
-          connect: { id: categoryRecord.id }
-        },
-        difficulty: puzzleDifficulty,
-        puzzleType: puzzleType || 'general',
-        riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' ? correctAnswer : undefined,
-        jigsaw:
-          puzzleType === 'jigsaw'
-            ? {
-                create: {
-                  gridRows: Number(puzzleData?.gridRows) || 3,
-                  gridCols: Number(puzzleData?.gridCols) || 4,
-                  snapTolerance: Number(puzzleData?.snapTolerance) || 12,
-                  rotationEnabled: Boolean(puzzleData?.rotationEnabled),
-                  // imageUrl is set automatically when an image is uploaded via /api/admin/media
-                },
-              }
-            : undefined,
-        solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' ? undefined : {
-          create: [
-            {
-              answer: correctAnswer,
-              isCorrect: true,
-              points: pointsReward || 100,
-              ignoreCase: true,
-              ignoreWhitespace: false,
-            },
-          ],
-        },
-        parts: isMultiPart
-          ? {
-              create: (parts as MultiPartInput[]).map((part: MultiPartInput, index: number) => ({
-                title: part.title || `Part ${index + 1}`,
-                description: part.content || '',
-                content: part.content || '',
-                order: index,
-                pointsValue: part.points || 50,
-                solutions: {
-                  create: [
-                    {
-                      answer: part.answer || '',
-                      isCorrect: true,
-                      points: part.points || 50,
-                      ignoreCase: true,
-                      ignoreWhitespace: false,
-                    },
-                  ],
-                },
-              })),
-            }
-          : undefined,
-        hints: hints && hints.length > 0
-          ? {
-              create: hints.map((hint: string, index: number) => ({
-                text: hint,
-                order: index,
-              })),
-            }
-          : undefined,
+    const createData: any = {
+      title: finalTitle,
+      description: puzzleDescription,
+      content: puzzleContent,
+      category: {
+        connect: { id: categoryRecord.id }
       },
+      difficulty: puzzleDifficulty,
+      puzzleType: puzzleType || 'general',
+      riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' ? correctAnswer : undefined,
+      jigsaw:
+        puzzleType === 'jigsaw'
+          ? {
+              create: {
+                gridRows: Number(puzzleData?.gridRows) || 3,
+                gridCols: Number(puzzleData?.gridCols) || 4,
+                snapTolerance: Number(puzzleData?.snapTolerance) || 12,
+                rotationEnabled: Boolean(puzzleData?.rotationEnabled),
+                // imageUrl is set automatically when an image is uploaded via /api/admin/media
+              },
+            }
+          : undefined,
+      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' ? undefined : {
+        create: [
+          {
+            answer: correctAnswer,
+            isCorrect: true,
+            points: pointsReward || 100,
+            ignoreCase: true,
+            ignoreWhitespace: false,
+          },
+        ],
+      },
+      parts: isMultiPart
+        ? {
+            create: (parts as MultiPartInput[]).map((part: MultiPartInput, index: number) => ({
+              title: part.title || `Part ${index + 1}`,
+              description: part.content || '',
+              content: part.content || '',
+              order: index,
+              pointsValue: part.points || 50,
+              solutions: {
+                create: [
+                  {
+                    answer: part.answer || '',
+                    isCorrect: true,
+                    points: part.points || 50,
+                    ignoreCase: true,
+                    ignoreWhitespace: false,
+                  },
+                ],
+              },
+            })),
+          }
+        : undefined,
+      hints: hints && hints.length > 0
+        ? {
+            create: hints.map((hint: string, index: number) => ({
+              text: hint,
+              order: index,
+            })),
+          }
+        : undefined,
+    };
+
+    if (puzzleType === 'escape_room' && typeof puzzleData !== 'undefined') {
+      createData.data = puzzleData;
+    }
+
+    const puzzle = await prisma.puzzle.create({
+      data: createData,
       include: {
         hints: true,
         solutions: true,
