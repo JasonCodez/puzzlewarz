@@ -75,15 +75,17 @@ export async function PUT(req: NextRequest) {
     const { id, title, description, minPlayers, maxPlayers, timeLimit, scenes, userSpecialties } = data;
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     // Update main room
+    const updateData: any = {
+      roomTitle: title,
+      roomDescription: description,
+    };
+    if (typeof minPlayers !== 'undefined' && minPlayers !== null) updateData.minTeamSize = Number(minPlayers);
+    if (typeof maxPlayers !== 'undefined' && maxPlayers !== null) updateData.maxTeamSize = Number(maxPlayers);
+    if (typeof timeLimit !== 'undefined' && timeLimit !== null) updateData.timeLimitSeconds = Number(timeLimit);
+
     await prisma.escapeRoomPuzzle.update({
       where: { id },
-      data: {
-        roomTitle: title,
-        roomDescription: description,
-        minTeamSize: minPlayers,
-        maxTeamSize: maxPlayers,
-        timeLimitSeconds: timeLimit,
-      },
+      data: updateData,
     });
     // For simplicity: delete all layouts/items/hotspots/triggers and recreate (can optimize later)
     await prisma.roomLayout.deleteMany({ where: { escapeRoomId: id } });
