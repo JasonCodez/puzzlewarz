@@ -255,7 +255,8 @@ export async function POST(req: NextRequest) {
         // Determine required players. For escape rooms, use the escapeRoom minTeamSize (expects exact match).
         let requiredPlayers = (puzzle.parts || []).length || puzzle.minTeamSize || 1;
         if (puzzle.escapeRoom) {
-          requiredPlayers = puzzle.escapeRoom.minTeamSize || requiredPlayers;
+          const er: any = puzzle.escapeRoom;
+          requiredPlayers = (typeof er.minTeamSize !== 'undefined' && er.minTeamSize !== null) ? Number(er.minTeamSize) : requiredPlayers;
         }
 
         // enforce exact match for start
