@@ -62,7 +62,8 @@ async function main() {
     });
     console.log('Created escapeRoom id=', escapeRoom.id);
   } catch (err) {
-    console.warn('Could not create escapeRoom record (possibly older schema):', err?.message || err);
+    const message = (err && typeof err === 'object' && 'message' in err) ? (err as any).message : String(err);
+    console.warn('Could not create escapeRoom record (possibly older schema):', message);
   }
 
   if (escapeRoom) {
