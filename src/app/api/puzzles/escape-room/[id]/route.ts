@@ -10,9 +10,9 @@ export async function GET(
     const puzzleId = resolved.id;
 
     // First get the puzzle to access the escape room data
+    // Avoid selecting `data` explicitly (client types may disagree); fetch the full record and access `data` dynamically.
     const puzzle = await prisma.puzzle.findUnique({
       where: { id: puzzleId },
-      select: { id: true, title: true, description: true, data: true },
     });
 
     if (!puzzle) return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
