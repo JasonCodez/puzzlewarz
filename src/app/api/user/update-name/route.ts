@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check whether the user already changed their display name once
-    const currentUser = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true, nameChanged: true } });
+    const currentUser = await (prisma.user as any).findUnique({ where: { email: session.user.email }, select: { id: true, nameChanged: true } });
     if (currentUser && currentUser.nameChanged) {
       return NextResponse.json({ error: "Display name may only be changed once" }, { status: 403 });
     }
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update user name and mark as changed so they cannot edit again
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await (prisma.user as any).update({
       where: { email: session.user.email },
       data: { name: trimmedName, nameChanged: true },
       select: {

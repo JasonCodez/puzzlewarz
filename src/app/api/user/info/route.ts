@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     // do not break with a 500.
     let user: any = null;
     try {
-      user = await prisma.user.findUnique({
+      user = await (prisma.user as any).findUnique({
         where: { email: session.user.email },
         select: { id: true, role: true, image: true, nameChanged: true },
       });
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       // Create a lightweight user record; try including `nameChanged` first,
       // fall back if the column doesn't exist.
       try {
-        const created = await prisma.user.create({
+        const created = await (prisma.user as any).create({
           data: {
             email: session.user.email,
             name: session.user.name || undefined,
