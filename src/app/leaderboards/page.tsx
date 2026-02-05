@@ -89,20 +89,15 @@ export default function LeaderboardsPage() {
       <div className="p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <Link
-            href="/dashboard"
-            className="inline-block mb-4 px-4 py-2 rounded-lg border text-white hover:opacity-90 transition-all"
-            style={{ backgroundColor: '#2a3a3b', borderColor: '#3891A6' }}
-          >
-            ← Back to Dashboard
-          </Link>
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2">🏆 Global Leaderboard</h1>
-              <p style={{ color: '#DDDBF1' }}>
-                Top players solving puzzles and earning points
-              </p>
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <Link
+              href="/dashboard"
+              className="inline-block px-4 py-2 rounded-lg border text-white hover:opacity-90 transition-all"
+              style={{ backgroundColor: '#2a3a3b', borderColor: '#3891A6' }}
+            >
+              ← Back to Dashboard
+            </Link>
+
             <Link
               href="/leaderboards/teams"
               className="px-4 py-2 text-white rounded-lg font-semibold transition-all whitespace-nowrap"
@@ -110,6 +105,13 @@ export default function LeaderboardsPage() {
             >
               Team Leaderboards
             </Link>
+          </div>
+
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">🏆 Global Leaderboard</h1>
+            <p style={{ color: '#DDDBF1' }}>
+              Top players solving puzzles and earning points
+            </p>
           </div>
         </div>
 

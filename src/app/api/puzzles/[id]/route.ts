@@ -28,6 +28,16 @@ export async function GET(
             name: true,
           },
         },
+        escapeRoom: {
+          select: {
+            id: true,
+            roomTitle: true,
+            roomDescription: true,
+            timeLimitSeconds: true,
+            minTeamSize: true,
+            maxTeamSize: true,
+          },
+        },
         hints: {
           select: {
             id: true,
@@ -102,7 +112,22 @@ export async function GET(
       }
     }
 
-    return NextResponse.json(outPayload);
+    // Debug: log nested sudoku payload (if any) to help diagnose missing Sudoku on client
+    try {
+      console.log('[PUZZLE FETCH] Out payload sudoku:', JSON.stringify((outPayload as any)?.sudoku));
+    } catch (e) {
+      console.warn('[PUZZLE FETCH] Failed to stringify sudoku payload for debug:', e);
+    }
+
+    // Normalize title/description for escape-room puzzles where the metadata is stored on EscapeRoomPuzzle.
+    const normalizedTitle = ((outPayload as any)?.title || '').toString().trim() || ((outPayload as any)?.escapeRoom?.roomTitle || '').toString().trim();
+    const normalizedDescription = ((outPayload as any)?.description || '').toString().trim() || ((outPayload as any)?.escapeRoom?.roomDescription || '').toString().trim();
+
+    return NextResponse.json({
+      ...(outPayload as any),
+      title: normalizedTitle,
+      description: normalizedDescription,
+    });
   } catch (error) {
     console.error("Error fetching puzzle:", error);
     return NextResponse.json(

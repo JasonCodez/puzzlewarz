@@ -6,19 +6,19 @@ const prisma = new PrismaClient();
 export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
-    // Required fields: puzzleId, roomTitle, roomDescription, minTeamSize, maxTeamSize
-    const { puzzleId, roomTitle, roomDescription, minTeamSize, maxTeamSize, timeLimitSeconds } = data;
-    if (!puzzleId || !roomTitle || !roomDescription || !minTeamSize || !maxTeamSize) {
+    // Required fields: puzzleId, roomTitle, roomDescription
+    const { puzzleId, roomTitle, roomDescription, timeLimitSeconds } = data;
+    if (!puzzleId || !roomTitle || !roomDescription) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
     const createData: any = {
       puzzleId,
       roomTitle,
       roomDescription,
+      // Escape rooms are team-only and always require exactly 4 players.
+      minTeamSize: 4,
+      maxTeamSize: 4,
     };
-
-    if (typeof minTeamSize !== 'undefined' && minTeamSize !== null) createData.minTeamSize = Number(minTeamSize);
-    if (typeof maxTeamSize !== 'undefined' && maxTeamSize !== null) createData.maxTeamSize = Number(maxTeamSize);
     if (typeof timeLimitSeconds !== 'undefined' && timeLimitSeconds !== null) createData.timeLimitSeconds = Number(timeLimitSeconds);
 
     const escapeRoom = await prisma.escapeRoomPuzzle.create({

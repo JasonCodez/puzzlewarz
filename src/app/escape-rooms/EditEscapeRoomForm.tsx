@@ -5,8 +5,6 @@ import React, { useState } from 'react';
 export default function EditEscapeRoomForm({ room, onUpdated }: { room: any, onUpdated?: () => void }) {
   const [roomTitle, setRoomTitle] = useState(room.roomTitle || '');
   const [roomDescription, setRoomDescription] = useState(room.roomDescription || '');
-  const [minTeamSize, setMinTeamSize] = useState(room.minTeamSize || 2);
-  const [maxTeamSize, setMaxTeamSize] = useState(room.maxTeamSize || 6);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(room.timeLimitSeconds || 1200);
   const [puzzleId, setPuzzleId] = useState(room.puzzleId || '');
   const [loading, setLoading] = useState(false);
@@ -24,8 +22,6 @@ export default function EditEscapeRoomForm({ room, onUpdated }: { room: any, onU
           puzzleId,
           roomTitle,
           roomDescription,
-          minTeamSize,
-          maxTeamSize,
           timeLimitSeconds,
         }),
       });
@@ -56,15 +52,9 @@ export default function EditEscapeRoomForm({ room, onUpdated }: { room: any, onU
         <label className="block text-sm">Room Description</label>
         <input value={roomDescription} onChange={e => setRoomDescription(e.target.value)} required className="border rounded px-2 py-1 w-full" />
       </div>
-      <div className="mb-2 flex gap-2">
-        <div>
-          <label className="block text-sm">Min Team Size</label>
-          <input type="number" value={minTeamSize} min={1} onChange={e => setMinTeamSize(Number(e.target.value))} required className="border rounded px-2 py-1 w-20" />
-        </div>
-        <div>
-          <label className="block text-sm">Max Team Size</label>
-          <input type="number" value={maxTeamSize} min={minTeamSize} onChange={e => setMaxTeamSize(Number(e.target.value))} required className="border rounded px-2 py-1 w-20" />
-        </div>
+      <div className="mb-2">
+        <label className="block text-sm">Team Size</label>
+        <div className="text-sm text-gray-700">Fixed: 4 players (team-only)</div>
       </div>
       <div className="mb-2">
         <label className="block text-sm">Time Limit (seconds)</label>

@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client-js"
-  url      = env("DATABASE_URL")
+  // url is removed for Prisma 7+; provide connection via prisma.config.ts if needed
+  // url      = env("DATABASE_URL")
 }
 
 datasource db {
@@ -8,9 +9,6 @@ datasource db {
   // change this back to "mysql" and update DATABASE_URL accordingly.
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  // Prisma 7+ no longer supports `url` in schema files; move connection URLs for Migrate
-  // to prisma.config.ts and provide an `adapter` or `accelerateUrl` to PrismaClient.
-  // See: https://pris.ly/d/config-datasource and https://pris.ly/d/prisma7-client-config
 }
 
 model User {
@@ -303,7 +301,18 @@ model TeamEscapeProgress {
   currentStageIndex Int @default(0)
   solvedStages String  @default("[]")
   inventory    String  @default("[]")
+  // Role assignments: userId -> role key/name
+  roles        String  @default("{}")
+  // Briefing acknowledgements: userId -> ISO timestamp (or true)
+  briefingAcks String  @default("{}")
+  // Shared inventory lock map: itemKey -> { lockedBy, lockedAt, lockedByName, expiresAt? }
+  inventoryLocks String @default("{}")
+
   startedAt    DateTime @default(now())
+  runStartedAt DateTime?
+  runExpiresAt DateTime?
+  failedAt     DateTime?
+  failedReason String?
   completedAt  DateTime?
   escapeRoom   EscapeRoomPuzzle @relation(fields: [escapeRoomId], references: [id], onDelete: Cascade)
   team         Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -338,6 +347,8 @@ model UserEscapeProgress {
   solvedStages      String           @default("[]")
   inventory         String           @default("[]")
   startedAt         DateTime         @default(now())
+  failedAt          DateTime?
+  failedReason      String?
   completedAt       DateTime?
   totalTimeSpent    Int              @default(0)
   hintsUsed         Int              @default(0)

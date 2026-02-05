@@ -75,6 +75,22 @@ export async function GET(req: NextRequest) {
       errors: [] as string[],
     };
 
+    // Escape rooms are team-only and always require exactly 4 players.
+    if (puzzle.puzzleType === 'escape_room') {
+      validations.isSoloPuzzle = false;
+      validations.isTeamPuzzle = true;
+      validations.minTeamSize = 4;
+
+      if (teamMembers.length !== 4) {
+        validations.errors.push(
+          `This escape room requires exactly 4 team members. Your team has ${teamMembers.length}.`
+        );
+      }
+
+      validations.canAttempt = validations.errors.length === 0;
+      return NextResponse.json(validations);
+    }
+
     // Check constraints
     if (puzzle.parts.length <= 1) {
       // Solo only puzzle

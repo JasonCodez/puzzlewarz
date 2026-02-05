@@ -57,8 +57,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       title: er.roomTitle,
       description: er.roomDescription,
-      minPlayers: er.minTeamSize,
-      maxPlayers: er.maxTeamSize,
+      minPlayers: 4,
+      maxPlayers: 4,
       timeLimit: er.timeLimitSeconds,
       scenes,
       userSpecialties: [], // Not implemented yet
@@ -72,15 +72,16 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const data = await req.json();
-    const { id, title, description, minPlayers, maxPlayers, timeLimit, scenes, userSpecialties } = data;
+    const { id, title, description, timeLimit, scenes, userSpecialties } = data;
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     // Update main room
     const updateData: any = {
       roomTitle: title,
       roomDescription: description,
+      // Escape rooms are team-only and always require exactly 4 players.
+      minTeamSize: 4,
+      maxTeamSize: 4,
     };
-    if (typeof minPlayers !== 'undefined' && minPlayers !== null) updateData.minTeamSize = Number(minPlayers);
-    if (typeof maxPlayers !== 'undefined' && maxPlayers !== null) updateData.maxTeamSize = Number(maxPlayers);
     if (typeof timeLimit !== 'undefined' && timeLimit !== null) updateData.timeLimitSeconds = Number(timeLimit);
 
     await prisma.escapeRoomPuzzle.update({

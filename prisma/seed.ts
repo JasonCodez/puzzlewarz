@@ -415,6 +415,7 @@ async function main() {
   try {
     await seedAchievements();
     await seedEscapeRoomExample();
+    await seedDetectiveCaseNoirExample();
     console.log('🎉 All seeds completed successfully.');
   } catch (e) {
     console.error('❌ Seed run failed:', e);
@@ -559,6 +560,94 @@ async function seedEscapeRoomExample() {
   });
 
   console.log('✅ Seeded escape room example.');
+}
+
+// --- Detective case example seed ---
+async function seedDetectiveCaseNoirExample() {
+  console.log('🌱 Seeding detective case noir example...');
+
+  const category = await prisma.puzzleCategory.upsert({
+    where: { name: 'Mystery' },
+    update: {},
+    create: { name: 'Mystery', description: 'Detective and noir cases', color: '#3891A6' },
+  });
+
+  // Avoid duplicate seed inserts if you re-run seeds.
+  const existing = await prisma.puzzle.findFirst({
+    where: { title: 'Seed: The Blackout Ledger', puzzleType: 'detective_case' },
+    select: { id: true },
+  });
+
+  if (existing) {
+    console.log('↪ Detective case already seeded.');
+    return;
+  }
+
+  await prisma.puzzle.create({
+    data: {
+      title: 'Seed: The Blackout Ledger',
+      description: 'A noir, multi-stage case. One wrong answer locks it forever.',
+      content:
+        'The rain writes confessions on the window.\n\nA blackout hits the city for eleven minutes. When the lights come back, a ledger page is missing—and a man is dead.\n\nSolve the case, stage by stage. Choose wrong once and the file gets stamped CLOSED.',
+      categoryId: category.id,
+      difficulty: 'medium',
+      isActive: true,
+      isTeamPuzzle: false,
+      puzzleType: 'detective_case',
+      data: {
+        detectiveCase: {
+          noirTitle: 'The Blackout Ledger',
+          intro: 'Keep your fedora dry. The city isn\'t.',
+          lockMode: 'fail_once',
+          stages: [
+            {
+              id: 'scene',
+              title: 'The Scene',
+              prompt:
+                'The office smells like cheap cologne and old mistakes.\n\nA matchbook sits in the ashtray. One token is scratched into the cover.\n\nSubmit the token.',
+              kind: 'text',
+              expectedAnswer: 'EMBER-11',
+              ignoreCase: true,
+              ignoreWhitespace: true,
+            },
+            {
+              id: 'eclipse',
+              title: 'The Matchbook',
+              prompt:
+                'Inside the matchbook: “11:07 Special.”\n\nThat\'s not a drink. That\'s a meeting.\n\nSubmit the code phrase.',
+              kind: 'text',
+              expectedAnswer: 'ECLIPSE-3',
+              ignoreCase: true,
+              ignoreWhitespace: true,
+            },
+            {
+              id: 'ledger',
+              title: 'The Ledger',
+              prompt:
+                'A carbon copy bleeds through the page like a secret that can\'t keep quiet.\n\nA number keeps showing up in the margins.\n\nSubmit it.',
+              kind: 'text',
+              expectedAnswer: 'CARBON-9',
+              ignoreCase: true,
+              ignoreWhitespace: true,
+            },
+          ],
+        },
+      },
+      solutions: {
+        create: [
+          {
+            answer: '__DETECTIVE_CASE__',
+            isCorrect: true,
+            points: 250,
+            ignoreCase: true,
+            ignoreWhitespace: false,
+          },
+        ],
+      },
+    },
+  });
+
+  console.log('✅ Seeded detective case noir example.');
 }
 
 // Run the escape room seed after the achievements

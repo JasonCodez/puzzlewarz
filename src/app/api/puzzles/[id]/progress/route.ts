@@ -83,10 +83,13 @@ export async function GET(
 
 // POST /api/puzzles/[id]/progress - Update progress (start session, log attempt, etc)
 const UpdateProgressSchema = z.object({
-  action: z.enum(["start_session", "end_session", "log_attempt", "attempt_success"]),
-  durationSeconds: z.number().optional(),
-  hintUsed: z.boolean().optional(),
-  successful: z.boolean().optional(),
+  action: z.enum(["start_session", "end_session", "log_attempt", "attempt_success", "lock_puzzle", "clear_state"]),
+  // Some callers send null; accept it and normalize later.
+  durationSeconds: z.number().nullable().optional(),
+  hintUsed: z.boolean().nullable().optional(),
+  successful: z.boolean().nullable().optional(),
+  // optional grid payload for puzzles like Sudoku
+  grid: z.array(z.array(z.number())).optional(),
 });
 
 export async function POST(
@@ -109,20 +112,31 @@ export async function POST(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Debug: log request headers and body to help diagnose 500s observed from the browser
-    try {
-      const ua = request.headers.get('user-agent') || '<none>';
-      const cookiePresent = request.headers.get('cookie') ? 'yes' : 'no';
-      console.log(`[PROGRESS] puzzle=${id} user=${user.id} ua="${ua}" cookie=${cookiePresent}`);
-    } catch (e) {
-      console.warn('[PROGRESS] failed reading request headers', e);
+    const debug = process.env.DEBUG_PROGRESS === '1';
+
+    // Debug logging (opt-in): set DEBUG_PROGRESS=1
+    const rawBody = await request.json().catch(() => null);
+    if (debug) {
+      try {
+        const ua = request.headers.get('user-agent') || '<none>';
+        const cookiePresent = request.headers.get('cookie') ? 'yes' : 'no';
+        console.log(`[PROGRESS] puzzle=${id} user=${user.id} ua="${ua}" cookie=${cookiePresent}`);
+        console.log('[PROGRESS] rawBody:', rawBody);
+      } catch (e) {
+        console.warn('[PROGRESS] failed reading request headers/body', e);
+      }
     }
 
-    const rawBody = await request.json().catch(() => null);
-    console.log('[PROGRESS] rawBody:', rawBody);
+    if (!rawBody || typeof rawBody.action === 'undefined') {
+      console.warn('[PROGRESS] Missing request body or action');
+      return NextResponse.json({ error: 'Missing action in request body' }, { status: 400 });
+    }
 
-    const { action, durationSeconds, hintUsed, successful } =
-      UpdateProgressSchema.parse(rawBody || {});
+    const parsed = UpdateProgressSchema.parse(rawBody || {});
+    const action = parsed.action;
+    const durationSeconds = typeof parsed.durationSeconds === 'number' ? parsed.durationSeconds : undefined;
+    const hintUsed = typeof parsed.hintUsed === 'boolean' ? parsed.hintUsed : undefined;
+    const successful = typeof parsed.successful === 'boolean' ? parsed.successful : undefined;
 
     // Get or create progress
     let progress = await prisma.userPuzzleProgress.findUnique({
@@ -166,17 +180,23 @@ export async function POST(
         break;
 
       case "end_session":
-        if (progress.currentSessionStart && durationSeconds) {
-          const totalTime = progress.totalTimeSpent + durationSeconds;
+        if (progress.currentSessionStart) {
+          const now = new Date();
+          const computedSeconds = Math.max(
+            0,
+            Math.floor((now.getTime() - progress.currentSessionStart.getTime()) / 1000)
+          );
+          const finalDuration = typeof durationSeconds === 'number' ? durationSeconds : computedSeconds;
+
           await prisma.userPuzzleProgress.update({
             where: { id: progress.id },
             data: {
-              totalTimeSpent: totalTime,
+              totalTimeSpent: progress.totalTimeSpent + finalDuration,
               currentSessionStart: null,
             },
           });
 
-          // Update latest session log
+          // Update latest session log (best effort)
           const sessionLog = await prisma.puzzleSessionLog.findFirst({
             where: {
               progressId: progress.id,
@@ -189,9 +209,9 @@ export async function POST(
             await prisma.puzzleSessionLog.update({
               where: { id: sessionLog.id },
               data: {
-                sessionEnd: new Date(),
-                durationSeconds,
-                hintUsed: hintUsed || false,
+                sessionEnd: now,
+                durationSeconds: finalDuration,
+                hintUsed: hintUsed ?? false,
               },
             });
           }
@@ -236,6 +256,49 @@ export async function POST(
         break;
 
       case "attempt_success":
+        // If this is a Sudoku puzzle, validate the submitted grid against the stored solution
+        try {
+          const submittedGrid = rawBody.grid;
+          const puzzleRecord = await prisma.puzzle.findUnique({ where: { id }, include: { sudoku: true } });
+          if (puzzleRecord?.puzzleType === 'sudoku') {
+            if (!Array.isArray(submittedGrid)) {
+              console.warn('[PROGRESS] attempt_success missing grid for sudoku');
+              return NextResponse.json({ error: 'Missing submitted grid for Sudoku validation' }, { status: 400 });
+            }
+
+            let storedSolution: any = null;
+            try {
+              storedSolution = puzzleRecord.sudoku?.solutionGrid ? JSON.parse(puzzleRecord.sudoku.solutionGrid) : null;
+            } catch (e) {
+              storedSolution = null;
+            }
+
+            if (!Array.isArray(storedSolution)) {
+              console.error('[PROGRESS] server missing sudoku solution for puzzle', id);
+              return NextResponse.json({ error: 'Server missing Sudoku solution' }, { status: 500 });
+            }
+
+            const gridsMatch = (() => {
+              for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                  const s = Number(storedSolution[r]?.[c] ?? -1);
+                  const g = Number(submittedGrid[r]?.[c] ?? -1);
+                  if (Number.isNaN(s) || Number.isNaN(g) || s !== g) return false;
+                }
+              }
+              return true;
+            })();
+
+            if (!gridsMatch) {
+              console.warn('[PROGRESS] submitted sudoku grid does not match solution');
+              return NextResponse.json({ error: 'Submitted Sudoku solution does not match' }, { status: 400 });
+            }
+          }
+        } catch (e) {
+          console.error('[PROGRESS] error validating sudoku grid', e);
+          return NextResponse.json({ error: 'Failed to validate submitted solution' }, { status: 500 });
+        }
+
         const successfulAttempts = progress.successfulAttempts + 1;
         const newAttempts2 = progress.attempts + 1;
         const newAvgTime2 =

@@ -1,0 +1,160 @@
+﻿
+> puzzle-warz@0.1.0 build
+> next build
+
+Γû▓ Next.js 16.1.1 (Turbopack)
+- Environments: .env.local, .env
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 9.4s
+  Running TypeScript ...
+  Collecting page data using 15 workers ...
+node.exe : display-name-validator: external blacklist not loaded; using internal fallback list
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (display-name-va...l fallback list:String) [], RemoteEx 
+   ception
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  Generating static pages using 15 workers (0/93) ...
+  Generating static pages using 15 workers (23/93) 
+display-name-validator: external blacklist not loaded; using internal fallback list
+  Generating static pages using 15 workers (46/93) 
+  Generating static pages using 15 workers (69/93) 
+Γ£ô Generating static pages using 15 workers (93/93) in 455.5ms
+  Finalizing page optimization ...
+
+Route (app)
+Γöî Γùï /
+Γö£ Γùï /_not-found
+Γö£ Γùï /achievements
+Γö£ Γùï /admin/analytics
+Γö£ Γùï /admin/arg
+Γö£ Γùï /admin/puzzles
+Γö£ ╞Æ /api/admin/analytics
+Γö£ ╞Æ /api/admin/check
+Γö£ ╞Æ /api/admin/import-image
+Γö£ ╞Æ /api/admin/media
+Γö£ ╞Æ /api/admin/puzzles
+Γö£ ╞Æ /api/admin/reviews
+Γö£ ╞Æ /api/admin/send-notification
+Γö£ ╞Æ /api/arg/phases
+Γö£ ╞Æ /api/arg/puzzles/create
+Γö£ ╞Æ /api/auth/[...nextauth]
+Γö£ ╞Æ /api/auth/logout
+Γö£ ╞Æ /api/auth/register
+Γö£ ╞Æ /api/auth/signout
+Γö£ ╞Æ /api/debug/users
+Γö£ ╞Æ /api/escape-rooms
+Γö£ ╞Æ /api/escape-rooms/[id]
+Γö£ ╞Æ /api/escape-rooms/create
+Γö£ ╞Æ /api/escape-rooms/designer
+Γö£ ╞Æ /api/escape-rooms/designer/[id]
+Γö£ ╞Æ /api/forum/posts
+Γö£ ╞Æ /api/forum/posts/[id]
+Γö£ ╞Æ /api/forum/vote/comment
+Γö£ ╞Æ /api/forum/vote/post
+Γö£ ╞Æ /api/image-proxy
+Γö£ ╞Æ /api/leaderboards/global
+Γö£ ╞Æ /api/leaderboards/teams
+Γö£ ╞Æ /api/puzzle-categories
+Γö£ ╞Æ /api/puzzle-subcategories
+Γö£ ╞Æ /api/puzzle-subcategories/[id]
+Γö£ ╞Æ /api/puzzles
+Γö£ ╞Æ /api/puzzles/[id]
+Γö£ ╞Æ /api/puzzles/[id]/hints
+Γö£ ╞Æ /api/puzzles/[id]/hints/update-effectiveness
+Γö£ ╞Æ /api/puzzles/[id]/progress
+Γö£ ╞Æ /api/puzzles/[id]/submit
+Γö£ ╞Æ /api/puzzles/escape-room/[id]
+Γö£ ╞Æ /api/puzzles/escape-room/[id]/action
+Γö£ ╞Æ /api/puzzles/escape-room/[id]/session
+Γö£ ╞Æ /api/puzzles/escape-room/[id]/state
+Γö£ ╞Æ /api/puzzles/escape-room/[id]/submit
+Γö£ ╞Æ /api/puzzles/rate
+Γö£ ╞Æ /api/puzzles/ratings-stats
+Γö£ ╞Æ /api/puzzles/relay/create
+Γö£ ╞Æ /api/puzzles/relay/join
+Γö£ ╞Æ /api/puzzles/relay/message
+Γö£ ╞Æ /api/puzzles/relay/messages
+Γö£ ╞Æ /api/puzzles/relay/state
+Γö£ ╞Æ /api/puzzles/relay/submit-answer
+Γö£ ╞Æ /api/puzzles/relay/submit-solution
+Γö£ ╞Æ /api/sudoku/generate
+Γö£ ╞Æ /api/team/lobby
+Γö£ ╞Æ /api/team/lobby/chat
+Γö£ ╞Æ /api/team/puzzles/assign-parts
+Γö£ ╞Æ /api/team/puzzles/submit-part
+Γö£ ╞Æ /api/team/puzzles/validate
+Γö£ ╞Æ /api/teams
+Γö£ ╞Æ /api/teams/[id]
+Γö£ ╞Æ /api/teams/[id]/applications
+Γö£ ╞Æ /api/teams/[id]/applications/[inviteId]
+Γö£ ╞Æ /api/teams/[id]/apply
+Γö£ ╞Æ /api/teams/[id]/invite-status
+Γö£ ╞Æ /api/teams/[id]/members/[memberId]
+Γö£ ╞Æ /api/teams/[id]/membership
+Γö£ ╞Æ /api/teams/invitations
+Γö£ ╞Æ /api/teams/invitations/[id]
+Γö£ ╞Æ /api/teams/invite
+Γö£ ╞Æ /api/teams/user-teams
+Γö£ ╞Æ /api/user/achievements
+Γö£ ╞Æ /api/user/achievements/collect
+Γö£ ╞Æ /api/user/achievements/notify
+Γö£ ╞Æ /api/user/activity
+Γö£ ╞Æ /api/user/activity/[id]
+Γö£ ╞Æ /api/user/avatar
+Γö£ ╞Æ /api/user/inbox
+Γö£ ╞Æ /api/user/info
+Γö£ ╞Æ /api/user/invite
+Γö£ ╞Æ /api/user/invite/generate
+Γö£ ╞Æ /api/user/notification-preferences
+Γö£ ╞Æ /api/user/notifications
+Γö£ ╞Æ /api/user/notifications/read
+Γö£ ╞Æ /api/user/profile
+Γö£ ╞Æ /api/user/puzzles
+Γö£ ╞Æ /api/user/settings
+Γö£ ╞Æ /api/user/stats
+Γö£ ╞Æ /api/user/team-admin
+Γö£ ╞Æ /api/user/update-name
+Γö£ ╞Æ /api/user/upload-avatar
+Γö£ ╞Æ /api/users
+Γö£ ╞Æ /api/users/[id]
+Γö£ ╞Æ /api/users/[id]/follow
+Γö£ ╞Æ /api/users/[id]/messages
+Γö£ ╞Æ /api/users/count
+Γö£ Γùï /auth/register
+Γö£ Γùï /auth/signin
+Γö£ Γùï /categories
+Γö£ Γùï /dashboard
+Γö£ ╞Æ /dashboard/activity
+Γö£ Γùï /escape-rooms
+Γö£ ╞Æ /escape-rooms/[id]
+Γö£ Γùï /escape-rooms/designer
+Γö£ Γùï /escape-rooms/designer/edit
+Γö£ Γùï /forum
+Γö£ Γùï /forum/create
+Γö£ ╞Æ /forum/posts/[id]
+Γö£ ╞Æ /health
+Γö£ Γùï /leaderboards
+Γö£ Γùï /leaderboards/teams
+Γö£ Γùï /messages
+Γö£ Γùï /notifications
+Γö£ Γùï /players
+Γö£ Γùï /profile
+Γö£ ╞Æ /profile/[id]
+Γö£ Γùï /puzzles
+Γö£ ╞Æ /puzzles/[id]
+Γö£ Γùï /settings
+Γö£ Γùï /teams
+Γö£ ╞Æ /teams/[id]
+Γö£ ╞Æ /teams/[id]/lobby
+Γöö ╞Æ /teams/[id]/puzzle/[puzzleId]/planning
+
+
+╞Æ Proxy (Middleware)
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

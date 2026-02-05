@@ -1,6 +1,6 @@
 'use client';
 
-import React, { JSX, useEffect } from 'react';
+import React, { JSX, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 // Dynamically import the advanced Escape Room Designer (client-side only)
 const EscapeRoomDesigner = dynamic(() => import("@/app/escape-rooms/Designer"), { ssr: false });
@@ -12,6 +12,62 @@ interface PuzzleTypeFieldsProps {
 }
 
 export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange }: PuzzleTypeFieldsProps) {
+  const [detectiveJson, setDetectiveJson] = useState<string>('');
+  const [detectiveJsonError, setDetectiveJsonError] = useState<string>('');
+
+  useEffect(() => {
+    if (puzzleType !== 'detective_case') return;
+
+    const existing = (puzzleData as any)?.detectiveCase;
+    const template = {
+      noirTitle: 'The Blackout Ledger',
+      intro: 'It rained like the city wanted to wash itself clean. It never does.',
+      lockMode: 'fail_once',
+      stages: [
+        {
+          id: 'scene',
+          title: 'The Scene',
+          prompt: 'A matchbook sits in the ashtray. One word is scratched into the cover. Submit it.',
+          kind: 'text',
+          expectedAnswer: 'EMBER-11',
+          ignoreCase: true,
+          ignoreWhitespace: true,
+        },
+        {
+          id: 'matchbook',
+          title: 'The Matchbook',
+          prompt: 'On the inside flap: “11:07 Special”. The bartender knows the code. Submit it.',
+          kind: 'text',
+          expectedAnswer: 'ECLIPSE-3',
+          ignoreCase: true,
+          ignoreWhitespace: true,
+        },
+        {
+          id: 'ledger',
+          title: 'The Ledger',
+          prompt: 'The carbon copy bleeds through. A number keeps showing up. Submit it.',
+          kind: 'text',
+          expectedAnswer: 'CARBON-9',
+          ignoreCase: true,
+          ignoreWhitespace: true,
+        },
+      ],
+    };
+
+    try {
+      const next = existing && typeof existing === 'object' ? existing : template;
+      setDetectiveJson(JSON.stringify(next, null, 2));
+      setDetectiveJsonError('');
+      // Ensure the parent form actually has detectiveCase data even if the admin never edits the JSON textarea.
+      onDataChange('detectiveCase', next);
+    } catch {
+      setDetectiveJson(JSON.stringify(template, null, 2));
+      setDetectiveJsonError('');
+      onDataChange('detectiveCase', template);
+    }
+    // Only reset when switching types or when a new puzzleData object is passed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzleType]);
   const asString = (value: unknown, fallback = ''): string => {
     if (typeof value === 'string') return value;
     if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -35,6 +91,24 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
       if (Number.isFinite(n)) return n;
     }
     return '';
+  };
+
+  const asStringArray = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value.filter((v) => typeof v === 'string') as string[];
+    if (typeof value === 'string') {
+      return value
+        .split(/\r?\n|,/g)
+        .map((v) => v.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  const updateValidationRule = (key: string, value: unknown) => {
+    const existing = (puzzleData.validationRules && typeof puzzleData.validationRules === 'object')
+      ? (puzzleData.validationRules as Record<string, unknown>)
+      : {};
+    onDataChange('validationRules', { ...existing, [key]: value });
   };
 
   const renderJigsawFields = () => (
@@ -85,6 +159,166 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
         />
         Rotation Enabled
       </label>
+    </div>
+  );
+
+  const renderCodeMasterFields = () => (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-semibold text-gray-300 mb-2">Scenario</label>
+        <textarea
+          value={asString(puzzleData.scenario, '')}
+          onChange={(e) => onDataChange('scenario', e.target.value)}
+          placeholder="Describe the mission and what's broken"
+          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-24"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-2">Language</label>
+          <select
+            value={asString(puzzleData.language, 'html')}
+            onChange={(e) => onDataChange('language', e.target.value)}
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+          >
+            <option value="html">HTML</option>
+            <option value="css">CSS</option>
+            <option value="javascript">JavaScript</option>
+            <option value="typescript">TypeScript</option>
+            <option value="python">Python</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-2">Validation Mode</label>
+          <select
+            value={asString(puzzleData.validationMode, 'exact')}
+            onChange={(e) => onDataChange('validationMode', e.target.value)}
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+          >
+            <option value="exact">Exact Match</option>
+            <option value="contains">Must Contain</option>
+            <option value="regex">Regex</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-gray-300 mb-2">Broken Code</label>
+        <textarea
+          value={asString(puzzleData.brokenCode, '')}
+          onChange={(e) => onDataChange('brokenCode', e.target.value)}
+          placeholder="Paste the broken code"
+          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-32 font-mono"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-gray-300 mb-2">Prefill CSS (optional)</label>
+        <textarea
+          value={asString(puzzleData.prefillCss, '')}
+          onChange={(e) => onDataChange('prefillCss', e.target.value)}
+          placeholder="Optional CSS to prefill styles.css"
+          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-24 font-mono"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-gray-300 mb-2">Expected Fix</label>
+        <textarea
+          value={asString(puzzleData.expectedFix, '')}
+          onChange={(e) => onDataChange('expectedFix', e.target.value)}
+          placeholder="What should the fixed code look like?"
+          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-32 font-mono"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-2">Must Contain (comma or newline)</label>
+          <textarea
+            value={asStringArray((puzzleData.validationRules as Record<string, unknown> | undefined)?.mustContain).join('\n')}
+            onChange={(e) => updateValidationRule('mustContain', asStringArray(e.target.value))}
+            placeholder="e.g., <nav>"
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-20"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-2">Must Not Contain (comma or newline)</label>
+          <textarea
+            value={asStringArray((puzzleData.validationRules as Record<string, unknown> | undefined)?.mustNotContain).join('\n')}
+            onChange={(e) => updateValidationRule('mustNotContain', asStringArray(e.target.value))}
+            placeholder="e.g., <center>"
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-20"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-gray-300 mb-2">Regex (optional)</label>
+        <input
+          type="text"
+          value={asString((puzzleData.validationRules as Record<string, unknown> | undefined)?.regex, '')}
+          onChange={(e) => updateValidationRule('regex', e.target.value)}
+          placeholder="e.g., <nav>.*</nav>"
+          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={Boolean((puzzleData.validationRules as Record<string, unknown> | undefined)?.ignoreCase)}
+            onChange={(e) => updateValidationRule('ignoreCase', e.target.checked)}
+            className="h-4 w-4"
+          />
+          Ignore Case
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={Boolean((puzzleData.validationRules as Record<string, unknown> | undefined)?.ignoreWhitespace)}
+            onChange={(e) => updateValidationRule('ignoreWhitespace', e.target.checked)}
+            className="h-4 w-4"
+          />
+          Ignore Whitespace
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={(puzzleData.validationRules as Record<string, unknown> | undefined)?.colorFlex !== false}
+            onChange={(e) => updateValidationRule('colorFlex', e.target.checked)}
+            className="h-4 w-4"
+          />
+          Match Color Names (e.g., blue)
+        </label>
+      </div>
+    </div>
+  );
+
+  const renderDetectiveCaseFields = () => (
+    <div className="space-y-3">
+      <div className="text-sm text-gray-300">
+        Paste a <span className="font-semibold">detectiveCase</span> JSON object. This puzzle type is multi-stage and locks forever on the first wrong submission.
+      </div>
+      <textarea
+        value={detectiveJson}
+        onChange={(e) => {
+          const next = e.target.value;
+          setDetectiveJson(next);
+          try {
+            const parsed = JSON.parse(next);
+            onDataChange('detectiveCase', parsed);
+            setDetectiveJsonError('');
+          } catch (err) {
+            setDetectiveJsonError('Invalid JSON (fix to save).');
+          }
+        }}
+        className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-64"
+        spellCheck={false}
+      />
+      {detectiveJsonError ? <div className="text-sm text-red-300">{detectiveJsonError}</div> : null}
     </div>
   );
 
@@ -165,6 +399,10 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
 
   if (puzzleType === 'jigsaw') {
     return renderJigsawFields();
+  }
+
+  if (puzzleType === 'code_master') {
+    return renderCodeMasterFields();
   }
 
   const renderCoordinatesFields = () => (
@@ -523,6 +761,7 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     math: renderMathFields,
     pattern: renderPatternFields,
     escape_room: renderEscapeRoomFields,
+    detective_case: renderDetectiveCaseFields,
   };
 
   const renderer = typeSpecificRenders[puzzleType];

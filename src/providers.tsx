@@ -7,6 +7,7 @@ import AchievementNotification from "@/components/AchievementNotification";
 import { rarityColors } from "@/lib/rarity";
 import { useSession } from "next-auth/react";
 import { useAchievementModalStore } from "@/lib/achievement-modal-store";
+import TeamLobbyInviteModalProvider from "@/components/teams/TeamLobbyInviteModalProvider";
 
 const Navbar = dynamic(() => import("@/components/Navbar"), { ssr: false });
 
@@ -84,6 +85,16 @@ function GlobalAchievementModal() {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  // Ensure next-auth client always fetches from the current origin.
+  // This avoids CLIENT_FETCH_ERROR when NEXTAUTH_URL is set to a different host
+  // (e.g. production) or when accessing dev via a LAN IP.
+  if (typeof window !== 'undefined') {
+    const w = window as unknown as { __NEXTAUTH?: Record<string, unknown> };
+    w.__NEXTAUTH = w.__NEXTAUTH || {};
+    w.__NEXTAUTH.baseUrl = window.location.origin;
+    w.__NEXTAUTH.basePath = (w.__NEXTAUTH.basePath as string) || '/api/auth';
+  }
+
   useEffect(() => {
     // connect a global socket to receive notifications when user is logged in
     (async () => {
@@ -129,6 +140,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <Navbar />
       <GlobalAchievementModal />
+      <TeamLobbyInviteModalProvider />
       {children}
     </SessionProvider>
   );

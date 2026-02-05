@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import HintCard from "@/components/puzzle/HintCard";
 import HintHistoryPanel from "@/components/puzzle/HintHistoryPanel";
@@ -19,6 +18,8 @@ import PuzzleCompletionRatingModal from "@/components/puzzle/PuzzleCompletionRat
 import Toasts from '@/components/Toast';
 import type { JigsawPuzzle as JigsawPuzzleType } from "@/lib/puzzle-types";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
+import CodeMasterIDE from "@/components/puzzle/CodeMasterIDE";
+import DetectiveCasePuzzle from "@/components/puzzle/DetectiveCasePuzzle";
 
 interface Puzzle {
   id: string;
@@ -27,6 +28,15 @@ interface Puzzle {
   content: string;
   difficulty: string;
   puzzleType?: string;
+  data?: Record<string, unknown>;
+  escapeRoom?: {
+    id: string;
+    roomTitle: string;
+    roomDescription: string;
+    timeLimitSeconds?: number | null;
+    minTeamSize?: number;
+    maxTeamSize?: number;
+  };
   category: {
     name: string;
   };
@@ -153,12 +163,16 @@ const difficultyColors: Record<string, string> = {
 export default function PuzzleDetailPage() {
   // Modal state for Sudoku start overlay
   const [showSudokuStartModal, setShowSudokuStartModal] = useState(false);
+  // Modal state for Sudoku help/info
+  const [showSudokuHelp, setShowSudokuHelp] = useState(false);
   // Track if Sudoku has started
   const [sudokuStarted, setSudokuStarted] = useState(false);
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const puzzleId = params.id as string;
+  const teamIdParam = searchParams.get('teamId') || undefined;
   const sessionStartRef = useRef<Date | null>(null);
 
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
@@ -187,6 +201,7 @@ export default function PuzzleDetailPage() {
   const [sudokuCompletionSeconds, setSudokuCompletionSeconds] = useState<number | null>(null);
   const [timeLimitExceeded, setTimeLimitExceeded] = useState(false);
   const [maxAttemptsExceeded, setMaxAttemptsExceeded] = useState(false);
+  const [sudokuAttemptsUsed, setSudokuAttemptsUsed] = useState<number>(0);
   const [showGiveUpConfirm, setShowGiveUpConfirm] = useState(false);
 
   // --- SUDOKU MODAL STATE ---
@@ -497,52 +512,149 @@ export default function PuzzleDetailPage() {
     fetchProgress();
   }, [puzzleId]);
 
-  // Start session on mount
+  // Team puzzle safety: mark entry + listen for lobby resets, and auto-reset if a teammate never reaches this page.
   useEffect(() => {
-    // Listen for participantLeft events when viewing a team puzzle; redirect back to lobby with notice
-    try {
-      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-      const teamId = params?.get('teamId');
-      if (!teamId) return;
-      (async () => {
-        try {
-          const { io } = await import('socket.io-client');
-          const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', { transports: ['websocket'] });
-          const handler = (payload: any) => {
-            try {
-              if (!payload) return;
-              if (payload.teamId !== teamId) return;
-              const name = payload.userName || payload.userId || 'A player';
-              const url = `/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}&notice=${encodeURIComponent(`${name} left the lobby`)}`;
-              try { router.push(url); } catch (e) { window.location.href = url; }
-            } catch (e) {
-              // ignore
+    if (!puzzleId) return;
+    const teamId = teamIdParam;
+    if (!teamId) return;
+
+    let socket: any = null;
+    let cancelled = false;
+    let currentUserId: string | null = null;
+    let checkTimer: any = null;
+
+    const buildLobbyUrl = (notice: string) =>
+      `/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}&notice=${encodeURIComponent(notice)}`;
+
+    const getUserId = async () => {
+      try {
+        const r = await fetch('/api/user/info');
+        const j = await r.json().catch(() => ({}));
+        return (j?.id as string) || null;
+      } catch {
+        return null;
+      }
+    };
+
+    const markEnteredPuzzle = async () => {
+      try {
+        await fetch('/api/team/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'enteredPuzzle', teamId, puzzleId }),
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    const fetchLobbyState = async () => {
+      try {
+        const res = await fetch(`/api/team/lobby?teamId=${encodeURIComponent(teamId)}&puzzleId=${encodeURIComponent(puzzleId)}`);
+        const j = await res.json().catch(() => ({}));
+        return j;
+      } catch {
+        return null;
+      }
+    };
+
+    const maybeAutoResetIfMissingPlayer = async () => {
+      try {
+        const lobby = await fetchLobbyState();
+        if (!lobby?.exists) return;
+        const participants = Array.isArray(lobby.participants) ? lobby.participants : [];
+        const entered = lobby.enteredPuzzleAt && typeof lobby.enteredPuzzleAt === 'object' ? Object.keys(lobby.enteredPuzzleAt).length : 0;
+        if (participants.length > 0 && entered >= participants.length) return;
+
+        if (!currentUserId) return;
+        if (lobby.leaderId && lobby.leaderId !== currentUserId) return;
+
+        await fetch('/api/team/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reset', teamId, puzzleId, reason: 'missing_player_navigation' }),
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    (async () => {
+      currentUserId = await getUserId();
+      if (cancelled) return;
+      await markEnteredPuzzle();
+
+      // Join the lobby room so we reliably receive room-scoped broadcasts.
+      try {
+        const { io } = await import('socket.io-client');
+        socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', { transports: ['websocket'] });
+        socket.on('connect', () => {
+          try {
+            socket.emit('joinLobby', { teamId, puzzleId, userId: currentUserId || '', name: session?.user?.name || '' });
+          } catch {
+            // ignore
+          }
+        });
+
+        const participantLeftHandler = (payload: any) => {
+          try {
+            if (!payload) return;
+            if (payload.teamId !== teamId || payload.puzzleId !== puzzleId) return;
+            const name = payload.userName || payload.userId || 'A player';
+            const url = buildLobbyUrl(`${name} left the lobby`);
+            try { router.push(url); } catch { window.location.href = url; }
+          } catch {
+            // ignore
+          }
+        };
+
+        const destroyedHandler = (payload: any) => {
+          try {
+            if (!payload) return;
+            if (payload.teamId !== teamId || payload.puzzleId !== puzzleId) return;
+            const reason = String(payload.reason || 'leader_shutdown');
+
+            if (reason === 'player_disconnected' || reason === 'missing_player' || reason === 'missing_player_navigation') {
+              const url = buildLobbyUrl('Lobby reset. Return to the lobby to restart.');
+              try { router.push(url); } catch { window.location.href = url; }
+              return;
             }
-          };
-          socket.on('participantLeft', handler);
-            const destroyedHandler = (payload: any) => {
-              try {
-                if (!payload) return;
-                if (payload.teamId !== teamId) return;
-                const msg = 'The team leader left the lobby. You will be returned to the dashboard.';
-                try { alert(msg); } catch (e) {}
-                try { router.push('/dashboard'); } catch (e) { window.location.href = '/dashboard'; }
-              } catch (e) {
-                // ignore
-              }
-            };
-            socket.on('lobbyDestroyed', destroyedHandler);
-          // cleanup
-            return () => { try { socket.off('participantLeft', handler); socket.off('lobbyDestroyed', destroyedHandler); socket.disconnect(); } catch (e) {} };
-        } catch (e) {
-          // ignore socket init errors
+
+            try { router.push('/dashboard'); } catch { window.location.href = '/dashboard'; }
+          } catch {
+            // ignore
+          }
+        };
+
+        socket.on('participantLeft', participantLeftHandler);
+        socket.on('lobbyDestroyed', destroyedHandler);
+
+        // cleanup handlers stored on socket for removal
+        (socket as any).__pw_participantLeftHandler = participantLeftHandler;
+        (socket as any).__pw_destroyedHandler = destroyedHandler;
+      } catch {
+        // ignore socket init errors
+      }
+
+      // If someone never reaches the puzzle page, reset the lobby.
+      // This runs from the puzzle page (leader is almost always here).
+      checkTimer = setTimeout(maybeAutoResetIfMissingPlayer, 20000);
+    })();
+
+    return () => {
+      cancelled = true;
+      try { if (checkTimer) clearTimeout(checkTimer); } catch { /* ignore */ }
+      try {
+        if (socket) {
+          socket.off('participantLeft', (socket as any).__pw_participantLeftHandler);
+          socket.off('lobbyDestroyed', (socket as any).__pw_destroyedHandler);
+          socket.disconnect();
         }
-      })();
-    } catch (e) {
-      // ignore
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [puzzleId]);
+      } catch {
+        // ignore
+      }
+    };
+  }, [puzzleId, teamIdParam, session?.user?.name, router]);
   useEffect(() => {
     if (!puzzleId || !session) return;
 
@@ -636,7 +748,7 @@ export default function PuzzleDetailPage() {
       const resp = await fetch(`/api/puzzles/${puzzleId}/progress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'attempt_success', durationSeconds: elapsedSeconds }),
+        body: JSON.stringify({ action: 'attempt_success', durationSeconds: elapsedSeconds, grid: submittedGrid }),
       });
 
       if (resp.ok) {
@@ -646,7 +758,9 @@ export default function PuzzleDetailPage() {
         const pointsAwarded = Math.max(0, newPoints - prevPoints);
         setJustAwardedPoints(pointsAwarded);
       } else {
-        console.error('Failed to record Sudoku success');
+        let bodyText = '';
+        try { bodyText = await resp.text(); } catch (e) { bodyText = '<unreadable response body>'; }
+        console.error('Failed to record Sudoku success', resp.status, bodyText);
       }
     } catch (err) {
       console.error('Failed to record Sudoku success:', err);
@@ -711,7 +825,7 @@ export default function PuzzleDetailPage() {
     e.preventDefault();
     
     // Skip if this is a Sudoku puzzle
-    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw') {
+    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw' || puzzle?.puzzleType === 'detective_case') {
       return;
     }
 
@@ -1007,8 +1121,8 @@ export default function PuzzleDetailPage() {
             className="border rounded-lg p-8 mb-8"
             style={{ backgroundColor: "rgba(253, 231, 76, 0.08)", borderColor: "#FDE74C" }}
           >
-            {/* Puzzle Title (single display) */}
-            <h1 className="text-4xl font-bold text-white mb-4">{puzzle.title}</h1>
+            {/* Puzzle Title */}
+            <h1 className="text-4xl font-bold text-white mb-4">{((puzzle.title || puzzle?.escapeRoom?.roomTitle || '') + '').trim() || 'Untitled Puzzle'}</h1>
             <div className="flex items-center gap-4 mb-6">
               <span className={`px-4 py-2 rounded-full text-sm font-semibold border whitespace-nowrap ${
                 difficultyColors[puzzle.difficulty] ||
@@ -1022,7 +1136,9 @@ export default function PuzzleDetailPage() {
                 </span>
               )}
             </div>
-            {/* puzzle.description removed as requested */}
+            <p className="text-base" style={{ color: '#DDDBF1' }}>
+              {((puzzle.description || puzzle?.escapeRoom?.roomDescription || '') + '').trim() || 'No description yet.'}
+            </p>
 
             {/* Math Problem Configuration (if present) */}
             {puzzle.puzzleType === 'math' && puzzle.math && (
@@ -1059,7 +1175,7 @@ export default function PuzzleDetailPage() {
               </div>
             )}
             {/* Main Puzzle Content */}
-            {puzzle.puzzleType !== 'sudoku' && (
+            {puzzle.puzzleType !== 'sudoku' && puzzle.puzzleType !== 'code_master' && (
               <div className="prose prose-invert max-w-none mb-8">
                 <div
                   className="whitespace-pre-wrap rounded-lg p-6 border"
@@ -1188,6 +1304,27 @@ export default function PuzzleDetailPage() {
               />
             )}
 
+            {showSudokuHelp && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+                <div className="max-w-lg w-full bg-gradient-to-br from-[#071016] to-[#09313a] text-white rounded-xl p-6 shadow-2xl border border-[#FDE74C]/20">
+                  <div className="flex items-start justify-between">
+                    <h2 className="text-2xl font-extrabold text-yellow-300">How to play Sudoku</h2>
+                    <button onClick={() => setShowSudokuHelp(false)} className="text-white/80 hover:text-white">✕</button>
+                  </div>
+                  <div className="mt-4 space-y-3 text-sm text-gray-200">
+                    <p><strong>Objective:</strong> Fill the 9×9 grid so each row, column, and 3×3 box contains the digits 1 through 9 exactly once.</p>
+                    <p><strong>Givens:</strong> Numbers shown in bold are pre-filled and cannot be changed.</p>
+                    <p>Click an empty cell and type a digit 1–9. Use the board's Submit button to check your solution, or the board will validate automatically when complete.</p>
+                    <p><strong>Limits:</strong> You have <strong>{puzzle?.sudoku?.timeLimitSeconds ? Math.round((puzzle.sudoku.timeLimitSeconds)/60) : 15} minutes</strong> and <strong>{puzzle?.sudoku?.maxAttempts ?? 5}</strong> attempts.</p>
+                    <p className="text-yellow-200">Tip: Work by scanning rows/columns/boxes and eliminating possibilities. Start with the easiest cells.</p>
+                  </div>
+                  <div className="mt-6 text-right">
+                    <button onClick={() => setShowSudokuHelp(false)} className="px-4 py-2 rounded bg-yellow-300 text-black font-semibold">Got it</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Toasts (inline above puzzle) */}
             <Toasts toasts={toasts} onRemove={(id) => removeToast(id)} inline />
 
@@ -1225,7 +1362,10 @@ export default function PuzzleDetailPage() {
                         This jigsaw puzzle is missing its image. Upload an image in the admin puzzle creator.
                       </div>
                     ) : (
-                      <div className="rounded-none overflow-hidden border border-gray-700 bg-gray-900 w-full">
+                      <div
+                        className="rounded-none overflow-hidden border border-gray-700 bg-gray-900"
+                        style={{ width: "fit-content", margin: "0 auto" }}
+                      >
                         <JigsawPuzzle
                           imageUrl={jigsawPlayable.imageUrl}
                           rows={jigsawPlayable.data.gridRows}
@@ -1271,14 +1411,37 @@ export default function PuzzleDetailPage() {
                       </div>
                     )}
                     <div className="mb-4">
-                      <EscapeRoomPuzzle
-                        puzzleId={puzzleId}
-                        onComplete={() => {
-                          setSuccess(true);
-                          setShowRatingModal(true);
-                        }}
-                      />
+                      {!teamIdParam ? (
+                        <div className="p-4 rounded-lg border text-white" style={{ backgroundColor: "rgba(171, 159, 157, 0.2)", borderColor: "#AB9F9D" }}>
+                          This escape room is team-only. Start it from your team lobby so the URL includes <b>teamId</b>.
+                        </div>
+                      ) : (
+                        <EscapeRoomPuzzle
+                          puzzleId={puzzleId}
+                          teamId={teamIdParam}
+                          onComplete={() => {
+                            setSuccess(true);
+                            setShowRatingModal(true);
+                          }}
+                        />
+                      )}
                     </div>
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'detective_case') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div
+                        className="mb-6 p-4 rounded-lg border text-white"
+                        style={{ backgroundColor: "rgba(76, 91, 92, 0.3)", borderColor: "#3891A6" }}
+                      >
+                        ✓ You have already solved this case.
+                      </div>
+                    )}
+                    <DetectiveCasePuzzle puzzleId={puzzleId} />
                   </div>
                 );
               }
@@ -1348,29 +1511,122 @@ export default function PuzzleDetailPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Render the interactive Sudoku board after the user starts */}
+                      {sudokuStarted && (
+                        <div className="mb-6">
+                          {/* Compact info bar stacked above the board */}
+                          <div className="mb-1 flex flex-col items-center gap-1 px-2 py-1 rounded bg-[#071016] text-sm">
+                            <div className="text-2xl sm:text-3xl" style={{ color: '#FDE74C', fontWeight: 800, lineHeight: 1 }}>
+                              {(() => {
+                                const limit = puzzle?.sudoku?.timeLimitSeconds ?? 15 * 60;
+                                const rem = Math.max(0, limit - sudokuElapsed);
+                                const mm = Math.floor(rem / 60).toString().padStart(2, '0');
+                                const ss = (rem % 60).toString().padStart(2, '0');
+                                return `Time remaining: ${mm}:${ss}`;
+                              })()}
+                            </div>
+                            {/* small help button */}
+                            <button
+                              type="button"
+                              onClick={() => setShowSudokuHelp(true)}
+                              className="mt-1 text-xs text-[#AB9F9D] hover:text-white underline"
+                            >
+                              How to play
+                            </button>
+                          </div>
+
+                          <SudokuGrid
+                            puzzle={(sudokuOriginal ?? (sudokuGrid as unknown as number[][])) as number[][]}
+                            givens={sudokuOriginal ?? undefined}
+                            solution={sudokuSolution ?? undefined}
+                            onChange={(g) => {
+                              setSudokuGrid(g);
+                              try {
+                                if (typeof window !== 'undefined') {
+                                  localStorage.setItem(`sudoku-progress:${puzzleId}`, JSON.stringify(g));
+                                }
+                              } catch (e) {
+                                // ignore storage errors
+                              }
+                            }}
+                            onValidatedSuccess={(sol) => {
+                              try {
+                                handleSudokuSubmit(sol);
+                              } catch (e) {
+                                console.error('Sudoku success handler failed:', e);
+                              }
+                            }}
+                            disabled={timeLimitExceeded || maxAttemptsExceeded || Boolean(progress?.solved)}
+                            maxAttempts={puzzle?.sudoku?.maxAttempts ?? 5}
+                            onAttempt={(attemptNumber, locked) => {
+                              setSudokuAttemptsUsed(attemptNumber);
+                              if (locked) setMaxAttemptsExceeded(true);
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   ) : null}
 
-                  {/* Text answer area */}
-                  <textarea
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                    disabled={submitting || success || progress?.solved}
-                    placeholder={progress?.solved ? "This puzzle has been solved." : "Enter your answer here..."}
-                    className="w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none disabled:opacity-50"
-                    style={{ backgroundColor: "#2a3a3b", borderWidth: "2px", borderColor: "#FDE74C" }}
-                    onFocus={(e) => (e.currentTarget.style.borderColor = "#3891A6")}
-                    onBlur={(e) => (e.currentTarget.style.borderColor = "#FDE74C")}
-                    rows={4}
-                  />
-                  <button
-                    type="submit"
-                    disabled={submitting || success || !answer.trim() || progress?.solved}
-                    className="mt-4 px-6 py-2 rounded-lg text-white font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
-                    style={{ backgroundColor: "#AB9F9D" }}
-                  >
-                    {submitting ? "Submitting..." : progress?.solved ? "Puzzle Solved ✓" : "Submit Answer"}
-                  </button>
+                  {/* Code Master IDE */}
+                  {puzzle?.puzzleType === 'code_master' && (
+                    <div className="mb-6 space-y-4">
+                      <div
+                        className="rounded-lg p-5 border"
+                        style={{ backgroundColor: "rgba(56, 145, 166, 0.1)", borderColor: "#3891A6" }}
+                      >
+                        <h2 className="text-lg font-semibold text-white mb-2">Scenario</h2>
+                        <p className="text-sm whitespace-pre-wrap" style={{ color: "#DDDBF1" }}>
+                          {String(puzzle?.data?.scenario || '')}
+                        </p>
+                      </div>
+
+                      <CodeMasterIDE
+                        language={String(puzzle?.data?.language || 'html')}
+                        brokenCode={String(puzzle?.data?.brokenCode || '')}
+                        prefillCss={String(puzzle?.data?.prefillCss || '')}
+                        files={puzzle?.data?.files as Record<string, string> | undefined}
+                        onCodeChange={(combined) => setAnswer(combined)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Text answer area - only show for non-Sudoku puzzles */}
+                  {puzzle?.puzzleType !== 'sudoku' && puzzle?.puzzleType !== 'code_master' && (
+                    <>
+                      <textarea
+                        value={answer}
+                        onChange={(e) => setAnswer(e.target.value)}
+                        disabled={submitting || success || progress?.solved}
+                        placeholder={progress?.solved ? "This puzzle has been solved." : "Enter your answer here..."}
+                        className="w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none disabled:opacity-50"
+                        style={{ backgroundColor: "#2a3a3b", borderWidth: "2px", borderColor: "#FDE74C" }}
+                        onFocus={(e) => (e.currentTarget.style.borderColor = "#3891A6")}
+                        onBlur={(e) => (e.currentTarget.style.borderColor = "#FDE74C")}
+                        rows={4}
+                      />
+                      <button
+                        type="submit"
+                        disabled={submitting || success || !answer.trim() || progress?.solved}
+                        className="mt-4 px-6 py-2 rounded-lg text-white font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                        style={{ backgroundColor: "#AB9F9D" }}
+                      >
+                        {submitting ? "Submitting..." : progress?.solved ? "Puzzle Solved ✓" : "Submit Answer"}
+                      </button>
+                    </>
+                  )}
+
+                  {puzzle?.puzzleType === 'code_master' && (
+                    <button
+                      type="submit"
+                      disabled={submitting || success || !answer.trim() || progress?.solved}
+                      className="mt-4 px-6 py-2 rounded-lg text-white font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                      style={{ backgroundColor: "#AB9F9D" }}
+                    >
+                      {submitting ? "Submitting..." : progress?.solved ? "Puzzle Solved ✓" : "Submit Fix"}
+                    </button>
+                  )}
                 </form>
               );
             })()}
