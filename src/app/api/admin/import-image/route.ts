@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import fs from "fs/promises";
 import path from "path";
+import { resolveUploadsPath } from "@/lib/uploadStorage";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB
 
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     const safeBase = origName.replace(/[^a-z0-9-_\.]/gi, '_').replace(/_+/g, '_').slice(0, 80);
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2,8)}${ext}`;
 
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'puzzles', puzzleId);
+    const uploadsDir = resolveUploadsPath('puzzles', puzzleId);
     await fs.mkdir(uploadsDir, { recursive: true });
     const outPath = path.join(uploadsDir, fileName);
     await fs.writeFile(outPath, buf);

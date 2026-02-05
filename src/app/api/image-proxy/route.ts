@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+
 // Simple image proxy for puzzles to avoid CORS blocking when images are hosted
 // on third-party hosts. SECURITY: restrict allowed hosts via ALLOWED_IMAGE_HOSTS
 // env var (comma-separated). If unset, only allow same-origin (relative URLs).

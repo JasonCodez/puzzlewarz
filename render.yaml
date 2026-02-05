@@ -8,7 +8,13 @@ services:
     buildCommand: "npm ci && npx prisma generate && npm run build"
     startCommand: "npm run start"
     autoDeploy: true
+    disk:
+      name: uploads
+      mountPath: /var/data/uploads
+      sizeGB: 1
     envVars:
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
       # Add secrets in the Render dashboard instead of committing them here.
       # - key: DATABASE_URL
       #   sync: false

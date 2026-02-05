@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
+import { resolveUploadsPath } from "@/lib/uploadStorage";
 
 // Max file sizes (in bytes)
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB for video
@@ -129,8 +130,9 @@ export async function POST(request: NextRequest) {
       // (e.g. designer background images). Only allow whitelisted targets.
       const dest = (formData.get('dest') as string) || '';
       const ALLOWED_DESTS: Record<string, { dir: string; urlPrefix: string }> = {
-        'uploads-media': { dir: join(process.cwd(), 'public', 'uploads', 'media'), urlPrefix: '/uploads/media' },
-        'content-images': { dir: join(process.cwd(), 'public', 'content', 'images'), urlPrefix: '/content/images' },
+        'uploads-media': { dir: resolveUploadsPath('media'), urlPrefix: '/uploads/media' },
+        // Store backgrounds under the uploads root (served via /content/images/* route handler).
+        'content-images': { dir: resolveUploadsPath('content', 'images'), urlPrefix: '/content/images' },
       };
 
       const chosen = ALLOWED_DESTS[dest || 'uploads-media'] || ALLOWED_DESTS['uploads-media'];
@@ -344,7 +346,7 @@ export async function DELETE(request: NextRequest) {
     try {
       if (media && media.url) {
         const fileName = media.url.split("/").pop();
-        const filePath = join(process.cwd(), "public", "uploads", "media", fileName || "");
+        const filePath = resolveUploadsPath('media', fileName || "");
         const fs = await import("fs").then((m: any) => m.promises);
         await fs.unlink(filePath).catch(() => {
           // File might not exist, that's okay

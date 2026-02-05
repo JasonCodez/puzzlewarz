@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
+import { resolveUploadsPath } from "@/lib/uploadStorage";
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create uploads directory if it doesn't exist
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "avatars");
+    const uploadDir = resolveUploadsPath('avatars');
     if (!existsSync(uploadDir)) {
       await mkdir(uploadDir, { recursive: true });
     }

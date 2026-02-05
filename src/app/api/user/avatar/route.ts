@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
+import { resolveUploadsPath } from "@/lib/uploadStorage";
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create uploads directory if it doesn't exist
-    const uploadsDir = path.join(process.cwd(), "public", "uploads", "avatars");
+    const uploadsDir = resolveUploadsPath('avatars');
     await mkdir(uploadsDir, { recursive: true });
 
     // Generate unique filename
