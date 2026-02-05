@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
 import ActionModal from "@/components/ActionModal";
 
@@ -9,6 +9,8 @@ export default function TeamLobbyPage() {
   const params = useParams();
   const teamId = params.id as string;
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const puzzleIdFromQuery = searchParams.get('puzzleId') || '';
 
   const [puzzleId, setPuzzleId] = useState("");
   const [teamPuzzles, setTeamPuzzles] = useState<any[]>([]);
@@ -16,6 +18,7 @@ export default function TeamLobbyPage() {
   const [navHeight, setNavHeight] = useState<number | null>(null);
   const [lobby, setLobby] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
+  const [teamLeaderId, setTeamLeaderId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -25,6 +28,9 @@ export default function TeamLobbyPage() {
   const chatAbortRef = useRef<AbortController | null>(null);
   const socketRef = useRef<any>(null);
   const prevParticipantsRef = useRef<string[]>([]);
+  const autoJoinAttemptRef = useRef<string | null>(null);
+  const membersRef = useRef<any[]>([]);
+  const skipLeaveOnUnmountRef = useRef(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<null | "create" | "ready" | "unready" | "start" | "refresh" | "invite" | "leave" | "destroy">(null);
@@ -32,8 +38,59 @@ export default function TeamLobbyPage() {
   const [actionModalVariant, setActionModalVariant] = useState<"success" | "error" | "info">("info");
   const [actionModalTitle, setActionModalTitle] = useState<string | undefined>(undefined);
   const [actionModalMessage, setActionModalMessage] = useState<string | undefined>(undefined);
-  const [redirectOnClose, setRedirectOnClose] = useState(false);
+  const [redirectUrlOnClose, setRedirectUrlOnClose] = useState<string | null>(null);
   const [selfLeaving, setSelfLeaving] = useState(false);
+
+  const handleRefresh = async (e?: React.MouseEvent) => {
+    try {
+      e?.preventDefault();
+      e?.stopPropagation();
+    } catch {
+      // ignore
+    }
+
+    try {
+      // Pull latest lobby snapshot from the API
+      await fetchLobby();
+
+      // Ensure we have an identity for socket + join enforcement
+      if (!currentUserId) {
+        await fetchCurrentUser();
+      }
+
+      // Best-effort: ensure server-side lobby includes us (API is authoritative for start)
+      if (teamId && puzzleId) {
+        try {
+          await fetch("/api/team/lobby", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "create", teamId, puzzleId }),
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      // Best-effort: prompt socket server to broadcast latest lobbyState
+      try {
+        const uid = currentUserId;
+        if (socketRef.current && socketRef.current.connected && teamId && puzzleId && uid) {
+          const member = (membersRef.current || []).find((m: any) => m.user?.id === uid);
+          const adminFlag = !!member && ["admin", "moderator"].includes(member.role);
+          const displayName = member?.user?.name || member?.user?.email || '';
+          socketRef.current.emit('joinLobby', { teamId, puzzleId, userId: uid, name: displayName, isAdmin: adminFlag });
+        }
+      } catch {
+        // ignore
+      }
+
+      // Re-fetch once more after join attempt so the UI updates immediately
+      await fetchLobby();
+    } catch (err) {
+      console.error('Refresh failed', err);
+      openActionModal('error', 'Refresh Failed', 'Unable to refresh lobby state.');
+    }
+  };
 
   async function fetchMembers() {
     try {
@@ -41,6 +98,7 @@ export default function TeamLobbyPage() {
       if (res.ok) {
         const team = await res.json();
         setMembers(team.members || []);
+        setTeamLeaderId((prev) => prev ?? team.createdBy ?? null);
       }
     } catch (e) {
       console.error("Failed load members", e);
@@ -52,11 +110,22 @@ export default function TeamLobbyPage() {
       const res = await fetch(`/api/puzzles?limit=100&isTeam=true`);
       if (!res.ok) return;
       const list = await res.json();
-      const normalized = list.map((p: any) => ({ ...p, partsCount: Array.isArray(p.parts) ? p.parts.length : 0 }));
+      const normalized = list.map((p: any) => {
+        const partsCount = Array.isArray(p.parts) ? p.parts.length : 0;
+        const minTeamSize = typeof p.minTeamSize === 'number' ? p.minTeamSize : 0;
+        const isEscapeRoom = p?.puzzleType === 'escape_room' || !!p?.escapeRoom;
+        const requiredPlayers = isEscapeRoom ? 4 : ((partsCount > 0 ? partsCount : minTeamSize) || 1);
+        const isLocked = isEscapeRoom && p?.escapeRoomFailed === true;
+        return { ...p, partsCount, requiredPlayers, isLocked };
+      });
       setTeamPuzzles(normalized);
-      if (normalized.length > 0 && !puzzleId) {
-        setPuzzleId(normalized[0].id);
-        setSelectedPuzzle(normalized[0]);
+      if (!puzzleId) {
+        const fromQuery = puzzleIdFromQuery && normalized.find((p: any) => p.id === puzzleIdFromQuery && !p.isLocked);
+        const pick = fromQuery || normalized.find((p: any) => !p.isLocked) || normalized[0];
+        if (pick) {
+          setPuzzleId(pick.id);
+          setSelectedPuzzle(pick);
+        }
       }
     } catch (e) {
       console.error("Failed load team puzzles", e);
@@ -86,6 +155,9 @@ export default function TeamLobbyPage() {
           return;
         }
         setLobby(j);
+        if (j?.leaderId) {
+          setTeamLeaderId(j.leaderId);
+        }
         return j;
       }
     } catch (e) {
@@ -153,8 +225,23 @@ export default function TeamLobbyPage() {
   }, [teamId]);
 
   useEffect(() => {
+    membersRef.current = members || [];
+  }, [members]);
+
+  useEffect(() => {
     fetchTeamPuzzles();
   }, []);
+
+  // If the URL puzzleId changes (e.g. clicking a card/invite), sync selection.
+  useEffect(() => {
+    if (!puzzleIdFromQuery) return;
+    if (puzzleIdFromQuery === puzzleId) return;
+    // if we have puzzle list, validate it; otherwise still set so downstream effects run
+    const found = teamPuzzles.find((p: any) => p.id === puzzleIdFromQuery);
+    setPuzzleId(puzzleIdFromQuery);
+    if (found) setSelectedPuzzle(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzleIdFromQuery]);
 
   // Measure navbar height
   useEffect(() => {
@@ -193,23 +280,45 @@ export default function TeamLobbyPage() {
   // Auto-join lobby when visiting: add current user as participant if not present
   useEffect(() => {
     async function joinIfNeeded() {
-      if (!teamId || !puzzleId || !currentUserId) return;
+      if (!teamId || !puzzleId) return;
+      const joinKey = `${teamId}::${puzzleId}`;
+      if (autoJoinAttemptRef.current === joinKey) return;
+      autoJoinAttemptRef.current = joinKey;
       try {
-        const res = await fetch(`/api/team/lobby?teamId=${encodeURIComponent(teamId)}&puzzleId=${encodeURIComponent(puzzleId)}`);
-        if (!res.ok) return;
-        const j = await res.json();
-        const participants = j?.participants || [];
-        if (participants.includes(currentUserId)) return;
-        await fetch("/api/team/lobby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", teamId, puzzleId }) });
+        // Always attempt to join via server session; the server will no-op if already joined.
+        const joinRes = await fetch("/api/team/lobby", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "create", teamId, puzzleId }),
+        });
+        if (!joinRes.ok) {
+          const j = await joinRes.json().catch(() => ({}));
+          if (j?.activePuzzleId && typeof j.activePuzzleId === 'string') {
+            try {
+              const notice = encodeURIComponent(j?.error || 'Only the lobby leader can change the team puzzle.');
+              router.push(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(j.activePuzzleId)}&notice=${notice}`);
+              return;
+            } catch {
+              // ignore
+            }
+          }
+          // If unauthorized, show a clearer message rather than silently staying at 0/4.
+          openActionModal('error', 'Unable to Join Lobby', j?.error || joinRes.statusText);
+          return;
+        }
         // refresh lobby and seed prevParticipants to avoid false "removed" modal during immediate join
         const newLobby = await fetchLobby();
         try { prevParticipantsRef.current = (newLobby?.participants || []).slice(); } catch (e) {}
+        // Ensure we have a current user id for ready/chat/socket flows.
+        if (!currentUserId) {
+          try { await fetchCurrentUser(); } catch (e) { /* ignore */ }
+        }
       } catch (e) {
         console.error("Auto-join failed", e);
       }
     }
     joinIfNeeded();
-  }, [teamId, puzzleId, currentUserId]);
+  }, [teamId, puzzleId]);
 
   useEffect(() => {
     if (!lobby || !currentUserId) return;
@@ -231,9 +340,11 @@ export default function TeamLobbyPage() {
 
         socket.on('connect', () => {
           try {
-            const member = members.find((m: any) => m.user?.id === currentUserId);
+            const currentMembers = membersRef.current || [];
+            const member = currentMembers.find((m: any) => m.user?.id === currentUserId);
             const adminFlag = !!member && ["admin", "moderator"].includes(member.role);
-            socket.emit('joinLobby', { teamId, puzzleId, userId: currentUserId, name: '', isAdmin: adminFlag });
+            const displayName = member?.user?.name || member?.user?.email || '';
+            socket.emit('joinLobby', { teamId, puzzleId, userId: currentUserId, name: displayName, isAdmin: adminFlag });
           } catch (e) {
             socket.emit('joinLobby', { teamId, puzzleId, userId: currentUserId, name: '', isAdmin: false });
           }
@@ -253,16 +364,47 @@ export default function TeamLobbyPage() {
         socket.on('lobbyDestroyed', ({ teamId: t, puzzleId: p, reason }: any) => {
           if (!mounted) return;
           setActionModalVariant('info');
-          setActionModalTitle('Lobby Closed');
-          setActionModalMessage('The team leader left the lobby. Click Close to go to the dashboard.');
-          setRedirectOnClose(true);
+          const r = reason ? String(reason) : '';
+          const effectivePuzzleId = p || puzzleId;
+          if (r === 'player_disconnected' || r === 'missing_player' || r === 'missing_player_navigation') {
+            const notice =
+              r === 'missing_player'
+                ? 'A teammate did not join in time. The lobby was reset — please restart.'
+                : r === 'missing_player_navigation'
+                ? 'A teammate did not reach the puzzle page in time. The lobby was reset — please restart.'
+                : 'A teammate disconnected. The lobby was reset — please restart.';
+            setActionModalTitle('Lobby Reset');
+            setActionModalMessage(notice);
+            setRedirectUrlOnClose(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(effectivePuzzleId)}&notice=${encodeURIComponent(notice)}`);
+          } else {
+            setActionModalTitle('Lobby Closed');
+            setActionModalMessage('The leader shut down the lobby. Click Close to go to the dashboard.');
+            setRedirectUrlOnClose('/dashboard');
+          }
           setActionModalOpen(true);
         });
 
         socket.on('puzzleStarting', ({ teamId: t, puzzleId: p }) => {
           if (!mounted) return;
           // navigate to planning/role assignment screen
-          router.push(`/teams/${teamId}/puzzle/${puzzleId}/planning`);
+          skipLeaveOnUnmountRef.current = true;
+          const effectiveTeamId = t || teamId;
+          const effectivePuzzleId = p || puzzleId;
+          if (!effectiveTeamId || !effectivePuzzleId) {
+            openActionModal('error', 'Navigation Error', 'Missing team or puzzle id; unable to open planning page.');
+            return;
+          }
+          router.push(`/teams/${effectiveTeamId}/puzzle/${effectivePuzzleId}/planning`);
+        });
+
+        socket.on('teamPuzzleChanged', ({ toPuzzleId }: any) => {
+          if (!mounted) return;
+          if (!toPuzzleId) return;
+          try {
+            router.push(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(toPuzzleId)}&notice=${encodeURIComponent('The lobby leader changed the team puzzle.')}`);
+          } catch {
+            // ignore
+          }
         });
 
         socket.on('startFailed', (err: any) => {
@@ -295,14 +437,18 @@ export default function TeamLobbyPage() {
     return () => {
       mounted = false;
       try {
-        // inform server we are leaving the lobby (SPA navigation)
-        if (socketRef.current && currentUserId) {
-          try { socketRef.current.emit('leaveLobby', { teamId, puzzleId, userId: currentUserId }); } catch (e) {}
+        // On SPA navigation into the puzzle/planning flow, keep lobby participants intact.
+        // Explicit leaving still happens via the Leave button or on beforeunload.
+        if (!skipLeaveOnUnmountRef.current) {
+          // inform server we are leaving the lobby (SPA navigation)
+          if (socketRef.current && currentUserId) {
+            try { socketRef.current.emit('leaveLobby', { teamId, puzzleId, userId: currentUserId }); } catch (e) {}
+          }
+          // attempt an async leave request
+          (async () => {
+            try { await fetch('/api/team/lobby', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'leave', teamId, puzzleId }) }); } catch (e) { /* ignore */ }
+          })();
         }
-        // attempt an async leave request
-        (async () => {
-          try { await fetch('/api/team/lobby', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'leave', teamId, puzzleId }) }); } catch (e) { /* ignore */ }
-        })();
       } catch (e) {
         // ignore
       }
@@ -311,7 +457,7 @@ export default function TeamLobbyPage() {
       socketRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, puzzleId, currentUserId, members]);
+  }, [teamId, puzzleId, currentUserId]);
 
   // Ensure server gets updated isAdmin flag if members or currentUserId change after socket connected
   useEffect(() => {
@@ -320,7 +466,8 @@ export default function TeamLobbyPage() {
       const adminFlag = !!member && ["admin", "moderator"].includes(member.role);
       if (socketRef.current && socketRef.current.connected) {
         try {
-          socketRef.current.emit('joinLobby', { teamId, puzzleId, userId: currentUserId, name: '', isAdmin: adminFlag });
+          const displayName = member?.user?.name || member?.user?.email || '';
+          socketRef.current.emit('joinLobby', { teamId, puzzleId, userId: currentUserId, name: displayName, isAdmin: adminFlag });
         } catch (e) {
           // ignore
         }
@@ -341,8 +488,8 @@ export default function TeamLobbyPage() {
           if (target && target === currentUserId) {
             setActionModalVariant('info');
             setActionModalTitle('Removed from Lobby');
-            setActionModalMessage('An admin removed you from the puzzle lobby. Click Close to go to the dashboard.');
-            setRedirectOnClose(true);
+            setActionModalMessage('The leader removed you from the lobby. Click Close to go to the dashboard.');
+            setRedirectUrlOnClose('/dashboard');
             setActionModalOpen(true);
           } else {
             // someone else was kicked — show a small info modal
@@ -389,11 +536,46 @@ export default function TeamLobbyPage() {
   // determine if current user is admin/moderator of the team
   const currentMember = members.find((m: any) => m.user?.id === currentUserId);
   const isAdmin = !!currentMember && ["admin", "moderator"].includes(currentMember.role);
-  
-  const participantsCount = (lobby?.participants || []).length;
-  const requiredPlayers = selectedPuzzle?.partsCount || 0;
-  const requiredMet = selectedPuzzle && participantsCount >= requiredPlayers;
-  const allReady = (lobby?.participants || []).length > 0 && (lobby?.participants || []).every((p: string) => !!(lobby?.ready && lobby.ready[p]));
+  const isLeader = !!teamLeaderId && !!currentUserId && teamLeaderId === currentUserId;
+
+  // Keep selectedPuzzle in sync when we arrive via ?puzzleId before teamPuzzles loads.
+  useEffect(() => {
+    if (!puzzleId) {
+      setSelectedPuzzle(null);
+      return;
+    }
+    const found = teamPuzzles.find((p: any) => p.id === puzzleId) || null;
+    setSelectedPuzzle((prev: any) => {
+      if (prev?.id && found?.id && prev.id === found.id) return prev;
+      if (!prev && !found) return prev;
+      return found;
+    });
+  }, [teamPuzzles, puzzleId]);
+
+  const getRequiredPlayersForPuzzle = (puzzle: any): number => {
+    if (!puzzle) return 0;
+    if (puzzle?.puzzleType === 'escape_room' || puzzle?.escapeRoom) return 4;
+    const partsCount = typeof puzzle.partsCount === 'number'
+      ? puzzle.partsCount
+      : (Array.isArray(puzzle.parts) ? puzzle.parts.length : 0);
+    const minTeamSize = typeof puzzle.minTeamSize === 'number' ? puzzle.minTeamSize : 0;
+    const required = partsCount > 0 ? partsCount : minTeamSize;
+    return required > 0 ? required : 1;
+  };
+
+  const participantIds = Array.from(
+    new Set(
+      (lobby?.participants || [])
+        .map((p: any) => (typeof p === 'string' ? p : (p?.userId as string | undefined)))
+        .filter(Boolean),
+    ),
+  ) as string[];
+
+  const participantsCount = participantIds.length;
+  const requiredPlayers = selectedPuzzle ? getRequiredPlayersForPuzzle(selectedPuzzle) : 0;
+  const hasEnoughPlayers = !!selectedPuzzle && requiredPlayers > 0 && participantsCount >= requiredPlayers;
+  const hasExactPlayers = !!selectedPuzzle && requiredPlayers > 0 && participantsCount === requiredPlayers;
+  const allReady = participantsCount > 0 && participantIds.every((id: string) => !!(lobby?.ready && lobby.ready[id]));
 
   const openActionModal = (variant: "success" | "error" | "info", title?: string, message?: string) => {
     setActionModalVariant(variant);
@@ -424,12 +606,15 @@ export default function TeamLobbyPage() {
 
   const onLeaveClick = () => {
     if (!currentUserId) return openActionModal("error", "Not signed in", "Sign in to leave the lobby");
-    if (isAdmin) {
-      // admins destroying the lobby when they leave
-      setConfirmAction("destroy");
-    } else {
-      setConfirmAction("leave");
-    }
+    // Only the team leader can destroy/shut down the lobby.
+    setConfirmAction(isLeader ? "destroy" : "leave");
+    setConfirmOpen(true);
+  };
+
+  const onShutdownClick = () => {
+    if (!isLeader) return;
+    if (!puzzleId.trim()) return openActionModal("error", "Missing Puzzle", "Select a puzzle to shut down its lobby.");
+    setConfirmAction("destroy");
     setConfirmOpen(true);
   };
 
@@ -449,6 +634,7 @@ export default function TeamLobbyPage() {
         const j = await res.json().catch(() => ({}));
         if (!res.ok) return openActionModal("error", "Create Lobby Failed", j?.error || res.statusText);
         await fetchLobby();
+        await fetchMembers();
         return openActionModal("success", "Lobby Created", "Lobby created — members can now ready up.");
       }
 
@@ -466,6 +652,10 @@ export default function TeamLobbyPage() {
         const j = await res.json().catch(() => ({}));
         if (!res.ok) return openActionModal("error", "Start Failed", j?.error || res.statusText);
         // success -> navigate to team planning so leader can assign roles
+        skipLeaveOnUnmountRef.current = true;
+        if (!teamId || !puzzleId) {
+          return openActionModal('error', 'Navigation Error', 'Missing team or puzzle id; unable to open planning page.');
+        }
         router.push(`/teams/${teamId}/puzzle/${puzzleId}/planning`);
       }
       if (confirmAction === "destroy") {
@@ -480,8 +670,11 @@ export default function TeamLobbyPage() {
         const res = await fetch("/api/team/lobby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "leave", teamId, puzzleId }) });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) return openActionModal("error", "Leave Failed", j?.error || res.statusText);
-        // redirect the user to the dashboard immediately after leaving the lobby
-        try { router.push('/dashboard'); } catch (e) { window.location.href = '/dashboard'; }
+        // Redirect the user to the dashboard immediately after leaving the lobby.
+        // Use a hard navigation fallback because some socket/update flows can re-trigger lobby joins.
+        skipLeaveOnUnmountRef.current = true;
+        try { router.replace('/dashboard'); } catch (e) { /* ignore */ }
+        try { window.location.assign('/dashboard'); } catch (e) { window.location.href = '/dashboard'; }
         return;
       }
       if (confirmAction === "invite") {
@@ -511,55 +704,61 @@ export default function TeamLobbyPage() {
         <h2 className="text-2xl text-white font-bold mb-4">Team Lobby</h2>
 
         <div className="mb-4">
-          <label className="text-sm text-gray-300 block mb-2">{isAdmin ? 'Choose Team Puzzle' : 'Team Puzzle'}</label>
-          {isAdmin ? (
-            <select value={puzzleId} onChange={(e) => {
+          <label className="text-sm text-gray-300 block mb-2">Choose Team Puzzle</label>
+          <select
+            value={puzzleId}
+            onChange={(e) => {
+              if (lobby && !isLeader) {
+                openActionModal('error', 'Not Allowed', 'Only the lobby leader can change the team puzzle.');
+                return;
+              }
               const id = e.target.value;
-              setPuzzleId(id);
               const found = teamPuzzles.find((p) => p.id === id) || null;
+              if (found?.isLocked) {
+                openActionModal('error', 'Locked Puzzle', 'You already failed this escape room. It is locked and cannot be replayed.');
+                return;
+              }
+              setPuzzleId(id);
               setSelectedPuzzle(found);
-            }} className="w-full px-3 py-2 rounded bg-black text-white border">
-              <option value="">-- Select a puzzle --</option>
-              {teamPuzzles.map((p) => (
-                <option key={p.id} value={p.id}>{p.title} (players: {p.partsCount || 0})</option>
-              ))}
-            </select>
-          ) : (
-            <div className="w-full px-3 py-2 rounded bg-black text-white border">
-              {selectedPuzzle?.title || (puzzleId ? puzzleId : 'No puzzle selected')}
-            </div>
-          )}
+              try {
+                router.replace(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(id)}`);
+              } catch {
+                // ignore
+              }
+            }}
+            disabled={!!lobby && !isLeader}
+            className="w-full px-3 py-2 rounded bg-black text-white border"
+          >
+            <option value="">-- Select a puzzle --</option>
+            {teamPuzzles.map((p) => (
+              <option key={p.id} value={p.id} disabled={!!p.isLocked}>
+                {p.title} (players: {p.requiredPlayers || 1}){p.isLocked ? ' — LOCKED' : ''}
+              </option>
+            ))}
+          </select>
           <div className="flex gap-2 mt-3">
-            <button onClick={fetchLobby} className="px-4 py-2 bg-slate-700 text-white rounded">Refresh</button>
+            <button type="button" onClick={handleRefresh} className="px-4 py-2 bg-slate-700 text-white rounded">Refresh</button>
           </div>
 
           {selectedPuzzle && (
             <div className="mt-3 text-sm text-gray-300">
-              Required players: <span className="font-semibold text-white">{selectedPuzzle.partsCount || 0}</span>
+              Required players: <span className="font-semibold text-white">{requiredPlayers || 1}</span>
             </div>
           )}
 
-          {selectedPuzzle && members.length < (selectedPuzzle.partsCount || 0) && (
+          {selectedPuzzle && members.length < requiredPlayers && (
             <div className="mt-3 p-3 rounded border bg-slate-800 border-slate-700">
-              {isAdmin ? (
-                <div className="text-sm text-amber-200">
-                  Your team has <strong className="text-white">{members.length}</strong> member(s), but this puzzle requires <strong className="text-white">{selectedPuzzle.partsCount}</strong> players.
-                  <div>If you don't have enough members yet, invite teammates or add them to the team before starting the puzzle.</div>
-                  <div className="mt-2"><a className="text-sky-400 underline" href={`/teams/${teamId}`}>Manage team members</a></div>
-                </div>
-              ) : (
-                <div className="text-sm text-gray-300">
-                  This puzzle requires <strong className="text-white">{selectedPuzzle.partsCount}</strong> players but your team currently has <strong className="text-white">{members.length}</strong>.
-                  Ask a team admin to add members or invite teammates to join the lobby.
-                </div>
-              )}
+              <div className="text-sm text-amber-200">
+                Your team has <strong className="text-white">{members.length}</strong> member(s), but this puzzle requires <strong className="text-white">{requiredPlayers}</strong> players.
+                <div className="mt-2"><a className="text-sky-400 underline" href={`/teams/${teamId}`}>Manage team members</a></div>
+              </div>
             </div>
           )}
 
-          {isAdmin && (
+          {isLeader && (
             <div className="mt-4">
               <label className="text-sm text-gray-300 block mb-2">Invite members to lobby</label>
-              {requiredMet ? (
+              {hasEnoughPlayers ? (
                 <div className="p-3 rounded bg-slate-800 text-sm text-emerald-300">Required players met — cannot invite more members.</div>
               ) : (
                 <div className="space-y-2">
@@ -567,9 +766,9 @@ export default function TeamLobbyPage() {
                     .filter((m: any) => m.user?.id && m.user.id !== currentUserId)
                     .map((m: any) => {
                       const memberId = m.user.id;
-                      const alreadyParticipant = (lobby?.participants || []).includes(memberId);
+                      const alreadyParticipant = participantIds.includes(memberId);
                       const alreadyInvited = (lobby?.invites || []).some((inv: any) => inv.userId === memberId || inv.email === m.user.email);
-                      const inviteLimitReached = selectedPuzzle && (((lobby?.participants || []).length + (lobby?.invites?.length || 0)) >= (selectedPuzzle?.partsCount || 0) || requiredMet);
+                      const inviteLimitReached = selectedPuzzle && (((participantsCount) + (lobby?.invites?.length || 0)) >= requiredPlayers || hasEnoughPlayers);
                       return (
                         <div key={memberId} className="flex items-center justify-between p-2 bg-slate-800 rounded">
                           <div className="text-gray-200">{m.user.name || m.user.email}</div>
@@ -618,28 +817,45 @@ export default function TeamLobbyPage() {
             )}
             
           {(() => {
-            const parts = (lobby?.participants || []).map((p: any) => {
+            const rawParts = (lobby?.participants || []).map((p: any, index: number) => {
               if (!p) return null;
-              if (typeof p === 'string') return { userId: p, name: undefined };
-              return { userId: p.userId || p.userId, name: p.name || p.userName || undefined };
+              if (typeof p === 'string') return { userId: p, name: undefined, _index: index };
+              const userId = p.userId || p.id || p.user?.id;
+              const name = p.name || p.userName || p.user?.name || undefined;
+              return { userId, name, _index: index };
             }).filter(Boolean as any);
 
+            const parts = (() => {
+              const seen = new Set<string>();
+              const deduped: any[] = [];
+              for (const part of rawParts) {
+                const uid = part?.userId;
+                if (uid && !seen.has(uid)) {
+                  seen.add(uid);
+                  deduped.push(part);
+                  continue;
+                }
+                if (!uid) deduped.push(part);
+              }
+              return deduped;
+            })();
+
             return parts.map((part: any) => {
-              const uid = part.userId;
+              const uid: string | undefined = part.userId;
               const member = members.find((m: any) => m.user?.id === uid);
               const label = member ? (member.user.name || member.user.email) : (part.name || uid);
               return (
-                <div key={uid} className="flex items-center justify-between p-2 bg-slate-800 rounded">
+                <div key={uid ? `user:${uid}` : `idx:${part._index}`} className="flex items-center justify-between p-2 bg-slate-800 rounded">
                   <div className="text-white">{label}</div>
                   <div className="flex items-center gap-3">
                     <div className="text-sm">
-                      {lobby?.ready && lobby.ready[uid] ? (
+                      {uid && lobby?.ready?.[uid] ? (
                         <span className="text-emerald-400 font-bold">READY!</span>
                       ) : (
                         <span className="text-red-500">Not ready</span>
                       )}
                     </div>
-                    {isAdmin && uid !== currentUserId && (
+                    {isLeader && uid && uid !== currentUserId && (
                       <button
                         onClick={async () => {
                           try {
@@ -669,15 +885,22 @@ export default function TeamLobbyPage() {
             <div className="mt-3">
               <h4 className="text-sm text-gray-300">Invites</h4>
               <div className="mt-2 space-y-2">
-                {lobby.invites.map((inv: any) => {
+                {lobby.invites.map((inv: any, idx: number) => {
                   const inviter = members.find((m: any) => m.user?.id === inv.invitedBy);
                   const inviterLabel = inviter ? (inviter.user.name || inviter.user.email) : inv.invitedBy;
+
+                  const invitedMember = inv.userId ? members.find((m: any) => m.user?.id === inv.userId) : null;
+                  const inviteeLabel =
+                    (invitedMember?.user?.name as string | undefined) ||
+                    (inv.displayName as string | undefined) ||
+                    (inv.userId as string | undefined) ||
+                    'Invited player';
                   return (
-                    <div key={inv.id} className="flex items-center justify-between p-2 bg-slate-800 rounded">
-                      <div className="text-gray-200">{inv.email || inv.userId} <span className="text-xs text-gray-400">({inv.status})</span></div>
+                    <div key={inv.id ?? `${inv.userId ?? inv.email ?? 'inv'}:${idx}`} className="flex items-center justify-between p-2 bg-slate-800 rounded">
+                      <div className="text-gray-200">{inviteeLabel} <span className="text-xs text-gray-400">({inv.status})</span></div>
                       <div className="flex items-center gap-3">
                         <div className="text-xs text-gray-400">Invited by: {inviterLabel}</div>
-                        {isAdmin && (
+                        {isLeader && (
                           <button
                             onClick={async () => {
                               try {
@@ -707,17 +930,35 @@ export default function TeamLobbyPage() {
 
         <div className="flex flex-col sm:flex-row gap-3">
           <button onClick={onToggleReadyClick} className="w-full sm:w-auto text-sm px-3 py-2 bg-amber-500 text-black rounded">Ready / Unready</button>
-          {isAdmin && (
+          {isLeader && (
             <button
               onClick={onStartClick}
-              disabled={!selectedPuzzle || (lobby?.participants || []).length !== (selectedPuzzle?.partsCount || 0) || !allReady}
+              disabled={!selectedPuzzle || !hasExactPlayers || !allReady}
               className="w-full sm:w-auto text-sm px-3 py-2 bg-emerald-600 text-white rounded disabled:opacity-50"
-              title={!allReady ? 'All participants must be marked ready before starting' : undefined}
+              title={
+                !selectedPuzzle
+                  ? 'Select a puzzle to start'
+                  : !hasExactPlayers
+                    ? `Player count mismatch: requires exactly ${requiredPlayers} players`
+                    : !allReady
+                      ? 'All participants must be marked ready before starting'
+                      : undefined
+              }
             >
               Start Puzzle
             </button>
           )}
-          {(lobby?.participants || []).includes(currentUserId) && (
+          {isLeader && (
+            <button
+              onClick={onShutdownClick}
+              disabled={!puzzleId}
+              className="w-full sm:w-auto text-sm px-3 py-2 bg-slate-800 border border-red-700 text-red-200 rounded hover:bg-slate-700 disabled:opacity-50"
+              title="Shut down the current lobby"
+            >
+              Shut Down Lobby
+            </button>
+          )}
+          {!!currentUserId && participantIds.includes(currentUserId) && (
             <button onClick={onLeaveClick} className="w-full sm:w-auto text-sm px-3 py-2 bg-red-600 text-white rounded">Leave Lobby</button>
           )}
         </div>
@@ -728,10 +969,21 @@ export default function TeamLobbyPage() {
             {chatMessages.length === 0 && (
               <div className="text-sm text-gray-400">No messages yet — say hello!</div>
             )}
-            {chatMessages.map((m) => (
-              <div key={m.id} className="flex flex-col sm:flex-row items-start justify-between bg-slate-800 rounded w-full px-1 py-1">
+            {chatMessages.map((m, idx) => {
+              const member = (members || []).find((mm: any) => mm.user?.id && m?.userId && mm.user.id === m.userId);
+              const senderLabel =
+                (m?.user?.name as string | undefined) ||
+                (m?.user?.email as string | undefined) ||
+                (member?.user?.name as string | undefined) ||
+                (member?.user?.email as string | undefined) ||
+                (m?.userId as string | undefined) ||
+                'Unknown';
+
+              const key = m?.id ?? `${m?.userId ?? 'u'}:${m?.createdAt ?? idx}:${idx}`;
+              return (
+              <div key={key} className="flex flex-col sm:flex-row items-start justify-between bg-slate-800 rounded w-full px-1 py-1">
                 <div className="flex-1 min-w-0 px-3">
-                  <div className="text-base text-gray-200"><strong className="text-white">{m.user?.name || m.user?.email || m.userId}</strong> <span className="text-xs text-gray-400">{new Date(m.createdAt).toLocaleTimeString()}</span></div>
+                  <div className="text-base text-gray-200"><strong className="text-white">{senderLabel}</strong> <span className="text-xs text-gray-400">{new Date(m.createdAt).toLocaleTimeString()}</span></div>
                   <div className="text-base text-gray-300 break-words mt-1">{m.content}</div>
                 </div>
                 {isAdmin && (
@@ -740,7 +992,8 @@ export default function TeamLobbyPage() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex items-center justify-center">
@@ -759,6 +1012,8 @@ export default function TeamLobbyPage() {
             ? 'Start Puzzle'
             : confirmAction === 'create'
             ? 'Create Lobby'
+            : confirmAction === 'destroy'
+            ? 'Shut Down Lobby'
             : confirmAction === 'ready'
             ? 'Mark Ready'
             : confirmAction === 'unready'
@@ -774,17 +1029,21 @@ export default function TeamLobbyPage() {
             ? `Start the puzzle now? This will open the puzzle for the team if start conditions are met.`
             : confirmAction === 'create'
             ? `Create or join the lobby for '${selectedPuzzle?.title || puzzleId}'?`
+            : confirmAction === 'destroy'
+            ? `Shut down this lobby and send everyone back to the dashboard?`
             : confirmAction === 'ready'
             ? `Mark yourself as ready for this puzzle?`
             : confirmAction === 'unready'
             ? `Remove your ready status?`
+            : confirmAction === 'leave'
+            ? `Leave this lobby and return to the dashboard?`
             : confirmAction === 'invite'
             ? `Invite ${inviteEmail} to the lobby?`
             : confirmAction === 'refresh'
             ? `Refresh the lobby state now?`
             : undefined
         }
-        confirmLabel={confirmAction === 'start' ? 'Start' : 'Confirm'}
+        confirmLabel={confirmAction === 'start' ? 'Start' : confirmAction === 'destroy' ? 'Shut Down' : 'Confirm'}
         onConfirm={handleConfirm}
         onCancel={() => { setConfirmOpen(false); setConfirmAction(null); }}
       />
@@ -796,9 +1055,9 @@ export default function TeamLobbyPage() {
         message={actionModalMessage}
         onClose={() => {
           setActionModalOpen(false);
-          if (redirectOnClose) {
-            try { router.push('/dashboard'); } catch (e) { /* ignore */ }
-            setRedirectOnClose(false);
+          if (redirectUrlOnClose) {
+            try { router.push(redirectUrlOnClose); } catch (e) { /* ignore */ }
+            setRedirectUrlOnClose(null);
           }
         }}
       />

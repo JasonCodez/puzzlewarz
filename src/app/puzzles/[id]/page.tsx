@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import HintCard from "@/components/puzzle/HintCard";
 import HintHistoryPanel from "@/components/puzzle/HintHistoryPanel";
@@ -20,6 +19,7 @@ import Toasts from '@/components/Toast';
 import type { JigsawPuzzle as JigsawPuzzleType } from "@/lib/puzzle-types";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import CodeMasterIDE from "@/components/puzzle/CodeMasterIDE";
+import DetectiveCasePuzzle from "@/components/puzzle/DetectiveCasePuzzle";
 
 interface Puzzle {
   id: string;
@@ -29,6 +29,14 @@ interface Puzzle {
   difficulty: string;
   puzzleType?: string;
   data?: Record<string, unknown>;
+  escapeRoom?: {
+    id: string;
+    roomTitle: string;
+    roomDescription: string;
+    timeLimitSeconds?: number | null;
+    minTeamSize?: number;
+    maxTeamSize?: number;
+  };
   category: {
     name: string;
   };
@@ -162,7 +170,9 @@ export default function PuzzleDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const puzzleId = params.id as string;
+  const teamIdParam = searchParams.get('teamId') || undefined;
   const sessionStartRef = useRef<Date | null>(null);
 
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
@@ -502,52 +512,149 @@ export default function PuzzleDetailPage() {
     fetchProgress();
   }, [puzzleId]);
 
-  // Start session on mount
+  // Team puzzle safety: mark entry + listen for lobby resets, and auto-reset if a teammate never reaches this page.
   useEffect(() => {
-    // Listen for participantLeft events when viewing a team puzzle; redirect back to lobby with notice
-    try {
-      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-      const teamId = params?.get('teamId');
-      if (!teamId) return;
-      (async () => {
-        try {
-          const { io } = await import('socket.io-client');
-          const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', { transports: ['websocket'] });
-          const handler = (payload: any) => {
-            try {
-              if (!payload) return;
-              if (payload.teamId !== teamId) return;
-              const name = payload.userName || payload.userId || 'A player';
-              const url = `/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}&notice=${encodeURIComponent(`${name} left the lobby`)}`;
-              try { router.push(url); } catch (e) { window.location.href = url; }
-            } catch (e) {
-              // ignore
+    if (!puzzleId) return;
+    const teamId = teamIdParam;
+    if (!teamId) return;
+
+    let socket: any = null;
+    let cancelled = false;
+    let currentUserId: string | null = null;
+    let checkTimer: any = null;
+
+    const buildLobbyUrl = (notice: string) =>
+      `/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}&notice=${encodeURIComponent(notice)}`;
+
+    const getUserId = async () => {
+      try {
+        const r = await fetch('/api/user/info');
+        const j = await r.json().catch(() => ({}));
+        return (j?.id as string) || null;
+      } catch {
+        return null;
+      }
+    };
+
+    const markEnteredPuzzle = async () => {
+      try {
+        await fetch('/api/team/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'enteredPuzzle', teamId, puzzleId }),
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    const fetchLobbyState = async () => {
+      try {
+        const res = await fetch(`/api/team/lobby?teamId=${encodeURIComponent(teamId)}&puzzleId=${encodeURIComponent(puzzleId)}`);
+        const j = await res.json().catch(() => ({}));
+        return j;
+      } catch {
+        return null;
+      }
+    };
+
+    const maybeAutoResetIfMissingPlayer = async () => {
+      try {
+        const lobby = await fetchLobbyState();
+        if (!lobby?.exists) return;
+        const participants = Array.isArray(lobby.participants) ? lobby.participants : [];
+        const entered = lobby.enteredPuzzleAt && typeof lobby.enteredPuzzleAt === 'object' ? Object.keys(lobby.enteredPuzzleAt).length : 0;
+        if (participants.length > 0 && entered >= participants.length) return;
+
+        if (!currentUserId) return;
+        if (lobby.leaderId && lobby.leaderId !== currentUserId) return;
+
+        await fetch('/api/team/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reset', teamId, puzzleId, reason: 'missing_player_navigation' }),
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    (async () => {
+      currentUserId = await getUserId();
+      if (cancelled) return;
+      await markEnteredPuzzle();
+
+      // Join the lobby room so we reliably receive room-scoped broadcasts.
+      try {
+        const { io } = await import('socket.io-client');
+        socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', { transports: ['websocket'] });
+        socket.on('connect', () => {
+          try {
+            socket.emit('joinLobby', { teamId, puzzleId, userId: currentUserId || '', name: session?.user?.name || '' });
+          } catch {
+            // ignore
+          }
+        });
+
+        const participantLeftHandler = (payload: any) => {
+          try {
+            if (!payload) return;
+            if (payload.teamId !== teamId || payload.puzzleId !== puzzleId) return;
+            const name = payload.userName || payload.userId || 'A player';
+            const url = buildLobbyUrl(`${name} left the lobby`);
+            try { router.push(url); } catch { window.location.href = url; }
+          } catch {
+            // ignore
+          }
+        };
+
+        const destroyedHandler = (payload: any) => {
+          try {
+            if (!payload) return;
+            if (payload.teamId !== teamId || payload.puzzleId !== puzzleId) return;
+            const reason = String(payload.reason || 'leader_shutdown');
+
+            if (reason === 'player_disconnected' || reason === 'missing_player' || reason === 'missing_player_navigation') {
+              const url = buildLobbyUrl('Lobby reset. Return to the lobby to restart.');
+              try { router.push(url); } catch { window.location.href = url; }
+              return;
             }
-          };
-          socket.on('participantLeft', handler);
-            const destroyedHandler = (payload: any) => {
-              try {
-                if (!payload) return;
-                if (payload.teamId !== teamId) return;
-                const msg = 'The team leader left the lobby. You will be returned to the dashboard.';
-                try { alert(msg); } catch (e) {}
-                try { router.push('/dashboard'); } catch (e) { window.location.href = '/dashboard'; }
-              } catch (e) {
-                // ignore
-              }
-            };
-            socket.on('lobbyDestroyed', destroyedHandler);
-          // cleanup
-            return () => { try { socket.off('participantLeft', handler); socket.off('lobbyDestroyed', destroyedHandler); socket.disconnect(); } catch (e) {} };
-        } catch (e) {
-          // ignore socket init errors
+
+            try { router.push('/dashboard'); } catch { window.location.href = '/dashboard'; }
+          } catch {
+            // ignore
+          }
+        };
+
+        socket.on('participantLeft', participantLeftHandler);
+        socket.on('lobbyDestroyed', destroyedHandler);
+
+        // cleanup handlers stored on socket for removal
+        (socket as any).__pw_participantLeftHandler = participantLeftHandler;
+        (socket as any).__pw_destroyedHandler = destroyedHandler;
+      } catch {
+        // ignore socket init errors
+      }
+
+      // If someone never reaches the puzzle page, reset the lobby.
+      // This runs from the puzzle page (leader is almost always here).
+      checkTimer = setTimeout(maybeAutoResetIfMissingPlayer, 20000);
+    })();
+
+    return () => {
+      cancelled = true;
+      try { if (checkTimer) clearTimeout(checkTimer); } catch { /* ignore */ }
+      try {
+        if (socket) {
+          socket.off('participantLeft', (socket as any).__pw_participantLeftHandler);
+          socket.off('lobbyDestroyed', (socket as any).__pw_destroyedHandler);
+          socket.disconnect();
         }
-      })();
-    } catch (e) {
-      // ignore
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [puzzleId]);
+      } catch {
+        // ignore
+      }
+    };
+  }, [puzzleId, teamIdParam, session?.user?.name, router]);
   useEffect(() => {
     if (!puzzleId || !session) return;
 
@@ -718,7 +825,7 @@ export default function PuzzleDetailPage() {
     e.preventDefault();
     
     // Skip if this is a Sudoku puzzle
-    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw') {
+    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw' || puzzle?.puzzleType === 'detective_case') {
       return;
     }
 
@@ -1014,8 +1121,8 @@ export default function PuzzleDetailPage() {
             className="border rounded-lg p-8 mb-8"
             style={{ backgroundColor: "rgba(253, 231, 76, 0.08)", borderColor: "#FDE74C" }}
           >
-            {/* Puzzle Title (single display) */}
-            <h1 className="text-4xl font-bold text-white mb-4">{puzzle.title}</h1>
+            {/* Puzzle Title */}
+            <h1 className="text-4xl font-bold text-white mb-4">{((puzzle.title || puzzle?.escapeRoom?.roomTitle || '') + '').trim() || 'Untitled Puzzle'}</h1>
             <div className="flex items-center gap-4 mb-6">
               <span className={`px-4 py-2 rounded-full text-sm font-semibold border whitespace-nowrap ${
                 difficultyColors[puzzle.difficulty] ||
@@ -1029,7 +1136,9 @@ export default function PuzzleDetailPage() {
                 </span>
               )}
             </div>
-            {/* puzzle.description removed as requested */}
+            <p className="text-base" style={{ color: '#DDDBF1' }}>
+              {((puzzle.description || puzzle?.escapeRoom?.roomDescription || '') + '').trim() || 'No description yet.'}
+            </p>
 
             {/* Math Problem Configuration (if present) */}
             {puzzle.puzzleType === 'math' && puzzle.math && (
@@ -1302,14 +1411,37 @@ export default function PuzzleDetailPage() {
                       </div>
                     )}
                     <div className="mb-4">
-                      <EscapeRoomPuzzle
-                        puzzleId={puzzleId}
-                        onComplete={() => {
-                          setSuccess(true);
-                          setShowRatingModal(true);
-                        }}
-                      />
+                      {!teamIdParam ? (
+                        <div className="p-4 rounded-lg border text-white" style={{ backgroundColor: "rgba(171, 159, 157, 0.2)", borderColor: "#AB9F9D" }}>
+                          This escape room is team-only. Start it from your team lobby so the URL includes <b>teamId</b>.
+                        </div>
+                      ) : (
+                        <EscapeRoomPuzzle
+                          puzzleId={puzzleId}
+                          teamId={teamIdParam}
+                          onComplete={() => {
+                            setSuccess(true);
+                            setShowRatingModal(true);
+                          }}
+                        />
+                      )}
                     </div>
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'detective_case') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div
+                        className="mb-6 p-4 rounded-lg border text-white"
+                        style={{ backgroundColor: "rgba(76, 91, 92, 0.3)", borderColor: "#3891A6" }}
+                      >
+                        ✓ You have already solved this case.
+                      </div>
+                    )}
+                    <DetectiveCasePuzzle puzzleId={puzzleId} />
                   </div>
                 );
               }

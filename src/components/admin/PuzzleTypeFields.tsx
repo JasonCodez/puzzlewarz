@@ -1,6 +1,6 @@
 'use client';
 
-import React, { JSX, useEffect } from 'react';
+import React, { JSX, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 // Dynamically import the advanced Escape Room Designer (client-side only)
 const EscapeRoomDesigner = dynamic(() => import("@/app/escape-rooms/Designer"), { ssr: false });
@@ -12,6 +12,62 @@ interface PuzzleTypeFieldsProps {
 }
 
 export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange }: PuzzleTypeFieldsProps) {
+  const [detectiveJson, setDetectiveJson] = useState<string>('');
+  const [detectiveJsonError, setDetectiveJsonError] = useState<string>('');
+
+  useEffect(() => {
+    if (puzzleType !== 'detective_case') return;
+
+    const existing = (puzzleData as any)?.detectiveCase;
+    const template = {
+      noirTitle: 'The Blackout Ledger',
+      intro: 'It rained like the city wanted to wash itself clean. It never does.',
+      lockMode: 'fail_once',
+      stages: [
+        {
+          id: 'scene',
+          title: 'The Scene',
+          prompt: 'A matchbook sits in the ashtray. One word is scratched into the cover. Submit it.',
+          kind: 'text',
+          expectedAnswer: 'EMBER-11',
+          ignoreCase: true,
+          ignoreWhitespace: true,
+        },
+        {
+          id: 'matchbook',
+          title: 'The Matchbook',
+          prompt: 'On the inside flap: “11:07 Special”. The bartender knows the code. Submit it.',
+          kind: 'text',
+          expectedAnswer: 'ECLIPSE-3',
+          ignoreCase: true,
+          ignoreWhitespace: true,
+        },
+        {
+          id: 'ledger',
+          title: 'The Ledger',
+          prompt: 'The carbon copy bleeds through. A number keeps showing up. Submit it.',
+          kind: 'text',
+          expectedAnswer: 'CARBON-9',
+          ignoreCase: true,
+          ignoreWhitespace: true,
+        },
+      ],
+    };
+
+    try {
+      const next = existing && typeof existing === 'object' ? existing : template;
+      setDetectiveJson(JSON.stringify(next, null, 2));
+      setDetectiveJsonError('');
+      // Ensure the parent form actually has detectiveCase data even if the admin never edits the JSON textarea.
+      onDataChange('detectiveCase', next);
+    } catch {
+      setDetectiveJson(JSON.stringify(template, null, 2));
+      setDetectiveJsonError('');
+      onDataChange('detectiveCase', template);
+    }
+    // Only reset when switching types or when a new puzzleData object is passed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzleType]);
   const asString = (value: unknown, fallback = ''): string => {
     if (typeof value === 'string') return value;
     if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -238,6 +294,31 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
           Match Color Names (e.g., blue)
         </label>
       </div>
+    </div>
+  );
+
+  const renderDetectiveCaseFields = () => (
+    <div className="space-y-3">
+      <div className="text-sm text-gray-300">
+        Paste a <span className="font-semibold">detectiveCase</span> JSON object. This puzzle type is multi-stage and locks forever on the first wrong submission.
+      </div>
+      <textarea
+        value={detectiveJson}
+        onChange={(e) => {
+          const next = e.target.value;
+          setDetectiveJson(next);
+          try {
+            const parsed = JSON.parse(next);
+            onDataChange('detectiveCase', parsed);
+            setDetectiveJsonError('');
+          } catch (err) {
+            setDetectiveJsonError('Invalid JSON (fix to save).');
+          }
+        }}
+        className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-64"
+        spellCheck={false}
+      />
+      {detectiveJsonError ? <div className="text-sm text-red-300">{detectiveJsonError}</div> : null}
     </div>
   );
 
@@ -680,6 +761,7 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     math: renderMathFields,
     pattern: renderPatternFields,
     escape_room: renderEscapeRoomFields,
+    detective_case: renderDetectiveCaseFields,
   };
 
   const renderer = typeSpecificRenders[puzzleType];

@@ -84,9 +84,10 @@ export async function GET(
 // POST /api/puzzles/[id]/progress - Update progress (start session, log attempt, etc)
 const UpdateProgressSchema = z.object({
   action: z.enum(["start_session", "end_session", "log_attempt", "attempt_success", "lock_puzzle", "clear_state"]),
-  durationSeconds: z.number().optional(),
-  hintUsed: z.boolean().optional(),
-  successful: z.boolean().optional(),
+  // Some callers send null; accept it and normalize later.
+  durationSeconds: z.number().nullable().optional(),
+  hintUsed: z.boolean().nullable().optional(),
+  successful: z.boolean().nullable().optional(),
   // optional grid payload for puzzles like Sudoku
   grid: z.array(z.array(z.number())).optional(),
 });
@@ -111,25 +112,31 @@ export async function POST(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Debug: log request headers and body to help diagnose 500s observed from the browser
-    try {
-      const ua = request.headers.get('user-agent') || '<none>';
-      const cookiePresent = request.headers.get('cookie') ? 'yes' : 'no';
-      console.log(`[PROGRESS] puzzle=${id} user=${user.id} ua="${ua}" cookie=${cookiePresent}`);
-    } catch (e) {
-      console.warn('[PROGRESS] failed reading request headers', e);
-    }
+    const debug = process.env.DEBUG_PROGRESS === '1';
 
+    // Debug logging (opt-in): set DEBUG_PROGRESS=1
     const rawBody = await request.json().catch(() => null);
-    console.log('[PROGRESS] rawBody:', rawBody);
+    if (debug) {
+      try {
+        const ua = request.headers.get('user-agent') || '<none>';
+        const cookiePresent = request.headers.get('cookie') ? 'yes' : 'no';
+        console.log(`[PROGRESS] puzzle=${id} user=${user.id} ua="${ua}" cookie=${cookiePresent}`);
+        console.log('[PROGRESS] rawBody:', rawBody);
+      } catch (e) {
+        console.warn('[PROGRESS] failed reading request headers/body', e);
+      }
+    }
 
     if (!rawBody || typeof rawBody.action === 'undefined') {
       console.warn('[PROGRESS] Missing request body or action');
       return NextResponse.json({ error: 'Missing action in request body' }, { status: 400 });
     }
 
-    const { action, durationSeconds, hintUsed, successful } =
-      UpdateProgressSchema.parse(rawBody || {});
+    const parsed = UpdateProgressSchema.parse(rawBody || {});
+    const action = parsed.action;
+    const durationSeconds = typeof parsed.durationSeconds === 'number' ? parsed.durationSeconds : undefined;
+    const hintUsed = typeof parsed.hintUsed === 'boolean' ? parsed.hintUsed : undefined;
+    const successful = typeof parsed.successful === 'boolean' ? parsed.successful : undefined;
 
     // Get or create progress
     let progress = await prisma.userPuzzleProgress.findUnique({
@@ -173,17 +180,23 @@ export async function POST(
         break;
 
       case "end_session":
-        if (progress.currentSessionStart && durationSeconds) {
-          const totalTime = progress.totalTimeSpent + durationSeconds;
+        if (progress.currentSessionStart) {
+          const now = new Date();
+          const computedSeconds = Math.max(
+            0,
+            Math.floor((now.getTime() - progress.currentSessionStart.getTime()) / 1000)
+          );
+          const finalDuration = typeof durationSeconds === 'number' ? durationSeconds : computedSeconds;
+
           await prisma.userPuzzleProgress.update({
             where: { id: progress.id },
             data: {
-              totalTimeSpent: totalTime,
+              totalTimeSpent: progress.totalTimeSpent + finalDuration,
               currentSessionStart: null,
             },
           });
 
-          // Update latest session log
+          // Update latest session log (best effort)
           const sessionLog = await prisma.puzzleSessionLog.findFirst({
             where: {
               progressId: progress.id,
@@ -196,9 +209,9 @@ export async function POST(
             await prisma.puzzleSessionLog.update({
               where: { id: sessionLog.id },
               data: {
-                sessionEnd: new Date(),
-                durationSeconds,
-                hintUsed: hintUsed || false,
+                sessionEnd: now,
+                durationSeconds: finalDuration,
+                hintUsed: hintUsed ?? false,
               },
             });
           }

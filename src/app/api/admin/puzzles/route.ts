@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { notifyPuzzleRelease } from "@/lib/notification-service";
+import { getDetectiveCaseData } from "@/lib/detectiveCase";
 
 type MultiPartInput = {
   title?: string;
@@ -97,10 +98,21 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master') {
+    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case') {
       if (!correctAnswer) {
         return NextResponse.json(
           { error: "Single-part puzzles must have a correct answer" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate detective case configuration (stage-based validation, fail-once lockout)
+    if (puzzleType === 'detective_case') {
+      const dc = getDetectiveCaseData(puzzleData);
+      if (!dc) {
+        return NextResponse.json(
+          { error: "Detective Case puzzles require puzzleData.detectiveCase with at least 1 stage" },
           { status: 400 }
         );
       }
@@ -164,6 +176,13 @@ export async function POST(request: NextRequest) {
       },
       difficulty: puzzleDifficulty,
       puzzleType: puzzleType || 'general',
+      ...(puzzleType === 'escape_room'
+        ? {
+            // Escape rooms are team-only and always require exactly 4 players.
+            isTeamPuzzle: true,
+            minTeamSize: 4,
+          }
+        : {}),
       riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' ? correctAnswer : undefined,
       jigsaw:
         puzzleType === 'jigsaw'
@@ -177,7 +196,7 @@ export async function POST(request: NextRequest) {
               },
             }
           : undefined,
-      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' || puzzleType === 'code_master' ? undefined : {
+      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' ? undefined : {
         create: [
           {
             answer: correctAnswer,
@@ -220,8 +239,23 @@ export async function POST(request: NextRequest) {
         : undefined,
     };
 
-    if ((puzzleType === 'escape_room' || puzzleType === 'code_master') && typeof puzzleData !== 'undefined') {
+    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case') && typeof puzzleData !== 'undefined') {
       createData.data = puzzleData;
+    }
+
+    // Detective cases are validated stage-by-stage; we still create a solution row to carry points.
+    if (puzzleType === 'detective_case') {
+      createData.solutions = {
+        create: [
+          {
+            answer: '__DETECTIVE_CASE__',
+            isCorrect: true,
+            points: pointsReward || 100,
+            ignoreCase: true,
+            ignoreWhitespace: false,
+          },
+        ],
+      };
     }
 
     const puzzle = await prisma.puzzle.create({
@@ -297,7 +331,8 @@ export async function POST(request: NextRequest) {
       console.log(`[PUZZLE CREATE] Jigsaw record:`, jigsawRecord);
     }
 
-    // If this is an escape room, persist rooms/stages/layouts/hotspots
+    // If this is an escape room, persist rooms/stages/layouts/hotspots (+ item definitions)
+    // Note: the designer payload stores items/zones under puzzleData.escapeRoomData.scenes.
     if (puzzle.puzzleType === 'escape_room' && puzzleData && Array.isArray(puzzleData.rooms)) {
       try {
         // Create escape room and related records in a transaction
@@ -309,8 +344,44 @@ export async function POST(request: NextRequest) {
               roomTitle: puzzleData.roomTitle || (puzzle.title || 'Escape Room'),
               roomDescription: puzzleData.roomDescription || (puzzle.description || ''),
               timeLimitSeconds: typeof puzzleData.timeLimitSeconds !== 'undefined' && puzzleData.timeLimitSeconds !== null ? Number(puzzleData.timeLimitSeconds) : undefined,
+              // Escape rooms are team-only and always require exactly 4 players.
+              minTeamSize: 4,
+              maxTeamSize: 4,
             },
           });
+
+          // Persist ItemDefinitions from designer scenes so collectible hotspots can resolve to real DB items.
+          // Hotspots use targetId = ItemDefinition.id.
+          const itemIdToDefinitionId = new Map<string, string>();
+          try {
+            const d: any = (puzzleData as any).escapeRoomData;
+            const scenes: any[] = Array.isArray(d?.scenes) ? d.scenes : [];
+            const seenItemIds = new Set<string>();
+            for (const scene of scenes) {
+              const items: any[] = Array.isArray(scene?.items) ? scene.items : [];
+              for (const it of items) {
+                const itemId = typeof it?.id === 'string' ? it.id : null;
+                if (!itemId || seenItemIds.has(itemId)) continue;
+                seenItemIds.add(itemId);
+
+                const created = await tx.itemDefinition.create({
+                  data: {
+                    escapeRoomId: escapeRoom.id,
+                    // ItemDefinition.key is globally unique; prefix with escapeRoom id.
+                    key: `item_${escapeRoom.id}_${itemId}`,
+                    name: (typeof it?.name === 'string' && it.name.trim()) ? it.name.trim() : 'Item',
+                    description: typeof it?.description === 'string' ? it.description : null,
+                    imageUrl: typeof it?.imageUrl === 'string' ? it.imageUrl : null,
+                    consumable: true,
+                  },
+                });
+                itemIdToDefinitionId.set(itemId, created.id);
+              }
+            }
+          } catch (itemErr) {
+            // Non-fatal: escape room can still function without collectible items.
+            console.warn('[PUZZLE CREATE] Failed to persist escape-room item definitions:', itemErr);
+          }
 
           let stageOrder = 1;
           for (const r of rooms) {
@@ -330,6 +401,12 @@ export async function POST(request: NextRequest) {
               // Persist hotspots if provided
               if (Array.isArray(layout.hotspots)) {
                 for (const hs of layout.hotspots) {
+                  // If the client provided a designer item id (collectItemId), map it to ItemDefinition.id.
+                  let targetId: string | null = hs.targetId || null;
+                  if (targetId && itemIdToDefinitionId.has(targetId)) {
+                    targetId = itemIdToDefinitionId.get(targetId) || null;
+                  }
+
                   await tx.hotspot.create({
                     data: {
                       layoutId: createdLayout.id,
@@ -338,7 +415,7 @@ export async function POST(request: NextRequest) {
                       w: Number(hs.w) || 32,
                       h: Number(hs.h) || 32,
                       type: hs.type || 'interactive',
-                      targetId: hs.targetId || null,
+                      targetId,
                       meta: hs.meta ? (typeof hs.meta === 'string' ? hs.meta : JSON.stringify(hs.meta)) : null,
                     },
                   });

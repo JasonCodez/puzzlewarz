@@ -97,6 +97,34 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
     aspect?: number;
   }>(null);
 
+  const draggingItemRef = useRef<null | {
+    sceneIdx: number;
+    itemIdx: number;
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+    parentRect: DOMRect;
+    itemW: number;
+    itemH: number;
+    raf: number | null;
+    latestClientX: number;
+    latestClientY: number;
+  }>(null);
+
+  const draggingZoneRef = useRef<null | {
+    sceneIdx: number;
+    zoneIdx: number;
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+    parentRect: DOMRect;
+    zoneW: number;
+    zoneH: number;
+    raf: number | null;
+    latestClientX: number;
+    latestClientY: number;
+  }>(null);
+
 
   // Remove non-serializable fields from scenes before passing data to parent
   const getSerializableScenes = () =>
@@ -168,6 +196,10 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
             <input type="number" min={60} value={timeLimit} onChange={e => setTimeLimit(Number(e.target.value))} className="border rounded px-2 py-1 w-full bg-slate-800 text-white" />
           </div>
           <div>
+            <label className="block text-sm text-white">Team Size</label>
+            <div className="text-sm text-gray-200">Fixed: 4 players (team-only)</div>
+          </div>
+          <div>
             <label className="block text-sm text-white">Start Mode</label>
             <select value={startMode} onChange={e => setStartMode(e.target.value)} className="border rounded px-2 py-1 w-full bg-slate-800 text-white">
               <option value="leader-start">Leader starts the session</option>
@@ -212,7 +244,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
             style={{ background: '#222', minHeight: 320, position: 'relative', width: 600, maxWidth: '100%' }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => e.preventDefault()}
-            onClick={() => setSelectedItem(null)}
+            onClick={() => { setSelectedItem(null); setSelectedZone(null); }}
           >
             {/* Background image */}
             {scenes[previewSceneIdx].backgroundUrl ? (
@@ -243,35 +275,101 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
             {scenes[previewSceneIdx].items.map((item, i) => (
               <div
                 key={item.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('text/plain', `${previewSceneIdx}-${i}`);
-                }}
-                onDragEnd={(e) => {
-                  const rect = previewRef.current?.getBoundingClientRect();
-                  if (rect) {
-                    const newX = e.clientX - rect.left;
-                    const newY = e.clientY - rect.top;
-                    const updated = [...scenes];
-                    const iw = (updated[previewSceneIdx].items[i].w as number) || 48;
-                    const ih = (updated[previewSceneIdx].items[i].h as number) || 48;
-                    updated[previewSceneIdx].items[i].x = Math.max(0, Math.min(newX, rect.width - iw));
-                    updated[previewSceneIdx].items[i].y = Math.max(0, Math.min(newY, rect.height - ih));
-                    setScenes(updated);
+                onClick={(ev) => { ev.stopPropagation(); setSelectedItem({ sceneIdx: previewSceneIdx, itemIdx: i }); setSelectedZone(null); }}
+                onPointerDown={(ev) => {
+                  ev.stopPropagation();
+                  // primary button only (avoid right-click drag)
+                  if (ev.button !== 0) return;
+                  const parentRect = previewRef.current?.getBoundingClientRect();
+                  if (!parentRect) return;
+                  setSelectedItem({ sceneIdx: previewSceneIdx, itemIdx: i });
+                  setSelectedZone(null);
+
+                  const startXPos = item.x ?? (20 + i * 60);
+                  const startYPos = item.y ?? 20;
+                  const itemW = item.w ?? 48;
+                  const itemH = item.h ?? 48;
+
+                  const offsetX = ev.clientX - (parentRect.left + startXPos);
+                  const offsetY = ev.clientY - (parentRect.top + startYPos);
+
+                  try {
+                    (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+                  } catch {
+                    // ignore if capture fails
                   }
+
+                  draggingItemRef.current = {
+                    sceneIdx: previewSceneIdx,
+                    itemIdx: i,
+                    pointerId: ev.pointerId,
+                    offsetX,
+                    offsetY,
+                    parentRect,
+                    itemW,
+                    itemH,
+                    raf: null,
+                    latestClientX: ev.clientX,
+                    latestClientY: ev.clientY,
+                  };
+
+                  const scheduleUpdate = () => {
+                    const r = draggingItemRef.current;
+                    if (!r) return;
+                    if (r.raf != null) return;
+                    r.raf = window.requestAnimationFrame(() => {
+                      const rr = draggingItemRef.current;
+                      if (!rr) return;
+                      rr.raf = null;
+                      const newX = rr.latestClientX - rr.parentRect.left - rr.offsetX;
+                      const newY = rr.latestClientY - rr.parentRect.top - rr.offsetY;
+                      const clampedX = Math.max(0, Math.min(newX, rr.parentRect.width - rr.itemW));
+                      const clampedY = Math.max(0, Math.min(newY, rr.parentRect.height - rr.itemH));
+                      setScenes(prev => {
+                        const copy = [...prev];
+                        const it = copy[rr.sceneIdx]?.items?.[rr.itemIdx];
+                        if (!it) return prev;
+                        it.x = Math.round(clampedX);
+                        it.y = Math.round(clampedY);
+                        return copy;
+                      });
+                    });
+                  };
+
+                  const onPointerMove = (pm: PointerEvent) => {
+                    const r = draggingItemRef.current;
+                    if (!r) return;
+                    if (pm.pointerId !== r.pointerId) return;
+                    r.latestClientX = pm.clientX;
+                    r.latestClientY = pm.clientY;
+                    scheduleUpdate();
+                  };
+
+                  const onPointerUp = (pu: PointerEvent) => {
+                    const r = draggingItemRef.current;
+                    if (!r) return;
+                    if (pu.pointerId !== r.pointerId) return;
+                    if (r.raf != null) window.cancelAnimationFrame(r.raf);
+                    draggingItemRef.current = null;
+                    window.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerUp);
+                  };
+
+                  window.addEventListener('pointermove', onPointerMove);
+                  window.addEventListener('pointerup', onPointerUp);
                 }}
-                onClick={(ev) => { ev.stopPropagation(); setSelectedItem({ sceneIdx: previewSceneIdx, itemIdx: i }); }}
                 style={{
                   position: 'absolute',
-                  left: item.x || 20 + i * 60,
-                  top: item.y || 20,
+                  left: item.x ?? (20 + i * 60),
+                  top: item.y ?? 20,
                   zIndex: 2,
                   borderRadius: 4,
                   padding: 2,
                   minWidth: 40,
                   textAlign: 'center',
                   cursor: 'move',
-                  userSelect: 'none'
+                  userSelect: 'none',
+                  touchAction: 'none'
                 }}
               >
                 {item.imageUrl ? (
@@ -309,6 +407,12 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                               style={style}
                               onPointerDown={(ev) => {
                                 ev.stopPropagation();
+                                // prevent the drag handler from also starting
+                                try {
+                                  (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+                                } catch {
+                                  // ignore
+                                }
                                 const rect = (ev.target as HTMLElement).closest('div')?.getBoundingClientRect();
                                 resizingRef.current = {
                                   kind: 'item',
@@ -382,34 +486,80 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                 onClick={(ev) => { ev.stopPropagation(); setSelectedZone({ sceneIdx: previewSceneIdx, zoneIdx: i }); setSelectedItem(null); }}
                 onPointerDown={(ev) => {
                   ev.stopPropagation();
+                  if (ev.button !== 0) return;
                   setSelectedZone({ sceneIdx: previewSceneIdx, zoneIdx: i });
                   setSelectedItem(null);
-                  const parentElem = (ev.currentTarget as HTMLElement).parentElement;
-                  const parentRect = parentElem?.getBoundingClientRect();
+                  const parentRect = previewRef.current?.getBoundingClientRect();
                   if (!parentRect) return;
-                  const startX = ev.clientX;
-                  const startY = ev.clientY;
-                  const origX = zone.x;
-                  const origY = zone.y;
-                  const onPointerMove = (pm: PointerEvent) => {
-                    const dx = pm.clientX - startX;
-                    const dy = pm.clientY - startY;
-                    const newX = Math.max(0, Math.min(origX + dx, parentRect.width - zone.width));
-                    const newY = Math.max(0, Math.min(origY + dy, parentRect.height - zone.height));
-                    setScenes(prev => {
-                      const copy = [...prev];
-                      copy[previewSceneIdx].interactiveZones[i] = { ...copy[previewSceneIdx].interactiveZones[i], x: Math.round(newX), y: Math.round(newY) };
-                      return copy;
+
+                  const offsetX = ev.clientX - (parentRect.left + zone.x);
+                  const offsetY = ev.clientY - (parentRect.top + zone.y);
+
+                  try {
+                    (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+                  } catch {
+                    // ignore
+                  }
+
+                  draggingZoneRef.current = {
+                    sceneIdx: previewSceneIdx,
+                    zoneIdx: i,
+                    pointerId: ev.pointerId,
+                    offsetX,
+                    offsetY,
+                    parentRect,
+                    zoneW: zone.width,
+                    zoneH: zone.height,
+                    raf: null,
+                    latestClientX: ev.clientX,
+                    latestClientY: ev.clientY,
+                  };
+
+                  const scheduleUpdate = () => {
+                    const r = draggingZoneRef.current;
+                    if (!r) return;
+                    if (r.raf != null) return;
+                    r.raf = window.requestAnimationFrame(() => {
+                      const rr = draggingZoneRef.current;
+                      if (!rr) return;
+                      rr.raf = null;
+                      const newX = rr.latestClientX - rr.parentRect.left - rr.offsetX;
+                      const newY = rr.latestClientY - rr.parentRect.top - rr.offsetY;
+                      const clampedX = Math.max(0, Math.min(newX, rr.parentRect.width - rr.zoneW));
+                      const clampedY = Math.max(0, Math.min(newY, rr.parentRect.height - rr.zoneH));
+                      setScenes(prev => {
+                        const copy = [...prev];
+                        const z = copy[rr.sceneIdx]?.interactiveZones?.[rr.zoneIdx];
+                        if (!z) return prev;
+                        copy[rr.sceneIdx].interactiveZones[rr.zoneIdx] = { ...z, x: Math.round(clampedX), y: Math.round(clampedY) };
+                        return copy;
+                      });
                     });
                   };
-                  const onPointerUp = () => {
+
+                  const onPointerMove = (pm: PointerEvent) => {
+                    const r = draggingZoneRef.current;
+                    if (!r) return;
+                    if (pm.pointerId !== r.pointerId) return;
+                    r.latestClientX = pm.clientX;
+                    r.latestClientY = pm.clientY;
+                    scheduleUpdate();
+                  };
+
+                  const onPointerUp = (pu: PointerEvent) => {
+                    const r = draggingZoneRef.current;
+                    if (!r) return;
+                    if (pu.pointerId !== r.pointerId) return;
+                    if (r.raf != null) window.cancelAnimationFrame(r.raf);
+                    draggingZoneRef.current = null;
                     window.removeEventListener('pointermove', onPointerMove);
                     window.removeEventListener('pointerup', onPointerUp);
                   };
+
                   window.addEventListener('pointermove', onPointerMove);
                   window.addEventListener('pointerup', onPointerUp);
                 }}
-                style={{ position: 'absolute', left: zone.x, top: zone.y, width: zone.width, height: zone.height, border: '2px dashed #38bdf8', background: 'rgba(56,189,248,0.1)', zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', touchAction: 'none' }}
+                style={{ position: 'absolute', left: zone.x, top: zone.y, width: zone.width, height: zone.height, border: '2px dashed #38bdf8', background: 'rgba(56,189,248,0.1)', zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', touchAction: 'none', cursor: 'move', userSelect: 'none' }}
               >
                 <span style={{ color: '#38bdf8', fontSize: 12, fontWeight: 600 }}>{zone.label}</span>
                 {/* selected handles */}
@@ -444,8 +594,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                           const startXPos = zone.x;
                           const startYPos = zone.y;
                           resizingRef.current = { kind: 'zone', sceneIdx: previewSceneIdx, idx: i, startX, startY, startW, startH, handle: h as any };
-                          const parentElemForHandle = (ev.currentTarget as HTMLElement).parentElement;
-                          const parentRectForHandle = parentElemForHandle?.getBoundingClientRect();
+                          const parentRectForHandle = previewRef.current?.getBoundingClientRect();
                           const onPointerMove = (pm: PointerEvent) => {
                             const r = resizingRef.current;
                             if (!r) return;
@@ -730,21 +879,9 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                             setScenes(updated);
                           }} placeholder="Description" className="border rounded px-2 py-1 w-full text-xs" />
                           <div className="mt-1 flex gap-2 items-center">
-                            <div>
-                              <label className="block text-xs">Width</label>
-                              <input type="number" value={Number(item.w ?? 48)} onChange={e => {
-                                const updated = [...scenes];
-                                updated[idx].items[itemIdx].w = Math.max(8, Number(e.target.value) || 8);
-                                setScenes(updated);
-                              }} className="border rounded px-2 py-1 w-24 text-xs" />
-                            </div>
-                            <div>
-                              <label className="block text-xs">Height</label>
-                              <input type="number" value={Number(item.h ?? 48)} onChange={e => {
-                                const updated = [...scenes];
-                                updated[idx].items[itemIdx].h = Math.max(8, Number(e.target.value) || 8);
-                                setScenes(updated);
-                              }} className="border rounded px-2 py-1 w-24 text-xs" />
+                            <div className="text-xs text-gray-300">
+                              <div>Size: {Math.round(item.w ?? 48)}×{Math.round(item.h ?? 48)}</div>
+                              <div className="text-[11px] text-gray-400">Resize on the preview canvas (corner handles). Hold Shift to lock aspect ratio.</div>
                             </div>
                             <div style={{ marginLeft: 12 }}>
                               <label className="block text-xs">Linked Puzzle (optional)</label>

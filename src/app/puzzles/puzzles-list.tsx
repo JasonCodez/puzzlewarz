@@ -7,6 +7,7 @@ import Link from "next/link";
 import FilterBar from "@/components/puzzle/FilterBar";
 import { StarRating } from "@/components/puzzle/StarRating";
 import Navbar from "@/components/Navbar";
+import { detectWebGLSupport } from "@/lib/webglSupport";
 
 interface Puzzle {
   id: string;
@@ -19,6 +20,14 @@ interface Puzzle {
   createdAt?: string;
   completionCount?: number;
   attemptCount?: number;
+  puzzleType?: string;
+  escapeRoom?: { id: string; roomTitle?: string; roomDescription?: string } | null;
+  // server-reported escape-room lockout state
+  escapeRoomFailed?: boolean;
+  escapeRoomFailedReason?: string | null;
+  // server-reported detective-case lockout state
+  detectiveCaseFailed?: boolean;
+  detectiveCaseFailedReason?: string | null;
   category: {
     id: string;
     name: string;
@@ -80,6 +89,28 @@ const CATEGORY_ICONS: Record<string, string> = {
   stealth: "🕶️",
 };
 
+function getDisplayTitle(puzzle: any) {
+  const raw = (puzzle && (puzzle.title ?? puzzle.name ?? puzzle?.escapeRoom?.roomTitle)) as unknown;
+  const title = typeof raw === 'string' ? raw.trim() : '';
+  return title || 'Untitled Puzzle';
+}
+
+function getDisplayDescription(puzzle: any) {
+  const raw = (puzzle && (puzzle.description ?? puzzle.summary ?? puzzle.content ?? puzzle?.escapeRoom?.roomDescription)) as unknown;
+  const desc = typeof raw === 'string' ? raw.trim() : '';
+  return desc || 'No description yet.';
+}
+
+function formatFailedReason(reason: string | null | undefined) {
+  if (!reason) return null;
+  if (reason === 'time_limit') return 'Time limit reached';
+  if (reason === 'time_expired') return 'Time expired';
+  if (reason === 'max_attempts') return 'Maximum submissions reached';
+  if (reason === 'given_up') return 'Gave up';
+  if (reason === 'incorrect_submission') return 'Wrong answer (case locked)';
+  return 'Failed';
+}
+
 export default function PuzzlesList({ initialCategory = "all" }: { initialCategory?: string }) {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -99,6 +130,10 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
   const [focusedPuzzleId, setFocusedPuzzleId] = useState<string | null>(null);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [teamModalMessage, setTeamModalMessage] = useState("");
+  const [teamModalTitle, setTeamModalTitle] = useState("Notice");
+  const [teamModalConfirmText, setTeamModalConfirmText] = useState<string>("OK");
+  const [teamModalCancelText, setTeamModalCancelText] = useState<string | null>(null);
+  const [teamModalConfirmAction, setTeamModalConfirmAction] = useState<(() => void) | null>(null);
 
   useEffect(function() {
     if (status === "unauthenticated") {
@@ -192,10 +227,16 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
 
       if (puzzlesRes.ok) {
         const puzzlesData = await puzzlesRes.json();
-        // Annotate puzzles with local failed flag and reason (set when a Sudoku time-limit or max attempts occurs)
+        // Annotate puzzles with local failed flag/reason (Sudoku) plus server-reported escape-room lockout.
         const annotated = puzzlesData.map((p: any) => {
-          let failedFlag = false;
-          let failedReason: string | null = null;
+          const escapeRoomFailed = p?.escapeRoomFailed === true;
+          const detectiveCaseFailed = p?.detectiveCaseFailed === true;
+          const baseFailedFlag = escapeRoomFailed || detectiveCaseFailed;
+          const baseFailedReason: string | null = escapeRoomFailed
+            ? (p?.escapeRoomFailedReason ?? null)
+            : (detectiveCaseFailed ? (p?.detectiveCaseFailedReason ?? 'incorrect_submission') : null);
+          let failedFlag = baseFailedFlag;
+          let failedReason: string | null = baseFailedReason;
           let completedElapsedSeconds: number | null = null;
           try {
             if (typeof window !== 'undefined') {
@@ -222,8 +263,8 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
               }
             }
           } catch (e) {
-            failedFlag = false;
-            failedReason = null;
+            failedFlag = baseFailedFlag;
+            failedReason = baseFailedReason;
           }
           return { ...p, failed: failedFlag, failedReason, completedElapsedSeconds };
         });
@@ -269,26 +310,76 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
     }
   }
 
-  async function handlePuzzleClick(puzzle: Puzzle) {
+  async function handlePuzzleClick(puzzle: Puzzle, opts?: { skipWebGLCheck?: boolean }) {
+    const isEscapeRoom = puzzle?.puzzleType === 'escape_room' || !!puzzle?.escapeRoom;
+
+    if (isEscapeRoom && !opts?.skipWebGLCheck) {
+      const webgl = detectWebGLSupport();
+      if (!webgl.available) {
+        setTeamModalTitle('WebGL Unavailable');
+        setTeamModalMessage(
+          "Your browser doesn't currently have WebGL enabled/available. The escape room may run in compatibility mode (reduced visuals/performance). Continue anyway?"
+        );
+        setTeamModalConfirmText('Continue');
+        setTeamModalCancelText('Cancel');
+        setTeamModalConfirmAction(() => {
+          return () => {
+            void handlePuzzleClick(puzzle, { skipWebGLCheck: true });
+          };
+        });
+        setShowTeamModal(true);
+        return;
+      }
+    }
+
+    if (isEscapeRoom && puzzle.escapeRoomFailed) {
+      setTeamModalTitle('Locked');
+      setTeamModalConfirmText('OK');
+      setTeamModalCancelText(null);
+      setTeamModalConfirmAction(null);
+      setTeamModalMessage("You already failed this escape room. It is locked and cannot be replayed.");
+      setShowTeamModal(true);
+      return;
+    }
+
+    const isDetectiveCase = puzzle?.puzzleType === 'detective_case';
+    if (isDetectiveCase && puzzle.detectiveCaseFailed) {
+      setTeamModalTitle('Locked');
+      setTeamModalConfirmText('OK');
+      setTeamModalCancelText(null);
+      setTeamModalConfirmAction(null);
+      setTeamModalMessage("You already made an incorrect submission on this case. It is locked forever and cannot be retried.");
+      setShowTeamModal(true);
+      return;
+    }
+
     // Non-team puzzles: go to puzzle page
     if (!puzzle.isTeamPuzzle) {
       router.push(`/puzzles/${puzzle.id}`);
       return;
     }
 
-    // Team puzzle: verify admin membership
+    // Team puzzle: verify team membership
     try {
       const res = await fetch(`/api/user/team-admin?puzzleId=${puzzle.id}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.isAdmin && data.teamId) {
+        if (data.teamId && (data.isMember || data.isAdmin)) {
           router.push(`/teams/${data.teamId}/lobby?puzzleId=${encodeURIComponent(puzzle.id)}`);
           return;
         }
       }
-      setTeamModalMessage("You must be part of a team and be an admin to start team puzzles.");
+      setTeamModalTitle('Team Required');
+      setTeamModalConfirmText('OK');
+      setTeamModalCancelText(null);
+      setTeamModalConfirmAction(null);
+      setTeamModalMessage("You must be part of a team to start team puzzles.");
       setShowTeamModal(true);
     } catch (e) {
+      setTeamModalTitle('Error');
+      setTeamModalConfirmText('OK');
+      setTeamModalCancelText(null);
+      setTeamModalConfirmAction(null);
       setTeamModalMessage("Unable to verify team membership. Please try again later.");
       setShowTeamModal(true);
     }
@@ -297,6 +388,20 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
   function closeTeamModal() {
     setShowTeamModal(false);
     setTeamModalMessage("");
+    setTeamModalTitle('Notice');
+    setTeamModalConfirmText('OK');
+    setTeamModalCancelText(null);
+    setTeamModalConfirmAction(null);
+  }
+
+  function onTeamModalConfirm() {
+    const action = teamModalConfirmAction;
+    closeTeamModal();
+    try {
+      action?.();
+    } catch {
+      // ignore
+    }
   }
 
   function applyFilters() {
@@ -549,7 +654,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                 >
                   <div className="mb-4">
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-xl font-bold text-white flex-1">{puzzle.title}</h3>
+                      <h3 className="text-xl font-bold text-white flex-1">{getDisplayTitle(puzzle)}</h3>
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: puzzle.isTeamPuzzle ? 'rgba(124,58,237,0.12)' : 'rgba(56,201,153,0.12)', color: puzzle.isTeamPuzzle ? '#7C3AED' : '#38D399' }}>
                           {puzzle.isTeamPuzzle ? 'Team' : 'Solo'}
@@ -565,7 +670,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                     </div>
                     <p className="text-xs font-semibold" style={{ color: '#AB9F9D' }}>✓ Puzzle Complete</p>
                   </div>
-                  <p className="text-sm mb-3" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
+                  <p className="text-sm mb-3" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                   <div className="flex gap-2 flex-wrap mb-2">
                     <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                       {puzzle.category?.name || 'General'}
@@ -618,7 +723,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   >
                     <div className="mb-4">
                       <div className="flex justify-between items-start mb-2">
-                        <h3 className="text-xl font-bold text-white flex-1">{puzzle.title}</h3>
+                        <h3 className="text-xl font-bold text-white flex-1">{getDisplayTitle(puzzle)}</h3>
                         <div className="flex items-center gap-3">
                           <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: puzzle.isTeamPuzzle ? 'rgba(124,58,237,0.12)' : 'rgba(56,201,153,0.12)', color: puzzle.isTeamPuzzle ? '#7C3AED' : '#38D399' }}>
                             {puzzle.isTeamPuzzle ? 'Team' : 'Solo'}
@@ -635,11 +740,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                       <p className="text-xs font-semibold" style={{ color: '#AB9F9D' }}>✗ Puzzle Failed</p>
                       {puzzle.failedReason && (
                         <p className="text-sm mt-1" style={{ color: '#FFB4B4' }}>
-                          Reason: {puzzle.failedReason === 'time_limit' ? 'Time limit reached' : puzzle.failedReason === 'max_attempts' ? 'Maximum submissions reached' : puzzle.failedReason === 'given_up' ? 'Gave up' : 'Failed'}
+                          Reason: {formatFailedReason(puzzle.failedReason) || 'Failed'}
                         </p>
                       )}
                     </div>
-                    <p className="text-sm mb-3" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
+                    <p className="text-sm mb-3" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                     <div className="flex gap-2 flex-wrap mb-2">
                       <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                         {puzzle.category?.name || 'General'}
@@ -676,7 +781,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                 >
                   <div className="mb-4">
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-xl font-bold text-white flex-1">{puzzle.title}</h3>
+                      <h3 className="text-xl font-bold text-white flex-1">{getDisplayTitle(puzzle)}</h3>
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: puzzle.isTeamPuzzle ? 'rgba(124,58,237,0.12)' : 'rgba(56,201,153,0.12)', color: puzzle.isTeamPuzzle ? '#7C3AED' : '#38D399' }}>
                           {puzzle.isTeamPuzzle ? 'Team' : 'Solo'}
@@ -690,7 +795,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                         </div>
                       </div>
                     </div>
-                    <p className="text-sm mb-3" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
+                    <p className="text-sm mb-3" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                     <div className="flex gap-2 flex-wrap mb-2">
                       <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                         {puzzle.category?.name || 'General'}
@@ -775,7 +880,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                               #{puzzle.order}
                             </span>
                           ) : null}
-                          <h3 className="text-lg font-bold text-white truncate">{puzzle.title}</h3>
+                          <h3 className="text-lg font-bold text-white truncate">{getDisplayTitle(puzzle)}</h3>
                           <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: puzzle.isTeamPuzzle ? 'rgba(124,58,237,0.12)' : 'rgba(56,201,153,0.12)', color: puzzle.isTeamPuzzle ? '#7C3AED' : '#38D399' }}>
                             {puzzle.isTeamPuzzle ? 'Team' : 'Solo'}
                           </span>
@@ -783,10 +888,10 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                             ✗ Failed
                           </span>
                         </div>
-                        <p className="text-sm mb-2 line-clamp-2" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
+                        <p className="text-sm mb-2 line-clamp-2" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                         {puzzle.failedReason && (
                             <p className="text-sm mt-1" style={{ color: '#FFB4B4' }}>
-                              Reason: {puzzle.failedReason === 'time_limit' ? 'Time limit reached' : puzzle.failedReason === 'max_attempts' ? 'Maximum submissions reached' : puzzle.failedReason === 'given_up' ? 'Gave up' : 'Failed'}
+                              Reason: {formatFailedReason(puzzle.failedReason) || 'Failed'}
                             </p>
                           )}
                       </div>
@@ -819,7 +924,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                             #{puzzle.order}
                           </span>
                         ) : null}
-                        <h3 className="text-lg font-bold text-white truncate">{puzzle.title}</h3>
+                        <h3 className="text-lg font-bold text-white truncate">{getDisplayTitle(puzzle)}</h3>
                         <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: puzzle.isTeamPuzzle ? 'rgba(124,58,237,0.12)' : 'rgba(56,201,153,0.12)', color: puzzle.isTeamPuzzle ? '#7C3AED' : '#38D399' }}>
                           {puzzle.isTeamPuzzle ? 'Team' : 'Solo'}
                         </span>
@@ -827,7 +932,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                           ✓ Complete
                         </span>
                       </div>
-                      <p className="text-sm mb-2 line-clamp-2" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
+                      <p className="text-sm mb-2 line-clamp-2" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                       <div className="flex flex-wrap gap-2 mb-2">
                         <span className="text-xs px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                           {puzzle.category?.name || 'General'}
@@ -902,12 +1007,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                             #{puzzle.order}
                           </span>
                         ) : null}
-                        <h3 className="text-lg font-bold text-white truncate">{puzzle.title}</h3>
+                        <h3 className="text-lg font-bold text-white truncate">{getDisplayTitle(puzzle)}</h3>
                         <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: puzzle.isTeamPuzzle ? 'rgba(124,58,237,0.12)' : 'rgba(56,201,153,0.12)', color: puzzle.isTeamPuzzle ? '#7C3AED' : '#38D399' }}>
                           {puzzle.isTeamPuzzle ? 'Team' : 'Solo'}
                         </span>
                       </div>
-                      <p className="text-sm mb-2 line-clamp-2" style={{ color: '#DDDBF1' }}>{puzzle.description}</p>
+                      <p className="text-sm mb-2 line-clamp-2" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                       <div className="flex flex-wrap gap-2 mb-2">
                         <span className="text-xs px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                           {puzzle.category?.name || 'General'}
@@ -956,10 +1061,19 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black opacity-60" onClick={closeTeamModal}></div>
           <div className="relative bg-[#0b0b0b] rounded-lg p-6 max-w-md mx-4" style={{ border: '1px solid rgba(253, 231, 76, 0.15)' }}>
-            <h3 className="text-lg font-bold text-white mb-2">Team Required</h3>
+            <h3 className="text-lg font-bold text-white mb-2">{teamModalTitle}</h3>
             <p style={{ color: '#DDDBF1' }} className="mb-4">{teamModalMessage}</p>
-            <div className="flex justify-end">
-              <button onClick={closeTeamModal} className="px-4 py-2 rounded bg-[#3891A6] text-black font-semibold">OK</button>
+            <div className="flex justify-end gap-2">
+              {teamModalCancelText && (
+                <button
+                  onClick={closeTeamModal}
+                  className="px-4 py-2 rounded bg-transparent text-white font-semibold"
+                  style={{ border: '1px solid rgba(221, 219, 241, 0.25)' }}
+                >
+                  {teamModalCancelText}
+                </button>
+              )}
+              <button onClick={onTeamModalConfirm} className="px-4 py-2 rounded bg-[#3891A6] text-black font-semibold">{teamModalConfirmText}</button>
             </div>
           </div>
         </div>

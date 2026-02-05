@@ -5,8 +5,6 @@ import React, { useState } from 'react';
 export default function CreateEscapeRoomForm({ onCreated }: { onCreated?: () => void }) {
   const [roomTitle, setRoomTitle] = useState('');
   const [roomDescription, setRoomDescription] = useState('');
-  const [minTeamSize, setMinTeamSize] = useState(2);
-  const [maxTeamSize, setMaxTeamSize] = useState(6);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(1200);
   const [puzzleId, setPuzzleId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,8 +22,6 @@ export default function CreateEscapeRoomForm({ onCreated }: { onCreated?: () => 
           puzzleId,
           roomTitle,
           roomDescription,
-          minTeamSize,
-          maxTeamSize,
           timeLimitSeconds,
         }),
       });
@@ -35,8 +31,6 @@ export default function CreateEscapeRoomForm({ onCreated }: { onCreated?: () => 
       } else {
         setRoomTitle('');
         setRoomDescription('');
-        setMinTeamSize(2);
-        setMaxTeamSize(6);
         setTimeLimitSeconds(1200);
         setPuzzleId('');
         if (onCreated) onCreated();
@@ -62,15 +56,9 @@ export default function CreateEscapeRoomForm({ onCreated }: { onCreated?: () => 
         <label className="block text-sm">Room Description</label>
         <input value={roomDescription} onChange={e => setRoomDescription(e.target.value)} required className="border rounded px-2 py-1 w-full" />
       </div>
-      <div className="mb-2 flex gap-2">
-        <div>
-          <label className="block text-sm">Min Team Size</label>
-          <input type="number" min={1} value={minTeamSize} onChange={e => setMinTeamSize(Number(e.target.value))} required className="border rounded px-2 py-1 w-20" />
-        </div>
-        <div>
-          <label className="block text-sm">Max Team Size</label>
-          <input type="number" min={minTeamSize} value={maxTeamSize} onChange={e => setMaxTeamSize(Number(e.target.value))} required className="border rounded px-2 py-1 w-20" />
-        </div>
+      <div className="mb-2">
+        <label className="block text-sm">Team Size</label>
+        <div className="text-sm text-gray-700">Fixed: 4 players (team-only)</div>
       </div>
       <div className="mb-2">
         <label className="block text-sm">Time Limit (seconds)</label>

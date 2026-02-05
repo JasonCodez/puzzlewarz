@@ -1,8 +1,8 @@
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import axios from 'axios';
 
 type DevServerHandle = {
-  proc: ChildProcessWithoutNullStreams | null;
+  proc: ChildProcess | null;
   stop: () => Promise<void>;
 };
 

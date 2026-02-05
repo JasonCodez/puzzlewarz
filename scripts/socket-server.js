@@ -157,6 +157,152 @@ const io = new Server(server, {
 // In-memory lobby state (lightweight sync). Keyed by `${teamId}::${puzzleId}`
 const lobbies = new Map();
 
+// Escape-room presence tracking (unique users). Keyed by `${teamId}::${puzzleId}`.
+// Value: Map<userId, connectionCount>
+const escapeRoomCounts = new Map();
+// Per-socket memberships so we can cleanly remove on disconnect.
+const socketEscapeMemberships = new Map(); // socketId -> Array<{ teamId, puzzleId, userId }>
+
+const REQUIRED_ESCAPE_PLAYERS = 4;
+const JOIN_WAIT_MS = Number(process.env.ESCAPE_JOIN_WAIT_MS) || 20_000;
+const DISCONNECT_GRACE_MS = Number(process.env.ESCAPE_DISCONNECT_GRACE_MS) || 5_000;
+
+// Lobby disconnect grace:
+// Users often navigate between pages (lobby -> planning -> puzzle), which can briefly drop the socket.
+// Treat disconnect as transient for a short window to avoid false "participantLeft" notices.
+const LOBBY_DISCONNECT_GRACE_MS = Number(process.env.LOBBY_DISCONNECT_GRACE_MS) || 15_000;
+
+// Key: `${teamId}::${puzzleId}::${userId}` -> Timeout
+const lobbyDisconnectTimers = new Map();
+
+const joinWaitTimers = new Map(); // key `${teamId}::${puzzleId}` -> Timeout
+const disconnectTimers = new Map(); // key `${teamId}::${puzzleId}` -> Timeout
+
+function escapeKey(teamId, puzzleId) {
+  return `${teamId}::${puzzleId}`;
+}
+
+function escapeRoomUniqueCount(key) {
+  const counts = escapeRoomCounts.get(key);
+  return counts ? counts.size : 0;
+}
+
+function addEscapeMember(teamId, puzzleId, userId) {
+  const key = escapeKey(teamId, puzzleId);
+  let counts = escapeRoomCounts.get(key);
+  if (!counts) {
+    counts = new Map();
+    escapeRoomCounts.set(key, counts);
+  }
+  counts.set(userId, (counts.get(userId) || 0) + 1);
+  return counts.size;
+}
+
+function removeEscapeMember(teamId, puzzleId, userId) {
+  const key = escapeKey(teamId, puzzleId);
+  const counts = escapeRoomCounts.get(key);
+  if (!counts) return 0;
+  const cur = counts.get(userId) || 0;
+  if (cur <= 1) counts.delete(userId);
+  else counts.set(userId, cur - 1);
+  if (counts.size === 0) escapeRoomCounts.delete(key);
+  return counts.size;
+}
+
+function appBaseUrl() {
+  const raw = process.env.APP_URL || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return (raw || '').replace(/\/$/, '');
+}
+
+async function callAppServerAbort({ teamId, puzzleId, reason }) {
+  try {
+    if (!process.env.SOCKET_SECRET) return;
+    const url = appBaseUrl() + '/api/team/lobby';
+    if (!global.fetch) return;
+
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-socket-secret': process.env.SOCKET_SECRET,
+      },
+      body: JSON.stringify({ action: 'serverAbort', teamId, puzzleId, reason, skipEmit: true }),
+    }).catch(() => null);
+  } catch (e) {
+    // ignore
+  }
+}
+
+function clearAbortTimers(key) {
+  const jw = joinWaitTimers.get(key);
+  if (jw) {
+    clearTimeout(jw);
+    joinWaitTimers.delete(key);
+  }
+  const dt = disconnectTimers.get(key);
+  if (dt) {
+    clearTimeout(dt);
+    disconnectTimers.delete(key);
+  }
+}
+
+async function performEscapeAbort(teamId, puzzleId, reason) {
+  const key = escapeKey(teamId, puzzleId);
+  const count = escapeRoomUniqueCount(key);
+  if (count >= REQUIRED_ESCAPE_PLAYERS) {
+    clearAbortTimers(key);
+    return;
+  }
+
+  // Notify clients in both lobby + escape rooms.
+  io.to(key).emit('lobbyDestroyed', { teamId, puzzleId, reason });
+  io.to(`escape:${key}`).emit('escapeAborted', { teamId, puzzleId, reason });
+
+  // Best-effort cleanup of socket-server lobby cache.
+  try { lobbies.delete(key); } catch (e) {}
+  try { clearAbortTimers(key); } catch (e) {}
+
+  // Ask Next.js to destroy its in-memory lobby + reset escape-room progress.
+  await callAppServerAbort({ teamId, puzzleId, reason });
+}
+
+function scheduleJoinWaitAbort(teamId, puzzleId) {
+  const key = escapeKey(teamId, puzzleId);
+  if (joinWaitTimers.has(key)) return;
+
+  const t = setTimeout(() => {
+    joinWaitTimers.delete(key);
+    const count = escapeRoomUniqueCount(key);
+    if (count >= REQUIRED_ESCAPE_PLAYERS) return;
+    performEscapeAbort(teamId, puzzleId, 'missing_player').catch(() => null);
+  }, JOIN_WAIT_MS);
+  joinWaitTimers.set(key, t);
+}
+
+function scheduleDisconnectAbort(teamId, puzzleId) {
+  const key = escapeKey(teamId, puzzleId);
+
+  // If we're already full again, cancel any pending disconnect abort.
+  const count = escapeRoomUniqueCount(key);
+  if (count >= REQUIRED_ESCAPE_PLAYERS) {
+    const dt = disconnectTimers.get(key);
+    if (dt) {
+      clearTimeout(dt);
+      disconnectTimers.delete(key);
+    }
+    return;
+  }
+
+  if (disconnectTimers.has(key)) return;
+  const t = setTimeout(() => {
+    disconnectTimers.delete(key);
+    const after = escapeRoomUniqueCount(key);
+    if (after >= REQUIRED_ESCAPE_PLAYERS) return;
+    performEscapeAbort(teamId, puzzleId, 'player_disconnected').catch(() => null);
+  }, DISCONNECT_GRACE_MS);
+  disconnectTimers.set(key, t);
+}
+
 // Track connected sockets per userId so server-side code may push notifications
 const userSockets = new Map(); // userId -> Set(socketId)
 
@@ -168,16 +314,85 @@ function getState(key) {
 io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
+  // Escape-room room membership (separate from lobby rooms)
+  socket.on('joinEscapeRoom', ({ teamId, puzzleId, userId }) => {
+    try {
+      if (!teamId || !puzzleId || !userId) return;
+      const room = `escape:${teamId}::${puzzleId}`;
+      socket.join(room);
+
+      // Track membership for abort logic.
+      const list = socketEscapeMemberships.get(socket.id) || [];
+      const already = list.some((m) => m.teamId === teamId && m.puzzleId === puzzleId && m.userId === userId);
+      if (!already) {
+        addEscapeMember(teamId, puzzleId, userId);
+        list.push({ teamId, puzzleId, userId });
+        socketEscapeMemberships.set(socket.id, list);
+      }
+
+      // Start a "missing player" timer once the first player arrives.
+      scheduleJoinWaitAbort(teamId, puzzleId);
+
+      // If we've reached quorum, clear any abort timers.
+      const key = escapeKey(teamId, puzzleId);
+      if (escapeRoomUniqueCount(key) >= REQUIRED_ESCAPE_PLAYERS) {
+        clearAbortTimers(key);
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+
+  socket.on('leaveEscapeRoom', ({ teamId, puzzleId, userId }) => {
+    try {
+      if (!teamId || !puzzleId || !userId) return;
+      const room = `escape:${teamId}::${puzzleId}`;
+      socket.leave(room);
+
+      // Only decrement if this socket previously joined.
+      const list = socketEscapeMemberships.get(socket.id) || [];
+      const idx = list.findIndex((m) => m.teamId === teamId && m.puzzleId === puzzleId && m.userId === userId);
+      if (idx >= 0) {
+        list.splice(idx, 1);
+        if (list.length > 0) socketEscapeMemberships.set(socket.id, list);
+        else socketEscapeMemberships.delete(socket.id);
+
+        removeEscapeMember(teamId, puzzleId, userId);
+        scheduleDisconnectAbort(teamId, puzzleId);
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+
   socket.on('joinLobby', ({ teamId, puzzleId, userId, name, isAdmin }) => {
     if (!teamId || !puzzleId || !userId) return;
     const key = `${teamId}::${puzzleId}`;
     socket.join(key);
+
+    // Cancel any pending disconnect removal for this lobby/user.
+    try {
+      const dk = `${key}::${userId}`;
+      const t = lobbyDisconnectTimers.get(dk);
+      if (t) {
+        clearTimeout(t);
+        lobbyDisconnectTimers.delete(dk);
+      }
+    } catch (e) {
+      // ignore
+    }
+
     let state = lobbies.get(key);
     if (!state) {
       state = { participants: {}, ready: {} };
       lobbies.set(key, state);
     }
-    state.participants[userId] = { userId, name, socketId: socket.id, isAdmin: !!isAdmin };
+
+    const incomingName = typeof name === 'string' ? name.trim() : '';
+    const existing = state.participants ? state.participants[userId] : undefined;
+    const finalName = incomingName || (existing && typeof existing.name === 'string' ? existing.name : '') || '';
+
+    state.participants[userId] = { userId, name: finalName, socketId: socket.id, isAdmin: !!isAdmin };
     // register socket for userId so notifications can be pushed
     if (userId) {
       let set = userSockets.get(userId);
@@ -192,6 +407,19 @@ io.on('connection', (socket) => {
   socket.on('leaveLobby', ({ teamId, puzzleId, userId }) => {
     const key = `${teamId}::${puzzleId}`;
     socket.leave(key);
+
+    // Explicit leave should cancel any pending disconnect removal.
+    try {
+      const dk = `${key}::${userId}`;
+      const t = lobbyDisconnectTimers.get(dk);
+      if (t) {
+        clearTimeout(t);
+        lobbyDisconnectTimers.delete(dk);
+      }
+    } catch (e) {
+      // ignore
+    }
+
     const state = lobbies.get(key);
     if (state) {
       delete state.participants[userId];
@@ -246,30 +474,71 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    // remove socket from any lobbies
-    for (const [key, state] of lobbies.entries()) {
-      const toRemove = Object.values(state.participants).find((p) => p.socketId === socket.id);
-      if (toRemove) {
-        const removed = toRemove;
-        delete state.participants[removed.userId];
-        delete state.ready[removed.userId];
-        io.to(key).emit('lobbyState', getState(key));
+    // Escape-room presence cleanup + abort scheduling
+    try {
+      const memberships = socketEscapeMemberships.get(socket.id) || [];
+      for (const m of memberships) {
         try {
-          const payload = { teamId: key.split('::')[0], puzzleId: key.split('::')[1], userId: removed.userId, userName: removed.name };
-          if (removed.isAdmin) {
-            // admin left -> destroy lobby for others
-            io.to(key).emit('lobbyDestroyed', { teamId: payload.teamId, puzzleId: payload.puzzleId, reason: 'leader_left' });
-            lobbies.delete(key);
-          } else {
-            io.to(key).emit('participantLeft', payload);
-          }
+          removeEscapeMember(m.teamId, m.puzzleId, m.userId);
+          scheduleDisconnectAbort(m.teamId, m.puzzleId);
         } catch (e) {
           // ignore
         }
       }
-      // cleanup empty lobbies
-      if (Object.keys(state.participants).length === 0) lobbies.delete(key);
+      socketEscapeMemberships.delete(socket.id);
+    } catch (e) {
+      // ignore
     }
+
+    // Handle disconnect from lobby rooms with a short grace period.
+    // This prevents false "left lobby" notices when a user navigates between pages.
+    for (const [key, state] of lobbies.entries()) {
+      const participant = Object.values(state.participants).find((p) => p.socketId === socket.id);
+      if (!participant) continue;
+
+      const teamId = key.split('::')[0];
+      const puzzleId = key.split('::')[1];
+      const userId = participant.userId;
+      const userName = participant.name;
+
+      // Mark as disconnected (but keep in participants until grace expires).
+      try {
+        state.participants[userId] = { ...participant, socketId: null };
+      } catch (e) {
+        // ignore
+      }
+
+      const timerKey = `${key}::${userId}`;
+      if (!lobbyDisconnectTimers.has(timerKey)) {
+        const t = setTimeout(() => {
+          try {
+            lobbyDisconnectTimers.delete(timerKey);
+            const current = lobbies.get(key);
+            if (!current) return;
+
+            const curP = current.participants && current.participants[userId];
+            // If they rejoined (socketId set), do nothing.
+            if (curP && curP.socketId) return;
+
+            // Remove participant after grace.
+            if (curP) {
+              delete current.participants[userId];
+              delete current.ready[userId];
+              io.to(key).emit('lobbyState', getState(key));
+              io.to(key).emit('participantLeft', { teamId, puzzleId, userId, userName });
+            }
+
+            if (current.participants && Object.keys(current.participants).length === 0) {
+              lobbies.delete(key);
+            }
+          } catch (e) {
+            // ignore
+          }
+        }, LOBBY_DISCONNECT_GRACE_MS);
+        lobbyDisconnectTimers.set(timerKey, t);
+      }
+    }
+
     // remove socket from any user socket registries
     for (const [uid, set] of userSockets.entries()) {
       if (set.has(socket.id)) {

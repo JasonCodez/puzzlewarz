@@ -32,8 +32,27 @@ export default function PixiRoom({
   const appRef = useRef<PIXI.Application | null>(null);
   const createdCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const createdOverlayRef = useRef<HTMLCanvasElement | null>(null);
+  const hotspotsRef = useRef<Hotspot[]>(hotspots);
+  const onHotspotActionRef = useRef<typeof onHotspotAction>(onHotspotAction);
   // local handle for canvas created inside effect (so closures can reference it)
   let createdCanvasLocal: HTMLCanvasElement | null = null;
+
+  useEffect(() => {
+    hotspotsRef.current = hotspots;
+  }, [hotspots]);
+
+  useEffect(() => {
+    onHotspotActionRef.current = onHotspotAction;
+  }, [onHotspotAction]);
+
+  const layoutKey = layout?.id ?? null;
+  const layoutBg = layout?.backgroundUrl ?? null;
+  const layoutW = layout?.width ?? null;
+  const layoutH = layout?.height ?? null;
+
+  const isEditor = typeof onHotspotMove === 'function' || typeof onHotspotTransform === 'function';
+
+  type FitMode = 'cover' | 'contain';
 
   useEffect(() => {
     try {
@@ -83,7 +102,10 @@ export default function PixiRoom({
         // otherwise fall back to the constructor for compatibility with older builds.
         const appOptions = {
           view: canvas,
-          backgroundAlpha: 0,
+          // Player view uses a solid background so letterboxing from 'contain' isn't white.
+          // Designer/editor stays transparent so it blends with the editor UI.
+          backgroundAlpha: isEditor ? 0 : 1,
+          backgroundColor: 0x0b1220,
           resolution: window.devicePixelRatio || 1,
           autoDensity: true,
           width,
@@ -167,8 +189,8 @@ export default function PixiRoom({
                 overlay.style.height = '100%';
                     // allow pointer events on the overlay so we can handle hotspot clicks in pure-canvas mode
                     overlay.style.pointerEvents = 'auto';
-                    // ensure overlay is on top of any PIXI canvas/view
-                    overlay.style.zIndex = '2147483647';
+                  // keep overlay above the PIXI canvas, but below the fixed Navbar (z-50)
+                  overlay.style.zIndex = '10';
                 createdOverlayRef.current = overlay;
                 try { containerRef.current.appendChild(overlay); } catch (_) { /* ignore */ }
                 try {
@@ -191,16 +213,21 @@ export default function PixiRoom({
                       const by = (ev.clientY - rect.top) * dprLocal;
                       const canvasW = overlay.width || Math.max(1, Math.floor(rect.width * dprLocal));
                       const canvasH = overlay.height || Math.max(1, Math.floor(rect.height * dprLocal));
-                      const layoutW = layout.width || 800;
-                      const layoutH = layout.height || 600;
-                      const scale = Math.max(canvasW / layoutW, canvasH / layoutH);
-                      const offsetX = (canvasW - layoutW * scale) / 2;
-                      const offsetY = (canvasH - layoutH * scale) / 2;
+                      const layoutW = layout.width || (bgImageEl && bgImageEl.naturalWidth) || 800;
+                      const layoutH = layout.height || (bgImageEl && bgImageEl.naturalHeight) || 600;
+                      const mode = getFitMode();
+                      const { scale, offsetX, offsetY } = computeTransform(layoutW, layoutH, canvasW, canvasH, mode);
                       const lx = (bx - offsetX) / scale;
                       const ly = (by - offsetY) / scale;
-                      for (const hs of hotspots || []) {
+                      const hsNorm = normalizeHotspotsToLayout(hotspotsRef.current || [], layoutW, layoutH);
+                      for (const hs of hsNorm || []) {
                         if (lx >= hs.x && lx <= hs.x + hs.w && ly >= hs.y && ly <= hs.y + hs.h) {
-                          try { if (typeof onHotspotAction === 'function') onHotspotAction(hs.id); } catch (e) { console.error('Hotspot action error', e); }
+                          try {
+                            const fn = onHotspotActionRef.current;
+                            if (typeof fn === 'function') fn(hs.id);
+                          } catch (e) {
+                            console.error('Hotspot action error', e);
+                          }
                           ev.stopPropagation();
                           ev.preventDefault();
                           return;
@@ -304,6 +331,100 @@ export default function PixiRoom({
 
     let bgSprite: PIXI.Sprite | null = null;
 
+      const PREVIEW_W = 600;
+      const PREVIEW_H = 320;
+
+      const resolveLayoutSize = () => {
+        let w = (layout.width || (bgImageEl && bgImageEl.naturalWidth) || 0) as number;
+        let h = (layout.height || (bgImageEl && bgImageEl.naturalHeight) || 0) as number;
+
+        if ((!w || !h) && bgSprite) {
+          try {
+            const tex: any = (bgSprite as any).texture;
+            const base = tex?.baseTexture;
+            const orig = tex?.orig;
+            const iw = (orig && orig.width) || (base && (base.realWidth || base.width)) || 0;
+            const ih = (orig && orig.height) || (base && (base.realHeight || base.height)) || 0;
+            if ((!w || !h) && iw && ih) {
+              w = iw;
+              h = ih;
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (!w) w = 800;
+        if (!h) h = 600;
+        return { w, h };
+      };
+
+      const hotspotsLikelyPreviewCoords = (hsList: any[], layoutW: number, layoutH: number) => {
+        try {
+          if (!Array.isArray(hsList) || hsList.length === 0) return false;
+          let maxX = 0;
+          let maxY = 0;
+          for (const hs of hsList) {
+            const x = Number(hs?.x) || 0;
+            const y = Number(hs?.y) || 0;
+            const w = Number(hs?.w) || 0;
+            const h = Number(hs?.h) || 0;
+            maxX = Math.max(maxX, x + w);
+            maxY = Math.max(maxY, y + h);
+          }
+          const withinPreview = maxX <= PREVIEW_W + 2 && maxY <= PREVIEW_H + 2;
+          const layoutBiggerThanPreview = layoutW > PREVIEW_W + 2 || layoutH > PREVIEW_H + 2;
+          return withinPreview && layoutBiggerThanPreview;
+        } catch {
+          return false;
+        }
+      };
+
+      const normalizeHotspotsToLayout = (hsList: any[], layoutW: number, layoutH: number) => {
+        if (!Array.isArray(hsList) || hsList.length === 0) return [];
+        if (!hotspotsLikelyPreviewCoords(hsList, layoutW, layoutH)) return hsList;
+
+        const scalePreview = Math.max(PREVIEW_W / layoutW, PREVIEW_H / layoutH);
+        const offsetPreviewX = (PREVIEW_W - layoutW * scalePreview) / 2;
+        const offsetPreviewY = (PREVIEW_H - layoutH * scalePreview) / 2;
+
+        return hsList.map((hs: any) => {
+          const x = ((Number(hs?.x) || 0) - offsetPreviewX) / (scalePreview || 1);
+          const y = ((Number(hs?.y) || 0) - offsetPreviewY) / (scalePreview || 1);
+          const w = (Number(hs?.w) || 0) / (scalePreview || 1);
+          const h = (Number(hs?.h) || 0) / (scalePreview || 1);
+          return { ...hs, x, y, w, h };
+        });
+      };
+
+      const getFitMode = (): FitMode => {
+        // Designer/editor expects cover so saved coords remain consistent.
+        if (isEditor) return 'cover';
+        try {
+          const cw = containerRef.current?.clientWidth || 0;
+          // Small widths = mobile; show the whole room (no crop).
+          if (cw > 0 && cw < 640) return 'contain';
+        } catch {
+          // ignore
+        }
+        return 'cover';
+      };
+
+      const computeScale = (sx: number, sy: number, mode: FitMode) => {
+        return mode === 'contain' ? Math.min(sx, sy) : Math.max(sx, sy);
+      };
+
+      const computeTransform = (layoutW: number, layoutH: number, targetW: number, targetH: number, mode: FitMode) => {
+        const safeW = layoutW || 1;
+        const safeH = layoutH || 1;
+        const sx = targetW / safeW;
+        const sy = targetH / safeH;
+        const scale = computeScale(sx, sy, mode);
+        const offsetX = (targetW - safeW * scale) / 2;
+        const offsetY = (targetH - safeH * scale) / 2;
+        return { scale, offsetX, offsetY };
+      };
+
       const draw = () => {
         if (usePureCanvas) {
             try {
@@ -316,30 +437,36 @@ export default function PixiRoom({
             // clear
             ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
             // fill fallback background
-            ctx.fillStyle = '#f3f4f6';
+            ctx.fillStyle = '#0b1220';
             ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
             // draw background image if available
             if (bgImageEl && bgImageEl.complete && bgImageEl.naturalWidth) {
               // compute scale to fit
               const layoutW = layout.width || bgImageEl.naturalWidth || 800;
               const layoutH = layout.height || bgImageEl.naturalHeight || 600;
-              // use 'cover' scaling so the background fills the canvas (may crop)
-              const sx = canvasEl.width / layoutW;
-              const sy = canvasEl.height / layoutH;
-              const scale = Math.max(sx, sy);
+              const mode = getFitMode();
+              const { scale, offsetX, offsetY } = computeTransform(layoutW, layoutH, canvasEl.width, canvasEl.height, mode);
               const drawW = Math.round(layoutW * scale);
               const drawH = Math.round(layoutH * scale);
-              const dx = Math.floor((canvasEl.width - drawW) / 2);
-              const dy = Math.floor((canvasEl.height - drawH) / 2);
+              const dx = Math.floor(offsetX);
+              const dy = Math.floor(offsetY);
               try { ctx.drawImage(bgImageEl, 0, 0, bgImageEl.naturalWidth, bgImageEl.naturalHeight, dx, dy, drawW, drawH); } catch (_) { /* ignore */ }
             }
+            const { w: effectiveLayoutW, h: effectiveLayoutH } = resolveLayoutSize();
+
             // draw items (uploaded images) on top of background — only draw after image loads
             try {
               const items = (layout as any).items || [];
               console.info('[PixiRoom] canvas items count', Array.isArray(items) ? items.length : 0);
               if (Array.isArray(items) && items.length > 0) {
-                // sort by preview bottom (y + h) so items with lower bottom edge render on top (visual depth)
-                const itemsSorted = items.slice().sort((a: any, b: any) => ((a.y || 0) + (a.h || 0)) - ((b.y || 0) + (b.h || 0)));
+                // Preserve Designer stacking order (array order) unless an explicit zIndex is provided.
+                const itemsSorted = items
+                  .map((it: any, idx: number) => ({ ...it, __idx: idx }))
+                  .sort((a: any, b: any) => {
+                    const za = (typeof a.zIndex === 'number' ? a.zIndex : (typeof a.z === 'number' ? a.z : a.__idx)) as number;
+                    const zb = (typeof b.zIndex === 'number' ? b.zIndex : (typeof b.z === 'number' ? b.z : b.__idx)) as number;
+                    return za - zb;
+                  });
                 for (const it of itemsSorted) {
                   try {
                     const src = it?.imageUrl || '';
@@ -355,16 +482,13 @@ export default function PixiRoom({
                       img.onerror = () => { console.info('[PixiRoom] item image load failed', src); };
                       imageCache.set(src, img);
                     }
-                    const itemLayoutW = layout.width || 800;
-                    const itemLayoutH = layout.height || (bgImageEl && bgImageEl.naturalHeight) || 600;
-                    const PREVIEW_W = 600;
-                    const PREVIEW_H = 320;
+                    const itemLayoutW = effectiveLayoutW;
+                    const itemLayoutH = effectiveLayoutH;
                     const scalePreview = Math.max(PREVIEW_W / itemLayoutW, PREVIEW_H / itemLayoutH);
                     const offsetPreviewX = (PREVIEW_W - itemLayoutW * scalePreview) / 2;
                     const offsetPreviewY = (PREVIEW_H - itemLayoutH * scalePreview) / 2;
-                    const scaleTarget = Math.max((canvasEl.width) / itemLayoutW, (canvasEl.height) / itemLayoutH);
-                    const offsetTargetX = Math.floor((canvasEl.width - itemLayoutW * scaleTarget) / 2);
-                    const offsetTargetY = Math.floor((canvasEl.height - itemLayoutH * scaleTarget) / 2);
+                    const mode = getFitMode();
+                    const { scale: scaleTarget, offsetX: offsetTargetX, offsetY: offsetTargetY } = computeTransform(itemLayoutW, itemLayoutH, canvasEl.width, canvasEl.height, mode);
                     const iw = (typeof it.w === 'number' && it.w > 0) ? it.w : 32;
                     const ih = (typeof it.h === 'number' && it.h > 0) ? it.h : 32;
                     const itemXInLayout = ((it.x || 0) - offsetPreviewX) / (scalePreview || 1);
@@ -382,15 +506,14 @@ export default function PixiRoom({
             } catch (_) { /* ignore */ }
             // draw hotspots
             try {
-              for (const hs of hotspots || []) {
-                const layoutW = layout.width || 800;
-                const layoutH = layout.height || 600;
-                // mirror PIXI cover logic: compute scale to cover target area
-                const sx = (canvasEl.width) / layoutW;
-                const sy = (canvasEl.height) / layoutH;
-                const scale = Math.max(sx, sy);
-                const x = Math.floor((canvasEl.width - layoutW * scale) / 2 + hs.x * scale);
-                const y = Math.floor((canvasEl.height - layoutH * scale) / 2 + hs.y * scale);
+              const hsNorm = normalizeHotspotsToLayout(hotspotsRef.current || [], effectiveLayoutW, effectiveLayoutH);
+              for (const hs of hsNorm || []) {
+                const layoutW = effectiveLayoutW;
+                const layoutH = effectiveLayoutH;
+                const mode = getFitMode();
+                const { scale, offsetX, offsetY } = computeTransform(layoutW, layoutH, canvasEl.width, canvasEl.height, mode);
+                const x = Math.floor(offsetX + hs.x * scale);
+                const y = Math.floor(offsetY + hs.y * scale);
                 const w = Math.max(1, Math.floor(hs.w * scale));
                 const h = Math.max(1, Math.floor(hs.h * scale));
                 // hide hotspot outlines in player view (Designer shows them).
@@ -408,6 +531,12 @@ export default function PixiRoom({
       const appInst = appRef.current;
       const renderer = (appInst as any).renderer;
       if (!renderer || !renderer.view) return;
+
+      // Pixi v8 events: make sure the stage participates in event processing.
+      try {
+        (appInst.stage as any).eventMode = 'static';
+        (appInst.stage as any).hitArea = (appInst as any).screen;
+      } catch (_) { /* ignore */ }
       appInst.stage.removeChildren();
 
       // background
@@ -472,8 +601,14 @@ export default function PixiRoom({
           if (Array.isArray(items) && items.length > 0) {
             // allow zIndex sorting so we can preserve Designer stacking order
             try { appInst.stage.sortableChildren = true; } catch (_) { /* ignore */ }
-            // sort by preview bottom (y + h) so items with lower bottom edge render on top (visual depth)
-            const itemsSorted = items.slice().sort((a: any, b: any) => ((a.y || 0) + (a.h || 0)) - ((b.y || 0) + (b.h || 0)));
+            // Preserve Designer stacking order (array order) unless an explicit zIndex is provided.
+            const itemsSorted = items
+              .map((it: any, idx: number) => ({ ...it, __idx: idx }))
+              .sort((a: any, b: any) => {
+                const za = (typeof a.zIndex === 'number' ? a.zIndex : (typeof a.z === 'number' ? a.z : a.__idx)) as number;
+                const zb = (typeof b.zIndex === 'number' ? b.zIndex : (typeof b.z === 'number' ? b.z : b.__idx)) as number;
+                return za - zb;
+              });
             for (let sortedIdx = 0; sortedIdx < itemsSorted.length; sortedIdx++) {
               const it = itemsSorted[sortedIdx];
               try {
@@ -500,8 +635,41 @@ export default function PixiRoom({
                 sprIt.height = ih * scaleTarget;
                 sprIt.x = offsetTargetX + itemXInLayout * scaleTarget;
                 sprIt.y = offsetTargetY + itemYInLayout * scaleTarget;
-                // use sorted index so lower Y drawn first, higher Y on top
+                // use sorted index so Designer ordering is preserved
                 try { (sprIt as any).zIndex = sortedIdx; } catch (_) { /* ignore */ }
+
+                // Player UX: allow clicking the item itself to trigger the hotspot that covers it.
+                // (Designer mode keeps item sprites non-interactive.)
+                if (!isEditor) {
+                  try {
+                    (sprIt as any).eventMode = 'static';
+                    (sprIt as any).cursor = 'pointer';
+                    sprIt.on('pointertap', async (event: any) => {
+                      const hsRaw = hotspotsRef.current || [];
+                      const hsList = normalizeHotspotsToLayout(hsRaw as any[], itemLayoutW, itemLayoutH);
+
+                      const gx = (event && (event.global?.x ?? event.data?.global?.x)) as number | undefined;
+                      const gy = (event && (event.global?.y ?? event.data?.global?.y)) as number | undefined;
+                      const lx = (typeof gx === 'number') ? ((gx - offsetTargetX) / (scaleTarget || 1)) : null;
+                      const ly = (typeof gy === 'number') ? ((gy - offsetTargetY) / (scaleTarget || 1)) : null;
+
+                      // Fall back to the item center in layout coords if we couldn't read event coords.
+                      const iwInLayout = iw / (scalePreview || 1);
+                      const ihInLayout = ih / (scalePreview || 1);
+                      const cx = itemXInLayout + iwInLayout / 2;
+                      const cy = itemYInLayout + ihInLayout / 2;
+                      const px = (lx == null ? cx : lx);
+                      const py = (ly == null ? cy : ly);
+
+                      const hit = (hsList as any[]).find((hs) => px >= hs.x && px <= hs.x + hs.w && py >= hs.y && py <= hs.y + hs.h);
+                      if (!hit) return;
+                      const fn = onHotspotActionRef.current;
+                      if (typeof fn === 'function') await fn(hit.id);
+                    });
+                  } catch (_) {
+                    // ignore
+                  }
+                }
                 appInst.stage.addChild(sprIt);
               } catch (_) { /* ignore per-item errors */ }
             }
@@ -533,9 +701,11 @@ export default function PixiRoom({
       // hotspots (now container-based for smooth dragging)
       // ensure stage supports zIndex sorting so hotspots with high zIndex sit above items
       try { appInst.stage.sortableChildren = true; } catch (_) { /* ignore */ }
-      for (const hs of hotspots || []) {
-        const layoutW = layout.width || 800;
-        const layoutH = layout.height || 600;
+      const { w: effLayoutW, h: effLayoutH } = resolveLayoutSize();
+      const hsNorm = normalizeHotspotsToLayout(hotspotsRef.current || [], effLayoutW, effLayoutH);
+      for (const hs of hsNorm || []) {
+        const layoutW = effLayoutW;
+        const layoutH = effLayoutH;
         const targetW = renderer.width || (renderer.view && renderer.view.width) || 0;
         const targetH = renderer.height || (renderer.view && renderer.view.height) || 0;
         const sx = targetW / layoutW;
@@ -583,8 +753,9 @@ export default function PixiRoom({
           hdl.beginFill(0x333333, 0.9);
           hdl.drawRect(0, 0, handleSize, handleSize);
           hdl.endFill();
-          hdl.interactive = true;
-          hdl.cursor = cursor;
+          // Pixi v8: use eventMode instead of interactive
+          (hdl as any).eventMode = 'static';
+          (hdl as any).cursor = cursor;
           return hdl;
         };
         const hNW = makeHandle('nwse-resize');
@@ -606,8 +777,10 @@ export default function PixiRoom({
 
         c.x = x;
         c.y = y;
-        c.interactive = true;
-        c.cursor = "pointer";
+        // Pixi v8: use eventMode instead of interactive
+        (c as any).eventMode = 'static';
+        (c as any).cursor = 'pointer';
+        try { (c as any).hitArea = new PIXI.Rectangle(0, 0, currW, currH); } catch (_) { /* ignore */ }
         // ensure hotspots render above scene items so they receive pointer events
         try { (c as any).zIndex = 99999; } catch (_) { /* ignore */ }
 
@@ -619,30 +792,47 @@ export default function PixiRoom({
         (c as any)._downTime = 0;
         (c as any)._resizing = null as null | { handle: 'nw' | 'ne' | 'sw' | 'se'; data: any; start: { x: number; y: number; w: number; h: number; px: number; py: number } };
 
-        c.on("pointerover", () => { outline.alpha = 1.0; hNW.visible = hNE.visible = hSW.visible = hSE.visible = true; });
-        c.on("pointerout", () => { if (!(c as any)._dragging && !(c as any)._resizing) { outline.alpha = 0.0; hNW.visible = hNE.visible = hSW.visible = hSE.visible = false; } });
+        if (isEditor) {
+          c.on("pointerover", () => { outline.alpha = 1.0; hNW.visible = hNE.visible = hSW.visible = hSE.visible = true; });
+          c.on("pointerout", () => { if (!(c as any)._dragging && !(c as any)._resizing) { outline.alpha = 0.0; hNW.visible = hNE.visible = hSW.visible = hSE.visible = false; } });
+        } else {
+          outline.alpha = 0.0;
+          hNW.visible = hNE.visible = hSW.visible = hSE.visible = false;
+        }
 
-        // pointerdown on container (start drag)
-        c.on("pointerdown", (event: any) => {
-          // don't start a drag if a handle started it
-          if ((c as any)._resizing) return;
-          (c as any)._dragData = event.data;
-          (c as any)._dragging = true;
-          try {
-            const pos = (c as any)._dragData.getLocalPosition(appInst.stage);
-            (c as any)._dragOffset.x = pos.x - c.x;
-            (c as any)._dragOffset.y = pos.y - c.y;
-            (c as any)._downPos.x = pos.x;
-            (c as any)._downPos.y = pos.y;
-          } catch (err) {
-            // fallback
-            (c as any)._dragOffset.x = 0;
-            (c as any)._dragOffset.y = 0;
-            (c as any)._downPos.x = 0;
-            (c as any)._downPos.y = 0;
-          }
-          (c as any)._downTime = Date.now();
-        });
+        if (isEditor) {
+          // pointerdown on container (start drag)
+          c.on("pointerdown", (event: any) => {
+            // don't start a drag if a handle started it
+            if ((c as any)._resizing) return;
+            (c as any)._dragData = event.data;
+            (c as any)._dragging = true;
+            try {
+              const pos = (c as any)._dragData.getLocalPosition(appInst.stage);
+              (c as any)._dragOffset.x = pos.x - c.x;
+              (c as any)._dragOffset.y = pos.y - c.y;
+              (c as any)._downPos.x = pos.x;
+              (c as any)._downPos.y = pos.y;
+            } catch (err) {
+              // fallback
+              (c as any)._dragOffset.x = 0;
+              (c as any)._dragOffset.y = 0;
+              (c as any)._downPos.x = 0;
+              (c as any)._downPos.y = 0;
+            }
+            (c as any)._downTime = Date.now();
+          });
+        } else {
+          // Player mode: treat the hotspot as a click target.
+          c.on("pointertap", async () => {
+            try {
+              const fn = onHotspotActionRef.current;
+              if (typeof fn === 'function') await fn(hs.id);
+            } catch (e) {
+              console.error('Hotspot action error', e);
+            }
+          });
+        }
 
         c.on("pointermove", () => {
           // dragging
@@ -658,6 +848,7 @@ export default function PixiRoom({
               const maxY = bgTop + layoutH * scale - currH;
               c.x = Math.max(bgLeft, Math.min(newX, maxX));
               c.y = Math.max(bgTop, Math.min(newY, maxY));
+              try { (c as any).hitArea = new PIXI.Rectangle(0, 0, currW, currH); } catch (_) { /* ignore */ }
               return;
             } catch (err) {
               return;
@@ -706,6 +897,7 @@ export default function PixiRoom({
               drawHit();
               drawOutline();
               positionHandles();
+              try { (c as any).hitArea = new PIXI.Rectangle(0, 0, currW, currH); } catch (_) { /* ignore */ }
               return;
             } catch (err) {
               return;
@@ -737,7 +929,12 @@ export default function PixiRoom({
             const moved = Math.hypot(pos.x - (c as any)._downPos.x, pos.y - (c as any)._downPos.y);
             const timeDiff = upTime - (c as any)._downTime;
             if (moved < 6 && timeDiff < 400) {
-              try { await onHotspotAction(hs.id); } catch (e) { console.error('Hotspot action error', e); }
+              try {
+                const fn = onHotspotActionRef.current;
+                if (typeof fn === 'function') await fn(hs.id);
+              } catch (e) {
+                console.error('Hotspot action error', e);
+              }
             } else {
               const newLayoutX = (c.x - (targetW - layoutW * scale) / 2) / scale;
               const newLayoutY = (c.y - (targetH - layoutH * scale) / 2) / scale;
@@ -750,8 +947,10 @@ export default function PixiRoom({
         };
 
           // finish handlers
-        c.on("pointerup", finishDragOrResize);
-        c.on("pointerupoutside", finishDragOrResize);
+        if (isEditor) {
+          c.on("pointerup", finishDragOrResize);
+          c.on("pointerupoutside", finishDragOrResize);
+        }
 
         // handle pointerdown for each handle
         const startResize = (handleName: 'nw' | 'ne' | 'sw' | 'se') => (event: any) => {
@@ -761,10 +960,12 @@ export default function PixiRoom({
             start: { x: c.x, y: c.y, w: currW, h: currH, px: event.data.getLocalPosition(appInst.stage).x, py: event.data.getLocalPosition(appInst.stage).y }
           };
         };
-        hNW.on('pointerdown', startResize('nw'));
-        hNE.on('pointerdown', startResize('ne'));
-        hSW.on('pointerdown', startResize('sw'));
-        hSE.on('pointerdown', startResize('se'));
+        if (isEditor) {
+          hNW.on('pointerdown', startResize('nw'));
+          hNE.on('pointerdown', startResize('ne'));
+          hSW.on('pointerdown', startResize('sw'));
+          hSE.on('pointerdown', startResize('se'));
+        }
 
         // hide handles by default until hover
         hNW.visible = hNE.visible = hSW.visible = hSE.visible = false;
@@ -892,7 +1093,7 @@ export default function PixiRoom({
     } catch (err) {
       console.error('[PixiRoom] useEffect top-level error', err);
     }
-  }, [layout, hotspots, puzzleId, onHotspotAction]);
+  }, [layoutKey, layoutBg, layoutW, layoutH, puzzleId]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 300 }} />
