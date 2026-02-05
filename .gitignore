@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# runtime uploads (admin/media uploads, imported puzzle images, etc.)
+/public/uploads/
+
 # vercel
 .vercel
 
