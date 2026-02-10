@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { readFile } from 'fs/promises';
+import path from 'path';
+import { resolveUploadsPath } from '@/lib/uploadStorage';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +12,52 @@ export const runtime = 'nodejs';
 const ALLOWED = process.env.ALLOWED_IMAGE_HOSTS
   ? process.env.ALLOWED_IMAGE_HOSTS.split(',').map((s) => s.trim()).filter(Boolean)
   : null;
+
+function contentTypeForFile(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.avif':
+      return 'image/avif';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+function getRequestOrigin(req: Request): string {
+  // Prefer proxy headers (Render/NGINX/etc) so relative URL resolution is stable.
+  const xfProto = req.headers.get('x-forwarded-proto');
+  const xfHost = req.headers.get('x-forwarded-host');
+  if (xfProto && xfHost) return `${xfProto}://${xfHost}`;
+  return new URL(req.url).origin;
+}
+
+function decodePathParts(raw: string): string[] {
+  return raw
+    .split('/')
+    .filter(Boolean)
+    .map((p) => {
+      try {
+        return decodeURIComponent(p);
+      } catch {
+        return p;
+      }
+    });
+}
+
+function isNodeError(err: unknown): err is NodeJS.ErrnoException {
+  return typeof err === 'object' && err !== null && 'code' in err;
+}
 
 function hostAllowed(allowed: string[], hostname: string) {
   const h = hostname.toLowerCase();
@@ -29,12 +78,57 @@ export async function GET(req: Request) {
     const target = url.searchParams.get('url');
     if (!target) return NextResponse.json({ error: 'missing url' }, { status: 400 });
 
+    // Fast-path: same-origin uploaded files — avoid HTTP self-fetch (can break behind proxies)
+    if (target.startsWith('/uploads/')) {
+      const rel = target.slice('/uploads/'.length);
+      const parts = decodePathParts(rel);
+      try {
+        const filePath = resolveUploadsPath(...parts);
+        const buf = await readFile(filePath);
+        return new NextResponse(buf, {
+          status: 200,
+          headers: {
+            'Content-Type': contentTypeForFile(filePath),
+            'Cache-Control': 'public, max-age=3600',
+          },
+        });
+      } catch (err) {
+        if (isNodeError(err) && err.code && err.code !== 'ENOENT') {
+          console.error('[image-proxy] failed reading uploads file', { target, code: err.code });
+          return NextResponse.json({ error: 'internal' }, { status: 500 });
+        }
+        return NextResponse.json({ error: 'not found' }, { status: 404 });
+      }
+    }
+
+    if (target.startsWith('/content/images/')) {
+      const rel = target.slice('/content/images/'.length);
+      const parts = decodePathParts(rel);
+      try {
+        const filePath = resolveUploadsPath('content', 'images', ...parts);
+        const buf = await readFile(filePath);
+        return new NextResponse(buf, {
+          status: 200,
+          headers: {
+            'Content-Type': contentTypeForFile(filePath),
+            'Cache-Control': 'public, max-age=3600',
+          },
+        });
+      } catch (err) {
+        if (isNodeError(err) && err.code && err.code !== 'ENOENT') {
+          console.error('[image-proxy] failed reading content image file', { target, code: err.code });
+          return NextResponse.json({ error: 'internal' }, { status: 500 });
+        }
+        return NextResponse.json({ error: 'not found' }, { status: 404 });
+      }
+    }
+
     // ensure http/https or same-origin-relative
     if (!/^https?:\/\//i.test(target) && !target.startsWith('/')) {
       return NextResponse.json({ error: 'invalid url' }, { status: 400 });
     }
 
-    const requestOrigin = new URL(req.url).origin;
+    const requestOrigin = getRequestOrigin(req);
     const resolvedUrl = new URL(target, requestOrigin).toString();
     const resolved = new URL(resolvedUrl);
     const isSameOrigin = resolved.origin === requestOrigin;
