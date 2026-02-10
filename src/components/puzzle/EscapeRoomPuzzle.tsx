@@ -271,7 +271,11 @@ export function EscapeRoomPuzzle({
       try {
         const { io } = await import('socket.io-client');
         if (cancelled) return;
-        const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', { transports: ['websocket'] });
+
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (process.env.NODE_ENV !== 'production' ? 'http://localhost:4000' : '');
+        if (!socketUrl) return;
+
+        const socket = io(socketUrl, { transports: ['polling', 'websocket'] });
         socketRef.current = socket;
 
         const pushActivity = (entry: EscapeActivityEntry) => {

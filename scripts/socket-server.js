@@ -123,6 +123,21 @@ function originsFromEnv() {
   // add NEXTAUTH_URL (production) and NEXTAUTH_URL_DEVELOPMENT
   if (process.env.NEXTAUTH_URL) set.add(process.env.NEXTAUTH_URL.replace(/\/$/, ''));
   if (process.env.NEXTAUTH_URL_DEVELOPMENT) set.add(process.env.NEXTAUTH_URL_DEVELOPMENT.replace(/\/$/, ''));
+  // add explicit frontend/app urls (socket server often runs as its own service)
+  if (process.env.APP_URL) set.add(process.env.APP_URL.replace(/\/$/, ''));
+  if (process.env.NEXT_PUBLIC_APP_URL) set.add(process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, ''));
+  if (process.env.SITE_URL) set.add(process.env.SITE_URL.replace(/\/$/, ''));
+  if (process.env.NEXT_PUBLIC_SITE_URL) set.add(process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, ''));
+
+  // allow a comma-separated list of extra origins (e.g. "https://www.puzzlewarz.com,https://puzzlewarz.com")
+  if (process.env.SOCKET_ALLOWED_ORIGINS) {
+    const parts = String(process.env.SOCKET_ALLOWED_ORIGINS)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => s.replace(/\/$/, ''));
+    for (const p of parts) set.add(p);
+  }
   // add NEXT_PUBLIC_SOCKET_URL if present (client uses this)
   if (process.env.NEXT_PUBLIC_SOCKET_URL) set.add(process.env.NEXT_PUBLIC_SOCKET_URL.replace(/\/$/, ''));
   // local dev defaults

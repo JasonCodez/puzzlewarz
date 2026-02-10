@@ -535,7 +535,7 @@ export default function PuzzleDetailPage() {
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (process.env.NODE_ENV !== 'production' ? 'http://localhost:4000' : '');
         if (!socketUrl) return;
 
-        socket = io(socketUrl, { transports: ['websocket'] });
+        socket = io(socketUrl, { transports: ['polling', 'websocket'] });
         socket.on('connect', () => {
           try {
             socket.emit('joinLobby', { teamId, puzzleId, userId: currentUserId || '', name: session?.user?.name || '' });

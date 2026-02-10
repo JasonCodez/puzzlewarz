@@ -335,7 +335,11 @@ export default function TeamLobbyPage() {
     (async () => {
       try {
         const { io } = await import('socket.io-client');
-        const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', { transports: ['websocket'] });
+
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (process.env.NODE_ENV !== 'production' ? 'http://localhost:4000' : '');
+        if (!socketUrl) return;
+
+        const socket = io(socketUrl, { transports: ['polling', 'websocket'] });
         socketRef.current = socket;
 
         socket.on('connect', () => {

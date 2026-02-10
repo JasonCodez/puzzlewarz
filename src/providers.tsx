@@ -104,7 +104,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (process.env.NODE_ENV !== 'production' ? 'http://localhost:4000' : '');
         if (!socketUrl) return;
 
-        const socket = io(socketUrl, { transports: ['websocket'] });
+        const socket = io(socketUrl, { transports: ['polling', 'websocket'] });
         globalSocket = socket;
 
         socket.on('connect', async () => {
