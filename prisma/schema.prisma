@@ -585,6 +585,13 @@ model UserPuzzleProgress {
   lastAttemptAt         DateTime?
   successfulAttempts    Int                  @default(0)
   totalTimeSpent        Int                  @default(0)
+
+  // Sudoku anti-cheat: persist a per-user deadline so refresh cannot reset the timer.
+  sudokuStartedAt        DateTime?
+  sudokuExpiresAt        DateTime?
+  sudokuLockedAt         DateTime?
+  sudokuLockReason       String?
+
   partProgress          PuzzlePartProgress[]
   sessionLogs           PuzzleSessionLog[]
   puzzle                Puzzle               @relation(fields: [puzzleId], references: [id], onDelete: Cascade)

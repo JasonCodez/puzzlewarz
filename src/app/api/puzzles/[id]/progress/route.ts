@@ -83,13 +83,17 @@ export async function GET(
 
 // POST /api/puzzles/[id]/progress - Update progress (start session, log attempt, etc)
 const UpdateProgressSchema = z.object({
-  action: z.enum(["start_session", "end_session", "log_attempt", "attempt_success", "lock_puzzle", "clear_state"]),
+  action: z.enum(["start_session", "end_session", "log_attempt", "attempt_success", "lock_puzzle", "clear_state", "start_sudoku_timer"]),
   // Some callers send null; accept it and normalize later.
   durationSeconds: z.number().nullable().optional(),
   hintUsed: z.boolean().nullable().optional(),
   successful: z.boolean().nullable().optional(),
   // optional grid payload for puzzles like Sudoku
   grid: z.array(z.array(z.number())).optional(),
+  // Sudoku timer bootstrapping (migrating older clients that stored a local start)
+  clientStartedAtMs: z.number().int().positive().optional(),
+  // Optional reason for lock_puzzle
+  reason: z.string().max(64).optional(),
 });
 
 export async function POST(
@@ -155,6 +159,8 @@ export async function POST(
     const durationSeconds = typeof parsed.durationSeconds === 'number' ? parsed.durationSeconds : undefined;
     const hintUsed = typeof parsed.hintUsed === 'boolean' ? parsed.hintUsed : undefined;
     const successful = typeof parsed.successful === 'boolean' ? parsed.successful : undefined;
+    const clientStartedAtMs = typeof parsed.clientStartedAtMs === 'number' ? parsed.clientStartedAtMs : undefined;
+    const lockReason = typeof parsed.reason === 'string' ? parsed.reason : undefined;
 
     // Get or create progress
     let progress = await prisma.userPuzzleProgress.findUnique({
@@ -196,6 +202,43 @@ export async function POST(
         });
 
         break;
+
+      case "start_sudoku_timer": {
+        if (puzzleRecord?.puzzleType !== 'sudoku') {
+          return NextResponse.json({ error: 'Not a Sudoku puzzle' }, { status: 400 });
+        }
+
+        if (progress.solved) break;
+        if (progress.sudokuLockedAt) {
+          return NextResponse.json({ error: 'Sudoku puzzle is locked' }, { status: 403 });
+        }
+
+        const now = new Date();
+        const limitSeconds = puzzleRecord.sudoku?.timeLimitSeconds ?? 15 * 60;
+
+        if (!progress.sudokuStartedAt || !progress.sudokuExpiresAt) {
+          const startedAt = (() => {
+            if (clientStartedAtMs && Number.isFinite(clientStartedAtMs)) {
+              const safeMs = Math.min(Date.now(), clientStartedAtMs);
+              return new Date(safeMs);
+            }
+            return now;
+          })();
+
+          const expiresAt = new Date(startedAt.getTime() + limitSeconds * 1000);
+
+          await prisma.userPuzzleProgress.update({
+            where: { id: progress.id },
+            data: {
+              sudokuStartedAt: startedAt,
+              sudokuExpiresAt: expiresAt,
+              sudokuLockedAt: null,
+              sudokuLockReason: null,
+            },
+          });
+        }
+        break;
+      }
 
       case "end_session":
         if (progress.currentSessionStart) {
@@ -274,6 +317,32 @@ export async function POST(
         break;
 
       case "attempt_success":
+        // Enforce Sudoku time limit / lock server-side to prevent refresh/localStorage cheating.
+        if (puzzleRecord?.puzzleType === 'sudoku') {
+          const now = new Date();
+          if (progress.sudokuLockedAt) {
+            return NextResponse.json({ error: 'Sudoku puzzle is locked' }, { status: 403 });
+          }
+          if (!progress.sudokuStartedAt || !progress.sudokuExpiresAt) {
+            return NextResponse.json({ error: 'Sudoku timer not started' }, { status: 403 });
+          }
+          if (now.getTime() > progress.sudokuExpiresAt.getTime()) {
+            // Mark locked (best effort) and deny.
+            try {
+              await prisma.userPuzzleProgress.update({
+                where: { id: progress.id },
+                data: {
+                  sudokuLockedAt: now,
+                  sudokuLockReason: 'time_limit',
+                },
+              });
+            } catch {
+              // ignore
+            }
+            return NextResponse.json({ error: 'Time limit exceeded' }, { status: 403 });
+          }
+        }
+
         // If this is a Sudoku puzzle, validate the submitted grid against the stored solution
         try {
           const submittedGrid = rawBody.grid;
@@ -391,6 +460,45 @@ export async function POST(
           }
 
         break;
+
+      case "lock_puzzle": {
+        // Currently used by Sudoku UI when time runs out.
+        const now = new Date();
+        if (puzzleRecord?.puzzleType === 'sudoku') {
+          await prisma.userPuzzleProgress.update({
+            where: { id: progress.id },
+            data: {
+              sudokuLockedAt: now,
+              sudokuLockReason: lockReason || 'locked',
+              // Ensure deadline is not in the future once locked.
+              sudokuExpiresAt: progress.sudokuExpiresAt && progress.sudokuExpiresAt.getTime() < now.getTime() ? progress.sudokuExpiresAt : now,
+            },
+          });
+        }
+        break;
+      }
+
+      case "clear_state": {
+        // IMPORTANT: do not allow users to reset an active Sudoku timer.
+        if (puzzleRecord?.puzzleType === 'sudoku') {
+          const now = new Date();
+          const expired = !!(progress.sudokuExpiresAt && progress.sudokuExpiresAt.getTime() <= now.getTime());
+          const canClearTimer = progress.solved || !!progress.sudokuLockedAt || expired;
+
+          if (canClearTimer) {
+            await prisma.userPuzzleProgress.update({
+              where: { id: progress.id },
+              data: {
+                sudokuStartedAt: null,
+                sudokuExpiresAt: null,
+                sudokuLockedAt: null,
+                sudokuLockReason: null,
+              },
+            });
+          }
+        }
+        break;
+      }
     }
 
     // Return updated progress
