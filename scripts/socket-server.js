@@ -26,6 +26,13 @@ function portFromUrl(url) {
 const PORT = Number(process.env.PORT) || Number(process.env.SOCKET_PORT) || portFromUrl(process.env.NEXT_PUBLIC_SOCKET_URL) || DEFAULT_PORT;
 
 const server = http.createServer(async (req, res) => {
+  // IMPORTANT: Let Socket.IO handle its own endpoint.
+  // If we respond with 404 here, the Socket.IO server never gets a chance to add
+  // the proper CORS headers or complete the handshake.
+  if (req.url && (req.url === '/socket.io' || req.url.startsWith('/socket.io/'))) {
+    return;
+  }
+
   // health endpoint for platform health checks (support GET + HEAD and /healthz)
   if ((req.method === 'GET' || req.method === 'HEAD') && (req.url === '/' || req.url === '/health' || req.url === '/healthz')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -143,6 +150,13 @@ function originsFromEnv() {
   // local dev defaults
   set.add('http://localhost:3000');
   set.add('http://127.0.0.1:3000');
+
+  // production defaults for this project (helps when socket service env is sparse)
+  if (process.env.NODE_ENV === 'production') {
+    set.add('https://www.puzzlewarz.com');
+    set.add('https://puzzlewarz.com');
+  }
+
   try { set.add(new URL(process.env.NEXTAUTH_URL || '').origin); } catch (e) {}
   return Array.from(set).filter(Boolean);
 }
