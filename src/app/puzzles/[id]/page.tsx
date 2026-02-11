@@ -1420,9 +1420,54 @@ export default function PuzzleDetailPage() {
                             </div>
                             <button
                               className="mt-8 px-6 py-3 rounded-lg bg-yellow-300 text-black font-bold text-lg shadow hover:brightness-95 transition"
-                              onClick={async () => {
+                              type="button"
+                              onClick={async (e) => {
+                                // This button lives inside a <form>; ensure we don't submit the form.
+                                e.preventDefault();
+                                e.stopPropagation();
+
                                 setShowSudokuStartModal(false);
                                 setSudokuStarted(true);
+
+                                // Start an immediate local tick so the UI countdown begins even if
+                                // the server bootstrap request is slow. Server enforcement still
+                                // controls validation/locking.
+                                const limitSeconds = puzzle?.sudoku?.timeLimitSeconds ?? 15 * 60;
+                                const localStart = Date.now();
+                                const localExpiresAtMs = localStart + limitSeconds * 1000;
+
+                                sudokuStartRef.current = localStart;
+                                setSudokuElapsed(0);
+                                setTimeLimitExceeded(false);
+
+                                try {
+                                  if (sudokuTimerRef.current != null) {
+                                    clearInterval(sudokuTimerRef.current);
+                                    sudokuTimerRef.current = null;
+                                  }
+                                } catch {
+                                  // ignore
+                                }
+
+                                const localTick = () => {
+                                  const now = Date.now();
+                                  const elapsedNow = Math.max(0, Math.floor((now - localStart) / 1000));
+                                  setSudokuElapsed(elapsedNow);
+                                  if (now >= localExpiresAtMs) {
+                                    setTimeLimitExceeded(true);
+                                    try {
+                                      if (sudokuTimerRef.current != null) {
+                                        clearInterval(sudokuTimerRef.current);
+                                        sudokuTimerRef.current = null;
+                                      }
+                                    } catch {
+                                      // ignore
+                                    }
+                                  }
+                                };
+
+                                localTick();
+                                sudokuTimerRef.current = window.setInterval(localTick, 1000) as any;
 
                                 // Bootstrap server timer. If an older client had saved a local start,
                                 // pass it up but clamp on the server so it can't extend time.
@@ -1435,6 +1480,19 @@ export default function PuzzleDetailPage() {
                                   }
                                 } catch {
                                   // ignore
+                                }
+
+                                // If we don't already have a stored start time, persist this click's
+                                // timestamp so we can send it on retries without extending time.
+                                if (!localStartMs) {
+                                  try {
+                                    if (typeof window !== 'undefined') {
+                                      localStorage.setItem(`sudoku-start:${puzzleId}`, String(localStart));
+                                    }
+                                  } catch {
+                                    // ignore
+                                  }
+                                  localStartMs = localStart;
                                 }
 
                                 try {

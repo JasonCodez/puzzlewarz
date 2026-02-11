@@ -5,6 +5,7 @@ interface AchievementModalState {
   setNotificationAchievement: (achievement: any | null) => void;
   shownAchievements: Set<string>;
   addShownAchievement: (id: string) => void;
+  setShownAchievements: (ids: Iterable<string>) => void;
 }
 
 export const useAchievementModalStore = create<AchievementModalState>((set, get) => ({
@@ -14,5 +15,8 @@ export const useAchievementModalStore = create<AchievementModalState>((set, get)
   addShownAchievement: (id) => {
     const prev = get().shownAchievements;
     set({ shownAchievements: new Set(prev).add(id) });
+  },
+  setShownAchievements: (ids) => {
+    set({ shownAchievements: new Set(ids) });
   },
 }));

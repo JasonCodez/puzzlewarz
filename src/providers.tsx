@@ -19,10 +19,39 @@ function GlobalAchievementModal() {
   const setNotificationAchievement = useAchievementModalStore((s) => s.setNotificationAchievement);
   const shownAchievements = useAchievementModalStore((s) => s.shownAchievements);
   const addShownAchievement = useAchievementModalStore((s) => s.addShownAchievement);
+  const setShownAchievements = useAchievementModalStore((s) => s.setShownAchievements);
   const [collecting, setCollecting] = useState<string | null>(null);
+
+  const shownStorageKey = session?.user?.email ? `achievement-modal-shown:${session.user.email}` : null;
+
+  const persistShown = () => {
+    try {
+      if (!shownStorageKey) return;
+      const ids = Array.from(useAchievementModalStore.getState().shownAchievements);
+      localStorage.setItem(shownStorageKey, JSON.stringify(ids));
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     if (!session?.user?.email) return;
+
+    // Hydrate shown achievements from localStorage so refresh doesn't re-show.
+    try {
+      if (shownStorageKey) {
+        const raw = localStorage.getItem(shownStorageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            setShownAchievements(parsed.filter((x) => typeof x === 'string'));
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     let interval: any;
     let mounted = true;
     const fetchAchievements = async () => {
@@ -34,9 +63,11 @@ function GlobalAchievementModal() {
             const autoUnlockTypes = ["puzzles_solved", "submission_accuracy", "points_earned", "streak", "custom"];
             const canAutoCollect = autoUnlockTypes.includes(achievement.conditionType || "");
             const isReady = !achievement.unlocked && achievement.progressPercentage === 100 && canAutoCollect;
-            if (isReady && !shownAchievements.has(achievement.id) && mounted) {
+            const shown = useAchievementModalStore.getState().shownAchievements;
+            if (isReady && !shown.has(achievement.id) && mounted) {
               setNotificationAchievement(achievement);
               addShownAchievement(achievement.id);
+              persistShown();
             }
           });
         }
@@ -50,9 +81,14 @@ function GlobalAchievementModal() {
       mounted = false;
       clearInterval(interval);
     };
-  }, [session?.user?.email, shownAchievements, setNotificationAchievement, addShownAchievement]);
+  }, [session?.user?.email, shownStorageKey, setNotificationAchievement, addShownAchievement, setShownAchievements]);
 
   const collectAchievement = async (achievementId: string) => {
+    // Dismiss immediately so slow network doesn't leave the modal hanging around.
+    // The collect request continues in the background.
+    setNotificationAchievement(null);
+    addShownAchievement(achievementId);
+    persistShown();
     setCollecting(achievementId);
     try {
       const response = await fetch("/api/user/achievements/collect", {
@@ -60,11 +96,8 @@ function GlobalAchievementModal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ achievementId }),
       });
-      if (response.ok) {
-        setTimeout(() => {
-          setNotificationAchievement(null);
-        }, 2000);
-      }
+      // best-effort; modal is already dismissed
+      void response;
     } catch (error) {
       // ignore
     } finally {

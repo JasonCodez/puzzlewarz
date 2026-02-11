@@ -56,6 +56,18 @@ export default function AchievementsPage() {
   const [notificationAchievement, setNotificationAchievement] = useState<any>(null);
   const [shownAchievements, setShownAchievements] = useState<Set<string>>(new Set());
 
+  const shownStorageKey = session?.user?.email ? `achievements-page-shown:${session.user.email}` : null;
+
+  const persistShown = (next?: Set<string>) => {
+    try {
+      if (!shownStorageKey) return;
+      const ids = Array.from((next || shownAchievements).values());
+      localStorage.setItem(shownStorageKey, JSON.stringify(ids));
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin");
@@ -64,6 +76,21 @@ export default function AchievementsPage() {
 
   useEffect(() => {
     if (session?.user?.email) {
+      // Hydrate from localStorage so refresh doesn't re-show already handled achievements.
+      try {
+        if (shownStorageKey) {
+          const raw = localStorage.getItem(shownStorageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              setShownAchievements(new Set(parsed.filter((x) => typeof x === 'string')));
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       fetchAchievements();
       
       // Poll for achievement updates every 5 seconds
@@ -91,7 +118,11 @@ export default function AchievementsPage() {
           // Show modal if achievement just became ready and we haven't shown it yet
           if (isReady && !shownAchievements.has(achievement.id)) {
             setNotificationAchievement(achievement);
-            setShownAchievements((prev) => new Set(prev).add(achievement.id));
+            setShownAchievements((prev) => {
+              const next = new Set(prev).add(achievement.id);
+              persistShown(next);
+              return next;
+            });
             
             // Send notification to notification center
             fetch("/api/user/achievements/notify", {
@@ -115,6 +146,13 @@ export default function AchievementsPage() {
   };
 
   const collectAchievement = async (achievementId: string) => {
+    // Close immediately so the modal doesn't linger during slow requests.
+    setNotificationAchievement(null);
+    setShownAchievements((prev) => {
+      const next = new Set(prev).add(achievementId);
+      persistShown(next);
+      return next;
+    });
     setCollecting(achievementId);
     try {
       const response = await fetch("/api/user/achievements/collect", {
@@ -126,10 +164,6 @@ export default function AchievementsPage() {
       if (response.ok) {
         // Refresh achievements after successful collection
         await fetchAchievements();
-        // Keep the modal open to show success, then auto-close after 2 seconds
-        setTimeout(() => {
-          setNotificationAchievement(null);
-        }, 2000);
       } else {
         console.error("Failed to collect achievement");
       }
