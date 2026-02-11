@@ -48,9 +48,16 @@ function RegisterForm() {
         body: JSON.stringify({ name, email, password, referralCode: referralCode || undefined }),
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        const data = await response.json();
         setError(data.error || "Registration failed");
+        return;
+      }
+
+      // In production we require email verification; guide the user instead of auto-signing-in.
+      if (data?.requireVerification) {
+        router.push(`/auth/verify-sent?email=${encodeURIComponent(email)}`);
         return;
       }
 

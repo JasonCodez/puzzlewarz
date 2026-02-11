@@ -6,6 +6,8 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+const requireEmailVerification = process.env.NODE_ENV === 'production';
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: {
@@ -65,6 +67,10 @@ export const authOptions: NextAuthOptions = {
 
         if (!user || !user.password) {
           throw new Error("User not found");
+        }
+
+        if (requireEmailVerification && !user.emailVerified) {
+          throw new Error("Email not verified. Please check your inbox for the verification link.");
         }
 
         const isPasswordValid = await bcrypt.compare(

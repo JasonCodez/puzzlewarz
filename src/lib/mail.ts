@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import sgMail from "@sendgrid/mail";
 
 // Initialize email transporter (configure with your SMTP settings)
 const transporter = nodemailer.createTransport({
@@ -20,13 +21,34 @@ interface EmailOptions {
 
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
+    // Preferred: SendGrid Web API
+    if (process.env.SENDGRID_API_KEY) {
+      const fromEmail = process.env.SENDGRID_FROM || process.env.SMTP_FROM;
+      if (!fromEmail) {
+        console.warn("SENDGRID_FROM is not set; cannot send email.");
+        return false;
+      }
+
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      await sgMail.send({
+        to: options.to,
+        from: { email: fromEmail, name: "Puzzle Warz" },
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+      });
+
+      return true;
+    }
+
+    // Fallback: SMTP (Nodemailer)
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
       console.warn("Email service not configured. Skipping email send.");
       return false;
     }
 
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || `Puzzle Warz <${process.env.SMTP_USER}>`,
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || `Puzzle Warz <${process.env.SMTP_USER}>`,
       to: options.to,
       subject: options.subject,
       html: options.html,
@@ -38,6 +60,31 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     console.error("Failed to send email:", error);
     return false;
   }
+}
+
+export function generateEmailVerificationEmail(userName: string, verifyUrl: string): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #020202 0%, #0a0a0a 100%); padding: 40px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #FDE74C; margin: 0;">✅ Verify Your Email</h1>
+      </div>
+
+      <div style="background: #1a1a1a; padding: 40px; border-radius: 0 0 8px 8px; color: #DDDBF1;">
+        <p>Hi <strong>${userName}</strong>,</p>
+        <p>Thanks for signing up for Puzzle Warz. Please verify your email to activate your account.</p>
+
+        <p style="text-align:center; margin: 24px 0;">
+          <a href="${verifyUrl}" style="display: inline-block; background: #3891A6; color: #020202; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+            Verify Email →
+          </a>
+        </p>
+
+        <p style="color: #AB9F9D; font-size: 12px; margin-top: 24px;">
+          If you didn’t create this account, you can ignore this email.
+        </p>
+      </div>
+    </div>
+  `;
 }
 
 // Email template functions

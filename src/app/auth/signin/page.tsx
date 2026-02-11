@@ -13,6 +13,7 @@ function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
   const [loading, setLoading] = useState(false);
   const isLoggedOut = searchParams.get("logout") === "true";
   const [mounted, setMounted] = useState(false);
@@ -68,6 +69,28 @@ function SignInForm() {
     }
   }
 
+  async function handleResendVerification() {
+    if (!email) {
+      setError("Enter your email first, then resend.");
+      return;
+    }
+    setResendStatus("sending");
+    try {
+      const resp = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!resp.ok) {
+        setResendStatus("failed");
+        return;
+      }
+      setResendStatus("sent");
+    } catch {
+      setResendStatus("failed");
+    }
+  }
+
   return (
     <>
       <Navbar />
@@ -82,6 +105,26 @@ function SignInForm() {
           {error && (
             <div className="mb-6 p-4 rounded-lg text-white border" style={{ backgroundColor: 'rgba(171, 159, 157, 0.2)', borderColor: '#AB9F9D' }}>
               {error}
+              {error.toLowerCase().includes('email not verified') && (
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resendStatus === 'sending'}
+                    className="px-3 py-2 rounded text-sm font-semibold transition disabled:opacity-50 hover:opacity-90"
+                    style={{ backgroundColor: '#3891A6', color: '#020202' }}
+                  >
+                    {resendStatus === 'sending'
+                      ? 'Sending...'
+                      : resendStatus === 'sent'
+                        ? 'Sent ✓'
+                        : 'Resend verification'}
+                  </button>
+                  {resendStatus === 'failed' && (
+                    <span className="text-xs" style={{ color: '#DDDBF1' }}>Could not send. Try again later.</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
