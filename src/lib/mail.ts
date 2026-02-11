@@ -30,12 +30,20 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       }
 
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      await sgMail.send({
+      const [resp] = await sgMail.send({
         to: options.to,
         from: { email: fromEmail, name: "Puzzle Warz" },
         subject: options.subject,
         html: options.html,
         text: options.text,
+      });
+
+      const headers = (resp as unknown as { headers?: Record<string, string> })?.headers;
+      const messageId = headers?.["x-message-id"] || headers?.["X-Message-Id"];
+      console.info("SendGrid email sent", {
+        to: options.to,
+        subject: options.subject,
+        messageId,
       });
 
       return true;
@@ -47,7 +55,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       return false;
     }
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: process.env.SMTP_FROM || `Puzzle Warz <${process.env.SMTP_USER}>`,
       to: options.to,
       subject: options.subject,
@@ -55,9 +63,27 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       text: options.text,
     });
 
+    console.info("SMTP email sent", {
+      to: options.to,
+      subject: options.subject,
+      messageId: (info as unknown as { messageId?: string })?.messageId,
+    });
+
     return true;
   } catch (error) {
-    console.error("Failed to send email:", error);
+    const sendgridError = error as {
+      code?: number | string;
+      message?: string;
+      response?: { statusCode?: number; body?: unknown };
+    };
+    if (sendgridError?.response?.body) {
+      console.error("Failed to send email (SendGrid):", {
+        statusCode: sendgridError.response.statusCode,
+        body: sendgridError.response.body,
+      });
+    } else {
+      console.error("Failed to send email:", error);
+    }
     return false;
   }
 }

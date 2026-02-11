@@ -6,7 +6,9 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-const requireEmailVerification = process.env.NODE_ENV === 'production';
+const requireEmailVerification =
+  process.env.NODE_ENV === "production" ||
+  process.env.REQUIRE_EMAIL_VERIFICATION === "true";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),

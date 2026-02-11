@@ -37,7 +37,9 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const requireVerification = process.env.NODE_ENV === 'production';
+    const requireVerification =
+      process.env.NODE_ENV === "production" ||
+      process.env.REQUIRE_EMAIL_VERIFICATION === "true";
 
     // Create user
     const user = await prisma.user.create({

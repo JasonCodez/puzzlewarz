@@ -25,7 +25,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, alreadyVerified: true });
     }
 
-    const requireVerification = process.env.NODE_ENV === "production";
+    const requireVerification =
+      process.env.NODE_ENV === "production" ||
+      process.env.REQUIRE_EMAIL_VERIFICATION === "true";
     if (!requireVerification) {
       await prisma.user.update({ where: { id: user.id }, data: { emailVerified: new Date() } });
       return NextResponse.json({ ok: true, autoVerified: true });
