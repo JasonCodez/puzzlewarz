@@ -13,6 +13,40 @@ type MultiPartInput = {
   points?: number;
 };
 
+export async function GET(_req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { role: true },
+    });
+    if (!user || user.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const puzzles = await prisma.puzzle.findMany({
+      select: {
+        id: true,
+        title: true,
+        puzzleType: true,
+        difficulty: true,
+        isActive: true,
+        createdAt: true,
+        category: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json(puzzles);
+  } catch (error) {
+    console.error("[PUZZLE LIST] Error:", error);
+    return NextResponse.json({ error: "Failed to fetch puzzles" }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log("[PUZZLE CREATE] Request received");

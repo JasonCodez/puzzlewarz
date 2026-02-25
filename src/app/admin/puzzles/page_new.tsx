@@ -51,6 +51,16 @@ const PUZZLE_TYPES = [
   { value: 'escape_room', label: 'Escape Room' },
 ];
 
+interface PuzzleListItem {
+  id: string;
+  title: string;
+  puzzleType: string;
+  difficulty: string;
+  isActive: boolean;
+  createdAt: string;
+  category: { name: string } | null;
+}
+
 export default function AdminPuzzlesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -58,6 +68,12 @@ export default function AdminPuzzlesPage() {
   const [loading, setLoading] = useState(true);
   const [puzzleId, setPuzzleId] = useState<string | null>(null);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  // Puzzle list / delete
+  const [allPuzzles, setAllPuzzles] = useState<PuzzleListItem[]>([]);
+  const [fetchingPuzzles, setFetchingPuzzles] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [jigsawImagePreview, setJigsawImagePreview] = useState<string>("");
   const [jigsawImageUrl, setJigsawImageUrl] = useState<string>("");
@@ -107,11 +123,43 @@ export default function AdminPuzzlesPage() {
       if (response.ok) {
         const data = await response.json();
         setIsAdmin(data.isAdmin);
+        if (data.isAdmin) fetchPuzzles();
       }
     } catch (error) {
       console.error("Failed to check admin status:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPuzzles = async () => {
+    setFetchingPuzzles(true);
+    try {
+      const res = await fetch("/api/admin/puzzles");
+      if (res.ok) setAllPuzzles(await res.json());
+    } catch (e) {
+      console.error("Failed to fetch puzzle list", e);
+    } finally {
+      setFetchingPuzzles(false);
+    }
+  };
+
+  const handleDeletePuzzle = async (id: string) => {
+    setDeletingId(id);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/admin/puzzles/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setAllPuzzles((prev) => prev.filter((p) => p.id !== id));
+        setDeleteConfirmId(null);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error || "Delete failed");
+      }
+    } catch (e) {
+      setDeleteError("Network error — could not delete puzzle");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -661,6 +709,9 @@ export default function AdminPuzzlesPage() {
       // Clear the escape-room Designer localStorage draft so a new room starts fresh
       try { localStorage.removeItem('escape-room-designer-draft'); } catch {}
 
+      // Refresh the puzzle list so the new puzzle appears immediately
+      fetchPuzzles();
+
       // Wait a bit longer for media to settle, then reset form
       setTimeout(() => {
         console.log("[SUBMIT] Resetting form");
@@ -765,6 +816,104 @@ export default function AdminPuzzlesPage() {
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-4xl font-bold text-white mb-2">🧩 Universal Puzzle Maker</h1>
           <p className="text-[#9BD1D6] mb-8">Create any type of puzzle with advanced tools and testing capabilities</p>
+
+          {/* ── Existing Puzzles ─────────────────────────────── */}
+          <div className="mb-12">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-white">Manage Puzzles</h2>
+              <button
+                type="button"
+                onClick={fetchPuzzles}
+                disabled={fetchingPuzzles}
+                className="px-3 py-1.5 rounded text-sm bg-slate-700 text-gray-300 hover:bg-slate-600 border border-slate-600 disabled:opacity-50"
+              >
+                {fetchingPuzzles ? "Loading…" : "↻ Refresh"}
+              </button>
+            </div>
+
+            {deleteError && (
+              <div className="mb-3 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center justify-between">
+                <span>⚠ {deleteError}</span>
+                <button type="button" onClick={() => setDeleteError(null)} className="ml-4 text-red-400 hover:text-white">✕</button>
+              </div>
+            )}
+
+            {fetchingPuzzles ? (
+              <p className="text-gray-400 text-sm">Loading puzzles…</p>
+            ) : allPuzzles.length === 0 ? (
+              <p className="text-gray-500 text-sm">No puzzles yet. Create one below.</p>
+            ) : (
+              <div className="overflow-auto rounded-lg border border-slate-700">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-800 text-gray-400 uppercase text-xs tracking-wider">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold">Title</th>
+                      <th className="px-4 py-3 font-semibold">Type</th>
+                      <th className="px-4 py-3 font-semibold">Difficulty</th>
+                      <th className="px-4 py-3 font-semibold">Category</th>
+                      <th className="px-4 py-3 font-semibold">Created</th>
+                      <th className="px-4 py-3 font-semibold">Status</th>
+                      <th className="px-4 py-3 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/60">
+                    {allPuzzles.map((p) => (
+                      <tr key={p.id} className="bg-slate-800/40 hover:bg-slate-800/70 transition-colors">
+                        <td className="px-4 py-3 text-white font-medium max-w-[220px] truncate" title={p.title}>{p.title || <span className="text-gray-500 italic">Untitled</span>}</td>
+                        <td className="px-4 py-3 text-gray-300 capitalize">{p.puzzleType.replace(/_/g, ' ')}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                            p.difficulty === 'easy' ? 'bg-green-500/20 text-green-300' :
+                            p.difficulty === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
+                            p.difficulty === 'hard' ? 'bg-red-500/20 text-red-300' :
+                            'bg-purple-500/20 text-purple-300'
+                          }`}>{p.difficulty}</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-400">{p.category?.name || '—'}</td>
+                        <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{new Date(p.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-xs font-semibold ${p.isActive ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                            {p.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          {deleteConfirmId === p.id ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="text-red-300 text-xs">Confirm delete?</span>
+                              <button
+                                type="button"
+                                disabled={deletingId === p.id}
+                                onClick={() => handleDeletePuzzle(p.id)}
+                                className="px-2 py-1 rounded text-xs bg-red-600 hover:bg-red-700 text-white disabled:opacity-60"
+                              >
+                                {deletingId === p.id ? "Deleting…" : "Yes, delete"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmId(null)}
+                                className="px-2 py-1 rounded text-xs bg-slate-600 hover:bg-slate-500 text-gray-300"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => { setDeleteConfirmId(p.id); setDeleteError(null); }}
+                              className="px-3 py-1 rounded text-xs bg-red-900/40 hover:bg-red-700/60 text-red-300 hover:text-white border border-red-700/40 transition-colors"
+                            >
+                              🗑 Delete
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          {/* ── End Manage Puzzles ──────────────────────────── */}
 
           <div className="grid md:grid-cols-3 gap-8 mb-12">
             {/* Form */}
