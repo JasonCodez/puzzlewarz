@@ -906,25 +906,30 @@ export default function JigsawPuzzleSVGWithTray({
   // Stage layout: board centered, loose pieces scattered around it (no tray).
   // In non-fullscreen, we treat the wrapper as the visible area and make the stage fill it.
   // Stage coordinates are "unscaled" and then we apply `scale()` to fit.
+  //
+  // IMPORTANT: use the mode-appropriate scale so the world dimensions (and therefore
+  // boardLeft/boardTop) stay the same whether or not the user is in fullscreen. This
+  // prevents piece positions from jumping when toggling fullscreen on maximised browsers
+  // (the most common case) where the container and viewport widths are equal.
   const stageWidth = useMemo(() => {
     const minStageW = boardWidth + scatterMargin * 2;
-    // In fullscreen, keep world dimensions stable; zoom is handled by fsScale/fsPan.
-    if (isFullscreen) return minStageW;
-
-    const wPx = (!isFullscreen ? wrapperWidth : null) ?? boardWidth;
-    const effectiveScale = nonFullscreenScale || 1;
+    const wPx = wrapperWidth ?? boardWidth;
+    // In fullscreen use fsScale so the world size matches what fsScale was calibrated against.
+    // In normal mode use nonFullscreenScale.
+    const effectiveScale = isFullscreen
+      ? (Number.isFinite(fsScale) && fsScale > 0 ? fsScale : 1)
+      : (nonFullscreenScale || 1);
     return Math.max(minStageW, Math.round(wPx / effectiveScale));
-  }, [isFullscreen, wrapperWidth, boardWidth, nonFullscreenScale, scatterMargin]);
+  }, [isFullscreen, wrapperWidth, boardWidth, nonFullscreenScale, fsScale, scatterMargin]);
 
   const stageHeight = useMemo(() => {
     const minStageH = boardHeight + scatterMargin * 2;
-    // In fullscreen, keep world dimensions stable; zoom is handled by fsScale/fsPan.
-    if (isFullscreen) return minStageH;
-
-    const hPx = (!isFullscreen ? (wrapperHeight ?? nonFullscreenHeight) : null) ?? boardHeight;
-    const effectiveScale = nonFullscreenScale || 1;
+    const hPx = (wrapperHeight ?? nonFullscreenHeight) || boardHeight;
+    const effectiveScale = isFullscreen
+      ? (Number.isFinite(fsScale) && fsScale > 0 ? fsScale : 1)
+      : (nonFullscreenScale || 1);
     return Math.max(minStageH, Math.round(hPx / effectiveScale));
-  }, [isFullscreen, wrapperHeight, nonFullscreenHeight, boardHeight, nonFullscreenScale, scatterMargin]);
+  }, [isFullscreen, wrapperHeight, nonFullscreenHeight, boardHeight, nonFullscreenScale, fsScale, scatterMargin]);
 
   const boardLeft = Math.max(0, Math.round((stageWidth - boardWidth) / 2));
   const boardTop = Math.max(0, Math.round((stageHeight - boardHeight) / 2));
@@ -1093,15 +1098,35 @@ export default function JigsawPuzzleSVGWithTray({
     piecesRef.current = pieces;
   }, [pieces]);
 
-  // Auto-save whenever pieces change (debounced 800 ms)
+  // Auto-save whenever pieces change (debounced 800 ms).
+  // Skip while in fullscreen: the world-coordinate system may differ from normal mode
+  // (boardLeft can shift on non-maximised browsers), so we only persist positions in
+  // the stable non-fullscreen coordinate space.
   React.useEffect(() => {
     if (completedRef.current) return; // don't overwrite after completion
+    if (isFullscreenRef.current) return; // save only in the stable non-fullscreen coordinate space
     const key = storageKeyRef.current;
     if (!key) return;
     const elapsedMs = Math.max(0, Date.now() - startTimeRef.current);
-    const id = setTimeout(() => saveJigsawProgress(key, piecesRef.current, elapsedMs), 800);
+    const id = setTimeout(() => {
+      if (isFullscreenRef.current) return; // re-check inside the debounce
+      saveJigsawProgress(key, piecesRef.current, elapsedMs);
+    }, 800);
     return () => clearTimeout(id);
   }, [pieces]);
+
+  // When exiting fullscreen, trigger a save so we don't lose progress made during a 
+  // fullscreen session (the coordinate space is now stable again).
+  React.useEffect(() => {
+    if (isFullscreen) return; // only fires on exit (false)
+    if (completedRef.current) return;
+    const key = storageKeyRef.current;
+    if (!key) return;
+    const elapsedMs = Math.max(0, Date.now() - startTimeRef.current);
+    // Delay slightly so the board sync effect has time to reposition snapped pieces first
+    const id = setTimeout(() => saveJigsawProgress(key, piecesRef.current, elapsedMs), 300);
+    return () => clearTimeout(id);
+  }, [isFullscreen]);
 
   // Reset pieces when initialPieces changes (e.g., layout switches stacked vs side-by-side)
   // Initialize pieces when core puzzle inputs change (rows/cols/image).
@@ -1245,22 +1270,26 @@ export default function JigsawPuzzleSVGWithTray({
 
       // After repositioning, clamp all loose pieces to ensure they stay within visible stage bounds
       // during orientation/resize changes (especially important on mobile).
-      const maxX = Math.max(0, stageWidth - pieceW);
-      const maxY = Math.max(0, stageHeight - pieceH);
-      next = next.map((p) => {
-        if (p.snapped) return p;
-        const clampedX = Math.max(0, Math.min(maxX, p.pos.x));
-        const clampedY = Math.max(0, Math.min(maxY, p.pos.y));
-        if (clampedX !== p.pos.x || clampedY !== p.pos.y) {
-          changed = true;
-          return { ...p, pos: { x: clampedX, y: clampedY } };
-        }
-        return p;
-      });
+      // SKIP in fullscreen: the stage world is navigated via pan/zoom and clamping pieces to the
+      // (potentially smaller) fullscreen stage bounds would permanently misplace them.
+      if (!isFullscreen) {
+        const maxX = Math.max(0, stageWidth - pieceW);
+        const maxY = Math.max(0, stageHeight - pieceH);
+        next = next.map((p) => {
+          if (p.snapped) return p;
+          const clampedX = Math.max(0, Math.min(maxX, p.pos.x));
+          const clampedY = Math.max(0, Math.min(maxY, p.pos.y));
+          if (clampedX !== p.pos.x || clampedY !== p.pos.y) {
+            changed = true;
+            return { ...p, pos: { x: clampedX, y: clampedY } };
+          }
+          return p;
+        });
+      }
 
       return changed ? next : prev;
     });
-  }, [boardLeft, boardTop, boardWidth, boardHeight, stageWidth, stageHeight, pieceW, pieceH]);
+  }, [boardLeft, boardTop, boardWidth, boardHeight, stageWidth, stageHeight, pieceW, pieceH, isFullscreen]);
 
   const effectiveSnapScale = isFullscreen ? (fsScale || 1) : (nonFullscreenScale || 1);
   const effectiveBoardSnapTolerance = boardSnapTolerance / (effectiveSnapScale || 1);
