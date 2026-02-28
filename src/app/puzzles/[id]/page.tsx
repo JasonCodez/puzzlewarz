@@ -1357,7 +1357,7 @@ export default function PuzzleDetailPage() {
                     ) : (
                       <div
                         className="rounded-none overflow-hidden border border-gray-700"
-                        style={{ margin: "0 auto" }}
+                        style={{ margin: "0 -2rem" }}
                       >
                         <JigsawPuzzle
                           puzzleId={puzzleId as string}

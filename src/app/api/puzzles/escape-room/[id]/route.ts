@@ -96,6 +96,7 @@ export async function GET(
           return NextResponse.json({
             id: puzzleId,
             stages,
+            minTeamSize: stored.minTeamSize || 1,
             puzzle: {
               title: stored.roomTitle || puzzle.title,
               description: stored.roomDescription || puzzle.description,
@@ -162,6 +163,10 @@ export async function GET(
                   y: it.y,
                   w: it.w,
                   h: it.h,
+                  rotation: it.rotation ?? null,
+                  scale: it.scale ?? null,
+                  skewX: it.skewX ?? null,
+                  skewY: it.skewY ?? null,
                   properties: it.properties || {},
                   ambientEffect: it.ambientEffect || null,
                 }));
@@ -185,9 +190,24 @@ export async function GET(
       console.error('Failed to load stored layouts for escape room:', err);
     }
 
+    // Fetch minTeamSize from escapeRoomPuzzle record if available
+    let minTeamSize = escapeRoomData?.minTeamSize || 1;
+    try {
+      const erRecord = await prisma.escapeRoomPuzzle.findUnique({
+        where: { puzzleId },
+        select: { minTeamSize: true },
+      });
+      if (erRecord?.minTeamSize && erRecord.minTeamSize > 0) {
+        minTeamSize = erRecord.minTeamSize;
+      }
+    } catch {
+      // use escapeRoomData fallback
+    }
+
     return NextResponse.json({
       id: puzzleId,
       stages,
+      minTeamSize,
       puzzle: {
         title: escapeRoomData.title || puzzle.title,
         description: escapeRoomData.description || puzzle.description,

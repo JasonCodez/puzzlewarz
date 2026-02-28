@@ -15,9 +15,8 @@ export async function POST(req: NextRequest) {
       puzzleId,
       roomTitle,
       roomDescription,
-      // Escape rooms are team-only and always require exactly 4 players.
-      minTeamSize: 4,
-      maxTeamSize: 4,
+      minTeamSize: (typeof data.minTeamSize === 'number' && data.minTeamSize > 0) ? data.minTeamSize : 1,
+      maxTeamSize: (typeof data.maxTeamSize === 'number' && data.maxTeamSize > 0) ? data.maxTeamSize : 8,
     };
     if (typeof timeLimitSeconds !== 'undefined' && timeLimitSeconds !== null) createData.timeLimitSeconds = Number(timeLimitSeconds);
 

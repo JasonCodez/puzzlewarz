@@ -270,6 +270,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
   const DRAFT_KEY = 'escape-room-designer-draft';
   const [previewSceneIdx, setPreviewSceneIdx] = useState(0);
   const [previewMode, setPreviewMode] = useState<'edit' | 'playtest'>('edit');
+  const [fullscreenPreview, setFullscreenPreview] = useState(false);
+  const [fsScale, setFsScale] = useState(1);
 
   // Local playtest state (no server, no DB) so designers can test wiring before creating/saving a puzzle.
   const [playtestSceneIdx, setPlaytestSceneIdx] = useState(0);
@@ -588,6 +590,23 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData]);
+
+  // ── Fullscreen preview: compute scale + close on Esc ──────────────────────
+  useEffect(() => {
+    if (!fullscreenPreview) return;
+    const compute = () => {
+      const scale = Math.min(window.innerWidth * 0.92 / 600, window.innerHeight * 0.92 / 320);
+      setFsScale(scale);
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreenPreview(false); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [fullscreenPreview]);
 
   // ── Persist / auto-save ────────────────────────────────────────────────────
 
@@ -1202,6 +1221,16 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
             >
               {previewMode === 'playtest' ? 'Exit Playtest' : 'Playtest'}
             </button>
+            {previewMode !== 'playtest' && (
+              <button
+                type="button"
+                title={fullscreenPreview ? 'Exit fullscreen (Esc)' : 'Fullscreen preview'}
+                className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFullscreenPreview(f => !f); }}
+              >
+                {fullscreenPreview ? '✕ Exit Fullscreen' : '⛶ Fullscreen'}
+              </button>
+            )}
           </div>
         )}
         {/* Live preview */}
@@ -2602,6 +2631,56 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ── Fullscreen read-only overlay (scales the 600×320 canvas to fill the viewport) ── */}
+        {fullscreenPreview && scenes.length > 0 && previewMode !== 'playtest' && (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.93)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setFullscreenPreview(false)}
+          >
+            {/* Exit controls */}
+            <div
+              style={{ position: 'fixed', top: 14, right: 18, zIndex: 10001, display: 'flex', gap: 10, alignItems: 'center' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Click anywhere or press Esc to exit</span>
+              <button
+                type="button"
+                onClick={() => setFullscreenPreview(false)}
+                style={{ background: 'rgba(30,30,40,0.9)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', borderRadius: 6, padding: '5px 14px', cursor: 'pointer', fontSize: 14 }}
+              >
+                ✕ Exit Fullscreen
+              </button>
+            </div>
+            {/* Uniformly scaled 600×320 canvas — items stay at same pixel coords, whole box scales together */}
+            <div
+              style={{ width: 600, height: 320, position: 'relative', overflow: 'hidden', transform: `scale(${fsScale})`, transformOrigin: 'center center', flexShrink: 0, pointerEvents: 'none' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {scenes[previewSceneIdx].backgroundUrl && (
+                <img
+                  src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(scenes[previewSceneIdx].backgroundUrl)}` : scenes[previewSceneIdx].backgroundUrl}
+                  alt="Background"
+                  style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }}
+                />
+              )}
+              {scenes[previewSceneIdx].items.map((item, i) => {
+                const sf = (item.scale != null && item.scale > 0) ? item.scale : 1;
+                const wt = [sf !== 1 ? `scale(${sf})` : '', item.rotation ? `rotate(${item.rotation}deg)` : '', item.skewX ? `skewX(${item.skewX}deg)` : '', item.skewY ? `skewY(${item.skewY}deg)` : ''].filter(Boolean).join(' ') || undefined;
+                return (
+                  <div key={item.id} style={{ position: 'absolute', left: item.x ?? (20 + i * 60), top: item.y ?? 20, width: item.w ?? 48, height: item.h ?? 48, transform: wt, transformOrigin: 'center center' }}>
+                    {item.imageUrl && <img src={item.imageUrl} alt={item.name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', borderRadius: 4 }} draggable={false} />}
+                  </div>
+                );
+              })}
+              {scenes[previewSceneIdx].interactiveZones.map((zone) => (
+                <div key={zone.id} style={{ position: 'absolute', left: zone.x, top: zone.y, width: zone.width, height: zone.height, border: '1.5px dashed rgba(99,102,241,0.7)', borderRadius: 3, boxSizing: 'border-box' }}>
+                  {zone.label && <span style={{ fontSize: 9, color: 'rgba(200,200,255,0.85)', padding: '0 2px', background: 'rgba(0,0,0,0.4)', borderRadius: 2, lineHeight: 1 }}>{zone.label}</span>}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

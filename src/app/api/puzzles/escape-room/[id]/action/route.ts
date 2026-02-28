@@ -757,7 +757,16 @@ export async function POST(
           sceneState: nextSceneState,
         });
 
-        const useLabel = (typeof meta.label === 'string' && meta.label.trim()) ? meta.label.trim() : `Used item: ${itemKey}`;
+        let useLabel = (typeof meta.label === 'string' && meta.label.trim()) ? meta.label.trim() : '';
+        if (!useLabel) {
+          // Resolve a friendly item name from ItemDefinition rather than showing the raw key.
+          try {
+            const itemDef = await prisma.itemDefinition.findUnique({ where: { key: itemKey }, select: { name: true } });
+            useLabel = itemDef?.name ? `Used item: ${itemDef.name}` : `Used item: ${itemKey}`;
+          } catch {
+            useLabel = `Used item: ${itemKey}`;
+          }
+        }
         await emitEscapeActivity(ctx.teamId, puzzleId, {
           teamId: ctx.teamId,
           puzzleId,

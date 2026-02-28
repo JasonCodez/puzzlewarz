@@ -84,6 +84,7 @@ type EscapeRoomStage = {
 type EscapeRoomResponse = {
   id: string;
   stages: EscapeRoomStage[];
+  minTeamSize?: number;
   puzzle?: {
     title: string;
     description: string | null;
@@ -147,6 +148,7 @@ export function EscapeRoomPuzzle({
   const timeExpiredHandledRef = useRef(false);
   const socketRef = useRef<any>(null);
   const soundEnabledRef = useRef(true);
+  const minTeamSizeRef = useRef<number>(1);
 
   useEffect(() => {
     soundEnabledRef.current = !!soundEnabled;
@@ -238,6 +240,9 @@ export function EscapeRoomPuzzle({
         const j = await res.json();
         if (cancelled) return;
         setData(j as EscapeRoomResponse);
+        if (typeof (j as any).minTeamSize === 'number' && (j as any).minTeamSize > 0) {
+          minTeamSizeRef.current = (j as any).minTeamSize;
+        }
 
         try {
           const u = await fetch('/api/user/info');
@@ -317,7 +322,7 @@ export function EscapeRoomPuzzle({
 
         socket.on('connect', () => {
           try {
-            socket.emit('joinEscapeRoom', { teamId, puzzleId, userId: currentUserId });
+            socket.emit('joinEscapeRoom', { teamId, puzzleId, userId: currentUserId, requiredPlayers: minTeamSizeRef.current });
           } catch {
             // ignore
           }
@@ -736,6 +741,27 @@ export function EscapeRoomPuzzle({
   const penaltyToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
   const bgmFadeRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Browsers block autoplay until a user gesture. On first interaction, resume BGM if it was blocked.
+  useEffect(() => {
+    const resumeBgm = () => {
+      const el = bgmRef.current;
+      if (el && el.paused && el.src && soundEnabledRef.current) {
+        void el.play().catch(() => {});
+      }
+      window.removeEventListener('click', resumeBgm);
+      window.removeEventListener('keydown', resumeBgm);
+      window.removeEventListener('touchstart', resumeBgm);
+    };
+    window.addEventListener('click', resumeBgm);
+    window.addEventListener('keydown', resumeBgm);
+    window.addEventListener('touchstart', resumeBgm);
+    return () => {
+      window.removeEventListener('click', resumeBgm);
+      window.removeEventListener('keydown', resumeBgm);
+      window.removeEventListener('touchstart', resumeBgm);
+    };
+  }, []);
 
   useEffect(() => {
     const prev = prevStageIndexRef.current;
@@ -1428,7 +1454,7 @@ export function EscapeRoomPuzzle({
     const stageMap = (stageMapRaw && typeof stageMapRaw === 'object') ? (stageMapRaw as Record<string, unknown>) : {};
     const counts = Object.values(stageMap).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
     const distinct = counts.length;
-    const requiredDistinct = 4;
+    const requiredDistinct = (data?.minTeamSize ?? minTeamSizeRef.current ?? 1);
     const minActionsPerPlayer = 1;
     const metMinimum = counts.filter((n) => n >= minActionsPerPlayer).length;
     return {
@@ -1438,14 +1464,14 @@ export function EscapeRoomPuzzle({
       minActionsPerPlayer,
       complete: distinct >= requiredDistinct && metMinimum >= requiredDistinct,
     };
-  }, [sceneState, stageIndex]);
+  }, [sceneState, stageIndex, data]);
 
   if (loading) return <div className="text-gray-300">Loading escape room…</div>;
   if (error) return <div className="text-red-300">{error}</div>;
   if (!data || !stage) return <div className="text-gray-300">Unable to load escape room stages.</div>;
 
   const ackCount = Object.keys(briefingAcks || {}).length;
-  const allAcked = ackCount >= 4;
+  const allAcked = ackCount >= (data?.minTeamSize ?? minTeamSizeRef.current ?? 1);
 
   const fmtRemaining = (ms: number | null) => {
     if (ms === null) return null;
@@ -1659,7 +1685,7 @@ export function EscapeRoomPuzzle({
         <div className="mb-3 rounded border border-slate-700 bg-slate-950/30 p-3">
           <div className="text-white font-semibold">Briefing</div>
           <div className="text-gray-300 text-sm mt-1">{data.puzzle?.description || 'Read the briefing, then acknowledge when ready.'}</div>
-          <div className="mt-2 text-sm text-gray-200">Acknowledged: {ackCount}/4</div>
+          <div className="mt-2 text-sm text-gray-200">Acknowledged: {ackCount}/{data?.minTeamSize ?? minTeamSizeRef.current ?? 1}</div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
@@ -2026,8 +2052,9 @@ export function EscapeRoomPuzzle({
           pendingPickup.pickupAnimationUrl && pickupPhase === 'ready' ? '' : 'bg-black/65 backdrop-blur-[1px]'
         }`}>
           {pendingPickup.pickupAnimationUrl && pickupPhase === 'ready' ? (
-            /* Video phase — same center point as the card; fades in over the reveal */
+            /* Video phase — transparent background, video plays over the scene */
             <>
+              {/* The actual video */}
               <video
                 key={pendingPickup.itemId}
                 src={/^https?:\/\//i.test(pendingPickup.pickupAnimationUrl) ? `/api/image-proxy?url=${encodeURIComponent(pendingPickup.pickupAnimationUrl)}` : pendingPickup.pickupAnimationUrl}
@@ -2035,18 +2062,26 @@ export function EscapeRoomPuzzle({
                 muted
                 playsInline
                 style={{
-                  maxHeight: '72vh',
-                  maxWidth: '82vw',
+                  position: 'relative',
+                  zIndex: 3,
+                  maxHeight: '68vh',
+                  maxWidth: '78vw',
                   objectFit: 'contain',
-                  borderRadius: 12,
-                  filter: 'drop-shadow(0 0 48px rgba(251,191,36,0.35))',
+                  borderRadius: 16,
+                  boxShadow: '0 8px 80px rgba(251,191,36,0.25), 0 2px 24px rgba(0,0,0,0.8)',
                   ...({
                     animation: 'pickupVideoFadeGrow 0.35s cubic-bezier(0.22,0.7,0.2,1) forwards',
                   } as React.CSSProperties),
                 }}
               />
-              <div style={{ position: 'fixed', bottom: 32, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, zIndex: 71 }}>
-                <h3 className="text-lg font-bold text-amber-50 drop-shadow-lg">You found {pendingPickup.itemName}</h3>
+              {/* Bottom bar: item name + buttons */}
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 4, padding: '20px 24px 28px', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {pendingPickup.imageUrl && !isVideoUrl(pendingPickup.imageUrl) && (
+                    <img src={pendingPickup.imageUrl} alt="" aria-hidden style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(0,0,0,0.4)' }} />
+                  )}
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: '#fef3c7', textShadow: '0 2px 8px rgba(0,0,0,0.8)', margin: 0 }}>You found <span style={{ color: '#fbbf24' }}>{pendingPickup.itemName}</span></h3>
+                </div>
                 <div className="flex gap-3">
                   <button type="button" onClick={dismissPendingPickup} className="px-4 py-2 rounded border border-amber-700/50 text-amber-100 hover:bg-amber-950/40">Not now</button>
                   <button type="button" onClick={() => void confirmPendingPickup()} className="px-4 py-2 rounded font-semibold text-white bg-amber-600 hover:bg-amber-500">Add to Inventory</button>

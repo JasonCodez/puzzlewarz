@@ -26,8 +26,7 @@ export async function PUT(req: NextRequest) {
     const id = req.nextUrl.pathname.split('/').pop();
     const data = await req.json();
 
-    // Escape rooms are team-only and always require exactly 4 players.
-    // Whitelist allowed fields and enforce min/max team size.
+    // Whitelist allowed fields. Only update minTeamSize/maxTeamSize if explicitly provided.
     const updateData: any = {
       ...(typeof data?.puzzleId === 'string' ? { puzzleId: data.puzzleId } : {}),
       ...(typeof data?.roomTitle === 'string' ? { roomTitle: data.roomTitle } : {}),
@@ -35,8 +34,8 @@ export async function PUT(req: NextRequest) {
       ...(typeof data?.timeLimitSeconds !== 'undefined' && data?.timeLimitSeconds !== null
         ? { timeLimitSeconds: Number(data.timeLimitSeconds) }
         : {}),
-      minTeamSize: 4,
-      maxTeamSize: 4,
+      ...(typeof data?.minTeamSize === 'number' && data.minTeamSize > 0 ? { minTeamSize: data.minTeamSize } : {}),
+      ...(typeof data?.maxTeamSize === 'number' && data.maxTeamSize > 0 ? { maxTeamSize: data.maxTeamSize } : {}),
     };
 
     const escapeRoom = await prisma.escapeRoomPuzzle.update({

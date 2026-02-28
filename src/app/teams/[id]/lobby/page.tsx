@@ -5,6 +5,14 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
 import ActionModal from "@/components/ActionModal";
 
+function getPuzzleDisplayTitle(p: any): string {
+  const escapeTitle = typeof p?.escapeRoom?.roomTitle === 'string' ? p.escapeRoom.roomTitle.trim() : '';
+  const puzzleTitle = typeof p?.title === 'string' ? p.title.trim() : '';
+  if (p?.puzzleType === 'escape_room' && escapeTitle) return escapeTitle;
+  if ((puzzleTitle === '' || puzzleTitle === 'Untitled Puzzle') && escapeTitle) return escapeTitle;
+  return puzzleTitle || escapeTitle || 'Untitled Puzzle';
+}
+
 export default function TeamLobbyPage() {
   const params = useParams();
   const teamId = params.id as string;
@@ -115,7 +123,7 @@ export default function TeamLobbyPage() {
         const minTeamSize = typeof p.minTeamSize === 'number' ? p.minTeamSize : 0;
         const isEscapeRoom = p?.puzzleType === 'escape_room' || !!p?.escapeRoom;
         const escaperoomMinPlayers = typeof p?.minTeamSize === 'number' && p.minTeamSize > 0 ? p.minTeamSize : 1;
-        const requiredPlayers = isEscapeRoom ? escaperoomMinPlayers : ((partsCount > 0 ? partsCount : minTeamSize) || 1);
+        const requiredPlayers = isEscapeRoom ? escaperoomMinPlayers : (minTeamSize > 0 ? minTeamSize : (partsCount > 0 ? partsCount : 1));
         const isLocked = isEscapeRoom && p?.escapeRoomFailed === true;
         return { ...p, partsCount, requiredPlayers, isLocked };
       });
@@ -391,15 +399,11 @@ export default function TeamLobbyPage() {
 
         socket.on('puzzleStarting', ({ teamId: t, puzzleId: p }) => {
           if (!mounted) return;
-          // navigate to planning screen
           skipLeaveOnUnmountRef.current = true;
           const effectiveTeamId = t || teamId;
           const effectivePuzzleId = p || puzzleId;
-          if (!effectiveTeamId || !effectivePuzzleId) {
-            openActionModal('error', 'Navigation Error', 'Missing team or puzzle id; unable to open planning page.');
-            return;
-          }
-          router.push(`/teams/${effectiveTeamId}/puzzle/${effectivePuzzleId}/planning`);
+          if (!effectiveTeamId || !effectivePuzzleId) return;
+          router.push(`/puzzles/${effectivePuzzleId}?teamId=${encodeURIComponent(effectiveTeamId)}`);
         });
 
         socket.on('teamPuzzleChanged', ({ toPuzzleId }: any) => {
@@ -567,7 +571,7 @@ export default function TeamLobbyPage() {
       ? puzzle.partsCount
       : (Array.isArray(puzzle.parts) ? puzzle.parts.length : 0);
     const minTeamSize = typeof puzzle.minTeamSize === 'number' ? puzzle.minTeamSize : 0;
-    const required = partsCount > 0 ? partsCount : minTeamSize;
+    const required = minTeamSize > 0 ? minTeamSize : (partsCount > 0 ? partsCount : 0);
     return required > 0 ? required : 1;
   };
 
@@ -659,12 +663,12 @@ export default function TeamLobbyPage() {
         const res = await fetch("/api/team/lobby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start", teamId, puzzleId }) });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) return openActionModal("error", "Start Failed", j?.error || res.statusText);
-        // success -> navigate to team planning so leader can open the puzzle
+        // success -> navigate directly to the puzzle
         skipLeaveOnUnmountRef.current = true;
         if (!teamId || !puzzleId) {
-          return openActionModal('error', 'Navigation Error', 'Missing team or puzzle id; unable to open planning page.');
+          return openActionModal('error', 'Navigation Error', 'Missing team or puzzle id; unable to start puzzle.');
         }
-        router.push(`/teams/${teamId}/puzzle/${puzzleId}/planning`);
+        router.push(`/puzzles/${puzzleId}?teamId=${encodeURIComponent(teamId)}`);
       }
       if (confirmAction === "destroy") {
         const res = await fetch("/api/team/lobby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "destroy", teamId, puzzleId }) });
@@ -740,7 +744,7 @@ export default function TeamLobbyPage() {
             <option value="">-- Select a puzzle --</option>
             {teamPuzzles.map((p) => (
               <option key={p.id} value={p.id} disabled={!!p.isLocked}>
-                {p.title} (players: {p.requiredPlayers || 1}){p.isLocked ? ' — LOCKED' : ''}
+                {getPuzzleDisplayTitle(p)} (players: {p.requiredPlayers || 1}){p.isLocked ? ' — LOCKED' : ''}
               </option>
             ))}
           </select>
@@ -1036,7 +1040,7 @@ export default function TeamLobbyPage() {
           confirmAction === 'start'
             ? `Start the puzzle now? This will open the puzzle for the team if start conditions are met.`
             : confirmAction === 'create'
-            ? `Create or join the lobby for '${selectedPuzzle?.title || puzzleId}'?`
+            ? `Create or join the lobby for '${getPuzzleDisplayTitle(selectedPuzzle) || puzzleId}'?`
             : confirmAction === 'destroy'
             ? `Shut down this lobby and send everyone back to the dashboard?`
             : confirmAction === 'ready'

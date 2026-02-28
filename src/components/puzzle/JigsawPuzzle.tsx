@@ -883,9 +883,9 @@ export default function JigsawPuzzleSVGWithTray({
   const pieceH = boardHeight / rows;
   const scatterMargin = useMemo(() => {
     // Unscaled stage-space margin around the board reserved for loose pieces.
-    // Roughly ~1.35 piece size plus a small buffer.
+    // Roughly ~0.6 piece size plus a small buffer.
     const base = Math.max(pieceW, pieceH);
-    return Math.round(base * 1.35 + 48);
+    return Math.round(base * 0.6 + 16);
   }, [pieceW, pieceH]);
   const [imageOk, setImageOk] = useState<boolean | null>(null);
   const [imageReloadKey, setImageReloadKey] = useState(0);
@@ -2486,8 +2486,8 @@ export default function JigsawPuzzleSVGWithTray({
       const contentH = boardHeight + scatterMargin * 2;
       const widthScale = Math.max(0.06, (availableWidth - pad) / contentW);
       const heightScale = Math.max(0.06, (availableHeight - pad) / contentH);
-      const fit = Math.min(1, widthScale, heightScale);
-      const next = Math.min(1, Math.max(0.06, fit));
+      const fit = Math.min(widthScale, heightScale);
+      const next = Math.max(0.06, fit);
 
       if (isFullscreen) {
         setFsScale(next);

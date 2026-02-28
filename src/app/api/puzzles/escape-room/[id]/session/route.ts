@@ -153,16 +153,21 @@ export async function POST(
       });
       const memberIds = new Set(members.map((m) => m.userId));
 
-      const acks = safeJsonParse<BriefingAcksMap>(progress.briefingAcks, {});
-      const ackedCount = Object.keys(acks).filter((uid) => memberIds.has(uid)).length;
-      if (ackedCount < members.length) {
-        return NextResponse.json({ error: `All players must acknowledge the briefing (${ackedCount}/${members.length})` }, { status: 409 });
-      }
-
       const escapeRoom = await prisma.escapeRoomPuzzle.findUnique({
         where: { id: ctx.escapeRoomId },
-        select: { timeLimitSeconds: true },
+        select: { timeLimitSeconds: true, minTeamSize: true },
       });
+
+      // Use minTeamSize as the required ack threshold (not total team roster size).
+      const requiredAcks = (escapeRoom?.minTeamSize && escapeRoom.minTeamSize > 0)
+        ? Math.min(escapeRoom.minTeamSize, members.length)
+        : members.length;
+
+      const acks = safeJsonParse<BriefingAcksMap>(progress.briefingAcks, {});
+      const ackedCount = Object.keys(acks).filter((uid) => memberIds.has(uid)).length;
+      if (ackedCount < requiredAcks) {
+        return NextResponse.json({ error: `All players must acknowledge the briefing (${ackedCount}/${requiredAcks})` }, { status: 409 });
+      }
 
       const limitSeconds = escapeRoom?.timeLimitSeconds ?? 1800;
       const startedAt = new Date();

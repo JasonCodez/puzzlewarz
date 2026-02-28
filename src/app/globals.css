@@ -119,6 +119,144 @@ body {
 .border-purple-500 { border-color: #3891A6 !important; }
 .focus\:border-purple-500:focus { border-color: #3891A6 !important; }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Escape-room pickup / collect animations
+   Required by EscapeRoomPuzzle.tsx (pickupRevealClass + pickupToInventoryClass)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Base wrapper — needed so the item div is a positioned context */
+.pickup-cinematic-item {
+  will-change: transform, opacity, filter;
+}
+
+/* ── Video pickup fade ─────────────────────────────────────── */
+@keyframes pickupVideoFadeGrow {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ── REVEAL keyframes ─────────────────────────────────────── */
+
+@keyframes pickupCinematicReveal {
+  0%   { opacity: 0; transform: scale(0.3);       filter: brightness(2.5) saturate(2); }
+  40%  { opacity: 1; transform: scale(1.12);       filter: brightness(1.6) saturate(1.6); }
+  65%  { transform: scale(0.97);                   filter: brightness(1.1); }
+  85%  { transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1);          filter: brightness(1) saturate(1); }
+}
+@keyframes pickupQuickSpinReveal {
+  0%   { opacity: 0; transform: scale(0.3) rotate(-180deg); }
+  55%  { opacity: 1; transform: scale(1.08) rotate(12deg); }
+  80%  { transform: scale(0.97) rotate(-5deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes pickupFloatInReveal {
+  0%   { opacity: 0; transform: translateY(52px) scale(0.65); }
+  50%  { opacity: 1; transform: translateY(-10px) scale(1.06); filter: brightness(1.35); }
+  75%  { transform: translateY(4px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1);         filter: brightness(1); }
+}
+@keyframes pickupPowerDropReveal {
+  0%   { opacity: 0; transform: translateY(-68px) scale(1.18); }
+  45%  { opacity: 1; transform: translateY(8px) scale(0.94);    filter: brightness(1.45); }
+  70%  { transform: translateY(-5px) scale(1.04); }
+  88%  { transform: translateY(2px) scale(0.99); }
+  100% { opacity: 1; transform: translateY(0) scale(1);         filter: brightness(1); }
+}
+@keyframes pickupSpiralReveal {
+  0%   { opacity: 0; transform: scale(0.2) rotate(-360deg); }
+  60%  { opacity: 1; transform: scale(1.1) rotate(20deg); }
+  80%  { transform: scale(0.97) rotate(-8deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes pickupBounceReveal {
+  0%   { opacity: 0; transform: scale(0.35); }
+  40%  { opacity: 1; transform: scale(1.2); }
+  60%  { transform: scale(0.87); }
+  75%  { transform: scale(1.11); }
+  88%  { transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes pickupGlitchReveal {
+  0%   { opacity: 0; transform: scale(0.8) skewX(-8deg);       filter: hue-rotate(90deg) brightness(2); }
+  15%  { opacity: 1; transform: scale(1.05) skewX(5deg);       filter: hue-rotate(0deg) brightness(1.6); }
+  30%  { transform: scale(0.98) skewX(-3deg);                  filter: hue-rotate(60deg); }
+  50%  { transform: scale(1.03) skewX(1deg);                   filter: hue-rotate(0deg) brightness(1.25); }
+  70%  { transform: scale(0.99) skewX(0deg);                   filter: hue-rotate(30deg); }
+  100% { opacity: 1; transform: scale(1) skewX(0deg);          filter: hue-rotate(0deg) brightness(1); }
+}
+@keyframes pickupFlashReveal {
+  0%   { opacity: 0; transform: scale(0.55);  filter: brightness(4) saturate(0.4); }
+  20%  { opacity: 1; transform: scale(1.18);  filter: brightness(2.8) saturate(1.6); }
+  45%  { transform: scale(0.96);              filter: brightness(1.2); }
+  65%  { transform: scale(1.05);              filter: brightness(1.7); }
+  85%  { transform: scale(0.99);              filter: brightness(1.1); }
+  100% { opacity: 1; transform: scale(1);     filter: brightness(1); }
+}
+
+/* ── REVEAL classes ────────────────────────────────────────── */
+.pickup-cinematic-reveal    { animation: pickupCinematicReveal  1s    cubic-bezier(0.22,0.7,0.2,1)    both; }
+.pickup-reveal-quick-spin   { animation: pickupQuickSpinReveal  0.67s cubic-bezier(0.3,0.6,0.2,1)    both; }
+.pickup-reveal-float-in     { animation: pickupFloatInReveal    0.95s cubic-bezier(0.25,0.8,0.25,1)  both; }
+.pickup-reveal-power-drop   { animation: pickupPowerDropReveal  0.91s cubic-bezier(0.2,0.75,0.25,1)  both; }
+.pickup-reveal-spiral       { animation: pickupSpiralReveal     0.8s  cubic-bezier(0.3,0.7,0.2,1)    both; }
+.pickup-reveal-bounce       { animation: pickupBounceReveal     0.87s cubic-bezier(0.3,1.3,0.5,1)    both; }
+.pickup-reveal-glitch       { animation: pickupGlitchReveal     0.6s  linear                         both; }
+.pickup-reveal-flash        { animation: pickupFlashReveal      0.7s  cubic-bezier(0.2,0.9,0.3,1)    both; }
+
+/* ── TO-INVENTORY keyframes ────────────────────────────────── */
+
+@keyframes pickupCinematicToInventory {
+  0%   { transform: translate(0,0) scale(1);                                                                       opacity: 1; filter: brightness(1.5); }
+  12%  { transform: translate(0,0) scale(1.14);                                                                    opacity: 1; filter: brightness(2); }
+  100% { transform: translate(var(--pickup-dx,0px), var(--pickup-dy,0px)) scale(var(--pickup-scale,0.34));        opacity: 0; filter: brightness(1); }
+}
+@keyframes pickupQuickSpinToInventory {
+  0%   { transform: translate(0,0) scale(1) rotate(0deg);                                                          opacity: 1; }
+  100% { transform: translate(var(--pickup-dx,0px), var(--pickup-dy,0px)) scale(var(--pickup-scale,0.34)) rotate(720deg); opacity: 0; }
+}
+@keyframes pickupFloatInToInventory {
+  0%   { transform: translate(0,0) scale(1) translateY(0);                                                         opacity: 1; }
+  18%  { transform: translate(0,-12px) scale(1.06);                                                                opacity: 1; }
+  100% { transform: translate(var(--pickup-dx,0px), var(--pickup-dy,0px)) scale(var(--pickup-scale,0.34));        opacity: 0; }
+}
+@keyframes pickupPowerDropToInventory {
+  0%   { transform: translate(0,0) scale(1);                                                                       opacity: 1; filter: brightness(1.4); }
+  100% { transform: translate(var(--pickup-dx,0px), var(--pickup-dy,0px)) scale(var(--pickup-scale,0.34));        opacity: 0; filter: brightness(2); }
+}
+@keyframes pickupSpiralToInventory {
+  0%   { transform: translate(0,0) scale(1) rotate(0deg);                                                          opacity: 1; }
+  100% { transform: translate(var(--pickup-dx,0px), var(--pickup-dy,0px)) scale(var(--pickup-scale,0.34)) rotate(-360deg); opacity: 0; }
+}
+@keyframes pickupBounceToInventory {
+  0%   { transform: translate(0,0) scale(1);  opacity: 1; }
+  14%  { transform: translate(0,0) scale(1.22); opacity: 1; }
+  100% { transform: translate(var(--pickup-dx,0px), var(--pickup-dy,0px)) scale(var(--pickup-scale,0.34)); opacity: 0; }
+}
+@keyframes pickupGlitchToInventory {
+  0%   { transform: translate(0,0) scale(1) skewX(0deg);           opacity: 1; filter: hue-rotate(0deg); }
+  18%  { transform: translate(0,0) scale(1.06) skewX(10deg);       filter: hue-rotate(120deg); }
+  36%  { transform: translate(0,0) scale(0.92) skewX(-5deg);       filter: hue-rotate(240deg); }
+  100% { transform: translate(var(--pickup-dx,0px), var(--pickup-dy,0px)) scale(var(--pickup-scale,0.34)) skewX(0deg); opacity: 0; filter: hue-rotate(0deg); }
+}
+@keyframes pickupFlashToInventory {
+  0%   { transform: translate(0,0) scale(1);    opacity: 1; filter: brightness(1); }
+  10%  { transform: translate(0,0) scale(1.12); opacity: 1; filter: brightness(3); }
+  100% { transform: translate(var(--pickup-dx,0px), var(--pickup-dy,0px)) scale(var(--pickup-scale,0.34)); opacity: 0; filter: brightness(1); }
+}
+
+/* ── TO-INVENTORY classes ──────────────────────────────────── */
+.pickup-cinematic-to-inventory    { animation: pickupCinematicToInventory  0.6s  cubic-bezier(0.7,0,1,1)    forwards; }
+.pickup-to-inventory-quick-spin   { animation: pickupQuickSpinToInventory  0.5s  cubic-bezier(0.7,0,1,1)    forwards; }
+.pickup-to-inventory-float-in     { animation: pickupFloatInToInventory    0.55s cubic-bezier(0.7,0,1,1)    forwards; }
+.pickup-to-inventory-power-drop   { animation: pickupPowerDropToInventory  0.5s  cubic-bezier(0.7,0,0.9,1)  forwards; }
+.pickup-to-inventory-spiral       { animation: pickupSpiralToInventory     0.55s cubic-bezier(0.7,0,1,1)    forwards; }
+.pickup-to-inventory-bounce       { animation: pickupBounceToInventory     0.5s  cubic-bezier(0.7,0,1,1)    forwards; }
+.pickup-to-inventory-glitch       { animation: pickupGlitchToInventory     0.48s ease-in                    forwards; }
+.pickup-to-inventory-flash        { animation: pickupFlashToInventory      0.46s cubic-bezier(0.7,0,1,1)    forwards; }
+
+/* ── End pickup animations ───────────────────────────────── */
+
 /* Explicit navbar breakpoint overrides (debugging fallback) */
 @media (min-width: 1032px) {
   .hamburger-button { display: none !important; }

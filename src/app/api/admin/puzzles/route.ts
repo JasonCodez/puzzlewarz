@@ -212,9 +212,8 @@ export async function POST(request: NextRequest) {
       puzzleType: puzzleType || 'general',
       ...(puzzleType === 'escape_room'
         ? {
-            // Escape rooms are team-only and always require exactly 4 players.
             isTeamPuzzle: true,
-            minTeamSize: 4,
+            minTeamSize: (() => { const v = puzzleData?.minTeamSize ?? (puzzleData as any)?.escapeRoomData?.minTeamSize; return (typeof v === 'number' && v > 0) ? v : 1; })(),
           }
         : {}),
       riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' ? correctAnswer : undefined,
@@ -378,9 +377,8 @@ export async function POST(request: NextRequest) {
               roomTitle: puzzleData.roomTitle || (puzzle.title || 'Escape Room'),
               roomDescription: puzzleData.roomDescription || (puzzle.description || ''),
               timeLimitSeconds: typeof puzzleData.timeLimitSeconds !== 'undefined' && puzzleData.timeLimitSeconds !== null ? Number(puzzleData.timeLimitSeconds) : undefined,
-              // Escape rooms are team-only and always require exactly 4 players.
-              minTeamSize: 4,
-              maxTeamSize: 4,
+              minTeamSize: (() => { const v = puzzleData?.minTeamSize ?? (puzzleData as any)?.escapeRoomData?.minTeamSize; return (typeof v === 'number' && v > 0) ? v : 1; })(),
+              maxTeamSize: (typeof puzzleData.maxTeamSize === 'number' && puzzleData.maxTeamSize > 0) ? puzzleData.maxTeamSize : 8,
             },
           });
 

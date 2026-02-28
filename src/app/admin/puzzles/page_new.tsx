@@ -462,6 +462,21 @@ export default function AdminPuzzlesPage() {
                       linkedPuzzleId: z.linkedPuzzleId,
                       eventId: z.eventId,
                       actionType: z.actionType,
+                      // Collect / pickup animation fields
+                      pickupAnimationPreset: z.pickupAnimationPreset,
+                      pickupAnimationUrl: z.pickupAnimationUrl,
+                      // Sound effects per interaction
+                      sfx: z.sfx,
+                      // Item-use gate and effects
+                      requiresItems: z.requiresItems,
+                      requiredItemKey: z.requiredItemKey,
+                      requiredItemId: z.requiredItemId,
+                      useEffect: z.useEffect,
+                      // Time penalty on failure
+                      penaltySeconds: z.penaltySeconds,
+                      // Mini-puzzle and code-entry configs
+                      miniPuzzle: z.miniPuzzle,
+                      codeEntry: z.codeEntry,
                     };
                     if (z.meta && typeof z.meta === 'object') return { ...(z.meta as any), ...base };
                     // If `z.meta` was a string (already serialized), preserve it as-is.
@@ -478,6 +493,8 @@ export default function AdminPuzzlesPage() {
               roomTitle: d.title || d.roomTitle || formData.title,
               roomDescription: d.description || d.roomDescription || formData.description,
               timeLimitSeconds: d.timeLimit || d.timeLimitSeconds || undefined,
+              minTeamSize: (typeof d.minTeamSize === 'number' && d.minTeamSize > 0) ? d.minTeamSize : 1,
+              maxTeamSize: (typeof d.maxTeamSize === 'number' && d.maxTeamSize > 0) ? d.maxTeamSize : 8,
             };
           }
         }

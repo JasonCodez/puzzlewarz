@@ -549,7 +549,11 @@ export async function POST(req: NextRequest) {
         // mark started in in-memory lobby
         lobby.started = true;
 
-        // attempt to notify the socket server so connected clients transition immediately
+        // mark puzzle opened immediately — skip planning page entirely
+        lobby.puzzleOpenedAt = Date.now();
+        lobby.enteredPuzzleAt = {};
+
+        // notify the socket server so all connected clients navigate directly to the puzzle
         try {
           const { postToSocket } = await import('@/lib/socket-client');
           const res = await postToSocket('/emit', { room: `${teamId}::${puzzleId}`, event: 'puzzleStarting', payload: { teamId, puzzleId } });

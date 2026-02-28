@@ -222,7 +222,7 @@ const escapeRoomCounts = new Map();
 // Per-socket memberships so we can cleanly remove on disconnect.
 const socketEscapeMemberships = new Map(); // socketId -> Array<{ teamId, puzzleId, userId }>
 
-const REQUIRED_ESCAPE_PLAYERS = 4;
+const DEFAULT_REQUIRED_ESCAPE_PLAYERS = 1; // fallback; per-room value is set by client via joinEscapeRoom
 const JOIN_WAIT_MS = Number(process.env.ESCAPE_JOIN_WAIT_MS) || 20_000;
 const DISCONNECT_GRACE_MS = Number(process.env.ESCAPE_DISCONNECT_GRACE_MS) || 5_000;
 
@@ -236,6 +236,7 @@ const lobbyDisconnectTimers = new Map();
 
 const joinWaitTimers = new Map(); // key `${teamId}::${puzzleId}` -> Timeout
 const disconnectTimers = new Map(); // key `${teamId}::${puzzleId}` -> Timeout
+const escapeRoomRequiredCounts = new Map(); // key `${teamId}::${puzzleId}` -> number (required player count)
 
 function escapeKey(teamId, puzzleId) {
   return `${teamId}::${puzzleId}`;
@@ -244,6 +245,10 @@ function escapeKey(teamId, puzzleId) {
 function escapeRoomUniqueCount(key) {
   const counts = escapeRoomCounts.get(key);
   return counts ? counts.size : 0;
+}
+
+function getRequiredPlayers(key) {
+  return escapeRoomRequiredCounts.get(key) || DEFAULT_REQUIRED_ESCAPE_PLAYERS;
 }
 
 function addEscapeMember(teamId, puzzleId, userId) {
@@ -308,7 +313,7 @@ function clearAbortTimers(key) {
 async function performEscapeAbort(teamId, puzzleId, reason) {
   const key = escapeKey(teamId, puzzleId);
   const count = escapeRoomUniqueCount(key);
-  if (count >= REQUIRED_ESCAPE_PLAYERS) {
+  if (count >= getRequiredPlayers(key)) {
     clearAbortTimers(key);
     return;
   }
@@ -332,7 +337,7 @@ function scheduleJoinWaitAbort(teamId, puzzleId) {
   const t = setTimeout(() => {
     joinWaitTimers.delete(key);
     const count = escapeRoomUniqueCount(key);
-    if (count >= REQUIRED_ESCAPE_PLAYERS) return;
+    if (count >= getRequiredPlayers(key)) return;
     performEscapeAbort(teamId, puzzleId, 'missing_player').catch(() => null);
   }, JOIN_WAIT_MS);
   joinWaitTimers.set(key, t);
@@ -343,7 +348,7 @@ function scheduleDisconnectAbort(teamId, puzzleId) {
 
   // If we're already full again, cancel any pending disconnect abort.
   const count = escapeRoomUniqueCount(key);
-  if (count >= REQUIRED_ESCAPE_PLAYERS) {
+  if (count >= getRequiredPlayers(key)) {
     const dt = disconnectTimers.get(key);
     if (dt) {
       clearTimeout(dt);
@@ -356,7 +361,7 @@ function scheduleDisconnectAbort(teamId, puzzleId) {
   const t = setTimeout(() => {
     disconnectTimers.delete(key);
     const after = escapeRoomUniqueCount(key);
-    if (after >= REQUIRED_ESCAPE_PLAYERS) return;
+    if (after >= getRequiredPlayers(key)) return;
     performEscapeAbort(teamId, puzzleId, 'player_disconnected').catch(() => null);
   }, DISCONNECT_GRACE_MS);
   disconnectTimers.set(key, t);
@@ -374,11 +379,20 @@ io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
   // Escape-room room membership (separate from lobby rooms)
-  socket.on('joinEscapeRoom', ({ teamId, puzzleId, userId }) => {
+  socket.on('joinEscapeRoom', ({ teamId, puzzleId, userId, requiredPlayers }) => {
     try {
       if (!teamId || !puzzleId || !userId) return;
       const room = `escape:${teamId}::${puzzleId}`;
       socket.join(room);
+
+      // Store the required player count for this room.
+      // Always use the latest value from the client (sourced from DB), so a DB fix takes effect immediately.
+      const key = escapeKey(teamId, puzzleId);
+      if (typeof requiredPlayers === 'number' && requiredPlayers > 0) {
+        escapeRoomRequiredCounts.set(key, requiredPlayers);
+      } else if (!escapeRoomRequiredCounts.has(key)) {
+        escapeRoomRequiredCounts.set(key, DEFAULT_REQUIRED_ESCAPE_PLAYERS);
+      }
 
       // Track membership for abort logic.
       const list = socketEscapeMemberships.get(socket.id) || [];
@@ -393,8 +407,7 @@ io.on('connection', (socket) => {
       scheduleJoinWaitAbort(teamId, puzzleId);
 
       // If we've reached quorum, clear any abort timers.
-      const key = escapeKey(teamId, puzzleId);
-      if (escapeRoomUniqueCount(key) >= REQUIRED_ESCAPE_PLAYERS) {
+      if (escapeRoomUniqueCount(key) >= getRequiredPlayers(key)) {
         clearAbortTimers(key);
       }
     } catch (e) {
