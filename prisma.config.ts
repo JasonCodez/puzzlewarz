@@ -8,8 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load .env.local first, then .env
-config({ path: path.join(__dirname, ".env.local") });
-config({ path: path.join(__dirname, ".env") });
+config({ path: path.join(__dirname, ".env.local"), quiet: true });
+config({ path: path.join(__dirname, ".env"), quiet: true });
 
 import { defineConfig } from "prisma/config";
 
@@ -17,8 +17,5 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
-  },
-  datasource: {
-    url: process.env["DATABASE_URL"] || "",
   },
 });
