@@ -520,9 +520,8 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("Error creating puzzle:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to create puzzle";
     return NextResponse.json(
-      { error: errorMessage },
+      { error: "Failed to create puzzle" },
       { status: 500 }
     );
   }

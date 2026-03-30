@@ -1,10 +1,14 @@
-import { PrismaClient } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-
-const prisma = new PrismaClient();
+import prisma from '@/lib/prisma';
+import { requireAdminUser } from '@/lib/requireAdmin';
 
 export async function POST(req: NextRequest) {
   try {
+    const admin = await requireAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const data = await req.json();
     // Required fields: puzzleId, roomTitle, roomDescription
     const { puzzleId, roomTitle, roomDescription, timeLimitSeconds } = data;
@@ -25,8 +29,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ escapeRoom }, { status: 201 });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    return NextResponse.json({ error: errorMessage, stack: errorStack }, { status: 500 });
+    console.error('[ESCAPE ROOM CREATE] Failed to create escape room', error);
+    return NextResponse.json({ error: 'Failed to create escape room' }, { status: 500 });
   }
 }

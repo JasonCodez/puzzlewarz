@@ -1,10 +1,14 @@
-import { PrismaClient } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-
-const prisma = new PrismaClient();
+import prisma from '@/lib/prisma';
+import { requireAdminUser } from '@/lib/requireAdmin';
 
 export async function POST(req: NextRequest) {
   try {
+    const admin = await requireAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const data = await req.json();
     // Destructure the designer config
     const { title, description, timeLimit, scenes, userSpecialties } = data;
@@ -81,6 +85,7 @@ export async function POST(req: NextRequest) {
     // Optionally: Save userSpecialties (not implemented here)
     return NextResponse.json({ success: true, escapeRoomId: escapeRoom.id });
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || String(error), stack: error?.stack }, { status: 500 });
+    console.error('[ESCAPE ROOM DESIGNER CREATE] Failed to create escape room', error);
+    return NextResponse.json({ error: 'Failed to create escape room' }, { status: 500 });
   }
 }

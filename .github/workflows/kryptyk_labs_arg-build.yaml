@@ -29,7 +29,7 @@ jobs:
 
       - name: Run script
         env:
-          DATABASE_URL: mysql://dbu1581612:Arm4469nine2686tee!@db5019454707.hosting-data.io:3306/dbs15222973?sslaccept=strict
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEXT_PUBLIC_SOCKET_URL: wss://kryptyk-socket.onrender.com
           NEXT_TELEMETRY_DISABLED: 1
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}

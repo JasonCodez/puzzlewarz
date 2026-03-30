@@ -52,11 +52,6 @@ export const bannedWords: string[] = externalBannedWords || [
   'sex',
 ];
 
-// If the external list wasn't loaded, surface a debug warning in Node logs to assist diagnosis.
-if (!externalBannedWords && typeof console !== 'undefined' && typeof console.warn === 'function') {
-  try { console.warn('display-name-validator: external blacklist not loaded; using internal fallback list'); } catch (e) {}
-}
-
 export function isAllowedDisplayName(name: string) {
   if (!name || typeof name !== 'string') return { ok: false, reason: 'Name required' };
   const trimmed = name.trim();

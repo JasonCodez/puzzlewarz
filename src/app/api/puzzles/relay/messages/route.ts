@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireRelayParticipant } from '@/lib/relayAccess';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,26 +13,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Find relay room
-    const relay = await prisma.relayRiddle.findUnique({
-      where: { roomId },
-    });
-
-    if (!relay) {
-      return NextResponse.json({ error: 'Room not found' }, { status: 404 });
+    const participant = await requireRelayParticipant(roomId);
+    if (participant instanceof NextResponse) {
+      return participant;
     }
 
-    // Fetch messages
     const messages = await prisma.relayMessage.findMany({
-      where: { relayId: relay.id },
-      include: { user: true },
+      where: { relayId: participant.relay.id },
+      include: { user: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'asc' },
     });
 
-    const formattedMessages = messages.map((msg: { id: string; userId?: string | null; user?: { name?: string | null; email?: string | null } | null; message: string; createdAt: Date }) => ({
+    const formattedMessages = messages.map((msg: { id: string; userId?: string | null; user?: { id: string; name?: string | null } | null; message: string; createdAt: Date }) => ({
       id: msg.id,
       userId: msg.userId || undefined,
-      userName: msg.user?.name || msg.user?.email || 'Unknown',
+      userName: msg.user?.name || 'Unknown',
+      userRole: msg.userId === participant.relay.solverUserId ? 'solver' : msg.userId === participant.relay.decoderUserId ? 'decoder' : 'unknown',
       message: msg.message,
       createdAt: msg.createdAt,
     }));

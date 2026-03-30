@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 export async function GET(request: NextRequest) {
+  const sameOriginError = validateSameOrigin(request);
+  if (sameOriginError) {
+    return sameOriginError;
+  }
+
   // Get the current session
   const session = await getServerSession(authOptions);
 

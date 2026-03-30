@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // Vote on a forum post
 export async function POST(request: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {

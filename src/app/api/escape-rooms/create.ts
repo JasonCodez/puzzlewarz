@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ escapeRoom }, { status: 201 });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error('[ESCAPE ROOM CREATE LEGACY] Failed to create escape room', error);
+    return NextResponse.json({ error: 'Failed to create escape room' }, { status: 500 });
   }
 }

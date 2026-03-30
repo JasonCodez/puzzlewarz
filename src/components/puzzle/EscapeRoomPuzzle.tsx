@@ -121,6 +121,7 @@ export function EscapeRoomPuzzle({
   const [inventory, setInventory] = useState<string[]>([]);
   const [inventoryItems, setInventoryItems] = useState<Record<string, InventoryItem>>({});
   const [selectedInventoryKey, setSelectedInventoryKey] = useState<string | null>(null);
+  const [inspectingItem, setInspectingItem] = useState<InventoryItem | null>(null);
   const [briefingAcks, setBriefingAcks] = useState<Record<string, string>>({});
   const [inventoryLocks, setInventoryLocks] = useState<InventoryLocksMap>({});
   const [sceneState, setSceneState] = useState<Record<string, any>>({});
@@ -1218,12 +1219,35 @@ export function EscapeRoomPuzzle({
       setPickupFlight(null);
       playBuiltinSfx('pickup');
       setPickupPhase('reveal');
+
+      // Resolve sprite state image if the zone's useEffect sets one for the collected item
+      let pickupImageUrl: string | null = typeof preview.imageUrl === 'string' ? preview.imageUrl : null;
+      if (hsMeta?.useEffect?.setItemStateById && typeof hsMeta.useEffect.setItemStateById === 'object') {
+        // Extract designer item ID from the item key (format: item_<escapeRoomId>_<designerItemId>)
+        const keyParts = String(preview.key || '').split('_');
+        const designerItemId = keyParts.length >= 3 ? keyParts[keyParts.length - 1] : '';
+        if (designerItemId) {
+          const stateKey = hsMeta.useEffect.setItemStateById[designerItemId];
+          if (typeof stateKey === 'string' && stateKey.trim()) {
+            const layoutItems = Array.isArray((curLayout as any)?.items) ? ((curLayout as any).items as any[]) : [];
+            const layoutItem = layoutItems.find((it: any) => String(it?.id) === designerItemId);
+            const spriteStates = layoutItem?.properties?.spriteStates;
+            if (spriteStates && typeof spriteStates === 'object') {
+              const stateImage = spriteStates[stateKey];
+              if (typeof stateImage === 'string' && stateImage.trim()) {
+                pickupImageUrl = stateImage;
+              }
+            }
+          }
+        }
+      }
+
       setPendingPickup({
         hotspotId,
         itemId: String(preview.id),
         itemKey: String(preview.key),
         itemName: String(preview.name),
-        imageUrl: typeof preview.imageUrl === 'string' ? preview.imageUrl : null,
+        imageUrl: pickupImageUrl,
         label: hotspotLabel === 'here' ? String(preview.name) : hotspotLabel,
         animationPreset: ['cinematic','quickSpin','floatIn','powerDrop','spiral','bounce','glitch','flash'].includes(preview?.pickupAnimationPreset)
           ? preview.pickupAnimationPreset
@@ -1298,7 +1322,14 @@ export function EscapeRoomPuzzle({
       }
 
       if (Array.isArray(jb?.inventory)) setInventory(jb.inventory || []);
-      if (jb?.inventoryItems) setInventoryItems(jb.inventoryItems || {});
+      if (jb?.inventoryItems) {
+        const items = { ...jb.inventoryItems };
+        // Override the picked-up item's imageUrl with the sprite-state-resolved image
+        if (pendingPickup.imageUrl && pendingPickup.itemKey && items[pendingPickup.itemKey]) {
+          items[pendingPickup.itemKey] = { ...items[pendingPickup.itemKey], imageUrl: pendingPickup.imageUrl };
+        }
+        setInventoryItems(items);
+      }
 
       setSideTab('inventory');
       playBuiltinSfx('inventory');
@@ -1791,13 +1822,19 @@ export function EscapeRoomPuzzle({
                             width: `${((it.w || 48) / effectiveLayoutSize.w) * 100}%`,
                             height: `${((it.h || 48) / effectiveLayoutSize.h) * 100}%`,
                             borderRadius: 4,
-                            transform: [
-                              it.scale != null && it.scale !== 1 ? `scale(${it.scale})` : '',
-                              it.rotation ? `rotate(${it.rotation}deg)` : '',
-                              it.skewX ? `skewX(${it.skewX}deg)` : '',
-                              it.skewY ? `skewY(${it.skewY}deg)` : '',
-                            ].filter(Boolean).join(' ') || undefined,
-                            transformOrigin: 'center center',
+                            transform: (() => {
+                              const hasPt3D = it.perspectiveRotateX || it.perspectiveRotateY;
+                              return [
+                                hasPt3D ? `perspective(${it.perspectiveDistance ?? 600}px)` : '',
+                                it.scale != null && it.scale !== 1 ? `scale(${it.scale})` : '',
+                                it.rotation ? `rotate(${it.rotation}deg)` : '',
+                                hasPt3D && it.perspectiveRotateX ? `rotateX(${it.perspectiveRotateX}deg)` : '',
+                                hasPt3D && it.perspectiveRotateY ? `rotateY(${it.perspectiveRotateY}deg)` : '',
+                                it.skewX ? `skewX(${it.skewX}deg)` : '',
+                                it.skewY ? `skewY(${it.skewY}deg)` : '',
+                              ].filter(Boolean).join(' ') || undefined;
+                            })(),
+                            transformOrigin: it.transformOrigin || 'center center',
                           }}
                         />
                       ))}
@@ -1930,6 +1967,16 @@ export function EscapeRoomPuzzle({
                           <div className="mt-2 flex gap-2">
                             <button
                               type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (item) setInspectingItem(item);
+                              }}
+                              className="px-2 py-1 rounded border border-amber-700/50 bg-neutral-900/60 text-amber-50/90 hover:bg-neutral-900/80"
+                            >
+                              View
+                            </button>
+                            <button
+                              type="button"
                               disabled={!canInteract || sessionBusy || (!!lock && !lockedByMe)}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2045,47 +2092,76 @@ export function EscapeRoomPuzzle({
         </div>
       ) : null}
 
+      {inspectingItem ? (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/70 backdrop-blur-[2px]" onClick={() => setInspectingItem(null)}>
+          <div className="relative w-full max-w-xl mx-4 rounded-2xl border border-amber-500/40 bg-neutral-950/95 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 pt-5 pb-2 text-center">
+              <h3 className="text-2xl font-bold text-amber-50">{inspectingItem.name}</h3>
+            </div>
+            <div className="relative py-6 flex items-center justify-center">
+              {inspectingItem.imageUrl ? (
+                isVideoUrl(inspectingItem.imageUrl) ? (
+                  <video src={inspectingItem.imageUrl} autoPlay loop muted playsInline className="max-h-96 max-w-full object-contain rounded-xl border border-amber-400/30 bg-neutral-900/80 p-3 shadow-[0_0_35px_rgba(251,191,36,0.25)]" />
+                ) : (
+                  <img src={inspectingItem.imageUrl} alt={inspectingItem.name} className="max-h-96 max-w-full object-contain rounded-xl border border-amber-400/30 bg-neutral-900/80 p-3 shadow-[0_0_35px_rgba(251,191,36,0.25)]" />
+                )
+              ) : (
+                <div className="h-36 w-36 rounded-lg border border-amber-500/25 bg-neutral-900/80 flex items-center justify-center text-amber-200/50 text-sm">No image</div>
+              )}
+            </div>
+            <div className="px-5 pb-5 pt-1 flex justify-center">
+              <button type="button" onClick={() => setInspectingItem(null)} className="px-4 py-2 rounded font-semibold text-white bg-amber-600 hover:bg-amber-500 text-sm">Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {pendingPickup ? (
         /* Single fixed overlay used for ALL phases — reveal, video, and toInventory.
            Keeping everything in one container means the visual center never jumps. */
-        <div className={`fixed inset-0 z-[70] flex items-center justify-center ${
-          pendingPickup.pickupAnimationUrl && pickupPhase === 'ready' ? '' : 'bg-black/65 backdrop-blur-[1px]'
+        <div className={`fixed inset-0 z-[70] flex flex-col ${
+          pendingPickup.pickupAnimationUrl && (pickupPhase === 'ready' || pickupPhase === 'toInventory') ? '' : 'bg-black/65 backdrop-blur-[1px] items-center justify-center'
         }`}>
-          {pendingPickup.pickupAnimationUrl && pickupPhase === 'ready' ? (
+          {pendingPickup.pickupAnimationUrl && (pickupPhase === 'ready' || pickupPhase === 'toInventory') ? (
             /* Video phase — transparent background, video plays over the scene */
             <>
-              {/* The actual video */}
-              <video
-                key={pendingPickup.itemId}
-                src={/^https?:\/\//i.test(pendingPickup.pickupAnimationUrl) ? `/api/image-proxy?url=${encodeURIComponent(pendingPickup.pickupAnimationUrl)}` : pendingPickup.pickupAnimationUrl}
-                autoPlay
-                muted
-                playsInline
-                style={{
-                  position: 'relative',
-                  zIndex: 3,
-                  maxHeight: '68vh',
-                  maxWidth: '78vw',
-                  objectFit: 'contain',
-                  borderRadius: 16,
-                  boxShadow: '0 8px 80px rgba(251,191,36,0.25), 0 2px 24px rgba(0,0,0,0.8)',
-                  ...({
-                    animation: 'pickupVideoFadeGrow 0.35s cubic-bezier(0.22,0.7,0.2,1) forwards',
-                  } as React.CSSProperties),
-                }}
-              />
-              {/* Bottom bar: item name + buttons */}
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 4, padding: '20px 24px 28px', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {pendingPickup.imageUrl && !isVideoUrl(pendingPickup.imageUrl) && (
-                    <img src={pendingPickup.imageUrl} alt="" aria-hidden style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(0,0,0,0.4)' }} />
-                  )}
-                  <h3 style={{ fontSize: 18, fontWeight: 700, color: '#fef3c7', textShadow: '0 2px 8px rgba(0,0,0,0.8)', margin: 0 }}>You found <span style={{ color: '#fbbf24' }}>{pendingPickup.itemName}</span></h3>
-                </div>
-                <div className="flex gap-3">
-                  <button type="button" onClick={dismissPendingPickup} className="px-4 py-2 rounded border border-amber-700/50 text-amber-100 hover:bg-amber-950/40">Not now</button>
-                  <button type="button" onClick={() => void confirmPendingPickup()} className="px-4 py-2 rounded font-semibold text-white bg-amber-600 hover:bg-amber-500">Add to Inventory</button>
-                </div>
+              {/* Title bar at top */}
+              <div style={{ position: 'relative', zIndex: 4, padding: '20px 24px 12px', background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                {pendingPickup.imageUrl && !isVideoUrl(pendingPickup.imageUrl) && (
+                  <img src={pendingPickup.imageUrl} alt="" aria-hidden style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(0,0,0,0.4)' }} />
+                )}
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#fef3c7', textShadow: '0 2px 8px rgba(0,0,0,0.8)', margin: 0 }}>You found <span style={{ color: '#fbbf24' }}>{pendingPickup.itemName}</span></h3>
+              </div>
+              {/* Video area */}
+              <div style={{
+                flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                transition: 'opacity 0.5s ease-out, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                ...(pickupPhase === 'toInventory' && pickupFlight ? {
+                  opacity: 0,
+                  transform: `translate(${pickupFlight.dx}px, ${pickupFlight.dy}px) scale(${pickupFlight.scale})`,
+                } : {}),
+              }}>
+                <video
+                  key={pendingPickup.itemId}
+                  src={/^https?:\/\//i.test(pendingPickup.pickupAnimationUrl) ? `/api/image-proxy?url=${encodeURIComponent(pendingPickup.pickupAnimationUrl)}` : pendingPickup.pickupAnimationUrl}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{
+                    maxHeight: '100%',
+                    maxWidth: '90%',
+                    objectFit: 'contain',
+                    borderRadius: 16,
+                    boxShadow: '0 8px 80px rgba(251,191,36,0.25), 0 2px 24px rgba(0,0,0,0.8)',
+                    ...({
+                      animation: 'pickupVideoFadeGrow 0.35s cubic-bezier(0.22,0.7,0.2,1) forwards',
+                    } as React.CSSProperties),
+                  }}
+                />
+              </div>
+              {/* Button at bottom */}
+              <div style={{ position: 'relative', zIndex: 4, padding: '12px 24px 20px', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', justifyContent: 'center', flexShrink: 0, transition: 'opacity 0.3s', opacity: pickupPhase === 'toInventory' ? 0 : 1 }}>
+                <button type="button" onClick={() => void confirmPendingPickup()} className="px-3 py-1.5 text-sm rounded font-semibold text-white bg-amber-600 hover:bg-amber-500">Add to Inventory</button>
               </div>
             </>
           ) : (
@@ -2096,7 +2172,7 @@ export function EscapeRoomPuzzle({
               <p className="mt-2 text-sm text-amber-100/70">Secure it now and add it to your inventory.</p>
             </div>
 
-            <div className="relative h-64 flex items-center justify-center">
+            <div className="relative py-8 flex items-center justify-center">
               <div
                 className={
                   'pickup-cinematic-item rounded-xl border border-amber-400/30 bg-neutral-900/80 p-4 shadow-[0_0_35px_rgba(251,191,36,0.35)] ' +
@@ -2127,21 +2203,14 @@ export function EscapeRoomPuzzle({
               </div>
             </div>
 
-            <div className="px-5 pb-5 pt-1 flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={dismissPendingPickup}
-                disabled={pickupPhase === 'committing' || pickupPhase === 'toInventory'}
-                className="px-4 py-2 rounded border border-amber-700/50 text-amber-100 hover:bg-amber-950/40 disabled:opacity-50"
-              >
-                Not now
-              </button>
+            <div className="mx-5 border-t border-amber-500/20" />
+            <div className="px-5 pb-5 pt-3 flex justify-center">
               <button
                 type="button"
                 onClick={() => void confirmPendingPickup()}
                 disabled={pickupPhase !== 'ready'}
                 className={
-                  'px-4 py-2 rounded font-semibold text-white transition ' +
+                  'px-3 py-1.5 text-sm rounded font-semibold text-white transition ' +
                   (pickupPhase === 'ready' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-amber-900/70 cursor-not-allowed')
                 }
               >

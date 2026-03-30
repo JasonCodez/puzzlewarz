@@ -5,6 +5,8 @@ import prisma from '@/lib/prisma';
 import { createNotification } from '@/lib/notification-service';
 import { sendEmail, generateTeamLobbyInviteEmail } from '@/lib/mail';
 import { deleteLobby, ensureLobby, findActiveLobbyForTeam, getLobby, keyFor } from "@/lib/teamLobbyStore";
+import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 async function resetTeamEscapeProgressForPuzzle(teamId: string, puzzleId: string) {
   try {
@@ -31,6 +33,24 @@ async function cleanupPersistentLobbyData(teamId: string, puzzleId: string) {
   }
 }
 
+async function requireLobbyMember(teamId: string) {
+  const currentUser = await requireAuthenticatedUser();
+  if (currentUser instanceof NextResponse) {
+    return currentUser;
+  }
+
+  const membership = await prisma.teamMember.findUnique({
+    where: { teamId_userId: { teamId, userId: currentUser.id } },
+    select: { id: true },
+  });
+
+  if (!membership) {
+    return NextResponse.json({ error: 'You must be a member of this team to use the lobby' }, { status: 403 });
+  }
+
+  return currentUser;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
@@ -40,12 +60,32 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "teamId and puzzleId required" }, { status: 400 });
     }
 
-    const key = keyFor(teamId, puzzleId);
+    const currentUser = await requireLobbyMember(teamId);
+    if (currentUser instanceof NextResponse) {
+      return currentUser;
+    }
+
     const lobby = getLobby(teamId, puzzleId);
     if (!lobby) {
       return NextResponse.json({ teamId, puzzleId, ready: {}, started: false, exists: false });
     }
-    return NextResponse.json({ ...lobby, exists: true });
+
+    const sanitizedInvites = Array.isArray(lobby.invites)
+      ? lobby.invites.map((invite) => ({
+          id: invite.id,
+          userId: invite.userId,
+          invitedBy: invite.invitedBy,
+          status: invite.status,
+          createdAt: invite.createdAt,
+          displayName: invite.userId ? undefined : 'Pending email invite',
+        }))
+      : [];
+
+    return NextResponse.json({
+      ...lobby,
+      invites: sanitizedInvites,
+      exists: true,
+    });
   } catch (err) {
     console.error('lobby GET error', err);
     return NextResponse.json({ error: 'Failed to fetch lobby' }, { status: 500 });
@@ -98,17 +138,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, destroyed: true, reason });
     }
 
+    const sameOriginError = validateSameOrigin(req);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    console.log(`lobby POST received action=${action} teamId=${teamId} puzzleId=${puzzleId} userEmail=${session.user.email}`);
 
     const userEmail = session.user.email as string;
     const userRecord = await prisma.user.findUnique({ where: { email: userEmail }, select: { id: true, name: true, email: true } });
     if (!userRecord?.id) return NextResponse.json({ error: 'User not found' }, { status: 404 });
     const userId = userRecord.id;
     const userName = userRecord.name || userRecord.email || userEmail;
-    console.log(`lobby POST resolved userId=${userId}`);
 
     // For most lobby actions, require the requester to be a member of the team.
     // (declineInvite is allowed even if the user isn't a team member, so they can dismiss notifications.)
@@ -574,14 +616,12 @@ export async function POST(req: NextRequest) {
     if (action === 'invite') {
       // inviter must be the lobby leader
       try {
-        console.log('lobby invite flow started', { teamId, puzzleId, userId });
         const leaderId = lobby.leaderId;
         if (leaderId && leaderId !== userId) {
           return NextResponse.json({ error: 'Only the lobby leader can invite members' }, { status: 403 });
         }
 
         const { inviteeEmail, inviteeUserId } = body as any;
-        console.log('lobby invite payload', { inviteeEmail, inviteeUserId });
         let inviteeId: string | undefined = undefined;
         let inviteeEmailFinal: string | undefined = undefined;
         let inviteeDisplayName: string | undefined = undefined;
@@ -592,7 +632,6 @@ export async function POST(req: NextRequest) {
           inviteeId = u.id;
           inviteeEmailFinal = u.email || undefined;
           inviteeDisplayName = u.name || undefined;
-          console.log(`lobby invite resolved invitee by id -> inviteeId=${inviteeId}`);
         } else if (inviteeEmail) {
           const u = await prisma.user.findUnique({ where: { email: inviteeEmail }, select: { id: true, email: true, name: true } });
           if (u) {
@@ -600,7 +639,6 @@ export async function POST(req: NextRequest) {
             inviteeDisplayName = u.name || undefined;
           }
           inviteeEmailFinal = inviteeEmail;
-          console.log(`lobby invite resolved invitee by email -> inviteeId=${inviteeId} inviteeEmailFinal=${inviteeEmailFinal}`);
         } else {
           return NextResponse.json({ error: 'inviteeEmail or inviteeUserId required' }, { status: 400 });
         }
@@ -630,7 +668,6 @@ export async function POST(req: NextRequest) {
         }
 
         lobby.invites.push(invite as any);
-        console.log('lobby in-memory invite added', invite);
 
         let notificationCreated = false;
         let emailSent = false;
@@ -639,7 +676,6 @@ export async function POST(req: NextRequest) {
         if (inviteeId) {
           // Persist (or refresh) a TeamInvite record. This should not gate notifications.
           try {
-            console.log(`upserting persistent teamInvite for user ${inviteeId}`);
             await prisma.teamInvite.upsert({
               where: { teamId_userId: { teamId, userId: inviteeId } },
               create: {
@@ -669,7 +705,6 @@ export async function POST(req: NextRequest) {
             const notification = await createNotification({ userId: inviteeId, type: 'team_lobby_invite' as any, title: inviteTitle, message: inviteMsg, relatedId: `${teamId}::${puzzleId}` });
             notificationCreated = !!notification;
             notificationId = notification?.id;
-            console.log('createNotification returned', { notifId: notificationId });
 
             // Email (best-effort): ensure preference exists so defaults apply
             try {
@@ -684,7 +719,6 @@ export async function POST(req: NextRequest) {
 
             try {
               const pref = await prisma.notificationPreference.findUnique({ where: { userId: inviteeId } });
-              console.log('notification preference for invitee', { pref });
               if (pref?.emailNotificationsEnabled) {
                 const inviteeUser = await prisma.user.findUnique({ where: { id: inviteeId }, select: { name: true, email: true } });
                 if (inviteeUser?.email) {
@@ -699,7 +733,6 @@ export async function POST(req: NextRequest) {
                   );
                   const sent = await sendEmail({ to: inviteeUser.email, subject: inviteTitle, html });
                   emailSent = !!sent;
-                  console.log('invite email send result', { to: inviteeUser.email, sent });
                   if (sent && notificationId) {
                     await prisma.notification.update({ where: { id: notificationId }, data: { emailSent: true, emailSentAt: new Date() } });
                   }
@@ -817,10 +850,28 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(req);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const url = new URL(req.url);
     const teamId = url.searchParams.get('teamId');
     const puzzleId = url.searchParams.get('puzzleId');
     if (!teamId || !puzzleId) return NextResponse.json({ error: 'teamId and puzzleId required' }, { status: 400 });
+
+    const currentUser = await requireLobbyMember(teamId);
+    if (currentUser instanceof NextResponse) {
+      return currentUser;
+    }
+
+    const lobby = getLobby(teamId, puzzleId);
+    if (lobby?.leaderId && lobby.leaderId !== currentUser.id) {
+      return NextResponse.json({ error: 'Only the lobby leader can delete the lobby' }, { status: 403 });
+    }
+
+    await resetTeamEscapeProgressForPuzzle(teamId, puzzleId);
+    try { await cleanupPersistentLobbyData(teamId, puzzleId); } catch { /* ignore */ }
     deleteLobby(teamId, puzzleId);
     return NextResponse.json({ success: true });
   } catch (err) {

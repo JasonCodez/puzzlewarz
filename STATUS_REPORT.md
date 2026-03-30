@@ -1,223 +1,92 @@
-# Email Notification System - Status Report
+# Notification System Status Report
 
-**Date:** $(date)  
-**Status:** ✅ **FULLY IMPLEMENTED & BUILD VERIFIED**  
-**Phase Completion:** 100%
+**Last reviewed:** March 30, 2026  
+**Scope:** Notification and email subsystem only
 
----
+## Summary
 
-## System Overview
+The notification subsystem is implemented in the current codebase and consists of:
 
-A comprehensive email notification system has been implemented for Kryptyk Labs with 4 notification types:
+- in-app notifications stored in the database
+- email helper and template logic
+- user notification preferences
+- user inbox-style notification APIs
+- an admin test endpoint
+- a settings UI component
 
-| Type | Purpose | Recipients | Trigger |
-|------|---------|-----------|---------|
-| 🧩 Puzzle Release | Announces new puzzles | All users | When puzzle is published |
-| 🏆 Achievement Unlock | Celebrates achievement | Single user | When achievement earned |
-| 👥 Team Update | Team announcements | Team members | Create, join, milestone |
-| 📊 Leaderboard Change | Rank updates | Single user | When rank changes |
+This report intentionally avoids app-wide route counts and historical build metrics. For the current project build status, run `npm run build`.
 
----
+## Current Feature Surface
 
-## Build Status
+### Library Code
 
-```
-✅ TypeScript Compilation: PASSED
-✅ All 43 Routes: Compiled successfully
-✅ Turbopack: 7.1s compile time
-✅ No Type Errors: 0 issues
-✅ Database Schema: In sync
-```
-
-**Recent Build Output:**
-```
-Compiled successfully in 4.6s
-Finished TypeScript in 7.1s
-43 routes compiled (including new /api/admin/send-notification)
-```
-
----
-
-## Files Created
-
-### Core Services
-| File | Lines | Purpose |
-|------|-------|---------|
-| `/src/lib/mail.ts` | 150 | SMTP email sending + 4 templates |
-| `/src/lib/notification-service.ts` | 270 | Notification triggers + preference management |
-| `/src/lib/EMAIL_INTEGRATION_GUIDE.md` | 450+ | Integration instructions for each system |
+| File | Purpose |
+|------|---------|
+| `src/lib/mail.ts` | outbound email helpers and templates |
+| `src/lib/notification-service.ts` | notification trigger helpers and orchestration |
+| `src/lib/auth.ts` | authenticated route support |
+| `src/lib/prisma.ts` | Prisma client |
 
 ### API Endpoints
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/user/notification-preferences` | GET/PUT | User preference management |
-| `/api/admin/send-notification` | POST | Admin test endpoint |
 
-### UI Components
-| Component | Lines | Features |
-|-----------|-------|----------|
-| `NotificationSettings.tsx` | 280 | Master toggle + 5 notification toggles + digest settings |
+| Route | Methods | Purpose |
+|------|---------|---------|
+| `/api/user/notification-preferences` | `GET`, `PUT` | fetch and update preference settings |
+| `/api/user/notifications` | `GET`, `POST`, `DELETE` | list, create, and delete user notifications |
+| `/api/user/notifications/read` | `PATCH` | mark notifications as read |
+| `/api/admin/send-notification` | `POST` | admin-triggered test notification endpoint |
 
-### Documentation
-| Doc | Length | Content |
-|-----|--------|---------|
-| `NOTIFICATION_SYSTEM_README.md` | 320 | Architecture, usage, troubleshooting |
-| `EMAIL_INTEGRATION_GUIDE.md` | 450+ | Step-by-step integration for 4 systems |
+### UI Surface
 
-### Database Schema
-All schema changes are applied and synced:
-- ✅ Notification model extended with email tracking (emailSent, emailSentAt, emailRead, emailReadAt)
-- ✅ NotificationPreference model created with 5 toggle + digest settings
-- ✅ User model extended with NotificationPreference relation
-- ✅ Database migration applied
+| File | Purpose |
+|------|---------|
+| `src/components/NotificationSettings.tsx` | user preference UI |
+| `src/components/notifications/NotificationBell.tsx` | bell and unread indicator |
+| `src/components/notifications/NotificationsPanel.tsx` | notifications panel |
+| `src/app/notifications/page.tsx` | notifications page |
 
----
+## Data Model
 
-## System Architecture
+The subsystem depends on the following Prisma models in `prisma/schema.prisma`:
 
-```
-┌─────────────────────────────────────────────┐
-│          Event Sources                      │
-├─────────────────────────────────────────────┤
-│  • Puzzle Creation/Publication              │
-│  • Achievement Unlock                       │
-│  • Team Actions (create, join, milestone)   │
-│  • Leaderboard Calculation                  │
-└────────────────┬────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────┐
-│     Notification Service Layer              │
-├─────────────────────────────────────────────┤
-│  • notifyPuzzleRelease()                   │
-│  • notifyAchievementUnlock()                │
-│  • notifyTeamUpdate()                       │
-│  • notifyLeaderboardChange()                │
-│  • getUserNotificationPreference()          │
-└────────────────┬────────────────────────────┘
-                 │
-         ┌───────┴───────┐
-         ▼               ▼
-    ┌─────────┐    ┌──────────┐
-    │ In-App  │    │  Email   │
-    │Notif.   │    │  Service │
-    └────┬────┘    └────┬─────┘
-         │              ▼
-         │         ┌──────────┐
-         │         │ Nodemailer
-         │         │ (SMTP)   │
-         │         └──────────┘
-         ▼
-    ┌──────────────────────┐
-    │    Database          │
-    ├──────────────────────┤
-    │ Notification         │ ← In-app + email tracking
-    │ NotificationPreference│ ← User preferences
-    └──────────────────────┘
+- `Notification`
+- `NotificationPreference`
+- `User.notificationPreference`
+
+The project now uses PostgreSQL. Any older MySQL references in historical docs describe an earlier deployment phase.
+
+## Operational Notes
+
+- Notification preferences are created lazily if a user does not already have one.
+- Notification listing supports pagination parameters such as `limit` and `skip`.
+- The mark-as-read endpoint supports both selected notification IDs and a bulk `markAllAsRead` flow.
+- The admin test endpoint is useful for end-to-end verification without needing to trigger the full upstream business flow.
+
+## Recommended Validation
+
+Use these checks when working on the subsystem:
+
+```bash
+npm run build
 ```
 
----
+Then exercise:
 
-## Notification Flow
+- `/api/user/notification-preferences`
+- `/api/user/notifications`
+- `/api/user/notifications/read`
+- `/api/admin/send-notification`
 
-### Example: Puzzle Release
+## Related Docs
 
-```
-1. Admin publishes puzzle
-   └─> /api/admin/puzzles (POST)
-   
-2. Puzzle marked isActive = true
-   └─> System detects publication
-   
-3. Get all users
-   └─> prisma.user.findMany()
-   
-4. For each user:
-   ├─> Check preference
-   │   └─> emailOnPuzzleRelease && emailNotificationsEnabled
-   │
-   ├─> Create in-app notification
-   │   └─> db.notification.create()
-   │
-   └─> Send email if allowed
-       ├─> Generate HTML template
-       ├─> Send via SMTP (nodemailer)
-       └─> Mark emailSent = true, emailSentAt = now()
-```
+- `README_DOCS_INDEX.md`
+- `QUICK_START.md`
+- `src/lib/NOTIFICATION_SYSTEM_README.md`
+- `src/lib/EMAIL_INTEGRATION_GUIDE.md`
 
----
+## Historical Context
 
-## API Reference
-
-### User Notification Preferences
-
-**GET** `/api/user/notification-preferences`
-```json
-Response:
-{
-  "id": "pref-123",
-  "userId": "user-456",
-  "emailOnPuzzleRelease": true,
-  "emailOnAchievement": true,
-  "emailOnTeamUpdate": true,
-  "emailOnLeaderboard": true,
-  "emailOnSystem": false,
-  "enableDigest": false,
-  "digestFrequency": "weekly",
-  "emailNotificationsEnabled": true,
-  "updatedAt": "2024-01-15T10:30:00Z"
-}
-```
-
-**PUT** `/api/user/notification-preferences`
-```json
-Request:
-{
-  "emailOnPuzzleRelease": true,
-  "emailOnAchievement": false,
-  "enableDigest": true,
-  "digestFrequency": "daily"
-}
-
-Response: Updated preference object
-```
-
-### Admin Test Endpoint
-
-**POST** `/api/admin/send-notification` (Admin only)
-
-```json
-// Puzzle Release
-Request:
-{
-  "type": "puzzle_release",
-  "data": {
-    "puzzleId": "puzz-123",
-    "puzzleTitle": "The Enigma Code",
-    "difficulty": "HARD",
-    "points": 250
-  }
-}
-Response: { success: true, message: "Notification sent to 42 users" }
-
-// Achievement
-Request:
-{
-  "type": "achievement",
-  "data": {
-    "achievementId": "ach-123",
-    "achievementName": "Speed Demon",
-    "achievementDescription": "Solve 10 puzzles in one day",
-    "badgeUrl": "https://..."
-  }
-}
-
-// Team Update
-Request:
-{
-  "type": "team_update",
-  "data": {
-    "teamId": "team-123",
+Files such as `FINAL_DELIVERY.md`, `PHASE_4_COMPLETE.md`, and `INTEGRATION_COMPLETE.md` remain useful as dated implementation records. They should not be used as the current source of truth for route counts or overall project status.
     "teamName": "Code Breakers",
     "updateTitle": "New Member Joined",
     "updateMessage": "Welcome to the team!"

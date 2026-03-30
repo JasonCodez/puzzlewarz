@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
       ];
     }
 
@@ -40,7 +39,6 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         name: true,
-        email: true,
         image: true,
         createdAt: true,
         achievements: { select: { id: true } },
@@ -60,7 +58,6 @@ export async function GET(request: NextRequest) {
     const formattedUsers = users.map((user: {
       id: string;
       name?: string | null;
-      email?: string | null;
       image?: string | null;
       createdAt: Date;
       achievements: { id: string }[];
@@ -70,7 +67,6 @@ export async function GET(request: NextRequest) {
     }) => ({
       id: user.id,
       name: user.name,
-      email: user.email,
       image: user.image,
       createdAt: user.createdAt,
       stats: {

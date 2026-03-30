@@ -943,6 +943,13 @@ export default function PixiRoom({
                     const canvasBaseScale = Number((it as any)?.scale);
                     const canvasBaseSkewX = Number((it as any)?.skewX);
                     const canvasBaseSkewY = Number((it as any)?.skewY);
+                    // 3D perspective properties from Designer
+                    const canvasPerspRotateX = Number((it as any)?.perspectiveRotateX);
+                    const canvasPerspRotateY = Number((it as any)?.perspectiveRotateY);
+                    const canvasPerspDist = Number((it as any)?.perspectiveDistance);
+                    const perspRX = Number.isFinite(canvasPerspRotateX) ? canvasPerspRotateX : 0;
+                    const perspRY = Number.isFinite(canvasPerspRotateY) ? canvasPerspRotateY : 0;
+                    const perspD = Number.isFinite(canvasPerspDist) && canvasPerspDist > 0 ? canvasPerspDist : 600;
                     const canvasTotalRotationDeg = (Number.isFinite(canvasBaseRotation) ? canvasBaseRotation : 0) + visualRotationDeg;
                     const canvasTotalScale = (Number.isFinite(canvasBaseScale) && canvasBaseScale > 0 ? canvasBaseScale : 1) * visualScale;
                     const canvasSkewXRad = Number.isFinite(canvasBaseSkewX) ? (canvasBaseSkewX * Math.PI) / 180 : 0;
@@ -978,6 +985,19 @@ export default function PixiRoom({
                         if (canvasSkewXRad !== 0 || canvasSkewYRad !== 0) {
                           // Apply skew via 2D transform matrix: [1, tan(skewY), tan(skewX), 1, 0, 0]
                           ctx.transform(1, Math.tan(canvasSkewYRad), Math.tan(canvasSkewXRad), 1, 0, 0);
+                        }
+                        // Approximate CSS perspective() + rotateX/rotateY in 2D canvas
+                        if (perspRX !== 0 || perspRY !== 0) {
+                          const rxRad = (perspRX * Math.PI) / 180;
+                          const ryRad = (perspRY * Math.PI) / 180;
+                          // For rotateY: scaleX by cos(angle), add horizontal perspective shear
+                          // For rotateX: scaleY by cos(angle), add vertical perspective shear
+                          const scaleXFactor = perspRY !== 0 ? Math.cos(ryRad) : 1;
+                          const scaleYFactor = perspRX !== 0 ? Math.cos(rxRad) : 1;
+                          // Perspective shear: sin(angle) / distance creates the trapezoid effect
+                          const shearH = perspRY !== 0 ? Math.sin(ryRad) / perspD : 0; // vertical shear from rotateY
+                          const shearV = perspRX !== 0 ? Math.sin(rxRad) / perspD : 0; // horizontal shear from rotateX
+                          ctx.transform(scaleXFactor, shearV * scaledH, shearH * scaledW, scaleYFactor, 0, 0);
                         }
                         ctx.globalAlpha = Math.max(0, Math.min(1, (ctx.globalAlpha || 1) * visualAlpha));
                         // Deep dramatic drop shadow

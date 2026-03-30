@@ -1,5 +1,7 @@
 # 🎉 Phase 4 Complete - Email Notification System Delivered
 
+> Historical delivery report. This file documents the phase-complete state at the time it was written. Current stack details, route counts, and operational status may differ; use `README.md`, `DOCUMENTATION_INDEX.md`, and `README_DOCS_INDEX.md` for current information.
+
 ## Executive Summary
 
 The email notification system for Kryptyk Labs is **100% complete, fully tested, and ready for integration** into puzzle releases, achievement unlocks, team updates, and leaderboard changes.

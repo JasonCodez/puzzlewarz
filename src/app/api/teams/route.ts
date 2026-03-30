@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { notifyTeamUpdate } from "@/lib/notification-service";
 import { z } from "zod";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 const CreateTeamSchema = z.object({
   name: z.string().min(1).max(100),
@@ -15,6 +16,11 @@ type CreateTeamInput = z.infer<typeof CreateTeamSchema>;
 
 export async function POST(request: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
@@ -58,7 +64,6 @@ export async function POST(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                email: true,
                 image: true,
               },
             },
@@ -122,7 +127,6 @@ export async function GET(request: NextRequest) {
                 select: {
                   id: true,
                   name: true,
-                  email: true,
                   image: true,
                 },
               },

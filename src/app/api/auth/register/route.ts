@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import crypto from "crypto";
 import { sendEmail, generateEmailVerificationEmail } from "@/lib/mail";
+import { enforceRateLimit, getClientAddress } from "@/lib/requestSecurity";
 
 const RegisterSchema = z.object({
   name: z.string().min(1).max(100),
@@ -16,11 +17,31 @@ type RegisterInput = z.infer<typeof RegisterSchema>;
 
 export async function POST(request: NextRequest) {
   try {
+    const ipRateLimit = await enforceRateLimit({
+      key: `auth:register:ip:${getClientAddress(request)}`,
+      limit: 5,
+      windowMs: 15 * 60 * 1000,
+      message: "Too many registration attempts. Please try again later.",
+    });
+    if (ipRateLimit) {
+      return ipRateLimit;
+    }
+
     const body = await request.json();
     const parsed = RegisterSchema.parse(body);
     const name = parsed.name.trim();
     const email = parsed.email.trim().toLowerCase();
     const { password, referralCode } = parsed;
+
+    const emailRateLimit = await enforceRateLimit({
+      key: `auth:register:email:${email}`,
+      limit: 3,
+      windowMs: 60 * 60 * 1000,
+      message: "Too many registration attempts for this email. Please try again later.",
+    });
+    if (emailRateLimit) {
+      return emailRateLimit;
+    }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({

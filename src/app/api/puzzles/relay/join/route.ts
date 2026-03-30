@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
 import prisma from '@/lib/prisma';
-import { authOptions } from '@/lib/auth';
+import { requireAuthenticatedUser } from '@/lib/requireAuthenticatedUser';
+import { validateSameOrigin } from '@/lib/requestSecurity';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
     }
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const currentUser = await requireAuthenticatedUser();
+    if (currentUser instanceof NextResponse) {
+      return currentUser;
     }
 
     const body = await request.json();
@@ -28,34 +24,67 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find relay room
     const relay = await prisma.relayRiddle.findUnique({
       where: { roomId },
+      select: {
+        roomId: true,
+        status: true,
+        expiresAt: true,
+        solverClues: true,
+        encryptedMsg: true,
+        cipherType: true,
+        solverUserId: true,
+        decoderUserId: true,
+      },
     });
 
     if (!relay) {
       return NextResponse.json({ error: 'Room not found' }, { status: 404 });
     }
 
-    if (relay.status === 'expired') {
+    if (relay.status === 'expired' || relay.expiresAt <= new Date()) {
       return NextResponse.json({ error: 'Room has expired' }, { status: 410 });
     }
 
-    // Update room with player
-    let updatedRelay;
-    if (role === 'solver') {
-      updatedRelay = await prisma.relayRiddle.update({
-        where: { roomId },
-        data: { solverUserId: user.id, status: 'in_progress' },
-      });
-    } else {
-      updatedRelay = await prisma.relayRiddle.update({
-        where: { roomId },
-        data: { decoderUserId: user.id, status: 'in_progress' },
-      });
+    if (relay.status === 'solved') {
+      return NextResponse.json({ error: 'Room is already solved' }, { status: 409 });
     }
 
-    // Return player-specific view
+    if (role === 'solver') {
+      if (relay.decoderUserId === currentUser.id) {
+        return NextResponse.json({ error: 'You cannot join both relay roles' }, { status: 409 });
+      }
+      if (relay.solverUserId && relay.solverUserId !== currentUser.id) {
+        return NextResponse.json({ error: 'Solver role is already taken' }, { status: 409 });
+      }
+    }
+
+    if (role === 'decoder') {
+      if (relay.solverUserId === currentUser.id) {
+        return NextResponse.json({ error: 'You cannot join both relay roles' }, { status: 409 });
+      }
+      if (relay.decoderUserId && relay.decoderUserId !== currentUser.id) {
+        return NextResponse.json({ error: 'Decoder role is already taken' }, { status: 409 });
+      }
+    }
+
+    let updatedRelay;
+    if (role === 'solver') {
+      updatedRelay = relay.solverUserId === currentUser.id
+        ? relay
+        : await prisma.relayRiddle.update({
+            where: { roomId },
+            data: { solverUserId: currentUser.id, status: 'in_progress' },
+          });
+    } else {
+      updatedRelay = relay.decoderUserId === currentUser.id
+        ? relay
+        : await prisma.relayRiddle.update({
+            where: { roomId },
+            data: { decoderUserId: currentUser.id, status: 'in_progress' },
+          });
+    }
+
     const clues = JSON.parse(relay.solverClues);
     const view =
       role === 'solver'
@@ -68,7 +97,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       joined: true,
       role,
-      roomId,
+      roomId: updatedRelay.roomId,
       view,
     });
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 export type EscapeRoomTeamContext = {
   teamId: string;
@@ -22,6 +23,12 @@ export async function requireEscapeRoomTeamContext(
   const requireStarted = options?.requireStarted ?? true;
   const requireNotFinished = options?.requireNotFinished ?? true;
   const allowUserFailed = options?.allowUserFailed ?? false;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+  }
 
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {

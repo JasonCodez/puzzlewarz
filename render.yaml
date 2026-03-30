@@ -18,6 +18,8 @@ services:
       # Add secrets in the Render dashboard instead of committing them here.
       # - key: DATABASE_URL
       #   sync: false
+      # - key: REDIS_URL
+      #   sync: false
       # - key: NEXTAUTH_URL
       #   sync: false
       # - key: NEXTAUTH_SECRET

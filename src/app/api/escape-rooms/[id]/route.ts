@@ -1,10 +1,14 @@
-import { PrismaClient } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-
-const prisma = new PrismaClient();
+import prisma from '@/lib/prisma';
+import { requireAdminUser } from '@/lib/requireAdmin';
 
 export async function GET(req: NextRequest) {
   try {
+    const admin = await requireAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const id = req.nextUrl.pathname.split('/').pop();
     const escapeRoom = await prisma.escapeRoomPuzzle.findUnique({
       where: { id },
@@ -15,14 +19,18 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({ escapeRoom });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    return NextResponse.json({ error: errorMessage, stack: errorStack }, { status: 500 });
+    console.error('[ESCAPE ROOM GET] Failed to fetch escape room', error);
+    return NextResponse.json({ error: 'Failed to fetch escape room' }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
+    const admin = await requireAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const id = req.nextUrl.pathname.split('/').pop();
     const data = await req.json();
 
@@ -44,22 +52,25 @@ export async function PUT(req: NextRequest) {
     });
     return NextResponse.json({ escapeRoom });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    return NextResponse.json({ error: errorMessage, stack: errorStack }, { status: 500 });
+    console.error('[ESCAPE ROOM UPDATE] Failed to update escape room', error);
+    return NextResponse.json({ error: 'Failed to update escape room' }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
+    const admin = await requireAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const id = req.nextUrl.pathname.split('/').pop();
     await prisma.escapeRoomPuzzle.delete({
       where: { id },
     });
     return NextResponse.json({ success: true });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    return NextResponse.json({ error: errorMessage, stack: errorStack }, { status: 500 });
+    console.error('[ESCAPE ROOM DELETE] Failed to delete escape room', error);
+    return NextResponse.json({ error: 'Failed to delete escape room' }, { status: 500 });
   }
 }

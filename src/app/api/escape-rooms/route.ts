@@ -1,17 +1,20 @@
-import { PrismaClient } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-
-const prisma = new PrismaClient();
+import prisma from '@/lib/prisma';
+import { requireAdminUser } from '@/lib/requireAdmin';
 
 export async function GET(req: NextRequest) {
   try {
+    const admin = await requireAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const escapeRooms = await prisma.escapeRoomPuzzle.findMany({
       include: { puzzle: true },
     });
     return NextResponse.json({ escapeRooms });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    return NextResponse.json({ error: errorMessage, stack: errorStack }, { status: 500 });
+    console.error('[ESCAPE ROOMS] Failed to fetch escape rooms', error);
+    return NextResponse.json({ error: 'Failed to fetch escape rooms' }, { status: 500 });
   }
 }

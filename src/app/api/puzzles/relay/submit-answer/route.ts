@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
 import prisma from '@/lib/prisma';
-import { authOptions } from '@/lib/auth';
+import { requireRelayParticipant } from '@/lib/relayAccess';
+import { validateSameOrigin } from '@/lib/requestSecurity';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
     }
-
     const body = await request.json();
     const { roomId, answer } = body;
 
@@ -20,21 +19,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find relay room
+    const participant = await requireRelayParticipant(roomId, { requiredRole: 'solver' });
+    if (participant instanceof NextResponse) {
+      return participant;
+    }
+
     const relay = await prisma.relayRiddle.findUnique({
       where: { roomId },
+      select: { solverAnswer: true },
     });
 
     if (!relay) {
       return NextResponse.json({ error: 'Room not found' }, { status: 404 });
     }
 
-    // Validate answer (case-insensitive)
     const isCorrect =
       answer.toString().toLowerCase() === relay.solverAnswer.toLowerCase();
 
     if (isCorrect) {
-      // Update room to mark solver as submitted
       await prisma.relayRiddle.update({
         where: { roomId },
         data: { solverSubmittedAt: new Date() },

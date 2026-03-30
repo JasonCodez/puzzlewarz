@@ -6,9 +6,15 @@ import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import { resolveUploadsPath } from "@/lib/uploadStorage";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 export async function POST(request: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -86,9 +92,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error uploading avatar:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to upload avatar";
     return NextResponse.json(
-      { error: errorMessage },
+      { error: "Failed to upload avatar" },
       { status: 500 }
     );
   }

@@ -338,9 +338,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...media, mediaUrl: media.url }, { status: 201 });
   } catch (error) {
     console.error("Error uploading file:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to upload file";
     return NextResponse.json(
-      { error: errorMessage },
+      { error: "Failed to upload file" },
       { status: 500 }
     );
   }

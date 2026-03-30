@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import EditEscapeRoomForm from '../EditEscapeRoomForm';
 import { useRouter } from 'next/navigation';
 
@@ -60,7 +61,13 @@ export default function EscapeRoomDetailPage({ params }: { params: { id: string 
           <div className="mt-4 text-xs text-gray-500">Room ID: {room.id}</div>
           {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
           <div className="flex gap-2 mt-6">
-            <button className="bg-yellow-500 text-white px-4 py-2 rounded" onClick={() => setEditing(true)}>Edit</button>
+            <Link
+              href={`/escape-rooms/designer/edit?id=${room.id}`}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            >
+              Edit in Designer
+            </Link>
+            <button className="bg-yellow-500 text-white px-4 py-2 rounded" onClick={() => setEditing(true)}>Edit Details</button>
             <button className="bg-red-600 text-white px-4 py-2 rounded" onClick={handleDelete}>Delete</button>
           </div>
         </>

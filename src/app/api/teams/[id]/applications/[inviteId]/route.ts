@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { notifyTeamUpdate } from "@/lib/notification-service";
 import { z } from "zod";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 const ActionSchema = z.object({ action: z.enum(["approve", "deny"]) });
 
@@ -12,6 +13,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string; inviteId: string }> }
 ) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const { id: teamId, inviteId } = await params;
     const session = await getServerSession(authOptions);
 

@@ -1,5 +1,7 @@
 # ✅ Media Upload System - COMPLETE & OPERATIONAL
 
+This is a feature-specific guide for the media upload subsystem. For the current project-wide overview, setup, and API map, use `README.md` and `DOCUMENTATION_INDEX.md`.
+
 ## Quick Status: READY FOR USE
 
 Your ARG puzzle platform now has a **complete, production-ready media upload system**. Admins can upload images, videos, audio, and documents directly in the puzzle creator, and players see rich multimedia content when solving puzzles.
@@ -99,7 +101,7 @@ node scripts/make-admin.js your-email@example.com
 | [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) | Architecture and design |
 | [MEDIA_SYSTEM_VERIFICATION.md](MEDIA_SYSTEM_VERIFICATION.md) | Verification checklist |
 | [FEATURES.md](FEATURES.md) | Feature list and ideas |
-| [README.md](README.md) | This file - quick overview |
+| [README_MEDIA.md](README_MEDIA.md) | This file - media subsystem overview |
 
 ---
 
@@ -195,7 +197,7 @@ See [MEDIA_SYSTEM.md](MEDIA_SYSTEM.md) for detailed troubleshooting.
 | **Max File Size** | 500MB |
 | **Supported Formats** | Image, Video, Audio, Document |
 | **Storage Location** | `public/uploads/media/` |
-| **Database** | MySQL with PuzzleMedia table |
+| **Database** | Prisma model stored in the current PostgreSQL-backed app database |
 | **API Rate** | No limits (can be added) |
 | **Concurrent Uploads** | Unlimited |
 | **Max Media per Puzzle** | Unlimited (practical: ~50) |
@@ -294,9 +296,9 @@ Player experiences:
 ## 🎓 Developer Info
 
 ### Tech Stack
-- Next.js 16.1.1 (Turbopack)
+- Next.js 16.1.6
 - TypeScript
-- MySQL
+- PostgreSQL
 - Prisma 6.19.1
 - NextAuth.js
 

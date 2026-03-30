@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // GET: /api/team/lobby/chat?teamId=...&puzzleId=...&limit=50
 export async function GET(req: NextRequest) {
@@ -14,6 +15,12 @@ export async function GET(req: NextRequest) {
     const puzzleId = url.searchParams.get('puzzleId');
     const limit = parseInt(url.searchParams.get('limit') || '50');
     if (!teamId || !puzzleId) return NextResponse.json({ error: 'teamId and puzzleId required' }, { status: 400 });
+
+    const user = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true } });
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+    const membership = await prisma.teamMember.findUnique({ where: { teamId_userId: { teamId, userId: user.id } } });
+    if (!membership) return NextResponse.json({ error: 'Only team members may view lobby chat' }, { status: 403 });
 
     const messages = await prisma.lobbyMessage.findMany({
       where: { teamId, puzzleId },
@@ -32,6 +39,11 @@ export async function GET(req: NextRequest) {
 // POST: create a message { teamId, puzzleId, content }
 export async function POST(req: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(req);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -59,6 +71,11 @@ export async function POST(req: NextRequest) {
 // DELETE: admin delete { messageId }
 export async function DELETE(req: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(req);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

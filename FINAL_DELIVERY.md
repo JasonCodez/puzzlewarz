@@ -1,5 +1,7 @@
 # EMAIL NOTIFICATION SYSTEM - FINAL DELIVERY SUMMARY
 
+> Historical delivery snapshot. Route counts, integration status, and infrastructure references in this file describe the subsystem state at the time of delivery, not the current project baseline. Use `README.md`, `DOCUMENTATION_INDEX.md`, and `README_DOCS_INDEX.md` for current information.
+
 ## 🎯 Project Completion Status
 
 **Phase 4 - Email Notification System: ✅ 100% COMPLETE**

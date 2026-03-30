@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // GET user's pending invitations
 export async function GET(request: NextRequest) {
@@ -75,6 +76,11 @@ const InviteSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

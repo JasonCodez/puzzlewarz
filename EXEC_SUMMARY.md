@@ -1,5 +1,7 @@
 # 🎉 MEDIA UPLOAD SYSTEM - COMPLETE & DELIVERED
 
+> Historical media feature delivery summary. Database and environment references reflect the implementation period of this feature and may differ from the current project stack. Use `README.md`, `DOCUMENTATION_INDEX.md`, and `README_MEDIA.md` for current information.
+
 ## ✅ Executive Summary
 
 **Your Request**: "I need to be able to upload any type of media involving audio, video, images"

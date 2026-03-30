@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // GET /api/puzzles/[id]/progress - Fetch user's progress for puzzle
 export async function GET(
@@ -11,6 +12,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
     const { id } = await params;
     const session = await getServerSession(authOptions);
 
@@ -152,10 +157,11 @@ export async function POST(
     }
     if (debug) {
       try {
-        const ua = request.headers.get('user-agent') || '<none>';
-        const cookiePresent = request.headers.get('cookie') ? 'yes' : 'no';
-        console.log(`[PROGRESS] puzzle=${id} user=${user.id} ua="${ua}" cookie=${cookiePresent}`);
-        console.log('[PROGRESS] rawBody:', rawBody);
+        console.log('[PROGRESS] request received', {
+          puzzleId: id,
+          userId: user.id,
+          action: rawBody?.action ?? null,
+        });
       } catch (e) {
         console.warn('[PROGRESS] failed reading request headers/body', e);
       }

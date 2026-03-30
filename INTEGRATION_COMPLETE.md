@@ -1,5 +1,7 @@
 # 🎉 Email Notification System - Integration Complete
 
+> Historical integration snapshot from December 2025. Route counts and platform references in this document are retained as implementation history and may differ from the current codebase. Use `README.md`, `DOCUMENTATION_INDEX.md`, and `STATUS_REPORT.md` for current information.
+
 **Status:** ✅ **ALL 4 NOTIFICATION SYSTEMS INTEGRATED & LIVE**
 
 **Date:** December 28, 2025  

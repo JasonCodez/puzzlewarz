@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // Check if an answer is correct by comparing against solutions
 async function checkAnswer(
@@ -46,6 +47,11 @@ async function checkAnswer(
 
 export async function POST(req: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(req);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,56 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
 import prisma from '@/lib/prisma';
-import { authOptions } from '@/lib/auth';
+import { requireRelayParticipant } from '@/lib/relayAccess';
+import { validateSameOrigin } from '@/lib/requestSecurity';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
     }
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
     const body = await request.json();
     const { roomId, message } = body;
+    const trimmedMessage = typeof message === 'string' ? message.trim() : '';
 
-    if (!roomId || !message) {
+    if (!roomId || !trimmedMessage) {
       return NextResponse.json(
         { error: 'Missing roomId or message' },
         { status: 400 }
       );
     }
 
-    // Find relay room
-    const relay = await prisma.relayRiddle.findUnique({
-      where: { roomId },
-    });
-
-    if (!relay) {
-      return NextResponse.json({ error: 'Room not found' }, { status: 404 });
+    const participant = await requireRelayParticipant(roomId);
+    if (participant instanceof NextResponse) {
+      return participant;
     }
 
-    // Create message
     const msg = await prisma.relayMessage.create({
       data: {
-        relayId: relay.id,
-        userId: user.id,
-        message,
+        relayId: participant.relay.id,
+        userId: participant.currentUser.id,
+        message: trimmedMessage,
       },
-      include: { user: true },
+      include: { user: { select: { id: true, name: true } } },
     });
 
     return NextResponse.json({
       id: msg.id,
       userId: msg.userId,
-      userName: msg.user?.name || msg.user?.email || 'Unknown',
+      userName: msg.user?.name || 'Unknown',
+      userRole: participant.role,
       message: msg.message,
       createdAt: msg.createdAt,
     });

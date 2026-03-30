@@ -55,7 +55,6 @@ export async function DELETE(
     return NextResponse.json({ success: true, id: puzzleId });
   } catch (error) {
     console.error("[PUZZLE DELETE] Error:", error);
-    const message = error instanceof Error ? error.message : "Failed to delete puzzle";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete puzzle" }, { status: 500 });
   }
 }

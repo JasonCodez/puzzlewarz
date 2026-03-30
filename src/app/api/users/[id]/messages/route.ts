@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // GET messages between current user and target user
 export async function GET(
@@ -10,6 +11,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -84,6 +90,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {

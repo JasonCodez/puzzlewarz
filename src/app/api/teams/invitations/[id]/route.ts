@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { notifyTeamUpdate } from "@/lib/notification-service";
 import { z } from "zod";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 const ActionSchema = z.object({
   invitationId: z.string(),
@@ -12,6 +13,11 @@ const ActionSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

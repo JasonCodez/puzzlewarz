@@ -44,6 +44,14 @@ interface EscapeRoomItem {
   skewX?: number;
   /** CSS skewY in degrees — tilt an item to match room perspective. */
   skewY?: number;
+  /** 3D perspective rotateX in degrees — tilt forward/backward. */
+  perspectiveRotateX?: number;
+  /** 3D perspective rotateY in degrees — tilt left/right to match wall angles. */
+  perspectiveRotateY?: number;
+  /** CSS perspective() distance in px — controls depth intensity (default 600). */
+  perspectiveDistance?: number;
+  /** CSS transform-origin override (default 'center center'). */
+  transformOrigin?: string;
   properties: Record<string, any>;
   /** Ambient animation effect shown on this item in the player. */
   ambientEffect?: 'none' | 'glow' | 'pulse' | 'float' | 'sparkle' | 'shimmer';
@@ -277,6 +285,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
   const [playtestSceneIdx, setPlaytestSceneIdx] = useState(0);
   const [playtestInventoryItemIds, setPlaytestInventoryItemIds] = useState<string[]>([]);
   const [playtestSelectedInventoryItemId, setPlaytestSelectedInventoryItemId] = useState<string | null>(null);
+  const [playtestInspectingItem, setPlaytestInspectingItem] = useState<{ name: string; imageUrl: string | null } | null>(null);
+  const [playtestInventoryImages, setPlaytestInventoryImages] = useState<Record<string, string>>({});
   const [playtestMessage, setPlaytestMessage] = useState<string>('');
   const [playtestCompleted, setPlaytestCompleted] = useState(false);
   const [playtestPendingPickup, setPlaytestPendingPickup] = useState<PlaytestPendingPickup | null>(null);
@@ -463,6 +473,10 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
     const picked = playtestPendingPickup;
     playtestPickupTimerRef.current = window.setTimeout(() => {
       setPlaytestInventoryItemIds(prev => (prev.includes(picked.itemId) ? prev : [...prev, picked.itemId]));
+      // Store the sprite-state-resolved image for inventory viewing
+      if (picked.imageUrl) {
+        setPlaytestInventoryImages(prev => ({ ...prev, [picked.itemId]: picked.imageUrl }));
+      }
       setPlaytestMessage(`Picked up ${picked.itemName}.`);
       setPlaytestSelectedInventoryItemId(null);
       setPlaytestModal(null);
@@ -716,6 +730,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
     if (previewMode !== 'playtest') return;
     setPlaytestSceneIdx(Math.max(0, Math.min(previewSceneIdx, Math.max(0, scenes.length - 1))));
     setPlaytestInventoryItemIds([]);
+    setPlaytestInventoryImages({});
     setPlaytestSelectedInventoryItemId(null);
     setPlaytestSceneState({ hiddenItemIds: [], shownItemIds: [], disabledHotspotIds: [], enabledHotspotIds: [], itemStates: {}, itemImageOverrides: {}, itemAlphaOverrides: {}, itemScaleOverrides: {}, itemRotationOverrides: {}, itemTintOverrides: {} });
     setPlaytestMessage('');
@@ -1378,8 +1393,12 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                   const rotationDeg = baseRotation + runtimeRotation;
                   const skewX = Number.isFinite(Number(item?.skewX)) ? Number(item.skewX) : 0;
                   const skewY = Number.isFinite(Number(item?.skewY)) ? Number(item.skewY) : 0;
+                  const perspectiveRotateX = Number.isFinite(Number(item?.perspectiveRotateX)) ? Number(item.perspectiveRotateX) : 0;
+                  const perspectiveRotateY = Number.isFinite(Number(item?.perspectiveRotateY)) ? Number(item.perspectiveRotateY) : 0;
+                  const perspectiveDistance = Number.isFinite(Number(item?.perspectiveDistance)) && Number(item.perspectiveDistance) > 0 ? Number(item.perspectiveDistance) : 600;
+                  const itemTransformOrigin = typeof item?.transformOrigin === 'string' && item.transformOrigin.trim() ? item.transformOrigin.trim() : 'center center';
                   const tint = typeof tintRaw === 'string' && tintRaw.trim().length > 0 ? tintRaw.trim() : '';
-                  return { alpha, scale, rotationDeg, skewX, skewY, tint };
+                  return { alpha, scale, rotationDeg, skewX, skewY, perspectiveRotateX, perspectiveRotateY, perspectiveDistance, itemTransformOrigin, tint };
                 };
 
                 const applyUseEffect = (useEffect: any, sourceZone?: any) => {
@@ -1620,10 +1639,24 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                       setPlaytestPickupRevealMotion(null);
                     }
                     setPlaytestPickupPhase('reveal');
+                    // Resolve sprite state image if the zone's useEffect sets one for the collected item
+                    let pickupImageUrl = item?.imageUrl || '';
+                    if (z?.useEffect?.setItemStateById && typeof z.useEffect.setItemStateById === 'object') {
+                      const stateKey = z.useEffect.setItemStateById[collectItemId];
+                      if (typeof stateKey === 'string' && stateKey.trim()) {
+                        const spriteStates = sceneItem?.properties?.spriteStates;
+                        if (spriteStates && typeof spriteStates === 'object') {
+                          const stateImage = spriteStates[stateKey];
+                          if (typeof stateImage === 'string' && stateImage.trim()) {
+                            pickupImageUrl = stateImage;
+                          }
+                        }
+                      }
+                    }
                     setPlaytestPendingPickup({
                       itemId: collectItemId,
                       itemName: item?.name || collectItemId,
-                      imageUrl: item?.imageUrl || '',
+                      imageUrl: pickupImageUrl,
                       preset,
                       pickupAnimationUrl: typeof z?.pickupAnimationUrl === 'string' && z.pickupAnimationUrl ? z.pickupAnimationUrl : undefined,
                     });
@@ -1730,9 +1763,13 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                         style={(() => {
                           const ptBaseW = item.w ?? 48;
                           const ptBaseH = item.h ?? 48;
+                          const hasPt3D = visual.perspectiveRotateX || visual.perspectiveRotateY;
                           const ptWrapperTransform = isPickupRevealItem ? undefined : [
+                            hasPt3D ? `perspective(${visual.perspectiveDistance}px)` : '',
                             visual.scale !== 1 ? `scale(${visual.scale})` : '',
                             visual.rotationDeg ? `rotate(${visual.rotationDeg}deg)` : '',
+                            hasPt3D && visual.perspectiveRotateX ? `rotateX(${visual.perspectiveRotateX}deg)` : '',
+                            hasPt3D && visual.perspectiveRotateY ? `rotateY(${visual.perspectiveRotateY}deg)` : '',
                             visual.skewX ? `skewX(${visual.skewX}deg)` : '',
                             visual.skewY ? `skewY(${visual.skewY}deg)` : '',
                           ].filter(Boolean).join(' ') || undefined;
@@ -1750,7 +1787,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                             opacity: isPickupRevealItem ? 1 : visual.alpha,
                             pointerEvents: (isPickupRevealItem ? 'none' : 'auto') as React.CSSProperties['pointerEvents'],
                             transform: ptWrapperTransform,
-                            transformOrigin: 'center center',
+                            transformOrigin: visual.itemTransformOrigin,
                             willChange: ptWrapperTransform ? 'transform' : undefined,
                             ...pickupRevealStyle,
                           };
@@ -1932,8 +1969,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
             {playtestPendingPickup ? (
               <div className="absolute inset-0 z-[80] flex items-center justify-center">
                 {playtestPickupPhase === 'ready' || playtestPickupPhase === 'toInventory' ? (
-                  <div className={`absolute inset-0 z-[82] flex items-center justify-center ${playtestPendingPickup.pickupAnimationUrl && playtestPickupPhase === 'ready' ? '' : 'bg-black/65 backdrop-blur-[1px]'}`}>
-                    {playtestPendingPickup.pickupAnimationUrl && playtestPickupPhase === 'ready' ? (
+                  <div className={`absolute inset-0 z-[82] flex flex-col ${playtestPendingPickup.pickupAnimationUrl && (playtestPickupPhase === 'ready' || playtestPickupPhase === 'toInventory') ? '' : 'bg-black/65 backdrop-blur-[1px]'}`}>
+                    {playtestPendingPickup.pickupAnimationUrl && (playtestPickupPhase === 'ready' || playtestPickupPhase === 'toInventory') ? (
                       /* Seamless: video starts at exact same size/position as item at end of reveal animation,
                          then smoothly grows to fill the canvas. */
                       (() => {
@@ -1945,63 +1982,68 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                         const startH = (th && isFinite(th) && th > 0) ? th : Math.round(canvasH * 0.45);
                         const growFactor = Math.max(1, Math.min(
                           (canvasW * 0.86) / startW,
-                          (canvasH * 0.78) / startH,
+                          (canvasH * 0.60) / startH,
                           4
                         ));
                         return (
                           <>
-                            <video
-                              key={playtestPendingPickup.itemId}
-                              src={/^https?:\/\//i.test(playtestPendingPickup.pickupAnimationUrl) ? `/api/image-proxy?url=${encodeURIComponent(playtestPendingPickup.pickupAnimationUrl)}` : playtestPendingPickup.pickupAnimationUrl}
-                              autoPlay
-                              muted
-                              playsInline
-                              style={{
-                                position: 'absolute',
-                                left: '50%',
-                                top: '50%',
-                                width: startW,
-                                height: startH,
-                                objectFit: 'contain',
-                                borderRadius: 8,
-                                filter: 'drop-shadow(0 0 40px rgba(251,191,36,0.3))',
-                                ...({
-                                  ['--pickup-video-grow' as any]: growFactor,
-                                  animation: 'pickupVideoGrow 0.4s cubic-bezier(0.22,0.7,0.2,1) forwards',
-                                } as React.CSSProperties),
-                              }}
-                            />
-                            {/* Buttons float at canvas bottom — independent of video position */}
-                            <div style={{ position: 'absolute', bottom: 14, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'auto', zIndex: 83 }}>
-                              <h3 className="text-base font-bold text-amber-50 drop-shadow-lg">You found {playtestPendingPickup.itemName}</h3>
-                              <div className="flex gap-3">
-                                <button
-                                  type="button"
-                                  onClick={dismissPlaytestPendingPickup}
-                                  className="px-4 py-2 rounded border border-amber-700/50 text-amber-100 hover:bg-amber-950/40"
-                                >
-                                  Not now
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={confirmPlaytestPendingPickup}
-                                  className="px-4 py-2 rounded font-semibold text-white bg-amber-600 hover:bg-amber-500"
-                                >
-                                  Add to Inventory
-                                </button>
-                              </div>
+                            {/* Title bar at top */}
+                            <div style={{ position: 'relative', zIndex: 83, padding: '10px 16px 8px', background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, pointerEvents: 'none', flexShrink: 0 }}>
+                              {playtestPendingPickup.imageUrl && !isVideoUrl(playtestPendingPickup.imageUrl) && (
+                                <img src={playtestPendingPickup.imageUrl} alt="" aria-hidden style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(0,0,0,0.4)' }} />
+                              )}
+                              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fef3c7', textShadow: '0 2px 8px rgba(0,0,0,0.8)', margin: 0 }}>You found <span style={{ color: '#fbbf24' }}>{playtestPendingPickup.itemName}</span></h3>
+                            </div>
+                            {/* Video area */}
+                            <div style={{
+                              flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                              transition: 'opacity 0.5s ease-out, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                              ...(playtestPickupPhase === 'toInventory' && playtestPickupFlight ? {
+                                opacity: 0,
+                                transform: `translate(${playtestPickupFlight.dx}px, ${playtestPickupFlight.dy}px) scale(${playtestPickupFlight.scale})`,
+                              } : {}),
+                            }}>
+                              <video
+                                key={playtestPendingPickup.itemId}
+                                src={/^https?:\/\//i.test(playtestPendingPickup.pickupAnimationUrl) ? `/api/image-proxy?url=${encodeURIComponent(playtestPendingPickup.pickupAnimationUrl)}` : playtestPendingPickup.pickupAnimationUrl}
+                                autoPlay
+                                muted
+                                playsInline
+                                style={{
+                                  maxWidth: '90%',
+                                  maxHeight: '100%',
+                                  objectFit: 'contain',
+                                  borderRadius: 8,
+                                  filter: 'drop-shadow(0 0 40px rgba(251,191,36,0.3))',
+                                  ...({
+                                    ['--pickup-video-grow' as any]: growFactor,
+                                    animation: 'pickupVideoGrow 0.4s cubic-bezier(0.22,0.7,0.2,1) forwards',
+                                  } as React.CSSProperties),
+                                }}
+                              />
+                            </div>
+                            {/* Button at bottom */}
+                            <div style={{ position: 'relative', zIndex: 83, padding: '8px 16px 12px', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', justifyContent: 'center', pointerEvents: 'auto', flexShrink: 0, transition: 'opacity 0.3s', opacity: playtestPickupPhase === 'toInventory' ? 0 : 1 }}>
+                              <button
+                                type="button"
+                                onClick={confirmPlaytestPendingPickup}
+                                className="px-3 py-1.5 text-sm rounded font-semibold text-white bg-amber-600 hover:bg-amber-500"
+                              >
+                                Add to Inventory
+                              </button>
                             </div>
                           </>
                         );
                       })()
                     ) : (
-                    <div className="relative w-full max-w-md mx-4 rounded-2xl border border-amber-500/40 bg-neutral-950/95 shadow-2xl overflow-hidden">
+                    <div className="relative w-full max-w-lg mx-4 rounded-2xl border border-amber-500/40 bg-neutral-950/95 shadow-2xl overflow-hidden">
                       <div className="px-5 pt-5 pb-2 text-center">
-                        <div className="text-xs uppercase tracking-[0.18em] text-amber-300/70">Playtest Pickup</div>
-                        <h3 className="mt-1 text-xl font-bold text-amber-50">You found {playtestPendingPickup.itemName}</h3>
+                        <div className="text-xs uppercase tracking-[0.18em] text-amber-300/70">Discovery</div>
+                        <h3 className="mt-1 text-2xl font-bold text-amber-50">You found {playtestPendingPickup.itemName}</h3>
+                        <p className="mt-2 text-sm text-amber-100/70">Secure it now and add it to your inventory.</p>
                       </div>
 
-                      <div className="relative h-56 flex items-center justify-center">
+                      <div className="relative py-8 flex items-center justify-center">
                         <div
                           className={
                             'designer-pickup-item rounded-xl border border-amber-400/30 bg-neutral-900/80 p-4 shadow-[0_0_35px_rgba(251,191,36,0.35)] ' +
@@ -2036,28 +2078,25 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                           }
                         >
                           {playtestPendingPickup.imageUrl ? (
-                            <img src={playtestPendingPickup.imageUrl} alt={playtestPendingPickup.itemName} className="h-32 w-32 object-contain" />
+                            isVideoUrl(playtestPendingPickup.imageUrl) ? (
+                              <video src={playtestPendingPickup.imageUrl} autoPlay loop muted playsInline className="h-36 w-36 object-contain" />
+                            ) : (
+                              <img src={playtestPendingPickup.imageUrl} alt={playtestPendingPickup.itemName} className="h-36 w-36 object-contain" />
+                            )
                           ) : (
-                            <div className="h-32 w-32 rounded-lg border border-amber-500/25 bg-neutral-900/80" />
+                            <div className="h-36 w-36 rounded-lg border border-amber-500/25 bg-neutral-900/80" />
                           )}
                         </div>
                       </div>
 
-                      <div className="px-5 pb-5 pt-1 flex gap-3 justify-end">
-                        <button
-                          type="button"
-                          onClick={dismissPlaytestPendingPickup}
-                          disabled={playtestPickupPhase === 'toInventory'}
-                          className="px-4 py-2 rounded border border-amber-700/50 text-amber-100 hover:bg-amber-950/40 disabled:opacity-50"
-                        >
-                          Not now
-                        </button>
+                      <div className="mx-5 border-t border-amber-500/20" />
+                      <div className="px-5 pb-5 pt-3 flex justify-center">
                         <button
                           type="button"
                           onClick={confirmPlaytestPendingPickup}
                           disabled={playtestPickupPhase !== 'ready'}
                           className={
-                            'px-4 py-2 rounded font-semibold text-white transition ' +
+                            'px-3 py-1.5 text-sm rounded font-semibold text-white transition ' +
                             (playtestPickupPhase === 'ready' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-amber-900/70 cursor-not-allowed')
                           }
                         >
@@ -2190,21 +2229,34 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     })();
                     const selected = playtestSelectedInventoryItemId === id;
                     return (
-                      <button
-                        key={id}
-                        type="button"
-                        className={selected ? 'bg-emerald-700 text-white px-2 py-1 rounded text-xs flex items-center gap-2' : 'bg-slate-700 text-white px-2 py-1 rounded text-xs flex items-center gap-2'}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setPlaytestSelectedInventoryItemId(prev => (prev === id ? null : id));
-                          setPlaytestModal(null);
-                        }}
-                        title={item?.name || id}
-                      >
-                        {item?.imageUrl ? <img src={item.imageUrl} alt="" className="h-5 w-5 object-cover rounded" /> : null}
-                        <span>{item?.name || id}</span>
-                      </button>
+                      <div key={id} className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className={selected ? 'bg-emerald-700 text-white px-2 py-1 rounded text-xs flex items-center gap-2' : 'bg-slate-700 text-white px-2 py-1 rounded text-xs flex items-center gap-2'}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setPlaytestSelectedInventoryItemId(prev => (prev === id ? null : id));
+                            setPlaytestModal(null);
+                          }}
+                          title={item?.name || id}
+                        >
+                          {(playtestInventoryImages[id] || item?.imageUrl) ? <img src={playtestInventoryImages[id] || item?.imageUrl || ''} alt="" className="h-5 w-5 object-cover rounded" /> : null}
+                          <span>{item?.name || id}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="bg-slate-600 hover:bg-slate-500 text-white px-1.5 py-1 rounded text-xs"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (item) setPlaytestInspectingItem({ name: item.name, imageUrl: playtestInventoryImages[id] || item.imageUrl });
+                          }}
+                          title="View item"
+                        >
+                          👁
+                        </button>
+                      </div>
                     );
                   })
                 )}
@@ -2218,6 +2270,31 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                 />
               )}
             </div>
+
+            {/* Inspect item modal */}
+            {playtestInspectingItem ? (
+              <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-[2px]" onClick={() => setPlaytestInspectingItem(null)}>
+                <div className="relative w-full max-w-xl mx-4 rounded-2xl border border-amber-500/40 bg-neutral-950/95 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                  <div className="px-5 pt-5 pb-2 text-center">
+                    <h3 className="text-2xl font-bold text-amber-50">{playtestInspectingItem.name}</h3>
+                  </div>
+                  <div className="relative py-6 flex items-center justify-center">
+                    {playtestInspectingItem.imageUrl ? (
+                      isVideoUrl(playtestInspectingItem.imageUrl) ? (
+                        <video src={playtestInspectingItem.imageUrl} autoPlay loop muted playsInline className="max-h-96 max-w-full object-contain rounded-xl border border-amber-400/30 bg-neutral-900/80 p-3 shadow-[0_0_35px_rgba(251,191,36,0.25)]" />
+                      ) : (
+                        <img src={playtestInspectingItem.imageUrl} alt={playtestInspectingItem.name} className="max-h-96 max-w-full object-contain rounded-xl border border-amber-400/30 bg-neutral-900/80 p-3 shadow-[0_0_35px_rgba(251,191,36,0.25)]" />
+                      )
+                    ) : (
+                      <div className="h-36 w-36 rounded-lg border border-amber-500/25 bg-neutral-900/80 flex items-center justify-center text-amber-200/50 text-sm">No image</div>
+                    )}
+                  </div>
+                  <div className="px-5 pb-5 pt-1 flex justify-center">
+                    <button type="button" onClick={() => setPlaytestInspectingItem(null)} className="px-4 py-2 rounded font-semibold text-white bg-amber-600 hover:bg-amber-500 text-sm">Close</button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -2346,7 +2423,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                   const sf = (item.scale != null && item.scale > 0) ? item.scale : 1;
                   const baseW = item.w ?? 48;
                   const baseH = item.h ?? 48;
-                  const wt = [sf !== 1 ? `scale(${sf})` : '', item.rotation ? `rotate(${item.rotation}deg)` : '', item.skewX ? `skewX(${item.skewX}deg)` : '', item.skewY ? `skewY(${item.skewY}deg)` : ''].filter(Boolean).join(' ') || undefined;
+                  const hasPerspective = (item.perspectiveRotateX || item.perspectiveRotateY);
+                  const wt = [hasPerspective ? `perspective(${item.perspectiveDistance ?? 600}px)` : '', sf !== 1 ? `scale(${sf})` : '', item.rotation ? `rotate(${item.rotation}deg)` : '', hasPerspective && item.perspectiveRotateX ? `rotateX(${item.perspectiveRotateX}deg)` : '', hasPerspective && item.perspectiveRotateY ? `rotateY(${item.perspectiveRotateY}deg)` : '', item.skewX ? `skewX(${item.skewX}deg)` : '', item.skewY ? `skewY(${item.skewY}deg)` : ''].filter(Boolean).join(' ') || undefined;
                   return {
                     position: 'absolute' as const,
                     left: item.x ?? (20 + i * 60),
@@ -2359,7 +2437,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     userSelect: 'none' as const,
                     touchAction: 'none' as const,
                     transform: wt,
-                    transformOrigin: 'center center',
+                    transformOrigin: item.transformOrigin || 'center center',
                     willChange: wt ? 'transform' : undefined,
                   };
                 })()}
@@ -2668,9 +2746,10 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
               )}
               {scenes[previewSceneIdx].items.map((item, i) => {
                 const sf = (item.scale != null && item.scale > 0) ? item.scale : 1;
-                const wt = [sf !== 1 ? `scale(${sf})` : '', item.rotation ? `rotate(${item.rotation}deg)` : '', item.skewX ? `skewX(${item.skewX}deg)` : '', item.skewY ? `skewY(${item.skewY}deg)` : ''].filter(Boolean).join(' ') || undefined;
+                const hasPerspective = (item.perspectiveRotateX || item.perspectiveRotateY);
+                const wt = [hasPerspective ? `perspective(${item.perspectiveDistance ?? 600}px)` : '', sf !== 1 ? `scale(${sf})` : '', item.rotation ? `rotate(${item.rotation}deg)` : '', hasPerspective && item.perspectiveRotateX ? `rotateX(${item.perspectiveRotateX}deg)` : '', hasPerspective && item.perspectiveRotateY ? `rotateY(${item.perspectiveRotateY}deg)` : '', item.skewX ? `skewX(${item.skewX}deg)` : '', item.skewY ? `skewY(${item.skewY}deg)` : ''].filter(Boolean).join(' ') || undefined;
                 return (
-                  <div key={item.id} style={{ position: 'absolute', left: item.x ?? (20 + i * 60), top: item.y ?? 20, width: item.w ?? 48, height: item.h ?? 48, transform: wt, transformOrigin: 'center center' }}>
+                  <div key={item.id} style={{ position: 'absolute', left: item.x ?? (20 + i * 60), top: item.y ?? 20, width: item.w ?? 48, height: item.h ?? 48, transform: wt, transformOrigin: item.transformOrigin || 'center center' }}>
                     {item.imageUrl && <img src={item.imageUrl} alt={item.name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', borderRadius: 4 }} draggable={false} />}
                   </div>
                 );
@@ -2689,13 +2768,20 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
           const _si = selectedItem.sceneIdx;
           const _ii = selectedItem.itemIdx;
           const _item = scenes[_si].items[_ii];
-          const _hasTransform = (_item.rotation ?? 0) !== 0 || (_item.scale ?? 1) !== 1 || (_item.skewX ?? 0) !== 0 || (_item.skewY ?? 0) !== 0;
-          const _updateField = (field: 'rotation' | 'scale' | 'skewX' | 'skewY', raw: string) => {
+          const _hasTransform = (_item.rotation ?? 0) !== 0 || (_item.scale ?? 1) !== 1 || (_item.skewX ?? 0) !== 0 || (_item.skewY ?? 0) !== 0 || (_item.perspectiveRotateX ?? 0) !== 0 || (_item.perspectiveRotateY ?? 0) !== 0 || ((_item.perspectiveDistance ?? 600) !== 600) || (_item.transformOrigin && _item.transformOrigin !== 'center center');
+          const _updateField = (field: 'rotation' | 'scale' | 'skewX' | 'skewY' | 'perspectiveRotateX' | 'perspectiveRotateY' | 'perspectiveDistance', raw: string) => {
             const val = Number(raw);
             setScenes(prev => {
               const copy = [...prev];
-              const defaults: Record<string, number> = { rotation: 0, scale: 1, skewX: 0, skewY: 0 };
+              const defaults: Record<string, number> = { rotation: 0, scale: 1, skewX: 0, skewY: 0, perspectiveRotateX: 0, perspectiveRotateY: 0, perspectiveDistance: 600 };
               copy[_si].items[_ii] = { ...copy[_si].items[_ii], [field]: val === defaults[field] ? undefined : val };
+              return copy;
+            });
+          };
+          const _updateOrigin = (origin: string) => {
+            setScenes(prev => {
+              const copy = [...prev];
+              copy[_si].items[_ii] = { ...copy[_si].items[_ii], transformOrigin: origin === 'center center' ? undefined : origin };
               return copy;
             });
           };
@@ -2714,7 +2800,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     onClick={() => {
                       setScenes(prev => {
                         const copy = [...prev];
-                        copy[_si].items[_ii] = { ...copy[_si].items[_ii], rotation: undefined, scale: undefined, skewX: undefined, skewY: undefined };
+                        copy[_si].items[_ii] = { ...copy[_si].items[_ii], rotation: undefined, scale: undefined, skewX: undefined, skewY: undefined, perspectiveRotateX: undefined, perspectiveRotateY: undefined, perspectiveDistance: undefined, transformOrigin: undefined };
                         return copy;
                       });
                     }}
@@ -2749,6 +2835,44 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                   <span className="text-gray-300">Skew Y</span>
                   <input type="range" min={-45} max={45} step={1} value={_item.skewY ?? 0} onChange={e => _updateField('skewY', e.target.value)} className="w-full" />
                   <div className="text-center text-[10px] text-gray-400">{_item.skewY ?? 0}°</div>
+                </label>
+              </div>
+              <div className="border-t border-indigo-500/20 px-3 py-2">
+                <div className="text-[10px] text-indigo-300 font-semibold mb-1">3D Perspective</div>
+                <div className="grid grid-cols-3 gap-3">
+                  <label className="block text-[11px]">
+                    <span className="text-gray-300">Tilt X</span>
+                    <input type="range" min={-60} max={60} step={1} value={_item.perspectiveRotateX ?? 0} onChange={e => _updateField('perspectiveRotateX', e.target.value)} className="w-full" />
+                    <div className="text-center text-[10px] text-gray-400">{_item.perspectiveRotateX ?? 0}°</div>
+                  </label>
+                  <label className="block text-[11px]">
+                    <span className="text-gray-300">Tilt Y</span>
+                    <input type="range" min={-60} max={60} step={1} value={_item.perspectiveRotateY ?? 0} onChange={e => _updateField('perspectiveRotateY', e.target.value)} className="w-full" />
+                    <div className="text-center text-[10px] text-gray-400">{_item.perspectiveRotateY ?? 0}°</div>
+                  </label>
+                  <label className="block text-[11px]">
+                    <span className="text-gray-300">Depth</span>
+                    <input type="range" min={100} max={2000} step={50} value={_item.perspectiveDistance ?? 600} onChange={e => _updateField('perspectiveDistance', e.target.value)} className="w-full" />
+                    <div className="text-center text-[10px] text-gray-400">{_item.perspectiveDistance ?? 600}px</div>
+                  </label>
+                </div>
+                <label className="block text-[11px] mt-1">
+                  <span className="text-gray-300">Origin</span>
+                  <select
+                    value={_item.transformOrigin || 'center center'}
+                    onChange={e => _updateOrigin(e.target.value)}
+                    className="w-full mt-0.5 bg-slate-800 border border-slate-600 rounded text-[11px] text-gray-300 px-1 py-0.5"
+                  >
+                    <option value="center center">Center</option>
+                    <option value="top center">Top</option>
+                    <option value="bottom center">Bottom</option>
+                    <option value="center left">Left</option>
+                    <option value="center right">Right</option>
+                    <option value="top left">Top Left</option>
+                    <option value="top right">Top Right</option>
+                    <option value="bottom left">Bottom Left</option>
+                    <option value="bottom right">Bottom Right</option>
+                  </select>
                 </label>
               </div>
             </div>
@@ -3609,7 +3733,101 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                                 </div>
                               </label>
                             </div>
-                            {((item.rotation ?? 0) !== 0 || (item.scale ?? 1) !== 1 || (item.skewX ?? 0) !== 0 || (item.skewY ?? 0) !== 0) && (
+                            <div className="mt-2 border-t border-gray-700/50 pt-2">
+                              <div className="text-[11px] font-semibold text-indigo-300 mb-1">3D Perspective</div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <label className="block text-xs">
+                                  <span className="text-gray-300">Tilt X (°)</span>
+                                  <input
+                                    type="range"
+                                    min={-60}
+                                    max={60}
+                                    step={1}
+                                    value={item.perspectiveRotateX ?? 0}
+                                    onChange={(e) => {
+                                      const updated = [...scenes];
+                                      const val = Number(e.target.value);
+                                      updated[idx].items[itemIdx] = { ...updated[idx].items[itemIdx], perspectiveRotateX: val === 0 ? undefined : val };
+                                      setScenes(updated);
+                                    }}
+                                    className="w-full"
+                                  />
+                                  <div className="flex justify-between text-[10px] text-gray-500">
+                                    <span>-60</span>
+                                    <span className="font-semibold text-gray-300">{item.perspectiveRotateX ?? 0}°</span>
+                                    <span>60</span>
+                                  </div>
+                                </label>
+                                <label className="block text-xs">
+                                  <span className="text-gray-300">Tilt Y (°)</span>
+                                  <input
+                                    type="range"
+                                    min={-60}
+                                    max={60}
+                                    step={1}
+                                    value={item.perspectiveRotateY ?? 0}
+                                    onChange={(e) => {
+                                      const updated = [...scenes];
+                                      const val = Number(e.target.value);
+                                      updated[idx].items[itemIdx] = { ...updated[idx].items[itemIdx], perspectiveRotateY: val === 0 ? undefined : val };
+                                      setScenes(updated);
+                                    }}
+                                    className="w-full"
+                                  />
+                                  <div className="flex justify-between text-[10px] text-gray-500">
+                                    <span>-60</span>
+                                    <span className="font-semibold text-gray-300">{item.perspectiveRotateY ?? 0}°</span>
+                                    <span>60</span>
+                                  </div>
+                                </label>
+                                <label className="block text-xs">
+                                  <span className="text-gray-300">Depth (px)</span>
+                                  <input
+                                    type="range"
+                                    min={100}
+                                    max={2000}
+                                    step={50}
+                                    value={item.perspectiveDistance ?? 600}
+                                    onChange={(e) => {
+                                      const updated = [...scenes];
+                                      const val = Number(e.target.value);
+                                      updated[idx].items[itemIdx] = { ...updated[idx].items[itemIdx], perspectiveDistance: val === 600 ? undefined : val };
+                                      setScenes(updated);
+                                    }}
+                                    className="w-full"
+                                  />
+                                  <div className="flex justify-between text-[10px] text-gray-500">
+                                    <span>100</span>
+                                    <span className="font-semibold text-gray-300">{item.perspectiveDistance ?? 600}px</span>
+                                    <span>2000</span>
+                                  </div>
+                                </label>
+                              </div>
+                              <label className="block text-xs mt-1">
+                                <span className="text-gray-300">Transform Origin</span>
+                                <select
+                                  value={item.transformOrigin || 'center center'}
+                                  onChange={(e) => {
+                                    const updated = [...scenes];
+                                    const val = e.target.value;
+                                    updated[idx].items[itemIdx] = { ...updated[idx].items[itemIdx], transformOrigin: val === 'center center' ? undefined : val };
+                                    setScenes(updated);
+                                  }}
+                                  className="w-full mt-0.5 bg-slate-800 border border-slate-600 rounded text-xs text-gray-300 px-1 py-0.5"
+                                >
+                                  <option value="center center">Center</option>
+                                  <option value="top center">Top</option>
+                                  <option value="bottom center">Bottom</option>
+                                  <option value="center left">Left</option>
+                                  <option value="center right">Right</option>
+                                  <option value="top left">Top Left</option>
+                                  <option value="top right">Top Right</option>
+                                  <option value="bottom left">Bottom Left</option>
+                                  <option value="bottom right">Bottom Right</option>
+                                </select>
+                              </label>
+                            </div>
+                            {((item.rotation ?? 0) !== 0 || (item.scale ?? 1) !== 1 || (item.skewX ?? 0) !== 0 || (item.skewY ?? 0) !== 0 || (item.perspectiveRotateX ?? 0) !== 0 || (item.perspectiveRotateY ?? 0) !== 0 || ((item.perspectiveDistance ?? 600) !== 600) || (item.transformOrigin && item.transformOrigin !== 'center center')) && (
                               <button
                                 type="button"
                                 className="mt-1 text-[11px] text-blue-400 hover:text-blue-300 underline"
@@ -3621,6 +3839,10 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                                     scale: undefined,
                                     skewX: undefined,
                                     skewY: undefined,
+                                    perspectiveRotateX: undefined,
+                                    perspectiveRotateY: undefined,
+                                    perspectiveDistance: undefined,
+                                    transformOrigin: undefined,
                                   };
                                   setScenes(updated);
                                 }}
@@ -5246,8 +5468,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
       </section>
       <style jsx global>{`
         @keyframes pickupVideoGrow {
-          0%   { transform: translate(-50%, -50%) scale(1); }
-          100% { transform: translate(-50%, -50%) scale(var(--pickup-video-grow, 1)); }
+          0%   { transform: scale(1); }
+          100% { transform: scale(var(--pickup-video-grow, 1)); }
         }
 
         @keyframes blink {

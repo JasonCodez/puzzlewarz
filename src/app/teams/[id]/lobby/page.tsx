@@ -920,7 +920,7 @@ export default function TeamLobbyPage() {
                                 const j = await res.json().catch(() => ({}));
                                 if (!res.ok) return openActionModal('error', 'Uninvite Failed', j?.error || res.statusText);
                                 await fetchLobby();
-                                openActionModal('success', 'Invite Revoked', `Invitation revoked for ${inv.email || inv.userId}`);
+                                openActionModal('success', 'Invite Revoked', `Invitation revoked for ${inviteeLabel}`);
                               } catch (err) {
                                 console.error('Uninvite failed', err);
                                 openActionModal('error', 'Uninvite Failed', 'An unexpected error occurred.');

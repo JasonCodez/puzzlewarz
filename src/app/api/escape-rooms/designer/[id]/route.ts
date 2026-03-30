@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAdminUser } from '@/lib/requireAdmin';
 
 const safeJsonParse = <T,>(raw: unknown, fallback: T): T => {
   if (typeof raw !== 'string' || !raw.trim()) return fallback;
@@ -24,6 +25,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> } | { params: { id: string } }
 ) {
   try {
+    const admin = await requireAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const resolved = params instanceof Promise ? await params : params;
     const id = resolved.id;
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
@@ -104,7 +110,8 @@ export async function GET(
       userSpecialties: [], // Not implemented yet
     });
   } catch (error) {
-    return NextResponse.json({ error: (error as any)?.message || String(error), stack: (error as any)?.stack }, { status: 500 });
+    console.error('[ESCAPE ROOM DESIGNER GET] Failed to load escape room designer payload', error);
+    return NextResponse.json({ error: 'Failed to load escape room' }, { status: 500 });
   }
 }
 
@@ -114,6 +121,11 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> } | { params: { id: string } }
 ) {
   try {
+    const admin = await requireAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const resolved = params instanceof Promise ? await params : params;
     const escapeRoomId = resolved.id;
 
@@ -251,6 +263,7 @@ export async function PUT(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: (error as any)?.message || String(error), stack: (error as any)?.stack }, { status: 500 });
+    console.error('[ESCAPE ROOM DESIGNER UPDATE] Failed to update escape room designer payload', error);
+    return NextResponse.json({ error: 'Failed to update escape room' }, { status: 500 });
   }
 }

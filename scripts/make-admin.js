@@ -55,8 +55,7 @@ async function promoteToAdmin(email) {
       console.error("   1. PostgreSQL is running on localhost:5432");
       console.error("   2. Database credentials in .env.local are correct");
       console.error("   3. The 'kryptyk_labs_arg' database exists");
-      console.error("\nDATABASE_URL from .env.local:");
-      console.error("  " + process.env.DATABASE_URL);
+      console.error("\nDATABASE_URL is configured but will not be printed for security reasons.");
     }
     process.exit(1);
   } finally {

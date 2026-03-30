@@ -50,7 +50,15 @@ export default function EscapeRoomsPage() {
                 {room.roomTitle}
               </Link>
               <div className="text-sm text-gray-600">{room.roomDescription}</div>
-              <div className="text-xs mt-2">Multiplayer team puzzle</div>
+              <div className="flex items-center gap-3 mt-2">
+                <span className="text-xs">Multiplayer team puzzle</span>
+                <Link
+                  href={`/escape-rooms/designer/edit?id=${room.id}`}
+                  className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded"
+                >
+                  Edit in Designer
+                </Link>
+              </div>
             </li>
           ))}
         </ul>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // GET notifications for the current user
 export async function GET(request: NextRequest) {
@@ -61,6 +62,11 @@ export async function GET(request: NextRequest) {
 // POST - Create a notification (internal use)
 export async function POST(request: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -101,6 +107,11 @@ export async function POST(request: NextRequest) {
 // DELETE - Permanently remove notification(s) for the current user
 export async function DELETE(request: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

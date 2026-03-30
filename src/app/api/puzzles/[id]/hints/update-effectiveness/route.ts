@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // POST /api/puzzles/[id]/hints/update-effectiveness - Called when puzzle is solved
 const UpdateEffectivenessSchema = z.object({
@@ -14,6 +15,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
     const { id } = await params;
     const session = await getServerSession(authOptions);
 

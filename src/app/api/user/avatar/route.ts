@@ -6,9 +6,15 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { resolveUploadsPath } from "@/lib/uploadStorage";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 export async function POST(request: NextRequest) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {

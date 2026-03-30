@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 export async function POST(request: NextRequest, context: { params: { id: string } } | { params: Promise<{ id: string }> }) {
 	try {
+		const sameOriginError = validateSameOrigin(request);
+		if (sameOriginError) {
+			return sameOriginError;
+		}
+		const currentUser = await requireAuthenticatedUser();
+		if (currentUser instanceof NextResponse) {
+			return currentUser;
+		}
+
 		// Unwrap params if it's a Promise (Next.js app router sometimes passes a Promise)
 		let puzzleId: string;
 		if (context.params instanceof Promise) {

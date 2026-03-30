@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import crypto from "crypto";
 import { z } from "zod";
 import { sendEmail, generateEmailVerificationEmail } from "@/lib/mail";
+import { enforceRateLimit, getClientAddress } from "@/lib/requestSecurity";
 
 const ResendSchema = z.object({
   email: z.string().email(),
@@ -10,9 +11,29 @@ const ResendSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const ipRateLimit = await enforceRateLimit({
+      key: `auth:resend-verification:ip:${getClientAddress(request)}`,
+      limit: 5,
+      windowMs: 15 * 60 * 1000,
+      message: "Too many verification email requests. Please try again later.",
+    });
+    if (ipRateLimit) {
+      return ipRateLimit;
+    }
+
     const body = await request.json();
     const { email: rawEmail } = ResendSchema.parse(body);
     const email = rawEmail.trim().toLowerCase();
+
+    const emailRateLimit = await enforceRateLimit({
+      key: `auth:resend-verification:email:${email}`,
+      limit: 3,
+      windowMs: 60 * 60 * 1000,
+      message: "Too many verification email requests for this address. Please try again later.",
+    });
+    if (emailRateLimit) {
+      return emailRateLimit;
+    }
 
     const user = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, emailVerified: true } });
 

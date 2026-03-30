@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { validateSameOrigin } from "@/lib/requestSecurity";
 
 // GET /api/puzzles/[id]/hints - Fetch all hints with history and stats
 export async function GET(
@@ -10,6 +11,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
     const { id } = await params;
     const session = await getServerSession(authOptions);
 

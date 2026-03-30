@@ -8,7 +8,6 @@ datasource db {
   // NOTE: switched to PostgreSQL for Render deployment. If you need MySQL,
   // change this back to "mysql" and update DATABASE_URL accordingly.
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {

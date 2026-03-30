@@ -1,221 +1,166 @@
-# Puzzle Warz - Puzzle Platform
+# Puzzle Warz
 
-A fully-featured Alternate Reality Game (ARG) puzzle platform with multiplayer collaboration, real-time leaderboards, and progressive puzzle unlocking.
+Puzzle Warz is a multiplayer puzzle platform built on the Next.js App Router. It supports solo and team play, progressive puzzle unlocks, leaderboards, achievements, notifications, forum discussion, direct messaging, and specialized modes such as escape rooms, relay puzzles, sudoku, and ARG phase content.
 
-## Features
+## Current Stack
 
-### 🎮 Core Gameplay
-- **Multi-stage Puzzles**: Progressive puzzle chains with dependencies
-- **Collaborative Teams**: Create or join teams for multiplayer solving
-- **Flexible Answer Matching**: Support for exact matches, regex patterns, and case-insensitive checking
-- **Hint System**: Contextual hints with point costs and usage limits
-- **Progress Tracking**: Track individual and team progress
+- Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS 4
+- Backend: Next.js route handlers under `src/app/api`
+- Database: Prisma with PostgreSQL
+- Auth: NextAuth credentials flow
+- Real-time: Socket.io client/server support
+- Validation: Zod
 
-### 👥 Team System
-- **Team Management**: Create, manage, and invite players to teams
-- **Roles & Permissions**: Admin, moderator, and member roles
-- **Team Leaderboards**: Compete with other teams globally
-- **Real-time Collaboration**: Live updates when team members solve puzzles
+## Feature Areas
 
-### 🏆 Competitive Features
-- **Leaderboards**: Global and puzzle-specific rankings
-- **Points System**: Earn points for solving puzzles and beating time records
-- **Achievements**: Track puzzle difficulty and solve streaks
-- **Announcements**: Broadcast events and puzzle releases
-
-### 🔐 Security
-- **NextAuth.js**: Secure authentication with email/password and OAuth support
-- **MySQL**: Robust relational database
-- **Validation**: Input validation with Zod
-
-## Tech Stack
-
-- **Frontend**: Next.js 14+ with React
-- **Backend**: Next.js API routes
-- **Database**: MySQL with Prisma ORM
-- **Authentication**: NextAuth.js
-- **Styling**: Tailwind CSS
-- **Real-time**: Socket.io (ready for implementation)
-- **Validation**: Zod
-- **Language**: TypeScript
+- Puzzles: standard puzzles, hint tiers, ratings, analytics, puzzle relationships, categories and subcategories
+- Team play: teams, invites, team puzzle part assignment, team lobbies, relay flows
+- Competitive systems: leaderboards, achievements, progress tracking, activity feeds
+- Social systems: profiles, follows, direct messages, forum posts and comments, notifications
+- Escape rooms and ARG: escape room designer/runtime, ARG phases, interactive witness and chained puzzle flows
+- Admin tooling: puzzle management, media uploads, analytics, review flows, notification testing
 
 ## Project Structure
 
-```
+```text
 src/
 ├── app/
-│   ├── api/
-│   │   ├── auth/              # Authentication endpoints
-│   │   ├── puzzles/           # Puzzle endpoints
-│   │   ├── teams/             # Team management endpoints
-│   │   └── leaderboards/      # Leaderboard endpoints
-│   ├── page.tsx               # Home page
-│   └── layout.tsx             # Root layout
-├── lib/
-│   ├── auth.ts                # NextAuth configuration
-│   └── prisma.ts              # Prisma client singleton
-├── components/                # Reusable React components
-└── styles/                    # Global styles
+│   ├── api/                  # Route handlers grouped by feature
+│   ├── admin/                # Admin pages and tooling
+│   ├── puzzles/              # Player puzzle pages
+│   ├── teams/                # Team UX
+│   ├── escape-rooms/         # Escape room pages and editors
+│   └── forum/, messages/, notifications/, profile/
+├── components/               # Shared UI and puzzle-specific components
+├── lib/                      # Auth, Prisma, notification, puzzle, and game logic
+└── providers.tsx             # Session + global client providers
+
 prisma/
-├── schema.prisma              # Database schema
-└── migrations/                # Database migrations
+├── schema.prisma             # Current data model (PostgreSQL datasource)
+├── migrations/               # Prisma migrations
+└── seed.ts                   # Seed script
+
+scripts/                      # Admin utilities, checks, and one-off project helpers
 ```
-
-## Database Schema
-
-The database includes models for:
-- **Users**: Authentication and profiles
-- **Teams**: Multiplayer groups with membership management
-- **Puzzles**: Challenge definitions with solutions and hints
-- **Progress**: User and team progress tracking
-- **Submissions**: Answer tracking and statistics
-- **Leaderboards**: Ranking and scoring
 
 ## Getting Started
 
 ### Prerequisites
-### 🔐 Security
-- **NextAuth.js**: Secure authentication with email/password and OAuth support
-- **MySQL**: Robust relational database
-- **Validation**: Input validation with Zod
+
+- Node.js 20+
+- PostgreSQL
+- npm
 
 ### Installation
-- **Database**: MySQL with Prisma ORM
-   npm install
-   ```
-### Prerequisites
-- Node.js 18+
-- MySQL 8+
-- npm
-   ```env
-   DATABASE_URL="mysql://user:password@localhost:3306/kryptyk_labs_arg"
-2. **Configure environment**:
-   - Edit `.env.local` with your MySQL connection string:
-   ```env
-   DATABASE_URL="mysql://user:password@localhost:3306/kryptyk_labs_arg"
-   NEXTAUTH_URL="http://localhost:3000"
-   NEXTAUTH_SECRET="your-secret-key-change-in-production"
-   ```
-   npx prisma migrate dev --name init
-   ```
-   This will create the database schema and generate the Prisma client.
 
-| `DATABASE_URL` | MySQL connection string | Yes |
-   ```bash
-   npm run dev
-   ```
-   Open [http://localhost:3000](http://localhost:3000)
+1. Install dependencies.
 
-## API Endpoints
-
-### Puzzles
-- `GET /api/puzzles` - Get all active puzzles (supports filtering by category)
-- `POST /api/puzzles/submit` - Submit an answer to a puzzle
-
-### Teams
-- `GET /api/teams` - Get user's teams with progress
-- `POST /api/teams` - Create a new team
-
-### Authentication
-- `POST /api/auth/signin` - Sign in
-- `POST /api/auth/signup` - Register new account
-- `GET /api/auth/session` - Get current session
-
-## Development
-
-### Running Prisma Studio
-View and manage your database with a beautiful UI:
 ```bash
-npx prisma studio
+npm install
 ```
 
-### Database Migrations
-After modifying `prisma/schema.prisma`:
-```bash
-npx prisma migrate dev --name <description_of_change>
+2. Create `.env.local` or `.env` with the core variables.
+
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/puzzlewarz"
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="replace-this-with-a-long-random-secret"
 ```
 
-### Type Generation
-TypeScript types are auto-generated from the schema in `src/generated/prisma/`
+3. Apply migrations and generate the Prisma client.
 
-## Key Features to Build Next
+```bash
+npx prisma migrate dev
+```
 
-- [ ] User registration and login UI pages
-- [ ] Puzzle display and submission interface
-- [ ] Team creation and management UI
-- [ ] Real-time leaderboards with Socket.io
-- [ ] Hint system UI with point costs
-- [ ] Team collaboration and notifications
-- [ ] Admin dashboard for puzzle management
-- [ ] Analytics and player statistics
-- [ ] Deployment to production
+4. Optionally seed the database.
+
+```bash
+npm run seed
+```
+
+5. Start the app.
+
+```bash
+npm run dev
+```
+
+## Common Scripts
+
+- `npm run dev` - start the Next.js dev server
+- `npm run build` - production build
+- `npm run start` - start the production server
+- `npm run seed` - run `prisma/seed.ts`
+- `npm run test:e2e` - run Playwright tests
+- `npm run socket-server` - start the socket server helper
 
 ## Environment Variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `DATABASE_URL` | MySQL connection string | Yes |
-| `NEXTAUTH_URL` | Next.js app URL | Yes |
-| `NEXTAUTH_SECRET` | Secret for NextAuth | Yes |
-| `GITHUB_ID` | GitHub OAuth ID | No |
-| `GITHUB_SECRET` | GitHub OAuth secret | No |
-| `GOOGLE_CLIENT_ID` | Google OAuth ID | No |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth secret | No |
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `REDIS_URL` | Shared Redis connection string for distributed rate limiting and socket fan-out | Yes in production |
+| `NEXTAUTH_URL` | Base URL used by NextAuth | Yes |
+| `NEXTAUTH_SECRET` | Secret used to sign auth tokens | Yes |
+| `NEXT_PUBLIC_SOCKET_URL` | Client socket endpoint | No |
+| `REQUIRE_EMAIL_VERIFICATION` | Force email verification outside production | No |
 
-## Performance Optimization
+Additional email, storage, and deployment variables may be required depending on which subsystems you enable.
 
-- Database queries use indexed fields for fast lookups
-- Connection pooling configured for production
-- **MySQL**: Robust relational database
-- Leaderboards can be cached with Redis for large player bases
+Production deployments should provide `REDIS_URL`; auth abuse protection now uses Redis-backed rate limiting so limits hold across multiple app instances.
 
-## Security Considerations
+## API Overview
 
-- Passwords hashed with bcryptjs
-- CSRF protection via NextAuth
-- **Database**: MySQL with Prisma ORM
-- SQL injection protected via Prisma
-- Rate limiting recommended for endpoints
+The API surface is larger than a simple CRUD puzzle app. Current namespaces include:
 
-## Deployment
+- `auth`: registration, verification, sign-out, and the NextAuth handler
+- `puzzles`: listing, detail, submission, hints, ratings, escape-room and relay puzzle flows
+- `teams` and `team`: team CRUD, invites, applications, lobbies, and collaborative puzzle endpoints
+- `leaderboards`: global and team leaderboards
+- `user` and `users`: profile, activity, inbox, notifications, achievements, settings, avatar, and social actions
+- `forum`: posts, comments, and vote endpoints
+- `escape-rooms`: runtime and designer endpoints
+- `arg`: ARG phase and puzzle administration
+- `admin`: puzzle management, media upload, analytics, review, system checks, notification testing
 
-### Recommended Platforms
-- **Frontend**: Vercel (optimized for Next.js)
-- **Database**: Render, Railway, or AWS RDS
-- **Environment**: Use production database with backups
+Representative routes:
 
-### Pre-deployment
-- [ ] Change `NEXTAUTH_SECRET` to strong random value
-- [ ] Set production database URL
-- [ ] Configure CORS if needed
-- [ ] Set up monitoring/logging
-- [ ] Enable rate limiting
-- [ ] Configure SSL/HTTPS
+- `GET /api/puzzles`
+- `POST /api/puzzles/[id]/submit`
+- `GET /api/teams`
+- `POST /api/teams`
+- `GET /api/leaderboards/global`
+- `POST /api/auth/register`
+- `GET /api/user/profile`
+- `GET /api/user/notifications`
+- `GET /api/forum/posts`
+- `GET /api/escape-rooms`
+- `GET /api/admin/puzzles`
+
+If you need the authoritative surface, inspect `src/app/api` directly. Route counts and delivery summaries in older markdown files are historical snapshots, not a live API contract.
+
+## Development Notes
+
+- Auth configuration lives in `src/lib/auth.ts`.
+- Prisma client setup lives in `src/lib/prisma.ts`.
+- The root providers in `src/providers.tsx` wire session handling, navigation, achievement modals, team lobby invites, and socket-driven notifications.
+- The database schema is large and feature-rich; prefer `prisma/schema.prisma` over older architecture summaries when details conflict.
+
+## Documentation
+
+- `API_REFERENCE.md` - current route inventory for `src/app/api`
+- `DOCUMENTATION_INDEX.md` - project-wide documentation map
+- `README_DOCS_INDEX.md` - notification/email subsystem docs
+- `README_MEDIA.md` - media upload subsystem docs
+- `TEAM_PUZZLE_INDEX.md` - team puzzle docs
+- `PUZZLE_CONSTRAINT_MASTER_INDEX.md` - puzzle constraint docs
+
+Several top-level delivery and completion reports remain in the repository as historical records. Use this README, `DOCUMENTATION_INDEX.md`, `package.json`, `prisma/schema.prisma`, and the code under `src/` as the current source of truth.
 
 ## Contributing
 
-1. Create a feature branch
-2. Make your changes
-3. Test thoroughly
-4. Submit a pull request
-
-### Deleting or decommissioning features
-If you plan to remove or decommission a feature, follow the project removal guidelines: see `.github/REMOVAL_GUIDELINES.md` and use the PR checklist in `.github/PULL_REQUEST_TEMPLATE.md` to ensure a safe, reversible cleanup.
-
-## License
-
-MIT
-
-## Support
-
-Create an issue in the repository for questions or problems.
-
----
-
-**Built with ❤️ for ARG enthusiasts**
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-- **MySQL**: Robust relational database
+1. Make focused changes.
+2. Run the relevant validation for the subsystem you touched.
+3. Prefer updating current docs over adding another delivery-summary file.
+4. If removing a feature, follow `.github/REMOVAL_GUIDELINES.md` and the PR checklist.
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

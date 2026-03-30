@@ -1,5 +1,7 @@
 # 🎊 PHASE 4 - EMAIL NOTIFICATION SYSTEM - COMPLETE PROJECT SUMMARY
 
+> Historical project summary for the notification rollout. Build counts and delivery status in this document are a dated snapshot, not the live project contract. Use `README.md`, `DOCUMENTATION_INDEX.md`, `README_DOCS_INDEX.md`, and `STATUS_REPORT.md` for current information.
+
 **Project Status:** ✅ **100% COMPLETE & FULLY INTEGRATED**
 
 **Completion Date:** December 28, 2025  
