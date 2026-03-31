@@ -13,12 +13,93 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl = "https://puzzlewarz.com";
+
 export const metadata: Metadata = {
-  title: "Puzzle Warz - ARG Puzzle Platform",
-  description: "An Alternate Reality Game puzzle platform with multiplayer collaboration, real-time leaderboards, and progressive challenges.",
-  icons: { 
-    icon: "/images/puzzle_warz_logo.png",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Puzzle Warz — Solve Challenges, Compete & Win",
+    template: "%s | Puzzle Warz",
   },
+  description:
+    "The ultimate multiplayer puzzle platform. Solve ARG-style challenges solo or with your team, climb real-time leaderboards, and unlock achievements on Puzzle Warz.",
+  keywords: [
+    "puzzle platform",
+    "online puzzles",
+    "ARG puzzles",
+    "multiplayer puzzle game",
+    "team puzzles",
+    "puzzle competition",
+    "escape room online",
+    "logic puzzles",
+    "cryptic challenges",
+    "leaderboard puzzles",
+  ],
+  authors: [{ name: "Puzzle Warz", url: siteUrl }],
+  creator: "Puzzle Warz",
+  publisher: "Puzzle Warz",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-snippet": -1, "max-image-preview": "large" },
+  },
+  alternates: { canonical: siteUrl },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: siteUrl,
+    siteName: "Puzzle Warz",
+    title: "Puzzle Warz — Solve Challenges, Compete & Win",
+    description:
+      "The ultimate multiplayer puzzle platform. Solve ARG-style challenges solo or with your team, climb real-time leaderboards, and unlock achievements.",
+    images: [
+      {
+        url: "/images/puzzle_warz_logo.png",
+        width: 1200,
+        height: 630,
+        alt: "Puzzle Warz",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Puzzle Warz — Solve Challenges, Compete & Win",
+    description:
+      "The ultimate multiplayer puzzle platform. Solve ARG-style challenges solo or with your team, climb real-time leaderboards, and unlock achievements.",
+    images: ["/images/puzzle_warz_logo.png"],
+  },
+  icons: {
+    icon: "/images/puzzle_warz_logo.png",
+    apple: "/apple-icon.png",
+  },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${siteUrl}/#website`,
+      name: "Puzzle Warz",
+      url: siteUrl,
+      description: "The ultimate multiplayer puzzle platform for ARG-style challenges.",
+      potentialAction: {
+        "@type": "SearchAction",
+        target: { "@type": "EntryPoint", urlTemplate: `${siteUrl}/puzzles?q={search_term_string}` },
+        "query-input": "required name=search_term_string",
+      },
+    },
+    {
+      "@type": "Organization",
+      "@id": `${siteUrl}/#organization`,
+      name: "Puzzle Warz",
+      url: siteUrl,
+      logo: {
+        "@type": "ImageObject",
+        url: `${siteUrl}/images/puzzle_warz_logo.png`,
+      },
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -28,6 +109,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

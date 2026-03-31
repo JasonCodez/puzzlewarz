@@ -36,6 +36,7 @@ export async function GET(_req: NextRequest) {
         isActive: true,
         createdAt: true,
         category: { select: { name: true } },
+        escapeRoom: { select: { roomTitle: true } },
       },
       orderBy: { createdAt: "desc" },
     });

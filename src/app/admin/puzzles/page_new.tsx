@@ -59,6 +59,7 @@ interface PuzzleListItem {
   isActive: boolean;
   createdAt: string;
   category: { name: string } | null;
+  escapeRoom?: { roomTitle: string } | null;
 }
 
 export default function AdminPuzzlesPage() {
@@ -74,6 +75,8 @@ export default function AdminPuzzlesPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [jigsawImagePreview, setJigsawImagePreview] = useState<string>("");
   const [jigsawImageUrl, setJigsawImageUrl] = useState<string>("");
@@ -161,6 +164,89 @@ export default function AdminPuzzlesPage() {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const loadPuzzleForEdit = async (id: string) => {
+    setLoadingEdit(true);
+    setFormError("");
+    setFormSuccess("");
+    try {
+      const res = await fetch(`/api/admin/puzzles/${id}`);
+      if (!res.ok) throw new Error("Failed to load puzzle data");
+      const p = await res.json();
+
+      const baseData: PuzzleFormData = {
+        title: p.title || "",
+        description: p.description || "",
+        content: p.content || "",
+        category: p.category?.name || "general",
+        difficulty: p.difficulty || "medium",
+        puzzleType: p.puzzleType || "riddle",
+        correctAnswer: p.solutions?.[0]?.answer || "",
+        pointsReward: p.solutions?.[0]?.points || 100,
+        hints: p.hints?.map((h: { text: string }) => h.text) || [],
+        isMultiPart: false,
+        parts: [
+          { title: "Part 1", content: "", answer: "", points: 50 },
+          { title: "Part 2", content: "", answer: "", points: 50 },
+        ],
+        puzzleData: (p.data as Record<string, unknown>) || {},
+      };
+
+      // Merge jigsaw config into puzzleData
+      if (p.jigsaw) {
+        baseData.puzzleData = {
+          ...baseData.puzzleData,
+          gridRows: p.jigsaw.gridRows,
+          gridCols: p.jigsaw.gridCols,
+          snapTolerance: p.jigsaw.snapTolerance,
+          rotationEnabled: p.jigsaw.rotationEnabled,
+        };
+        if (p.jigsaw.imageUrl) {
+          setJigsawImageUrl(p.jigsaw.imageUrl);
+          setJigsawImagePreview(p.jigsaw.imageUrl);
+        }
+      }
+
+      setFormData(baseData);
+      setEditingId(id);
+      setPuzzleId(id);
+
+      setTimeout(() => {
+        document.querySelector("form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to load puzzle for editing");
+    } finally {
+      setLoadingEdit(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setPuzzleId(null);
+    setFormData({
+      title: "",
+      description: "",
+      content: "",
+      category: "general",
+      difficulty: "medium",
+      puzzleType: "riddle",
+      correctAnswer: "",
+      pointsReward: 100,
+      hints: [],
+      isMultiPart: false,
+      parts: [
+        { title: "Part 1", content: "", answer: "", points: 50 },
+        { title: "Part 2", content: "", answer: "", points: 50 },
+      ],
+      puzzleData: {},
+    });
+    setJigsawImageUrl("");
+    setJigsawImagePreview("");
+    setJigsawImageFile(null);
+    setFormError("");
+    setFormSuccess("");
   };
 
   const handleInputChange = (
@@ -526,6 +612,42 @@ export default function AdminPuzzlesPage() {
         delete submitBody.correctAnswer;
       }
 
+      // ── EDIT mode: PUT to existing puzzle ─────────────────────────────
+      if (editingId) {
+        const response = await fetch(`/api/admin/puzzles/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submitBody),
+        }).catch((err) => {
+          throw new Error(`Network error: ${err.message || "Failed to connect to server"}`);
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+          throw new Error(errorData.error || "Failed to update puzzle");
+        }
+
+        const result = await response.json();
+        const updatedPuzzle = result.puzzle;
+        setAllPuzzles((prev) =>
+          prev.map((p) =>
+            p.id === editingId
+              ? {
+                  ...p,
+                  title: updatedPuzzle.title,
+                  difficulty: updatedPuzzle.difficulty,
+                  puzzleType: updatedPuzzle.puzzleType,
+                  category: updatedPuzzle.category,
+                }
+              : p
+          )
+        );
+        setFormSuccess("✅ Puzzle updated successfully!");
+        setSubmitting(false);
+        return;
+      }
+      // ── CREATE mode: POST new puzzle ───────────────────────────────────
+
       const response = await fetch("/api/admin/puzzles", {
         method: "POST",
         headers: {
@@ -876,7 +998,16 @@ export default function AdminPuzzlesPage() {
                   <tbody className="divide-y divide-slate-700/60">
                     {allPuzzles.map((p) => (
                       <tr key={p.id} className="bg-slate-800/40 hover:bg-slate-800/70 transition-colors">
-                        <td className="px-4 py-3 text-white font-medium max-w-[220px] truncate" title={p.title}>{p.title || <span className="text-gray-500 italic">Untitled</span>}</td>
+                        <td className="px-4 py-3 text-white font-medium max-w-[220px] truncate" title={p.title}>{(() => {
+                            const escapeTitle = p.escapeRoom?.roomTitle?.trim() || '';
+                            const t = p.title?.trim() || '';
+                            const display = (p.puzzleType === 'escape_room' && escapeTitle)
+                              ? escapeTitle
+                              : (!t || t === 'Untitled Puzzle') && escapeTitle
+                              ? escapeTitle
+                              : t || escapeTitle || '';
+                            return display ? display : <span className="text-gray-500 italic">Untitled</span>;
+                          })()}</td>
                         <td className="px-4 py-3 text-gray-300 capitalize">{p.puzzleType.replace(/_/g, ' ')}</td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
@@ -914,13 +1045,27 @@ export default function AdminPuzzlesPage() {
                               </button>
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => { setDeleteConfirmId(p.id); setDeleteError(null); }}
-                              className="px-3 py-1 rounded text-xs bg-red-900/40 hover:bg-red-700/60 text-red-300 hover:text-white border border-red-700/40 transition-colors"
-                            >
-                              🗑 Delete
-                            </button>
+                            <span className="inline-flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={loadingEdit}
+                                onClick={() => loadPuzzleForEdit(p.id)}
+                                className={`px-3 py-1 rounded text-xs border transition-colors ${
+                                  editingId === p.id
+                                    ? 'bg-blue-600/40 text-blue-200 border-blue-500/60'
+                                    : 'bg-blue-900/30 hover:bg-blue-700/50 text-blue-300 hover:text-white border-blue-700/40'
+                                }`}
+                              >
+                                {loadingEdit && editingId === null ? '…' : editingId === p.id ? '✏️ Editing' : '✏️ Edit'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setDeleteConfirmId(p.id); setDeleteError(null); }}
+                                className="px-3 py-1 rounded text-xs bg-red-900/40 hover:bg-red-700/60 text-red-300 hover:text-white border border-red-700/40 transition-colors"
+                              >
+                                🗑 Delete
+                              </button>
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -939,6 +1084,19 @@ export default function AdminPuzzlesPage() {
                 onSubmit={handleSubmit}
                 className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-lg p-6 space-y-6"
               >
+                  {editingId && (
+                    <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-200 flex items-center justify-between">
+                      <span className="text-sm">✏️ <strong>Editing puzzle</strong> — changes will overwrite the existing puzzle</span>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="px-3 py-1 rounded text-xs bg-slate-600 hover:bg-slate-500 text-gray-300 ml-4"
+                      >
+                        ✕ Cancel Edit
+                      </button>
+                    </div>
+                  )}
+
                   {formError && (
                     <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-200">
                       {formError}
@@ -986,7 +1144,7 @@ export default function AdminPuzzlesPage() {
                           disabled={submitting}
                           className="w-full px-6 py-3 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold transition"
                         >
-                          {submitting ? "Creating..." : "🚀 Create Puzzle"}
+                          {submitting ? (editingId ? "Saving..." : "Creating...") : editingId ? "💾 Update Puzzle" : "🚀 Create Puzzle"}
                         </button>
                       </div>
                     </>
@@ -1352,7 +1510,7 @@ export default function AdminPuzzlesPage() {
                       disabled={submitting}
                       className="w-full px-6 py-3 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold transition"
                     >
-                      {submitting ? "Creating..." : "🚀 Create Puzzle"}
+                      {submitting ? (editingId ? "Saving..." : "Creating...") : editingId ? "💾 Update Puzzle" : "🚀 Create Puzzle"}
                     </button>
                   )}
                 </form>

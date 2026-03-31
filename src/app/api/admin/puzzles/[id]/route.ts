@@ -13,6 +13,168 @@ async function requireAdmin() {
   return user?.role === "admin" ? session : null;
 }
 
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { id: puzzleId } = await params;
+  const puzzle = await prisma.puzzle.findUnique({
+    where: { id: puzzleId },
+    include: {
+      category: { select: { name: true } },
+      hints: { orderBy: { order: "asc" } },
+      solutions: { take: 1 },
+      jigsaw: true,
+      sudoku: true,
+    },
+  });
+
+  if (!puzzle) return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
+  return NextResponse.json(puzzle);
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { id: puzzleId } = await params;
+
+  const existing = await prisma.puzzle.findUnique({ where: { id: puzzleId }, select: { id: true } });
+  if (!existing) return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
+
+  const body = await req.json();
+  const {
+    title,
+    description,
+    content,
+    category,
+    difficulty,
+    correctAnswer,
+    pointsReward,
+    hints,
+    puzzleType,
+    puzzleData,
+    sudokuGrid,
+    sudokuSolution,
+    sudokuDifficulty,
+    timeLimitSeconds,
+  } = body;
+
+  // Get or create category
+  let categoryRecord = category
+    ? await prisma.puzzleCategory.findFirst({ where: { name: category } })
+    : null;
+  if (!categoryRecord && category) {
+    categoryRecord = await prisma.puzzleCategory.create({ data: { name: category } });
+  }
+
+  const validDifficulties = ["easy", "medium", "hard", "extreme"];
+  const safeDifficulty = difficulty && validDifficulties.includes(difficulty) ? difficulty : "medium";
+
+  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case"].includes(puzzleType);
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Update core puzzle fields
+    await tx.puzzle.update({
+      where: { id: puzzleId },
+      data: {
+        title: title || "Untitled Puzzle",
+        description: description || "",
+        content: content || "",
+        difficulty: safeDifficulty,
+        ...(categoryRecord ? { categoryId: categoryRecord.id } : {}),
+        ...(!isSpecialType ? { riddleAnswer: correctAnswer } : {}),
+        ...((["escape_room", "code_master", "detective_case"].includes(puzzleType)) && puzzleData != null
+          ? { data: puzzleData }
+          : {}),
+      },
+    });
+
+    // 2. Replace hints
+    await tx.puzzleHint.deleteMany({ where: { puzzleId } });
+    const filteredHints = Array.isArray(hints) ? hints.filter((h: string) => h?.trim()) : [];
+    if (filteredHints.length > 0) {
+      await tx.puzzleHint.createMany({
+        data: filteredHints.map((text: string, order: number) => ({ puzzleId, text, order })),
+      });
+    }
+
+    // 3. Update solution for simple puzzle types
+    if (!isSpecialType && correctAnswer) {
+      const sol = await tx.puzzleSolution.findFirst({ where: { puzzleId } });
+      if (sol) {
+        await tx.puzzleSolution.update({
+          where: { id: sol.id },
+          data: { answer: correctAnswer, points: pointsReward || 100 },
+        });
+      } else {
+        await tx.puzzleSolution.create({
+          data: {
+            puzzleId,
+            answer: correctAnswer,
+            isCorrect: true,
+            points: pointsReward || 100,
+            ignoreCase: true,
+            ignoreWhitespace: false,
+          },
+        });
+      }
+    }
+
+    // 4. Update sudoku record if applicable
+    if (puzzleType === "sudoku" && sudokuGrid && sudokuSolution) {
+      await tx.sudokuPuzzle.upsert({
+        where: { puzzleId },
+        update: {
+          puzzleGrid: JSON.stringify(sudokuGrid),
+          solutionGrid: JSON.stringify(sudokuSolution),
+          difficulty: sudokuDifficulty || "medium",
+          timeLimitSeconds: timeLimitSeconds ?? 900,
+        },
+        create: {
+          puzzleId,
+          puzzleGrid: JSON.stringify(sudokuGrid),
+          solutionGrid: JSON.stringify(sudokuSolution),
+          difficulty: sudokuDifficulty || "medium",
+          timeLimitSeconds: timeLimitSeconds ?? 900,
+        },
+      });
+    }
+
+    // 5. Update jigsaw config if applicable
+    if (puzzleType === "jigsaw" && puzzleData) {
+      await tx.jigsawPuzzle.upsert({
+        where: { puzzleId },
+        update: {
+          gridRows: Number(puzzleData.gridRows) || 3,
+          gridCols: Number(puzzleData.gridCols) || 4,
+          snapTolerance: Number(puzzleData.snapTolerance) || 12,
+          rotationEnabled: Boolean(puzzleData.rotationEnabled),
+        },
+        create: {
+          puzzleId,
+          gridRows: Number(puzzleData.gridRows) || 3,
+          gridCols: Number(puzzleData.gridCols) || 4,
+          snapTolerance: Number(puzzleData.snapTolerance) || 12,
+          rotationEnabled: Boolean(puzzleData.rotationEnabled),
+        },
+      });
+    }
+  });
+
+  const updated = await prisma.puzzle.findUnique({
+    where: { id: puzzleId },
+    select: { id: true, title: true, puzzleType: true, difficulty: true, isActive: true, createdAt: true, category: { select: { name: true } } },
+  });
+  return NextResponse.json({ success: true, puzzle: updated });
+}
+
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

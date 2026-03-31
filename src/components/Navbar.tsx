@@ -94,15 +94,15 @@ export default function Navbar() {
         {/* Logo: disabled link when signed in */}
         {session ? (
           <div className="flex items-center gap-3 opacity-80 select-none" aria-disabled="true" role="img" tabIndex={-1}>
-              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
-            <div className="text-lg font-bold" style={{ color: "#3891A6" }}>
+              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-10 w-auto" />
+            <div className="text-sm sm:text-lg font-bold" style={{ color: "#3891A6" }}>
               Puzzle Warz
             </div>
           </div>
         ) : (
           <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition">
-              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
-            <div className="text-lg font-bold" style={{ color: "#3891A6" }}>
+              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-10 w-auto" />
+            <div className="text-sm sm:text-lg font-bold" style={{ color: "#3891A6" }}>
               Puzzle Warz
             </div>
           </Link>
@@ -116,6 +116,7 @@ export default function Navbar() {
           <div className="desktop-nav hidden nav:flex items-center gap-1">
             <Link href="/dashboard" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Dashboard</Link>
             <Link href="/puzzles" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Puzzles</Link>
+            <Link href="/learn" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Learn</Link>
             <Link href="/forum" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Forum</Link>
             <Link href="/leaderboards" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Leaderboards</Link>
             <Link href="/teams" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Teams</Link>
@@ -143,7 +144,7 @@ export default function Navbar() {
                   />
                 )}
                 <div className="hidden sm:block text-right">
-                  <p className="text-white font-semibold text-sm">{session.user?.name || session.user?.email}</p>
+                  <p className="text-white font-semibold text-sm max-w-[140px] truncate">{session.user?.name || session.user?.email}</p>
                   <p style={{ color: "#3891A6" }} className="text-xs">Player</p>
                 </div>
                 <Link href={`/profile/${getUserId()}`} className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.6)" }}>Profile</Link>
@@ -186,6 +187,7 @@ export default function Navbar() {
               <>
                 <Link href="/dashboard" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Dashboard</Link>
                 <Link href="/puzzles" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Puzzles</Link>
+                <Link href="/learn" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Learn</Link>
                 <Link href="/forum" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Forum</Link>
                 <Link href="/leaderboards" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Leaderboards</Link>
                 <Link href="/teams" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Teams</Link>

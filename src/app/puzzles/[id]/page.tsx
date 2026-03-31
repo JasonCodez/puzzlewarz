@@ -736,11 +736,11 @@ export default function PuzzleDetailPage() {
     setSuccess(true);
     setShowSolvedMessage(true);
 
-    // Show solved message, then rating modal after delay (animation already finished when this is called)
+    // Show solved message, then rating modal after delay (let confetti play first)
     setTimeout(() => {
       setShowSolvedMessage(false);
       setShowRatingModal(true);
-    }, 1500);
+    }, 3000);
 
     // Record success and get updated progress (single request) including elapsed time
     const elapsedSeconds = sudokuStartRef.current ? Math.round((Date.now() - sudokuStartRef.current) / 1000) : 0;
@@ -899,8 +899,8 @@ export default function PuzzleDetailPage() {
           console.error("Failed to refresh progress:", err);
         }
 
-        // Show rating modal instead of immediately redirecting
-        setShowRatingModal(true);
+        // Delay rating modal so confetti / success animation plays first
+        setTimeout(() => setShowRatingModal(true), 3000);
       } else {
         setError(data.message || "Incorrect answer. Try again!");
       }
@@ -1389,7 +1389,7 @@ export default function PuzzleDetailPage() {
                             setSuccess(true);
                             return 0;
                           }}
-                          onShowRatingModal={() => setShowRatingModal(true)}
+                          onShowRatingModal={() => setTimeout(() => setShowRatingModal(true), 3000)}
                         />
                       </div>
                     )}
@@ -1416,7 +1416,7 @@ export default function PuzzleDetailPage() {
                           teamId={teamIdParam}
                           onComplete={() => {
                             setSuccess(true);
-                            setShowRatingModal(true);
+                            setTimeout(() => setShowRatingModal(true), 3000);
                           }}
                         />
                       )}
@@ -1661,22 +1661,23 @@ export default function PuzzleDetailPage() {
 
                   {/* Code Master IDE */}
                   {puzzle?.puzzleType === 'code_master' && (
-                    <div className="mb-6 space-y-4">
-                      <div
-                        className="rounded-lg p-5 border"
-                        style={{ backgroundColor: "rgba(56, 145, 166, 0.1)", borderColor: "#3891A6" }}
-                      >
-                        <h2 className="text-lg font-semibold text-white mb-2">Scenario</h2>
-                        <p className="text-sm whitespace-pre-wrap" style={{ color: "#DDDBF1" }}>
-                          {String(puzzle?.data?.scenario || '')}
-                        </p>
-                      </div>
-
+                    <div className="mb-6">
                       <CodeMasterIDE
                         language={String(puzzle?.data?.language || 'html')}
                         brokenCode={String(puzzle?.data?.brokenCode || '')}
                         prefillCss={String(puzzle?.data?.prefillCss || '')}
                         files={puzzle?.data?.files as Record<string, string> | undefined}
+                        validationMode={String(puzzle?.data?.validationMode || 'exact')}
+                        validationRules={puzzle?.data?.validationRules as { mustContain?: string[]; mustNotContain?: string[]; ignoreCase?: boolean; ignoreWhitespace?: boolean } | undefined}
+                        expectedFix={String(puzzle?.data?.expectedFix || '')}
+                        theory={puzzle?.data?.theory ? String(puzzle.data.theory) : undefined}
+                        lessonSummary={puzzle?.data?.lessonSummary ? String(puzzle.data.lessonSummary) : undefined}
+                        concepts={Array.isArray(puzzle?.data?.concepts) ? (puzzle.data.concepts as string[]) : undefined}
+                        track={puzzle?.data?.track ? String(puzzle.data.track) : undefined}
+                        trackOrder={puzzle?.data?.trackOrder ? Number(puzzle.data.trackOrder) : undefined}
+                        scenario={puzzle?.data?.scenario ? String(puzzle.data.scenario) : undefined}
+                        puzzleId={puzzle?.id}
+                        solved={progress?.solved}
                         onCodeChange={(combined) => setAnswer(combined)}
                       />
                     </div>
@@ -1711,10 +1712,13 @@ export default function PuzzleDetailPage() {
                     <button
                       type="submit"
                       disabled={submitting || success || !answer.trim() || progress?.solved}
-                      className="mt-4 px-6 py-2 rounded-lg text-white font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
-                      style={{ backgroundColor: "#AB9F9D" }}
+                      className={`mt-5 w-full py-3.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all disabled:opacity-50 shadow-lg ${
+                        progress?.solved
+                          ? 'bg-emerald-700 cursor-not-allowed'
+                          : 'bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] shadow-indigo-900/50'
+                      }`}
                     >
-                      {submitting ? "Submitting..." : progress?.solved ? "Puzzle Solved ✓" : "Submit Fix"}
+                      {submitting ? 'Submitting…' : progress?.solved ? '✓ Puzzle Solved' : 'Submit Fix →'}
                     </button>
                   )}
                 </form>
