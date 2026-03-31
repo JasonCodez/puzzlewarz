@@ -116,6 +116,7 @@ export default function Navbar() {
           <div className="desktop-nav hidden nav:flex items-center gap-1">
             <Link href="/dashboard" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Dashboard</Link>
             <Link href="/puzzles" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Puzzles</Link>
+            <Link href="/daily" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90 flex items-center gap-1" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Daily <span>🟩</span></Link>
             <Link href="/learn" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Learn</Link>
             <Link href="/forum" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Forum</Link>
             <Link href="/leaderboards" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.1)" }}>Leaderboards</Link>
@@ -187,6 +188,7 @@ export default function Navbar() {
               <>
                 <Link href="/dashboard" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Dashboard</Link>
                 <Link href="/puzzles" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Puzzles</Link>
+                <Link href="/daily" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition flex items-center gap-1" onClick={() => setMobileOpen(false)}>Daily <span>🟩</span></Link>
                 <Link href="/learn" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Learn</Link>
                 <Link href="/forum" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Forum</Link>
                 <Link href="/leaderboards" className="py-2 px-4 rounded text-white text-base font-medium hover:bg-brand-teal/20 transition" onClick={() => setMobileOpen(false)}>Leaderboards</Link>
