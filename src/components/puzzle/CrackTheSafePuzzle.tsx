@@ -41,6 +41,8 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
   const [shaking, setShaking] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const safeContainerRef = useRef<HTMLDivElement>(null);
+  const [safeScale, setSafeScale] = useState(1);
 
   const attemptsLeft = maxAttempts - history.length;
   const isPlaying = status === "playing";
@@ -48,6 +50,18 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
   // Focus first empty digit on mount
   useEffect(() => {
     inputRefs.current[0]?.focus();
+  }, []);
+
+  // Scale safe to fit container on mobile
+  useEffect(() => {
+    const el = safeContainerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      setSafeScale(w > 0 ? Math.min(1, w / 420) : 1);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
   }, []);
 
   const handleDigitChange = useCallback(
@@ -235,6 +249,8 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
             </div>
           ) : (
             /* ── CSS safe — reference image faithful ── */
+            <div ref={safeContainerRef} style={{ width: "100%", maxWidth: 420, position: "relative", height: Math.round(430 * safeScale), overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: 0, left: 0, transformOrigin: "top left", transform: `scale(${safeScale})` }}>
             <div className={shaking ? "safe-shake" : ""}
                  style={{ position: "relative", width: 420, height: 430, display: "inline-block" }}>
 
@@ -662,6 +678,8 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
                   pointerEvents: "none",
                 }} />
               ))}
+            </div>
+            </div>
             </div>
           )}
         </div>
