@@ -1990,6 +1990,106 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     );
   };
 
+  // ── Crack the Safe ───────────────────────────────────────────────────────
+  const renderCrackSafeFields = () => {
+    const safecode = asString(puzzleData.safecode, '');
+    const digits = Number((puzzleData.digits ?? safecode.length) || 6);
+    const maxAttempts = Number(puzzleData.maxAttempts ?? 10);
+    return (
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Safe Image URL <span className="text-xs font-normal text-gray-500">(optional)</span></label>
+          <input
+            type="text"
+            value={asString(puzzleData.safeImageUrl, '')}
+            onChange={(e) => onDataChange('safeImageUrl', e.target.value)}
+            placeholder="https://... paste a URL to a safe/vault image"
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+          />
+          <p className="text-xs text-gray-500 mt-1">If left blank, a default CSS safe graphic is shown. Paste any image URL or use your media library URL.</p>
+          {asString(puzzleData.safeImageUrl, '') && (
+            <img
+              src={asString(puzzleData.safeImageUrl, '')}
+              alt="Safe preview"
+              className="mt-2 rounded-lg max-h-40 object-contain border border-slate-600"
+            />
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Secret Combination</label>
+          <input
+            type="text"
+            value={safecode}
+            inputMode="numeric"
+            maxLength={8}
+            onChange={(e) => {
+              const v = e.target.value.replace(/\D/g, '').slice(0, 8);
+              onDataChange('safecode', v);
+              onDataChange('digits', v.length || digits);
+            }}
+            placeholder="e.g. 042731"
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 font-mono tracking-widest"
+          />
+          <p className="text-xs text-gray-500 mt-1">Digits only, 4–8 characters. This is the answer players must find.</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Number of Digits</label>
+            <input
+              type="number"
+              min={4}
+              max={8}
+              value={digits}
+              onChange={(e) => onDataChange('digits', Number(e.target.value))}
+              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+            />
+            <p className="text-xs text-gray-500 mt-1">Auto-set from code length</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Max Attempts</label>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={maxAttempts}
+              onChange={(e) => onDataChange('maxAttempts', Number(e.target.value))}
+              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Clue / Flavor Text</label>
+          <textarea
+            value={asString(puzzleData.clue, '')}
+            onChange={(e) => onDataChange('clue', e.target.value)}
+            placeholder="e.g. The museum vault hasn't been opened in 50 years. The combination was last written in the curator's journal..."
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-20"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Surprise Message (shown when cracked)</label>
+          <input
+            type="text"
+            value={asString(puzzleData.surpriseMessage, '')}
+            onChange={(e) => onDataChange('surpriseMessage', e.target.value)}
+            placeholder="e.g. 🎉 Inside the safe you find a golden key and a note that reads..."
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+          />
+        </div>
+
+        {safecode && (
+          <div className="p-3 rounded-lg text-xs text-center" style={{ background: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.2)', color: '#9BD1D6' }}>
+            Preview: {digits}-digit safe · up to {maxAttempts} attempts · players get Mastermind-style ●○ feedback per guess
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const typeSpecificRenders: Record<string, () => JSX.Element> = {
     cipher: renderCipherFields,
     text_extraction: renderTextExtractionFields,
@@ -2003,6 +2103,7 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     pattern: renderPatternFields,
     escape_room: renderEscapeRoomFields,
     detective_case: renderDetectiveCaseFields,
+    crack_safe: renderCrackSafeFields,
   };
 
   const renderer = typeSpecificRenders[puzzleType];

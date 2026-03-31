@@ -20,6 +20,7 @@ import type { JigsawPuzzle as JigsawPuzzleType } from "@/lib/puzzle-types";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import CodeMasterIDE from "@/components/puzzle/CodeMasterIDE";
 import DetectiveCasePuzzle from "@/components/puzzle/DetectiveCasePuzzle";
+import CrackTheSafePuzzle from "@/components/puzzle/CrackTheSafePuzzle";
 
 interface Puzzle {
   id: string;
@@ -827,7 +828,7 @@ export default function PuzzleDetailPage() {
     e.preventDefault();
     
     // Skip if this is a Sudoku puzzle
-    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw' || puzzle?.puzzleType === 'detective_case') {
+    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw' || puzzle?.puzzleType === 'detective_case' || puzzle?.puzzleType === 'crack_safe') {
       return;
     }
 
@@ -1437,6 +1438,27 @@ export default function PuzzleDetailPage() {
                       </div>
                     )}
                     <DetectiveCasePuzzle puzzleId={puzzleId} />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'crack_safe') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div className="mb-6 p-4 rounded-lg border text-white"
+                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
+                        🔓 You have already cracked this safe!
+                      </div>
+                    )}
+                    <CrackTheSafePuzzle
+                      puzzleId={puzzleId}
+                      safeData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      onSolved={() => {
+                        setSuccess(true);
+                        setTimeout(() => setShowRatingModal(true), 4000);
+                      }}
+                    />
                   </div>
                 );
               }

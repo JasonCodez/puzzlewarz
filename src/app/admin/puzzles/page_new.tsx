@@ -46,6 +46,7 @@ const PUZZLE_TYPES = [
   { value: 'jigsaw', label: 'Jigsaw Puzzle' },
   { value: 'code_master', label: 'Code Master' },
   { value: 'detective_case', label: 'Detective Case (Noir)' },
+  { value: 'crack_safe', label: 'Crack the Safe 🔐' },
   { value: 'math', label: 'Math' },
   { value: 'arg', label: 'ARG' },
   { value: 'escape_room', label: 'Escape Room' },
@@ -609,6 +610,10 @@ export default function AdminPuzzlesPage() {
         delete submitBody.correctAnswer;
       }
       if (formData.puzzleType === 'detective_case') {
+        delete submitBody.correctAnswer;
+      }
+      if (formData.puzzleType === 'crack_safe') {
+        // Code is stored in puzzleData.safecode — no separate correctAnswer needed
         delete submitBody.correctAnswer;
       }
 
@@ -1433,7 +1438,7 @@ export default function AdminPuzzlesPage() {
                   )}
 
                   {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
-                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && (
+                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crack_safe' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">
                         Correct Answer *

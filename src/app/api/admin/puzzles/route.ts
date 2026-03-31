@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case') {
+    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case' && puzzleType !== 'crack_safe') {
       if (!correctAnswer) {
         return NextResponse.json(
           { error: "Single-part puzzles must have a correct answer" },
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
             minTeamSize: (() => { const v = puzzleData?.minTeamSize ?? (puzzleData as any)?.escapeRoomData?.minTeamSize; return (typeof v === 'number' && v > 0) ? v : 1; })(),
           }
         : {}),
-      riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' ? correctAnswer : undefined,
+      riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'crack_safe' ? correctAnswer : undefined,
       jigsaw:
         puzzleType === 'jigsaw'
           ? {
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
               },
             }
           : undefined,
-      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' ? undefined : {
+      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crack_safe' ? undefined : {
         create: [
           {
             answer: correctAnswer,
@@ -273,7 +273,7 @@ export async function POST(request: NextRequest) {
         : undefined,
     };
 
-    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case') && typeof puzzleData !== 'undefined') {
+    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crack_safe') && typeof puzzleData !== 'undefined') {
       createData.data = puzzleData;
     }
 
@@ -283,6 +283,21 @@ export async function POST(request: NextRequest) {
         create: [
           {
             answer: '__DETECTIVE_CASE__',
+            isCorrect: true,
+            points: pointsReward || 100,
+            ignoreCase: true,
+            ignoreWhitespace: false,
+          },
+        ],
+      };
+    }
+
+    // Crack the safe: code is stored in data.safecode; create a placeholder solution row for points.
+    if (puzzleType === 'crack_safe') {
+      createData.solutions = {
+        create: [
+          {
+            answer: '__CRACK_SAFE__',
             isCorrect: true,
             points: pointsReward || 100,
             ignoreCase: true,
