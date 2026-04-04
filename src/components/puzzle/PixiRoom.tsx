@@ -1079,7 +1079,7 @@ export default function PixiRoom({
               try {
                 const selId = selectedItemIdRef.current;
                 if (selId) {
-                  const selItem = items.find((it: any) => String(it?.id) === selId);
+                  const selItem = ((layout as any).items || []).find((it: any) => String(it?.id) === selId);
                   if (selItem) {
                     const itemLayoutW = effectiveLayoutW;
                     const itemLayoutH = effectiveLayoutH;
