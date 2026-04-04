@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true },
+      select: { id: true, totalPoints: true },
     });
 
     if (!user) {
@@ -37,13 +37,13 @@ export async function GET(request: NextRequest) {
     // Get user's puzzle data for progress calculation
     const userPuzzleProgress = await prisma.userPuzzleProgress.findMany({
       where: { userId: user.id },
-      select: { solved: true, attempts: true, puzzleId: true, pointsEarned: true, solvedAt: true },
+      select: { solved: true, attempts: true, puzzleId: true, solvedAt: true },
     });
 
     const puzzlesSolved = userPuzzleProgress.filter((p: { solved?: boolean }) => !!p.solved).length;
     const totalAttempts = userPuzzleProgress.reduce((sum: number, p: { attempts?: number }) => sum + (p.attempts || 0), 0);
     const firstTrySolves = userPuzzleProgress.filter((p: { solved?: boolean; attempts?: number }) => p.solved && p.attempts === 1).length;
-    const totalPointsEarned = userPuzzleProgress.reduce((sum: number, p: { pointsEarned?: number | null }) => sum + (p.pointsEarned || 0), 0);
+    const totalPointsEarned = user.totalPoints ?? 0;
 
     // Calculate current streak from solved puzzles
     let currentStreak = 0;

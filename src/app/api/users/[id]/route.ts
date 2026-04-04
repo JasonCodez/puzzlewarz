@@ -24,6 +24,7 @@ export async function GET(
         xp: true,
         level: true,
         xpTitle: true,
+        totalPoints: true,
         achievements: {
           include: {
             achievement: {
@@ -61,11 +62,6 @@ export async function GET(
     // Get user stats
     const solvedPuzzles = await prisma.userPuzzleProgress.count({
       where: { userId, solved: true },
-    });
-
-    const totalPoints = await prisma.userPuzzleProgress.aggregate({
-      where: { userId },
-      _sum: { pointsEarned: true },
     });
 
     // Get follower counts
@@ -106,7 +102,7 @@ export async function GET(
       xpTitle: title,
       stats: {
         puzzlesSolved: solvedPuzzles,
-        totalPoints: totalPoints._sum.pointsEarned || 0,
+        totalPoints: user.totalPoints ?? 0,
         achievementsCount: user.achievements.length,
         teamsCount: user.teams.length,
       },

@@ -25,26 +25,22 @@ export async function GET(request: NextRequest) {
     // Calculate team rankings
     const entries = await Promise.all(
       teams.map(async (team: { id: string; name?: string | null }) => {
-        // Get team members
+        // Get team members with their persistent point totals
         const members = await prisma.teamMember.findMany({
           where: { teamId: team.id },
-          select: { userId: true },
+          select: { userId: true, user: { select: { totalPoints: true } } },
         });
 
-        // Get progress for all team members
-        const allProgress = await prisma.userPuzzleProgress.findMany({
-          where: {
-            userId: { in: members.map((m: { userId: string }) => m.userId) },
-            solved: true,
-          },
-          select: { pointsEarned: true },
+        const memberIds = members.map((m: { userId: string }) => m.userId);
+        const puzzlesSolved = await prisma.userPuzzleProgress.count({
+          where: { userId: { in: memberIds }, solved: true },
         });
 
         return {
           teamId: team.id,
           teamName: team.name,
-          totalPoints: allProgress.reduce((sum: number, p: { pointsEarned?: number | null }) => sum + (p.pointsEarned || 0), 0),
-          totalPuzzlesSolved: allProgress.length,
+          totalPoints: members.reduce((sum: number, m: { user?: { totalPoints?: number | null } }) => sum + (m.user?.totalPoints ?? 0), 0),
+          totalPuzzlesSolved: puzzlesSolved,
           memberCount: members.length,
           rank: 0,
         };

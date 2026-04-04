@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true },
+      select: { id: true, totalPoints: true },
     });
 
     if (!user) {
@@ -107,14 +107,7 @@ export async function POST(request: NextRequest) {
 
     // For points_earned achievements, validate the condition is met
     if (achievement.conditionType === "points_earned") {
-      const userPuzzleProgress = await prisma.userPuzzleProgress.findMany({
-        where: { userId: user.id },
-        select: { pointsEarned: true },
-      });
-      const totalPoints = userPuzzleProgress.reduce(
-        (sum: number, p: { pointsEarned?: number | null }) => sum + (p.pointsEarned || 0),
-        0
-      );
+      const totalPoints = user.totalPoints ?? 0;
       
       if (totalPoints < (achievement.conditionValue || 1)) {
         return NextResponse.json(

@@ -465,6 +465,12 @@ export async function POST(
               data: { pointsEarned: { increment: awardPoints } },
             });
 
+            // Update user's persistent total (survives puzzle deletion)
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { totalPoints: { increment: awardPoints } },
+            });
+
             // Update or create global leaderboard entry
             const existingLeaderboard = await prisma.globalLeaderboard.findFirst({ where: { userId: user.id } });
             if (existingLeaderboard) {

@@ -2093,6 +2093,211 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     );
   };
 
+  // ── Word Search ───────────────────────────────────────────────────────────
+
+  const renderWordSearchFields = () => {
+    const gridSize = Number(puzzleData.gridSize ?? 12);
+    const rawWords = asString(puzzleData.wordsRaw, '');
+    const currentGrid = (puzzleData.grid ?? []) as string[][];
+
+    function generateGrid() {
+      const cleaned = rawWords
+        .split(/[\n,]+/)
+        .map((w: string) => w.trim().toUpperCase().replace(/[^A-Z]/g, ''))
+        .filter((w: string) => w.length >= 2);
+      if (cleaned.length === 0) return;
+
+      const DIRS = [[0,1],[1,0],[0,-1],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]] as const;
+      const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const g: string[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(''));
+
+      for (const word of cleaned) {
+        let placed = false;
+        for (let attempt = 0; attempt < 300 && !placed; attempt++) {
+          const [dr, dc] = DIRS[Math.floor(Math.random() * DIRS.length)];
+          const sr = Math.floor(Math.random() * gridSize);
+          const sc = Math.floor(Math.random() * gridSize);
+          const er = sr + dr * (word.length - 1);
+          const ec = sc + dc * (word.length - 1);
+          if (er < 0 || er >= gridSize || ec < 0 || ec >= gridSize) continue;
+          let ok = true;
+          for (let i = 0; i < word.length; i++) {
+            const cell = g[sr + dr * i][sc + dc * i];
+            if (cell !== '' && cell !== word[i]) { ok = false; break; }
+          }
+          if (!ok) continue;
+          for (let i = 0; i < word.length; i++) g[sr + dr * i][sc + dc * i] = word[i];
+          placed = true;
+        }
+      }
+
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+          if (!g[r][c]) g[r][c] = ALPHA[Math.floor(Math.random() * ALPHA.length)];
+        }
+      }
+
+      onDataChange('grid', g);
+      onDataChange('words', cleaned);
+      onDataChange('gridSize', gridSize);
+    }
+
+    const parsedWords = rawWords
+      .split(/[\n,]+/)
+      .map((w: string) => w.trim().toUpperCase().replace(/[^A-Z]/g, ''))
+      .filter((w: string) => w.length >= 2);
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Grid Size</label>
+            <select
+              value={gridSize}
+              onChange={(e) => { onDataChange('gridSize', Number(e.target.value)); onDataChange('grid', []); }}
+              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+            >
+              <option value={10}>10 × 10</option>
+              <option value={12}>12 × 12</option>
+              <option value={15}>15 × 15</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={generateGrid}
+              disabled={parsedWords.length < 2}
+              className="w-full px-4 py-2 rounded-lg font-bold text-white transition-all disabled:opacity-40"
+              style={{ background: parsedWords.length >= 2 ? 'rgba(129,140,248,0.3)' : undefined, border: '1px solid rgba(129,140,248,0.5)' }}
+            >
+              🔀 Generate Grid
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">
+            Words to Find <span className="text-red-400">*</span>
+            <span className="text-xs font-normal text-gray-500 ml-2">(one per line or comma-separated, min 2)</span>
+          </label>
+          <textarea
+            rows={5}
+            value={rawWords}
+            onChange={(e) => { onDataChange('wordsRaw', e.target.value); onDataChange('grid', []); }}
+            placeholder={"PUZZLE\nHIDDEN\nSEARCH\nWORD"}
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 font-mono uppercase resize-none"
+          />
+          {parsedWords.length > 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              {parsedWords.length} word{parsedWords.length !== 1 ? 's' : ''}: {parsedWords.join(', ')}
+            </p>
+          )}
+        </div>
+
+        {currentGrid.length > 0 && (
+          <div>
+            <p className="text-sm font-semibold text-gray-300 mb-2">Grid Preview ({currentGrid.length} × {currentGrid[0]?.length})</p>
+            <div
+              className="inline-block p-2 rounded-lg overflow-auto max-w-full"
+              style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(71,85,105,0.4)' }}
+            >
+              {currentGrid.map((row: string[], ri: number) => (
+                <div key={ri} style={{ display: 'flex', gap: 2 }}>
+                  {row.map((letter: string, ci: number) => (
+                    <span
+                      key={ci}
+                      className="flex items-center justify-center font-mono font-bold text-xs rounded"
+                      style={{ width: 20, height: 20, color: '#94a3b8', background: 'rgba(30,41,59,0.7)' }}
+                    >
+                      {letter}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Grid saved ✓ — regenerate any time after editing words.</p>
+          </div>
+        )}
+
+        {currentGrid.length === 0 && parsedWords.length >= 2 && (
+          <div className="p-3 rounded-lg text-sm text-center" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', color: '#fbbf24' }}>
+            ⚠️ Click &quot;Generate Grid&quot; to create the puzzle grid before saving.
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderWordleFields = () => {
+    const word = asString(puzzleData.word, '').toUpperCase();
+    const wordLength = word.length || Number(puzzleData.wordLength ?? 5);
+    const maxGuesses = Number(puzzleData.maxGuesses ?? 6);
+    return (
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Secret Word <span className="text-red-400">*</span></label>
+          <input
+            type="text"
+            value={word}
+            maxLength={10}
+            onChange={(e) => {
+              const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 10);
+              onDataChange('word', v);
+              onDataChange('wordLength', v.length || wordLength);
+            }}
+            placeholder="e.g. CRANE"
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 font-mono tracking-widest uppercase"
+          />
+          <p className="text-xs text-gray-500 mt-1">Letters only, 3–10 characters. This is the answer players must guess — it is never shown to players.</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Word Length</label>
+            <input
+              type="number"
+              min={3}
+              max={10}
+              value={wordLength}
+              readOnly
+              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-gray-400 cursor-not-allowed"
+            />
+            <p className="text-xs text-gray-500 mt-1">Auto-set from word length</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Max Guesses</label>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={maxGuesses}
+              onChange={(e) => onDataChange('maxGuesses', Number(e.target.value))}
+              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Hint <span className="text-xs font-normal text-gray-500">(optional)</span></label>
+          <input
+            type="text"
+            value={asString(puzzleData.hint, '')}
+            onChange={(e) => onDataChange('hint', e.target.value)}
+            placeholder="e.g. A common cooking spice"
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+          />
+          <p className="text-xs text-gray-500 mt-1">Shown to players above the grid as a clue. Leave blank for no hint.</p>
+        </div>
+
+        {word && (
+          <div className="p-3 rounded-lg text-xs text-center" style={{ background: 'rgba(83,141,78,0.1)', border: '1px solid rgba(83,141,78,0.3)', color: '#a7c4a4' }}>
+            Preview: {wordLength}-letter word · {maxGuesses} guesses · green / yellow / grey feedback per letter
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const typeSpecificRenders: Record<string, () => JSX.Element> = {
     cipher: renderCipherFields,
     text_extraction: renderTextExtractionFields,
@@ -2107,6 +2312,8 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     escape_room: renderEscapeRoomFields,
     detective_case: renderDetectiveCaseFields,
     crack_safe: renderCrackSafeFields,
+    word_crack: renderWordleFields,
+    word_search: renderWordSearchFields,
   };
 
   const renderer = typeSpecificRenders[puzzleType];

@@ -15,20 +15,21 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all users
-    const users = await prisma.user.findMany();
+    const users = await prisma.user.findMany({
+      select: { id: true, name: true, totalPoints: true },
+    });
 
     // Calculate rankings with progress data
     const entries = await Promise.all(
-      users.map(async (user: { id: string; name?: string | null; email?: string | null }) => {
-        const progress = await prisma.userPuzzleProgress.findMany({
+      users.map(async (user: { id: string; name?: string | null; totalPoints?: number | null }) => {
+        const puzzlesSolved = await prisma.userPuzzleProgress.count({
           where: { userId: user.id, solved: true },
-          select: { pointsEarned: true },
         });
         return {
               userId: user.id,
               userName: user.name,
-              puzzlesSolved: progress.length,
-              totalPoints: progress.reduce((sum: number, p: { pointsEarned?: number | null }) => sum + (p.pointsEarned || 0), 0),
+              puzzlesSolved,
+              totalPoints: user.totalPoints ?? 0,
               rank: 0,
             };
       })

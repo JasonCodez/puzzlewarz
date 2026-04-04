@@ -211,18 +211,30 @@ export async function POST(req: NextRequest) {
                 successfulAttempts: 1,
               },
             });
+            // Persist to user (survives puzzle deletion)
+            await prisma.user.update({
+              where: { id: member.userId },
+              data: { totalPoints: { increment: totalPoints } },
+            });
           } else {
+            const prevPoints = userProgress.pointsEarned ?? 0;
+            const newPoints = Math.max(prevPoints, totalPoints);
             await prisma.userPuzzleProgress.update({
               where: { id: userProgress.id },
               data: {
                 solved: true,
                 solvedAt: new Date(),
-                pointsEarned: Math.max(
-                  userProgress.pointsEarned,
-                  totalPoints
-                ), // Only award max points once
+                pointsEarned: newPoints, // Only award max points once
               },
             });
+            // Only increment the difference so we don't double-award
+            const diff = newPoints - prevPoints;
+            if (diff > 0) {
+              await prisma.user.update({
+                where: { id: member.userId },
+                data: { totalPoints: { increment: diff } },
+              });
+            }
           }
         }
 

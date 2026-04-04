@@ -42,13 +42,14 @@ interface MediaFile {
 }
 
 const PUZZLE_TYPES = [
-  { value: 'riddle', label: 'Riddle' },
+  { value: 'general', label: 'General' },
   { value: 'sudoku', label: 'Sudoku' },
   { value: 'jigsaw', label: 'Jigsaw Puzzle' },
   { value: 'code_master', label: 'Code Master' },
   { value: 'detective_case', label: 'Detective Case (Noir)' },
   { value: 'crack_safe', label: 'Crack the Safe 🔐' },
-  { value: 'math', label: 'Math' },
+  { value: 'word_crack', label: 'Word Crack 🟩' },
+  { value: 'word_search', label: 'Word Search 🔍' },
   { value: 'arg', label: 'ARG' },
   { value: 'escape_room', label: 'Escape Room' },
 ];
@@ -96,7 +97,7 @@ export default function AdminPuzzlesPage() {
     content: "",
     category: "general",
     difficulty: "medium",
-    puzzleType: "riddle",
+    puzzleType: "general",
     correctAnswer: "",
     pointsReward: 100,
     xpReward: 50,
@@ -184,7 +185,7 @@ export default function AdminPuzzlesPage() {
         content: p.content || "",
         category: p.category?.name || "general",
         difficulty: p.difficulty || "medium",
-        puzzleType: p.puzzleType || "riddle",
+        puzzleType: p.puzzleType || "general",
         correctAnswer: p.solutions?.[0]?.answer || "",
         pointsReward: p.solutions?.[0]?.points || 100,
         xpReward: (p as any).xpReward || 50,
@@ -235,7 +236,7 @@ export default function AdminPuzzlesPage() {
       content: "",
       category: "general",
       difficulty: "medium",
-      puzzleType: "riddle",
+      puzzleType: "general",
       correctAnswer: "",
       pointsReward: 100,
       xpReward: 50,
@@ -1344,45 +1345,7 @@ export default function AdminPuzzlesPage() {
 
                   {/* Show Difficulty/Category for non-escape_room types only */}
                   {formData.puzzleType !== 'escape_room' && (
-                    formData.puzzleType === 'math' ? (
-                      <div className="grid md:grid-cols-1 gap-4">
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-300 mb-2">
-                            Difficulty
-                          </label>
-                          <select
-                            name="difficulty"
-                            value={formData.difficulty}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                          >
-                            <option value="easy">Easy</option>
-                            <option value="medium">Medium</option>
-                            <option value="hard">Hard</option>
-                            <option value="extreme">Extreme</option>
-                          </select>
-                        </div>
-                      </div>
-                    ) : formData.puzzleType === 'riddle' ? (
-                      <div className="grid md:grid-cols-1 gap-4">
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-300 mb-2">
-                            Difficulty
-                          </label>
-                          <select
-                            name="difficulty"
-                            value={formData.difficulty}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                          >
-                            <option value="easy">Easy</option>
-                            <option value="medium">Medium</option>
-                            <option value="hard">Hard</option>
-                            <option value="extreme">Extreme</option>
-                          </select>
-                        </div>
-                      </div>
-                    ) : formData.puzzleType === 'sudoku' ? (
+                    formData.puzzleType === 'sudoku' ? (
                       <div className="grid md:grid-cols-1 gap-4">
                         <div>
                           <label className="block text-sm font-semibold text-gray-300 mb-2">
@@ -1400,6 +1363,8 @@ export default function AdminPuzzlesPage() {
                             <option value="jigsaw">Jigsaw</option>
                             <option value="puzzle">Puzzle</option>
                             <option value="challenge">Challenge</option>
+                            <option value="word_crack">Word Crack</option>
+                            <option value="word_search">Word Search</option>
                           </select>
                         </div>
                       </div>
@@ -1421,6 +1386,8 @@ export default function AdminPuzzlesPage() {
                             <option value="jigsaw">Jigsaw</option>
                             <option value="puzzle">Puzzle</option>
                             <option value="challenge">Challenge</option>
+                            <option value="word_crack">Word Crack</option>
+                            <option value="word_search">Word Search</option>
                           </select>
                         </div>
                         <div>
@@ -1444,7 +1411,7 @@ export default function AdminPuzzlesPage() {
                   )}
 
                   {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
-                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crack_safe' && (
+                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">
                         Correct Answer *

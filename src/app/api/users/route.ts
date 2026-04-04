@@ -41,12 +41,13 @@ export async function GET(request: NextRequest) {
         name: true,
         image: true,
         createdAt: true,
+        totalPoints: true,
         achievements: { select: { id: true } },
         teams: { select: { id: true } },
         followers: { select: { id: true } },
         solvedPuzzles: {
           where: { solved: true },
-          select: { id: true, pointsEarned: true },
+          select: { id: true },
         },
       },
       orderBy,
@@ -70,11 +71,8 @@ export async function GET(request: NextRequest) {
       image: user.image,
       createdAt: user.createdAt,
       stats: {
-        puzzlesSolved: user.solvedPuzzles.filter((p: { pointsEarned?: number | null }) => !!p.pointsEarned).length,
-          totalPoints: user.solvedPuzzles.reduce(
-            (sum: number, p: { pointsEarned?: number | null }) => sum + (p.pointsEarned || 0),
-            0
-          ),
+        puzzlesSolved: user.solvedPuzzles.length,
+        totalPoints: (user as any).totalPoints ?? 0,
         achievementsCount: user.achievements.length,
         teamsCount: user.teams.length,
         followers: user.followers.length,

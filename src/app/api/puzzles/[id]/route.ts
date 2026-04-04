@@ -98,6 +98,17 @@ export async function GET(
       }
     }
 
+    // For wordle puzzles, strip the secret word from the response — validation
+    // is done server-side via /api/puzzles/[id]/wordle. Expose only wordLength.
+    if ((outPayload as any).puzzleType === "word_crack" && (outPayload as any).data) {
+      const wd = { ...((outPayload as any).data as Record<string, unknown>) };
+      const secret = String(wd.word ?? "").trim();
+      const wordLength = secret.length || Number(wd.wordLength ?? 5);
+      delete wd.word;
+      wd.wordLength = wordLength;
+      outPayload = { ...outPayload, data: wd } as typeof outPayload;
+    }
+
     // Normalize title/description for escape-room puzzles where the metadata is stored on EscapeRoomPuzzle.
     const normalizedTitle = ((outPayload as any)?.title || '').toString().trim() || ((outPayload as any)?.escapeRoom?.roomTitle || '').toString().trim();
     const normalizedDescription = ((outPayload as any)?.description || '').toString().trim() || ((outPayload as any)?.escapeRoom?.roomDescription || '').toString().trim();

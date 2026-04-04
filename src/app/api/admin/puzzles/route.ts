@@ -97,8 +97,8 @@ export async function POST(request: NextRequest) {
       puzzleData,
     } = body;
 
-    // Validate input - title is required for most puzzle types but optional for Sudoku and Escape Room
-    if (!title && puzzleType !== 'sudoku' && puzzleType !== 'escape_room') {
+    // Validate input - title is required for most puzzle types but optional for Sudoku, Escape Room, and Word Crack
+    if (!title && puzzleType !== 'sudoku' && puzzleType !== 'escape_room' && puzzleType !== 'word_crack' && puzzleType !== 'word_search') {
       return NextResponse.json(
         { error: "Missing required field: title" },
         { status: 400 }
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case' && puzzleType !== 'crack_safe') {
+    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case' && puzzleType !== 'crack_safe' && puzzleType !== 'word_crack' && puzzleType !== 'word_search') {
       if (!correctAnswer) {
         return NextResponse.json(
           { error: "Single-part puzzles must have a correct answer" },
@@ -199,8 +199,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Provide a fallback title for Sudoku puzzles when none is supplied
-    const finalTitle = title || (puzzleType === 'sudoku' ? `Sudoku (${(sudokuDifficulty || 'medium').toString().toUpperCase()})` : 'Untitled Puzzle');
+    // Provide a fallback title when none is supplied
+    const finalTitle = title ||
+      (puzzleType === 'sudoku' ? `Sudoku (${(sudokuDifficulty || 'medium').toString().toUpperCase()})` :
+      puzzleType === 'word_crack' ? 'Word Crack' :
+      puzzleType === 'word_search' ? 'Word Search' :
+      'Untitled Puzzle');
 
     // Create puzzle
     const createData: any = {
@@ -276,7 +280,7 @@ export async function POST(request: NextRequest) {
         : undefined,
     };
 
-    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crack_safe') && typeof puzzleData !== 'undefined') {
+    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search') && typeof puzzleData !== 'undefined') {
       createData.data = puzzleData;
     }
 

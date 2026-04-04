@@ -49,43 +49,9 @@ export default async function ActivityFeedPage() {
 
   return (
     <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen">
-      {/* Navigation */}
-      <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
-            <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Puzzle Warz
-            </div>
-          </Link>
-          <div className="flex items-center gap-6">
-            {userInfo.image && (
-              <img src={userInfo.image} alt="Avatar" className="h-10 w-10 rounded-full object-cover" />
-            )}
-            <div className="text-right">
-              <p className="text-white font-semibold">{userInfo.name || userInfo.email}</p>
-              <p style={{ color: '#3891A6' }} className="text-sm">Player</p>
-            </div>
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 rounded-lg text-white transition hover:opacity-90"
-              style={{ backgroundColor: '#3891A6' }}
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/settings"
-              className="px-4 py-2 rounded-lg text-white transition hover:opacity-90"
-              style={{ backgroundColor: '#3891A6' }}
-            >
-              Settings
-            </Link>
-          </div>
-        </div>
-      </nav>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-24">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Activity Feed</h1>
           <p className="text-gray-400">

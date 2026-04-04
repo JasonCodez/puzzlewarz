@@ -21,6 +21,8 @@ import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import CodeMasterIDE from "@/components/puzzle/CodeMasterIDE";
 import DetectiveCasePuzzle from "@/components/puzzle/DetectiveCasePuzzle";
 import CrackTheSafePuzzle from "@/components/puzzle/CrackTheSafePuzzle";
+import WordCrackPuzzle from "@/components/puzzle/WordCrackPuzzle";
+import WordSearchPuzzle from "@/components/puzzle/WordSearchPuzzle";
 
 interface Puzzle {
   id: string;
@@ -1131,7 +1133,7 @@ export default function PuzzleDetailPage() {
               </span>
               {puzzle.puzzleType !== 'riddle' && (
                 <span className="text-sm" style={{ color: "#3891A6" }}>
-                  Category: {puzzle.category.name}
+                  Category: {puzzle.category.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                 </span>
               )}
             </div>
@@ -1455,6 +1457,50 @@ export default function PuzzleDetailPage() {
                     <CrackTheSafePuzzle
                       puzzleId={puzzleId}
                       safeData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      onSolved={() => {
+                        setSuccess(true);
+                        setTimeout(() => setShowRatingModal(true), 4000);
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'word_crack') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div className="mb-6 p-4 rounded-lg border text-white"
+                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
+                        🟩 You already solved this one!
+                      </div>
+                    )}
+                    <WordCrackPuzzle
+                      puzzleId={puzzleId}
+                      wordCrackData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      alreadySolved={progress?.solved ?? false}
+                      onSolved={() => {
+                        setSuccess(true);
+                        setTimeout(() => setShowRatingModal(true), 4000);
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'word_search') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div className="mb-6 p-4 rounded-lg border text-white"
+                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
+                        🔍 You already found all the words!
+                      </div>
+                    )}
+                    <WordSearchPuzzle
+                      puzzleId={puzzleId}
+                      wordSearchData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      alreadySolved={progress?.solved ?? false}
                       onSolved={() => {
                         setSuccess(true);
                         setTimeout(() => setShowRatingModal(true), 4000);
