@@ -5,6 +5,7 @@ import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { checkLocalRateLimit } from "@/lib/requestSecurity";
 
 const requireEmailVerification =
   process.env.NODE_ENV === "production" ||
@@ -64,6 +65,11 @@ export const authOptions: NextAuthOptions = {
         }
 
         const email = credentials.email.trim().toLowerCase();
+
+        // Rate limit: 10 login attempts per email per 15 minutes
+        if (checkLocalRateLimit({ key: `auth:login:email:${email}`, limit: 10, windowMs: 15 * 60 * 1000 })) {
+          throw new Error("Too many login attempts. Please wait 15 minutes and try again.");
+        }
 
         const user = await prisma.user.findUnique({
           where: { email },

@@ -1085,9 +1085,10 @@ export default function PuzzleDetailPage() {
       <nav
         className="backdrop-blur-md"
         style={{
-          borderBottomColor: "#FDE74C",
+          borderBottomColor: "rgba(56, 145, 166, 0.3)",
           borderBottomWidth: "1px",
-          backgroundColor: "rgba(76, 91, 92, 0.7)",
+          backgroundColor: "rgba(2, 4, 8, 0.85)",
+          boxShadow: "0 1px 0 rgba(56,145,166,0.12)",
         }}
       >
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
@@ -1110,8 +1111,8 @@ export default function PuzzleDetailPage() {
       <div className="flex-1 w-screen relative left-1/2 -translate-x-1/2 px-0 py-4 sm:p-8 sm:w-auto sm:static sm:translate-x-0">
         <div className="w-full">
           <div
-            className="border rounded-lg p-8 mb-8"
-            style={{ backgroundColor: "rgba(253, 231, 76, 0.08)", borderColor: "#FDE74C" }}
+            className="border rounded-2xl p-8 mb-8"
+            style={{ backgroundColor: "rgba(255,255,255,0.025)", borderColor: "rgba(56,145,166,0.22)", boxShadow: "0 0 0 1px rgba(56,145,166,0.08) inset" }}
           >
             {/* Puzzle Title */}
             <h1 className="text-4xl font-bold text-white mb-4">{(() => {
@@ -1142,8 +1143,8 @@ export default function PuzzleDetailPage() {
                   className="whitespace-pre-wrap rounded-lg p-6 border"
                   style={{
                     color: "#FDE74C",
-                    backgroundColor: "rgba(56, 145, 166, 0.18)",
-                    borderColor: "#FDE74C",
+                    backgroundColor: "rgba(56, 145, 166, 0.1)",
+                    borderColor: "rgba(56, 145, 166, 0.4)",
                   }}
                 >
                   <strong>Math Problem Configuration</strong>
@@ -1196,7 +1197,7 @@ export default function PuzzleDetailPage() {
                     <div
                       key={media.id}
                       className="rounded-lg overflow-hidden border transition-colors"
-                      style={{ backgroundColor: "rgba(76, 91, 92, 0.5)", borderColor: "#FDE74C" }}
+                      style={{ backgroundColor: "rgba(255,255,255,0.03)", borderColor: "rgba(56,145,166,0.3)" }}
                     >
                       {media.type === "image" && puzzle.puzzleType !== 'jigsaw' && (
                         <ImageViewer
@@ -1244,7 +1245,7 @@ export default function PuzzleDetailPage() {
                         </div>
                       )}
                       {media.title && (
-                        <div style={{ borderTopColor: "#FDE74C", borderTopWidth: "1px" }} className="p-3">
+                        <div style={{ borderTopColor: "rgba(56,145,166,0.25)", borderTopWidth: "1px" }} className="p-3">
                           <p className="text-white font-semibold text-sm">{media.title}</p>
                           {media.description && (
                             <p style={{ color: "#DDDBF1" }} className="text-xs mt-1">
@@ -1266,8 +1267,8 @@ export default function PuzzleDetailPage() {
 
             {error && (
               <div
-                className="mb-6 p-4 rounded-lg border text-white"
-                style={{ backgroundColor: "rgba(171, 159, 157, 0.2)", borderColor: "#AB9F9D" }}
+                className="mb-6 p-4 rounded-lg border"
+                style={{ backgroundColor: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.45)", color: "#fca5a5" }}
               >
                 {error}
               </div>
@@ -1352,7 +1353,7 @@ export default function PuzzleDetailPage() {
                       </div>
                     )}
                     {!jigsawPlayable ? (
-                      <div className="p-4 rounded-lg border text-white" style={{ backgroundColor: "rgba(171, 159, 157, 0.2)", borderColor: "#AB9F9D" }}>
+                      <div className="p-4 rounded-lg border" style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.4)", color: "#fca5a5" }}>
                         This jigsaw puzzle is missing its image. Upload an image in the admin puzzle creator.
                       </div>
                     ) : (
@@ -1408,7 +1409,7 @@ export default function PuzzleDetailPage() {
                     )}
                     <div className="mb-4">
                       {!teamIdParam ? (
-                        <div className="p-4 rounded-lg border text-white" style={{ backgroundColor: "rgba(171, 159, 157, 0.2)", borderColor: "#AB9F9D" }}>
+                        <div className="p-4 rounded-lg border" style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.4)", color: "#fca5a5" }}>
                           This escape room is team-only. Start it from your team lobby so the URL includes <b>teamId</b>.
                         </div>
                       ) : (
@@ -1714,16 +1715,16 @@ export default function PuzzleDetailPage() {
                         disabled={submitting || success || progress?.solved}
                         placeholder={progress?.solved ? "This puzzle has been solved." : "Enter your answer here..."}
                         className="w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none disabled:opacity-50"
-                        style={{ backgroundColor: "#2a3a3b", borderWidth: "2px", borderColor: "#FDE74C" }}
+                        style={{ backgroundColor: "#111820", borderWidth: "2px", borderColor: "rgba(56,145,166,0.35)" }}
                         onFocus={(e) => (e.currentTarget.style.borderColor = "#3891A6")}
-                        onBlur={(e) => (e.currentTarget.style.borderColor = "#FDE74C")}
+                        onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(56,145,166,0.35)")}
                         rows={4}
                       />
                       <button
                         type="submit"
                         disabled={submitting || success || !answer.trim() || progress?.solved}
-                        className="mt-4 px-6 py-2 rounded-lg text-white font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
-                        style={{ backgroundColor: "#AB9F9D" }}
+                        className="mt-4 px-6 py-2.5 rounded-lg font-bold tracking-wide transition-all hover:opacity-90 disabled:opacity-50"
+                        style={{ backgroundColor: "#3891A6", color: "#020202" }}
                       >
                         {submitting ? "Submitting..." : progress?.solved ? "Puzzle Solved ✓" : "Submit Answer"}
                       </button>
@@ -1846,9 +1847,9 @@ export default function PuzzleDetailPage() {
                         className="text-sm px-3 py-1 rounded-lg transition-colors hover:opacity-80"
                         style={{
                           backgroundColor: showStats
-                            ? "rgba(253, 231, 76, 0.2)"
-                            : "rgba(171, 159, 157, 0.1)",
-                          color: showStats ? "#FDE74C" : "#AB9F9D",
+                            ? "rgba(56,145,166,0.2)"
+                            : "rgba(56,145,166,0.08)",
+                          color: showStats ? "#9BD1D6" : "#6baabb",
                         }}
                       >
                         {showStats ? "Hide Stats" : "View Stats"}

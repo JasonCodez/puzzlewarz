@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
+import { calcLevel } from "@/lib/levels";
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -19,6 +21,9 @@ export async function GET(
         name: true,
         image: true,
         createdAt: true,
+        xp: true,
+        level: true,
+        xpTitle: true,
         achievements: {
           include: {
             achievement: {
@@ -93,14 +98,20 @@ export async function GET(
       }
     }
 
+    const { level, title, currentXp, nextLevelXp, progress } = calcLevel(user.xp ?? 0);
+
     return NextResponse.json({
       ...user,
+      level,
+      xpTitle: title,
       stats: {
         puzzlesSolved: solvedPuzzles,
         totalPoints: totalPoints._sum.pointsEarned || 0,
         achievementsCount: user.achievements.length,
         teamsCount: user.teams.length,
       },
+      xpProgress: progress,
+      xpToNextLevel: nextLevelXp - currentXp,
       social: {
         followers: followerCount,
         following: followingCount,

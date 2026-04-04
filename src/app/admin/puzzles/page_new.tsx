@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -17,6 +17,7 @@ interface PuzzleFormData {
   puzzleType: string;
   correctAnswer: string;
   pointsReward: number;
+  xpReward: number;
   hints: string[];
   isMultiPart: boolean;
   parts: PuzzlePart[];
@@ -98,6 +99,7 @@ export default function AdminPuzzlesPage() {
     puzzleType: "riddle",
     correctAnswer: "",
     pointsReward: 100,
+    xpReward: 50,
     hints: [],
     isMultiPart: false,
     parts: [
@@ -185,6 +187,7 @@ export default function AdminPuzzlesPage() {
         puzzleType: p.puzzleType || "riddle",
         correctAnswer: p.solutions?.[0]?.answer || "",
         pointsReward: p.solutions?.[0]?.points || 100,
+        xpReward: (p as any).xpReward || 50,
         hints: p.hints?.map((h: { text: string }) => h.text) || [],
         isMultiPart: false,
         parts: [
@@ -235,6 +238,7 @@ export default function AdminPuzzlesPage() {
       puzzleType: "riddle",
       correctAnswer: "",
       pointsReward: 100,
+      xpReward: 50,
       hints: [],
       isMultiPart: false,
       parts: [
@@ -256,7 +260,7 @@ export default function AdminPuzzlesPage() {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === "pointsReward" ? parseInt(value) : value,
+      [name]: name === "pointsReward" || name === "xpReward" ? parseInt(value) : value,
     }));
   };
 
@@ -283,7 +287,7 @@ export default function AdminPuzzlesPage() {
     }));
   };
 
-  const handlePuzzleDataChange = (key: string, value: unknown) => {
+  const handlePuzzleDataChange = useCallback((key: string, value: unknown) => {
     setFormData((prev) => {
       let next = {
         ...prev,
@@ -298,7 +302,8 @@ export default function AdminPuzzlesPage() {
       }
       return next;
     });
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // File uploads removed — images are provided via external URL only
 
@@ -868,6 +873,7 @@ export default function AdminPuzzlesPage() {
           puzzleType: "general",
           correctAnswer: "",
           pointsReward: 100,
+          xpReward: 50,
           hints: ["", "", ""],
           isMultiPart: false,
           parts: [
@@ -1456,18 +1462,34 @@ export default function AdminPuzzlesPage() {
                   )}
 
                   {/* Points */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">
-                      Points Reward
-                    </label>
-                    <input
-                      type="number"
-                      name="pointsReward"
-                      value={formData.pointsReward}
-                      onChange={handleInputChange}
-                      min="1"
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-300 mb-2">
+                        Points Reward
+                      </label>
+                      <input
+                        type="number"
+                        name="pointsReward"
+                        value={formData.pointsReward}
+                        onChange={handleInputChange}
+                        min="1"
+                        className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-300 mb-2">
+                        XP Reward
+                      </label>
+                      <input
+                        type="number"
+                        name="xpReward"
+                        value={formData.xpReward}
+                        onChange={handleInputChange}
+                        min="1"
+                        className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Easy=25 · Medium=50 · Hard=100 · Extreme=175</p>
+                    </div>
                   </div>
 
                   {/* Hints (hidden for Sudoku) */}

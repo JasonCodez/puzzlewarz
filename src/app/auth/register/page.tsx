@@ -16,6 +16,8 @@ function RegisterForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [referralCode, setReferralCode] = useState("");
+  const [tosAccepted, setTosAccepted] = useState(false);
+  const [honeypot, setHoneypot] = useState("");
 
   useEffect(() => {
     // Get referral code from URL params
@@ -39,13 +41,21 @@ function RegisterForm() {
       return;
     }
 
+    if (!tosAccepted) {
+      setError("You must accept the Terms of Service to create an account.");
+      return;
+    }
+
+    // Client-side honeypot guard
+    if (honeypot) return;
+
     setLoading(true);
 
     try {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, referralCode: referralCode || undefined }),
+        body: JSON.stringify({ name, email, password, website: honeypot, referralCode: referralCode || undefined }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -92,12 +102,25 @@ function RegisterForm() {
           <p style={{ color: '#3891A6' }} className="text-center mb-8">Create your account</p>
 
           {error && (
-            <div className="mb-6 p-4 rounded-lg text-white border" style={{ backgroundColor: 'rgba(171, 159, 157, 0.2)', borderColor: '#AB9F9D' }}>
+            <div className="mb-6 p-4 rounded-lg text-sm border" style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.4)', color: '#fca5a5' }}>
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Honeypot — visually hidden, real users never see or fill this */}
+            <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", width: 1, height: 1, overflow: "hidden" }}>
+              <label htmlFor="website">Website</label>
+              <input
+                id="website"
+                name="website"
+                type="text"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: '#3891A6' }}>
                 Display Name
@@ -166,11 +189,28 @@ function RegisterForm() {
               />
             </div>
 
+            {/* Terms of Service */}
+            <div className="flex items-start gap-3 pt-1">
+              <input
+                id="tos"
+                type="checkbox"
+                checked={tosAccepted}
+                onChange={(e) => setTosAccepted(e.target.checked)}
+                className="mt-0.5 shrink-0 h-4 w-4 rounded cursor-pointer accent-[#3891A6]"
+              />
+              <label htmlFor="tos" className="text-sm leading-snug cursor-pointer" style={{ color: '#888' }}>
+                I have read and agree to the{" "}
+                <Link href="/terms" target="_blank" className="font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity" style={{ color: '#3891A6' }}>
+                  Terms of Service
+                </Link>
+              </label>
+            </div>
+
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-2 rounded-lg text-white font-semibold transition disabled:opacity-50 hover:opacity-90"
-              style={{ backgroundColor: '#3891A6' }}
+              disabled={loading || !tosAccepted}
+              className="w-full py-2 rounded-lg font-semibold transition disabled:opacity-40 hover:opacity-90"
+              style={{ backgroundColor: '#3891A6', color: '#020202' }}
             >
               {loading ? "Creating account..." : "Create Account"}
             </button>

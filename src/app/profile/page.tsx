@@ -15,6 +15,11 @@ interface UserProfile {
   totalPuzzlesSolved: number;
   totalPoints: number;
   rank: number | null;
+  xp: number;
+  level: number;
+  xpTitle: string;
+  xpToNextLevel: number;
+  xpProgress: number;
 }
 
 export default function ProfilePage() {
@@ -78,13 +83,24 @@ export default function ProfilePage() {
   const fetchProfile = async () => {
     try {
       const response = await fetch('/api/user/profile');
-      if (response.ok) {
-        const data = await response.json();
-        setProfile(data);
-        setFormData({ name: data.name || '', email: data.email || '' });
+      const text = await response.text();
+      if (!response.ok) {
+        console.error('Profile fetch error:', response.status, text);
+        setError('Failed to load profile');
+        return;
       }
+      let data: UserProfile;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error('Profile response not JSON:', text.slice(0, 500));
+        setError('Failed to load profile');
+        return;
+      }
+      setProfile(data);
+      setFormData({ name: data.name || '', email: data.email || '' });
     } catch (error) {
-      console.error('Failed to fetch profile:', error);
+      console.error('Profile fetch error:', (error as Error)?.message ?? String(error));
       setError('Failed to load profile');
     } finally {
       setLoading(false);
@@ -429,21 +445,48 @@ export default function ProfilePage() {
           </div>
 
           {/* Stats Card */}
-          <div className="border rounded-lg p-6 space-y-6" style={{ backgroundColor: 'rgba(253, 231, 76, 0.06)', borderColor: '#FDE74C' }}>
+          <div className="border rounded-lg p-6 space-y-5" style={{ backgroundColor: 'rgba(56,145,166,0.06)', borderColor: 'rgba(56,145,166,0.35)' }}>
             <h3 className="text-lg font-bold text-white">Your Stats</h3>
 
+            {/* Level badge + title */}
+            <div className="flex flex-col items-center gap-1 py-3 rounded-lg" style={{ background: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.25)' }}>
+              <div className="text-4xl font-black" style={{ color: '#3891A6' }}>
+                LVL {profile?.level ?? 1}
+              </div>
+              <div className="text-sm font-bold tracking-widest uppercase" style={{ color: '#FDE74C' }}>
+                {profile?.xpTitle ?? 'Newcomer'}
+              </div>
+            </div>
+
+            {/* XP progress bar */}
             <div>
-              <p className="text-sm" style={{ color: '#FDE74C' }}>Puzzles Solved</p>
+              <div className="flex justify-between text-xs mb-1" style={{ color: '#888' }}>
+                <span>{profile?.xp ?? 0} XP</span>
+                <span>{profile?.xpToNextLevel ?? 100} XP to next level</span>
+              </div>
+              <div className="w-full rounded-full overflow-hidden" style={{ height: 8, background: 'rgba(255,255,255,0.07)' }}>
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${Math.min(100, profile?.xpProgress ?? 0)}%`,
+                    background: 'linear-gradient(90deg, #3891A6, #38D399)',
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ borderTopColor: 'rgba(56,145,166,0.2)', borderTopWidth: 1, paddingTop: 12 }}>
+              <p className="text-xs" style={{ color: '#888' }}>Puzzles Solved</p>
               <p className="text-3xl font-bold text-white">{profile?.totalPuzzlesSolved || 0}</p>
             </div>
 
             <div>
-              <p className="text-sm" style={{ color: '#FDE74C' }}>Total Points</p>
+              <p className="text-xs" style={{ color: '#888' }}>Total Points</p>
               <p className="text-3xl font-bold text-white">{profile?.totalPoints || 0}</p>
             </div>
 
             <div>
-              <p className="text-sm" style={{ color: '#FDE74C' }}>Global Rank</p>
+              <p className="text-xs" style={{ color: '#888' }}>Global Rank</p>
               <p className="text-3xl font-bold text-white">#{profile?.rank || 'N/A'}</p>
             </div>
           </div>

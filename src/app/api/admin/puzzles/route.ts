@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
       difficulty,
       correctAnswer,
       pointsReward,
+      xpReward,
       hints,
       isMultiPart,
       parts,
@@ -211,9 +212,11 @@ export async function POST(request: NextRequest) {
       },
       difficulty: puzzleDifficulty,
       puzzleType: puzzleType || 'general',
+      xpReward: typeof xpReward === 'number' && xpReward > 0 ? xpReward : 50,
       ...(puzzleType === 'escape_room'
         ? {
             isTeamPuzzle: true,
+            isActive: false,
             minTeamSize: (() => { const v = puzzleData?.minTeamSize ?? (puzzleData as any)?.escapeRoomData?.minTeamSize; return (typeof v === 'number' && v > 0) ? v : 1; })(),
           }
         : {}),

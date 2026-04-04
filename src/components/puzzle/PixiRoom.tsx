@@ -29,6 +29,10 @@ export default function PixiRoom({
   onHotspotTransform,
   onEffectiveLayoutSize,
   triggeredItemIds,
+  onItemMove,
+  onItemResize,
+  onItemSelect,
+  selectedItemId,
 }: {
   puzzleId: string;
   layout: { id: string; title?: string | null; backgroundUrl?: string | null; width?: number | null; height?: number | null } | null;
@@ -39,6 +43,14 @@ export default function PixiRoom({
   onEffectiveLayoutSize?: (w: number, h: number) => void;
   /** Set of item IDs that have been triggered — those items swap to their animationVideoUrl */
   triggeredItemIds?: Set<string>;
+  /** Editor: callback when an item is dragged to a new position (preview/layout coords) */
+  onItemMove?: (itemId: string, x: number, y: number) => void;
+  /** Editor: callback when an item is resized (preview/layout coords) */
+  onItemResize?: (itemId: string, x: number, y: number, w: number, h: number) => void;
+  /** Editor: callback when an item is clicked/selected (null = deselect) */
+  onItemSelect?: (itemId: string | null) => void;
+  /** Editor: currently selected item ID (shows highlight outline) */
+  selectedItemId?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -50,6 +62,12 @@ export default function PixiRoom({
   const onHotspotActionRef = useRef<typeof onHotspotAction>(onHotspotAction);
   const triggeredItemIdsRef = useRef<Set<string>>(new Set());
   const drawFnRef = useRef<(() => void) | null>(null);
+  const onItemMoveRef = useRef(onItemMove);
+  const onItemResizeRef = useRef(onItemResize);
+  const onItemSelectRef = useRef(onItemSelect);
+  const selectedItemIdRef = useRef(selectedItemId ?? null);
+  // Holds the live drag position so draw() can render the dragged item without any React state update.
+  const dragOverrideRef = useRef<{ id: string; x: number; y: number; w: number; h: number } | null>(null);
   // local handle for canvas created inside effect (so closures can reference it)
   let createdCanvasLocal: HTMLCanvasElement | null = null;
 
@@ -60,6 +78,16 @@ export default function PixiRoom({
   useEffect(() => {
     onHotspotActionRef.current = onHotspotAction;
   }, [onHotspotAction]);
+
+  useEffect(() => { onItemMoveRef.current = onItemMove; }, [onItemMove]);
+  useEffect(() => { onItemResizeRef.current = onItemResize; }, [onItemResize]);
+  useEffect(() => { onItemSelectRef.current = onItemSelect; }, [onItemSelect]);
+
+  // Sync selectedItemId ref and trigger a lightweight redraw for selection highlight changes.
+  useEffect(() => {
+    selectedItemIdRef.current = selectedItemId ?? null;
+    drawFnRef.current?.();
+  }, [selectedItemId]);
 
   // Sync triggered item ids ref and request a redraw whenever the set changes.
   useEffect(() => {
@@ -101,7 +129,7 @@ export default function PixiRoom({
     }
   })();
 
-  const isEditor = typeof onHotspotMove === 'function' || typeof onHotspotTransform === 'function';
+  const isEditor = typeof onHotspotMove === 'function' || typeof onHotspotTransform === 'function' || typeof onItemMove === 'function' || typeof onItemResize === 'function' || typeof onItemSelect === 'function';
 
   const normalizeImageUrl = (raw: string | null | undefined): string => {
     const src = (raw || '').trim();
@@ -147,10 +175,14 @@ export default function PixiRoom({
       // PIXI texture loading cache (avoid repeatedly calling Texture.from on URLs that aren't loaded yet)
       const pixiTextureCache = new Map<string, PIXI.Texture>();
       const pixiTextureLoading = new Set<string>();
+      // URLs that permanently failed to load — never retry them, preventing infinite draw() loops.
+      const pixiTextureFailed = new Set<string>();
 
       const getOrLoadPixiTexture = (url: string | null | undefined): PIXI.Texture | null => {
         const src = normalizeImageUrl(url);
         if (!src) return null;
+        // Permanently failed — don't retry, return null and move on.
+        if (pixiTextureFailed.has(src)) return null;
         const cached = pixiTextureCache.get(src);
         if (cached) return cached;
 
@@ -169,6 +201,7 @@ export default function PixiRoom({
 
         if (!pixiTextureLoading.has(src)) {
           pixiTextureLoading.add(src);
+          let loadSucceeded = false;
           try {
             const assetsAny = (PIXI as any).Assets;
             const loadPromise: Promise<any> | null = assetsAny && typeof assetsAny.load === 'function' ? assetsAny.load(src) : null;
@@ -176,14 +209,18 @@ export default function PixiRoom({
               loadPromise
                 .then((asset: any) => {
                   const tex = asset instanceof PIXI.Texture ? asset : (asset?.texture instanceof PIXI.Texture ? asset.texture : null);
-                  if (tex) pixiTextureCache.set(src, tex);
+                  if (tex) { pixiTextureCache.set(src, tex); loadSucceeded = true; }
+                  else { pixiTextureFailed.add(src); }
                 })
                 .catch((err: any) => {
                   console.info('[PixiRoom] PIXI.Assets.load failed', src, err);
+                  pixiTextureFailed.add(src);
                 })
                 .finally(() => {
                   pixiTextureLoading.delete(src);
-                  if (!isStale()) {
+                  // Only redraw on success — failure is already represented by missing sprite.
+                  // Redrawing on failure would immediately retry the failed URL → infinite loop.
+                  if (loadSucceeded && !isStale()) {
                     try { draw(); } catch (_) { /* ignore */ }
                   }
                 });
@@ -196,10 +233,12 @@ export default function PixiRoom({
                 return tex;
               } catch (_) {
                 pixiTextureLoading.delete(src);
+                pixiTextureFailed.add(src);
               }
             }
           } catch (_) {
             pixiTextureLoading.delete(src);
+            pixiTextureFailed.add(src);
           }
         }
         return null;
@@ -276,8 +315,11 @@ export default function PixiRoom({
         }
         // ensure container has positioned context
         try { if (containerRef.current) containerRef.current.style.position = containerRef.current.style.position || 'relative'; } catch (_) { /* ignore */ }
-        const width = containerRef.current?.clientWidth || 800;
-        const height = containerRef.current?.clientHeight || 600;
+        // Use layout dimensions as fallback if the container hasn't been laid out yet
+        // (clientWidth/clientHeight === 0). Without this, the canvas renders at 800×600,
+        // overflows its 600×320 container, and blocks pointer events on designer UI below it.
+        const width = containerRef.current?.clientWidth || (layout as any)?.width || 800;
+        const height = containerRef.current?.clientHeight || (layout as any)?.height || 600;
         const dpr = window.devicePixelRatio || 1;
         // ensure canvas backing buffer matches container size (important when reusing an existing canvas)
         try {
@@ -326,39 +368,15 @@ export default function PixiRoom({
           console.info('[PixiRoom] forceCanvas override enabled');
         }
 
-        // Pixi v8 WebGL can crash inside its shader error logging on some stacks
-        // (gl.getShaderSource(...) is null -> .split throws). The most reliable fix
-        // for player mode is to bypass PIXI entirely and use the pure Canvas2D renderer.
-        // Keep PIXI enabled only for editor interactions.
-        const forcePureCanvas = !isEditor;
-        if (forcePureCanvas) {
-          console.info('[PixiRoom] using pure Canvas2D mode for player (skipping PIXI init)');
-        }
+        // PIXI v8 removed the built-in Canvas renderer entirely. The `forceCanvas` option is
+        // silently ignored — `new Application()` always creates a WebGLRenderer which then crashes
+        // inside its shader error logger (`gl.getShaderSource(…)` returns null → `.split()` throws).
+        // The only reliable path is pure Canvas2D for both player and editor modes.
+        // Editor interactions (drag, resize, select) are handled via pointer events on the canvas.
+        const forcePureCanvas = true;
+        console.info('[PixiRoom] using pure Canvas2D mode (PIXI v8 WebGL crashes on this stack)');
 
-        if (!forcePureCanvas) {
-          // Detect WebGL availability WITHOUT touching the real canvas.
-          // Calling `canvas.getContext('webgl')` here can create a context with default attributes
-          // (often without stencil). Pixi will then reuse that context and warn/spam WebGL errors.
-          let supportsWebGL = false;
-          if (!appOptions.forceCanvas) {
-            try {
-              const testCanvas = document.createElement('canvas');
-              supportsWebGL = !!(
-                (testCanvas.getContext && testCanvas.getContext('webgl2', { stencil: true } as any)) ||
-                (testCanvas.getContext && testCanvas.getContext('webgl', { stencil: true } as any))
-              );
-            } catch (_) {
-              supportsWebGL = false;
-            }
-          }
-
-          if (!supportsWebGL || appOptions.forceCanvas) {
-            appOptions.forceCanvas = true;
-            console.info('[PixiRoom] WebGL not detected (or forced off) — forcing Canvas renderer fallback');
-          } else {
-            console.info('[PixiRoom] WebGL detected — using GPU renderer when available');
-          }
-        }
+        // Skip all PIXI init — go straight to Canvas2D setup.
 
         if (!forcePureCanvas) {
           try {
@@ -812,10 +830,8 @@ export default function PixiRoom({
       };
 
       const getFitMode = (): FitMode => {
-        // Designer/editor expects cover so saved coords remain consistent.
-        if (isEditor) return 'cover';
-        // Player view should always show the full room (no crop) so scaling stays
-        // consistent across all screen sizes and hotspot hit-testing remains aligned.
+        // Both editor and player use 'contain' so items appear at the same
+        // positions in the preview as they do during playtest.
         return 'contain';
       };
 
@@ -921,10 +937,14 @@ export default function PixiRoom({
                     const offsetPreviewY = (PREVIEW_H - itemLayoutH * scalePreview) / 2;
                     const mode = getFitMode();
                     const { scale: scaleTarget, offsetX: offsetTargetX, offsetY: offsetTargetY } = computeTransform(itemLayoutW, itemLayoutH, canvasEl.width, canvasEl.height, mode);
-                    const iw = (typeof it.w === 'number' && it.w > 0) ? it.w : 32;
-                    const ih = (typeof it.h === 'number' && it.h > 0) ? it.h : 32;
-                    const itemXInLayout = ((it.x || 0) - offsetPreviewX) / (scalePreview || 1);
-                    const itemYInLayout = ((it.y || 0) - offsetPreviewY) / (scalePreview || 1);
+                    // Use drag-override position if this item is currently being dragged (avoids React re-renders during drag).
+                    const dov = dragOverrideRef.current;
+                    const itX = (dov && dov.id === String(it.id)) ? dov.x : (it.x || 0);
+                    const itY = (dov && dov.id === String(it.id)) ? dov.y : (it.y || 0);
+                    const iw = (dov && dov.id === String(it.id) && dov.w > 0) ? dov.w : ((typeof it.w === 'number' && it.w > 0) ? it.w : 32);
+                    const ih = (dov && dov.id === String(it.id) && dov.h > 0) ? dov.h : ((typeof it.h === 'number' && it.h > 0) ? it.h : 32);
+                    const itemXInLayout = (itX - offsetPreviewX) / (scalePreview || 1);
+                    const itemYInLayout = (itY - offsetPreviewY) / (scalePreview || 1);
                     const ix = Math.floor(offsetTargetX + itemXInLayout * scaleTarget);
                     const iy = Math.floor(offsetTargetY + itemYInLayout * scaleTarget);
                     // Item w/h are stored in Designer preview pixels (600x320). Convert preview-pixels -> layout-units -> target-pixels.
@@ -1036,10 +1056,76 @@ export default function PixiRoom({
                 const y = Math.floor(offsetY + hs.y * scale);
                 const w = Math.max(1, Math.floor(hs.w * scale));
                 const h = Math.max(1, Math.floor(hs.h * scale));
-                // hide hotspot outlines in player view (Designer shows them).
-                // If you want visual debug outlines, restore the strokeRect call here.
+                if (isEditor) {
+                  // Draw hotspot outlines in editor mode
+                  ctx.save();
+                  ctx.strokeStyle = 'rgba(99,102,241,0.7)';
+                  ctx.lineWidth = 1.5;
+                  ctx.setLineDash([4, 3]);
+                  ctx.strokeRect(x, y, w, h);
+                  ctx.setLineDash([]);
+                  if ((hs as any).meta) {
+                    ctx.font = '9px sans-serif';
+                    ctx.fillStyle = 'rgba(200,200,255,0.85)';
+                    ctx.fillText(String((hs as any).meta), x + 2, y + 9);
+                  }
+                  ctx.restore();
+                }
               }
             } catch (_) { /* ignore */ }
+
+            // ── Editor overlay: selection highlight + resize handles ───────────────
+            if (isEditor) {
+              try {
+                const selId = selectedItemIdRef.current;
+                if (selId) {
+                  const selItem = items.find((it: any) => String(it?.id) === selId);
+                  if (selItem) {
+                    const itemLayoutW = effectiveLayoutW;
+                    const itemLayoutH = effectiveLayoutH;
+                    const PREVIEW_W2 = 600;
+                    const PREVIEW_H2 = 320;
+                    const scalePreview = Math.max(PREVIEW_W2 / itemLayoutW, PREVIEW_H2 / itemLayoutH);
+                    const offsetPreviewX = (PREVIEW_W2 - itemLayoutW * scalePreview) / 2;
+                    const offsetPreviewY = (PREVIEW_H2 - itemLayoutH * scalePreview) / 2;
+                    const mode = getFitMode();
+                    const { scale: scaleTarget, offsetX: offsetTargetX, offsetY: offsetTargetY } = computeTransform(itemLayoutW, itemLayoutH, canvasEl.width, canvasEl.height, mode);
+                    const sizeScale = (scaleTarget || 1) / (scalePreview || 1);
+                    // Use live drag position if item is being dragged
+                    const sdov = dragOverrideRef.current;
+                    const selX = (sdov && sdov.id === selId) ? sdov.x : (selItem.x || 0);
+                    const selY = (sdov && sdov.id === selId) ? sdov.y : (selItem.y || 0);
+                    const siw = (sdov && sdov.id === selId && sdov.w > 0) ? sdov.w : ((typeof selItem.w === 'number' && selItem.w > 0) ? selItem.w : 32);
+                    const sih = (sdov && sdov.id === selId && sdov.h > 0) ? sdov.h : ((typeof selItem.h === 'number' && selItem.h > 0) ? selItem.h : 32);
+                    const sx = Math.floor(offsetTargetX + (selX - offsetPreviewX) / (scalePreview || 1) * scaleTarget);
+                    const sy = Math.floor(offsetTargetY + (selY - offsetPreviewY) / (scalePreview || 1) * scaleTarget);
+                    const sw = Math.max(1, Math.floor(siw * sizeScale));
+                    const sh = Math.max(1, Math.floor(sih * sizeScale));
+                    // Selection outline
+                    ctx.save();
+                    ctx.strokeStyle = '#6366f1';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(sx, sy, sw, sh);
+                    // Resize handles (8×8 white squares at corners)
+                    const HS = 8;
+                    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                    ctx.strokeStyle = 'rgba(51,51,51,0.7)';
+                    ctx.lineWidth = 1;
+                    const corners = [
+                      [sx - HS / 2, sy - HS / 2],
+                      [sx + sw - HS / 2, sy - HS / 2],
+                      [sx - HS / 2, sy + sh - HS / 2],
+                      [sx + sw - HS / 2, sy + sh - HS / 2],
+                    ];
+                    for (const [cx, cy] of corners) {
+                      ctx.fillRect(cx, cy, HS, HS);
+                      ctx.strokeRect(cx, cy, HS, HS);
+                    }
+                    ctx.restore();
+                  }
+                }
+              } catch (_) { /* ignore */ }
+            }
           } catch (err) {
             console.error('[PixiRoom] pure-canvas draw failed', err);
           }
@@ -1063,6 +1149,10 @@ export default function PixiRoom({
         (appInst.stage as any).hitArea = (appInst as any).screen;
       } catch (_) { /* ignore */ }
       appInst.stage.removeChildren();
+      // Clear accumulated stage event listeners from previous draw() calls.
+      // Without this every draw() call (triggered by texture loads, selection changes, etc.)
+      // stacks another set of pointermove/pointerup handlers per item → N² callbacks per event.
+      try { (appInst.stage as any).removeAllListeners?.(); } catch (_) { /* ignore */ }
 
       // background
       if (layout.backgroundUrl) {
@@ -1226,35 +1316,48 @@ export default function PixiRoom({
                   }
                   try { (sprShadow as any).tint = 0x000000; } catch (_) { /* ignore */ }
                   sprShadow.alpha = 0;
-                  try { sprShadow.filters = [new PIXI.BlurFilter({ strength: 6, quality: 3 })]; } catch (_) { sprShadow.filters = []; }
+                  // Skip expensive BlurFilter in editor — keeps each draw() call fast.
+                  if (!isEditor) {
+                    try { sprShadow.filters = [new PIXI.BlurFilter({ strength: 6, quality: 3 })]; } catch (_) { sprShadow.filters = []; }
+                  }
                   try { (sprShadow as any).zIndex = sortedIdx * 2; } catch (_) { /* ignore */ }
                   try { (sprIt as any).zIndex = sortedIdx * 2 + 1; } catch (_) { /* ignore */ }
                   appInst.stage.addChild(sprShadow);
-                  // Fade shadow in sync with the main sprite
-                  const shadowFadeTick = () => {
-                    sprShadow.alpha = sprIt.alpha * 0.55 * visualAlpha;
-                  };
-                  try { appInst.ticker.add(shadowFadeTick); } catch (_) { sprShadow.alpha = 0.55 * visualAlpha; }
-                  // Clean up shadow ticker when main sprite fades in
-                  const origFadeTickRemover = () => {
-                    try { appInst.ticker.remove(shadowFadeTick); } catch (_) { /* ignore */ }
-                  };
-                  setTimeout(origFadeTickRemover, 1500);
-                } catch (_) { /* shadow not critical */ }
-                const transitionMsRaw = Number((it as any)?.properties?.stateTransitionMs);
-                const transitionMs = Number.isFinite(transitionMsRaw) && transitionMsRaw > 0
-                  ? Math.min(1200, Math.max(80, Math.floor(transitionMsRaw)))
-                  : 180;
-                const fadeStart = performance.now();
-                sprIt.alpha = 0;
-                const fadeTick = () => {
-                  const t = Math.max(0, Math.min(1, (performance.now() - fadeStart) / transitionMs));
-                  sprIt.alpha = visualAlpha * t;
-                  if (t >= 1) {
-                    try { appInst.ticker.remove(fadeTick); } catch (_) { /* ignore */ }
+                  if (!isEditor) {
+                    // Player: fade shadow in sync with the main sprite via ticker
+                    const shadowFadeTick = () => {
+                      sprShadow.alpha = sprIt.alpha * 0.55 * visualAlpha;
+                    };
+                    try { appInst.ticker.add(shadowFadeTick); } catch (_) { sprShadow.alpha = 0.55 * visualAlpha; }
+                    const origFadeTickRemover = () => {
+                      try { appInst.ticker.remove(shadowFadeTick); } catch (_) { /* ignore */ }
+                    };
+                    setTimeout(origFadeTickRemover, 1500);
+                  } else {
+                    // Editor: set shadow alpha immediately, no ticker needed
+                    sprShadow.alpha = 0.55 * visualAlpha;
                   }
-                };
-                try { appInst.ticker.add(fadeTick); } catch (_) { sprIt.alpha = 1; }
+                } catch (_) { /* shadow not critical */ }
+                if (isEditor) {
+                  // Editor: no fade animation — display items immediately at full opacity.
+                  sprIt.alpha = visualAlpha;
+                } else {
+                  // Player: fade-in animation via ticker
+                  const transitionMsRaw = Number((it as any)?.properties?.stateTransitionMs);
+                  const transitionMs = Number.isFinite(transitionMsRaw) && transitionMsRaw > 0
+                    ? Math.min(1200, Math.max(80, Math.floor(transitionMsRaw)))
+                    : 180;
+                  const fadeStart = performance.now();
+                  sprIt.alpha = 0;
+                  const fadeTick = () => {
+                    const t = Math.max(0, Math.min(1, (performance.now() - fadeStart) / transitionMs));
+                    sprIt.alpha = visualAlpha * t;
+                    if (t >= 1) {
+                      try { appInst.ticker.remove(fadeTick); } catch (_) { /* ignore */ }
+                    }
+                  };
+                  try { appInst.ticker.add(fadeTick); } catch (_) { sprIt.alpha = 1; }
+                }
                 // use sorted index so Designer ordering is preserved
                 try { (sprIt as any).zIndex = sortedIdx; } catch (_) { /* ignore */ }
 
@@ -1290,6 +1393,185 @@ export default function PixiRoom({
                     // ignore
                   }
                 }
+
+                // Editor item interaction: drag, resize, select
+                if (isEditor) {
+                  try {
+                    const itemId = String(it?.id);
+                    (sprIt as any).eventMode = 'static';
+                    (sprIt as any).cursor = 'move';
+
+                    // Helper: convert canvas center coords back to preview-space top-left coords
+                    const toPreview = (cx: number, cy: number, cw: number, ch: number) => {
+                      const tlX = cx - cw / 2;
+                      const tlY = cy - ch / 2;
+                      const lx = (tlX - offsetTargetX) / (scaleTarget || 1);
+                      const ly = (tlY - offsetTargetY) / (scaleTarget || 1);
+                      const px = lx * (scalePreview || 1) + offsetPreviewX;
+                      const py = ly * (scalePreview || 1) + offsetPreviewY;
+                      const pw = (cw / (scaleTarget || 1)) * (scalePreview || 1);
+                      const ph = (ch / (scaleTarget || 1)) * (scalePreview || 1);
+                      return { px, py, pw, ph };
+                    };
+
+                    // Selection outline
+                    const selOutline = new PIXI.Graphics();
+                    const drawSelOutline = (w: number, h: number) => {
+                      selOutline.clear();
+                      if (selectedItemIdRef.current === itemId) {
+                        selOutline.lineStyle(2, 0x6366f1, 1.0);
+                        selOutline.drawRect(-w / 2, -h / 2, w, h);
+                      }
+                    };
+                    drawSelOutline(scaledW, scaledH);
+                    selOutline.x = sprIt.x;
+                    selOutline.y = sprIt.y;
+                    try { (selOutline as any).zIndex = sortedIdx * 2 + 2; } catch (_) { /* ignore */ }
+                    appInst.stage.addChild(selOutline);
+
+                    // Resize handles
+                    const HS = 10;
+                    const makeItemHandle = (cur: string) => {
+                      const h = new PIXI.Graphics();
+                      h.beginFill(0xffffff, 0.9);
+                      h.lineStyle(1, 0x333333, 0.7);
+                      h.drawRect(0, 0, HS, HS);
+                      h.endFill();
+                      (h as any).eventMode = 'static';
+                      (h as any).cursor = cur;
+                      h.visible = false;
+                      return h;
+                    };
+                    const hNW = makeItemHandle('nwse-resize');
+                    const hNE = makeItemHandle('nesw-resize');
+                    const hSW = makeItemHandle('nesw-resize');
+                    const hSE = makeItemHandle('nwse-resize');
+                    const posItemHandles = (cx: number, cy: number, cw: number, ch: number) => {
+                      hNW.x = cx - cw / 2 - HS / 2; hNW.y = cy - ch / 2 - HS / 2;
+                      hNE.x = cx + cw / 2 - HS / 2; hNE.y = cy - ch / 2 - HS / 2;
+                      hSW.x = cx - cw / 2 - HS / 2; hSW.y = cy + ch / 2 - HS / 2;
+                      hSE.x = cx + cw / 2 - HS / 2; hSE.y = cy + ch / 2 - HS / 2;
+                    };
+                    posItemHandles(sprIt.x, sprIt.y, scaledW, scaledH);
+                    const showHandles = (v: boolean) => { hNW.visible = hNE.visible = hSW.visible = hSE.visible = v; };
+                    try { [hNW, hNE, hSW, hSE].forEach(h => { (h as any).zIndex = 99998; appInst.stage.addChild(h); }); } catch (_) { /* ignore */ }
+
+                    // Drag state
+                    let itemDragging = false;
+                    let itemResizing: { handle: 'nw'|'ne'|'sw'|'se'; startCX: number; startCY: number; startCW: number; startCH: number; pointerStartX: number; pointerStartY: number } | null = null;
+                    let itemDownPos = { x: 0, y: 0 };
+                    let itemDownTime = 0;
+                    let currSprCX = sprIt.x;
+                    let currSprCY = sprIt.y;
+                    let currSprCW = scaledW;
+                    let currSprCH = scaledH;
+
+                    sprIt.on('pointerover', () => {
+                      if (selectedItemIdRef.current === itemId) showHandles(true);
+                    });
+                    sprIt.on('pointerout', () => {
+                      if (!itemDragging && !itemResizing) showHandles(false);
+                    });
+
+                    sprIt.on('pointerdown', (event: any) => {
+                      itemDragging = true;
+                      const gx = event?.global?.x ?? event?.data?.global?.x ?? 0;
+                      const gy = event?.global?.y ?? event?.data?.global?.y ?? 0;
+                      itemDownPos = { x: gx, y: gy };
+                      itemDownTime = Date.now();
+                      (sprIt as any)._itemDragOffX = gx - currSprCX;
+                      (sprIt as any)._itemDragOffY = gy - currSprCY;
+                    });
+
+                    sprIt.on('pointermove', (event: any) => {
+                      if (!itemDragging || itemResizing) return;
+                      const gx = event?.global?.x ?? event?.data?.global?.x ?? 0;
+                      const gy = event?.global?.y ?? event?.data?.global?.y ?? 0;
+                      currSprCX = gx - ((sprIt as any)._itemDragOffX || 0);
+                      currSprCY = gy - ((sprIt as any)._itemDragOffY || 0);
+                      sprIt.x = currSprCX;
+                      sprIt.y = currSprCY;
+                      selOutline.x = currSprCX;
+                      selOutline.y = currSprCY;
+                      posItemHandles(currSprCX, currSprCY, currSprCW, currSprCH);
+                      try { (appInst as any).renderer.render(appInst.stage); } catch (_) { /* ignore */ }
+                    });
+
+                    sprIt.on('pointerup', () => {
+                      if (!itemDragging) return;
+                      itemDragging = false;
+                      const gx = sprIt.x;
+                      const moved = Math.hypot(gx - itemDownPos.x, sprIt.y - itemDownPos.y);
+                      const dt = Date.now() - itemDownTime;
+                      if (moved < 5 && dt < 400) {
+                        const fn = onItemSelectRef.current;
+                        if (typeof fn === 'function') fn(itemId);
+                        showHandles(true);
+                      } else {
+                        const { px, py } = toPreview(currSprCX, currSprCY, currSprCW, currSprCH);
+                        const fn = onItemMoveRef.current;
+                        if (typeof fn === 'function') fn(itemId, Math.round(px), Math.round(py));
+                      }
+                    });
+                    sprIt.on('pointerupoutside', () => {
+                      if (!itemDragging) return;
+                      itemDragging = false;
+                      const { px, py } = toPreview(currSprCX, currSprCY, currSprCW, currSprCH);
+                      const fn = onItemMoveRef.current;
+                      if (typeof fn === 'function') fn(itemId, Math.round(px), Math.round(py));
+                    });
+
+                    // Resize handle logic
+                    const startItemResize = (handle: 'nw'|'ne'|'sw'|'se') => (event: any) => {
+                      event.stopPropagation?.();
+                      const px = event?.global?.x ?? event?.data?.global?.x ?? 0;
+                      const py = event?.global?.y ?? event?.data?.global?.y ?? 0;
+                      itemResizing = { handle, startCX: currSprCX, startCY: currSprCY, startCW: currSprCW, startCH: currSprCH, pointerStartX: px, pointerStartY: py };
+                    };
+                    hNW.on('pointerdown', startItemResize('nw'));
+                    hNE.on('pointerdown', startItemResize('ne'));
+                    hSW.on('pointerdown', startItemResize('sw'));
+                    hSE.on('pointerdown', startItemResize('se'));
+
+                    appInst.stage.on('pointermove', (event: any) => {
+                      if (!itemResizing) return;
+                      const rs = itemResizing;
+                      const gx = event?.global?.x ?? event?.data?.global?.x ?? 0;
+                      const gy = event?.global?.y ?? event?.data?.global?.y ?? 0;
+                      const dx = gx - rs.pointerStartX;
+                      const dy = gy - rs.pointerStartY;
+                      const minS = 8;
+                      let newCW = rs.startCW, newCH = rs.startCH, newCX = rs.startCX, newCY = rs.startCY;
+                      if (rs.handle === 'se') { newCW = Math.max(minS, rs.startCW + dx); newCH = Math.max(minS, rs.startCH + dy); }
+                      else if (rs.handle === 'sw') { newCW = Math.max(minS, rs.startCW - dx); newCH = Math.max(minS, rs.startCH + dy); newCX = rs.startCX + (rs.startCW - newCW) / 2; }
+                      else if (rs.handle === 'ne') { newCW = Math.max(minS, rs.startCW + dx); newCH = Math.max(minS, rs.startCH - dy); newCY = rs.startCY + (rs.startCH - newCH) / 2; }
+                      else if (rs.handle === 'nw') { newCW = Math.max(minS, rs.startCW - dx); newCH = Math.max(minS, rs.startCH - dy); newCX = rs.startCX + (rs.startCW - newCW) / 2; newCY = rs.startCY + (rs.startCH - newCH) / 2; }
+                      currSprCX = newCX; currSprCY = newCY; currSprCW = newCW; currSprCH = newCH;
+                      sprIt.x = newCX; sprIt.y = newCY;
+                      sprIt.width = newCW; sprIt.height = newCH;
+                      selOutline.x = newCX; selOutline.y = newCY;
+                      drawSelOutline(newCW, newCH);
+                      posItemHandles(newCX, newCY, newCW, newCH);
+                      try { (appInst as any).renderer.render(appInst.stage); } catch (_) { /* ignore */ }
+                    });
+
+                    appInst.stage.on('pointerup', () => {
+                      if (!itemResizing) return;
+                      const { px, py, pw, ph } = toPreview(currSprCX, currSprCY, currSprCW, currSprCH);
+                      const fn = onItemResizeRef.current;
+                      if (typeof fn === 'function') fn(itemId, Math.round(px), Math.round(py), Math.max(8, Math.round(pw)), Math.max(8, Math.round(ph)));
+                      itemResizing = null;
+                    });
+                    appInst.stage.on('pointerupoutside', () => {
+                      if (!itemResizing) return;
+                      const { px, py, pw, ph } = toPreview(currSprCX, currSprCY, currSprCW, currSprCH);
+                      const fn = onItemResizeRef.current;
+                      if (typeof fn === 'function') fn(itemId, Math.round(px), Math.round(py), Math.max(8, Math.round(pw)), Math.max(8, Math.round(ph)));
+                      itemResizing = null;
+                    });
+
+                  } catch (_) { /* ignore item interaction setup errors */ }
+                }
                 appInst.stage.addChild(sprIt);
               } catch (_) { /* ignore per-item errors */ }
             }
@@ -1322,6 +1604,19 @@ export default function PixiRoom({
       // hotspots (now container-based for smooth dragging)
       // ensure stage supports zIndex sorting so hotspots with high zIndex sit above items
       try { appInst.stage.sortableChildren = true; } catch (_) { /* ignore */ }
+
+      // Editor: click on empty stage background = deselect item
+      if (isEditor) {
+        try {
+          (appInst.stage as any).on('pointerdown', (event: any) => {
+            // Only fire if the event target is the stage itself (not a child)
+            if (event?.target === appInst.stage) {
+              const fn = onItemSelectRef.current;
+              if (typeof fn === 'function') fn(null);
+            }
+          });
+        } catch (_) { /* ignore */ }
+      }
       const { w: effLayoutW, h: effLayoutH } = resolveLayoutSize();
       const hsNorm = normalizeHotspotsToLayout(hotspotsRef.current || [], effLayoutW, effLayoutH);
       for (const hs of hsNorm || []) {
@@ -1666,6 +1961,253 @@ export default function PixiRoom({
     drawFnRef.current = draw;
     try { draw(); } catch (err) { console.error('[PixiRoom] draw() failed', err); }
 
+    // ── Editor Canvas2D pointer events (drag, resize, select for items & hotspots) ──
+    let editorPointerDown: ((ev: PointerEvent) => void) | null = null;
+    let editorPointerMove: ((ev: PointerEvent) => void) | null = null;
+    let editorPointerUp: ((ev: PointerEvent) => void) | null = null;
+    if (isEditor) {
+      const targetCanvas = createdCanvasRef.current || createdCanvasLocal;
+      if (targetCanvas) {
+        // Drag/resize state
+        let dragState: {
+          type: 'item-move' | 'item-resize' | 'hotspot-move' | 'hotspot-resize';
+          id: string;
+          startPreviewX: number;
+          startPreviewY: number;
+          startObjX: number;
+          startObjY: number;
+          startObjW: number;
+          startObjH: number;
+          corner?: 'nw' | 'ne' | 'sw' | 'se';
+        } | null = null;
+        let downTime = 0;
+        let downPreviewPos = { x: 0, y: 0 };
+
+        /** Convert client pointer coordinates to preview-space (600×320) coordinates
+         *  using the same transform pipeline as draw() — inverted. */
+        const clientToPreview = (clientX: number, clientY: number): { px: number; py: number } | null => {
+          const rect = targetCanvas.getBoundingClientRect();
+          if (!rect.width || !rect.height) return null;
+          const dpr = window.devicePixelRatio || 1;
+          // Client → canvas backing-store pixels
+          const canvasX = ((clientX - rect.left) / rect.width) * targetCanvas.width;
+          const canvasY = ((clientY - rect.top) / rect.height) * targetCanvas.height;
+          // Layout dimensions & transforms (same as draw())
+          const { w: lw, h: lh } = resolveLayoutSize();
+          const mode = getFitMode();
+          const { scale: scaleTarget, offsetX: offTX, offsetY: offTY } = computeTransform(lw, lh, targetCanvas.width, targetCanvas.height, mode);
+          // Canvas → layout coords
+          const layoutX = (canvasX - offTX) / (scaleTarget || 1);
+          const layoutY = (canvasY - offTY) / (scaleTarget || 1);
+          // Layout → preview coords
+          const scalePreview = Math.max(PREVIEW_W / lw, PREVIEW_H / lh);
+          const offPX = (PREVIEW_W - lw * scalePreview) / 2;
+          const offPY = (PREVIEW_H - lh * scalePreview) / 2;
+          const px = layoutX * scalePreview + offPX;
+          const py = layoutY * scalePreview + offPY;
+          return { px, py };
+        };
+
+        const HS = 8; // resize handle size in preview coords
+
+        /** Hit-test: find item at preview coords (top-most first). */
+        const hitTestItem = (px: number, py: number): { id: string; x: number; y: number; w: number; h: number } | null => {
+          const items = Array.isArray((layout as any)?.items) ? (layout as any).items : [];
+          // Iterate reverse for top-most (last drawn) first
+          for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            if (!it?.id) continue;
+            const ix = it.x ?? 0;
+            const iy = it.y ?? 0;
+            const iw = (typeof it.w === 'number' && it.w > 0) ? it.w : 32;
+            const ih = (typeof it.h === 'number' && it.h > 0) ? it.h : 32;
+            if (px >= ix && px <= ix + iw && py >= iy && py <= iy + ih) {
+              return { id: String(it.id), x: ix, y: iy, w: iw, h: ih };
+            }
+          }
+          return null;
+        };
+
+        /** Hit-test resize handle of selected item. Returns corner if hit, null otherwise. */
+        const hitTestResizeHandle = (px: number, py: number): 'nw' | 'ne' | 'sw' | 'se' | null => {
+          const selId = selectedItemIdRef.current;
+          if (!selId) return null;
+          const items = Array.isArray((layout as any)?.items) ? (layout as any).items : [];
+          const selItem = items.find((it: any) => String(it?.id) === selId);
+          if (!selItem) return null;
+          const sx = selItem.x ?? 0;
+          const sy = selItem.y ?? 0;
+          const sw = (typeof selItem.w === 'number' && selItem.w > 0) ? selItem.w : 32;
+          const sh = (typeof selItem.h === 'number' && selItem.h > 0) ? selItem.h : 32;
+          const corners: Array<{ corner: 'nw' | 'ne' | 'sw' | 'se'; cx: number; cy: number }> = [
+            { corner: 'nw', cx: sx, cy: sy },
+            { corner: 'ne', cx: sx + sw, cy: sy },
+            { corner: 'sw', cx: sx, cy: sy + sh },
+            { corner: 'se', cx: sx + sw, cy: sy + sh },
+          ];
+          for (const c of corners) {
+            if (Math.abs(px - c.cx) <= HS && Math.abs(py - c.cy) <= HS) return c.corner;
+          }
+          return null;
+        };
+
+        /** Hit-test hotspot at preview coords. */
+        const hitTestHotspot = (px: number, py: number): { id: string; x: number; y: number; w: number; h: number } | null => {
+          const zones = hotspotsRef.current || [];
+          for (let i = zones.length - 1; i >= 0; i--) {
+            const z = zones[i];
+            if (!z?.id) continue;
+            if (px >= z.x && px <= z.x + z.w && py >= z.y && py <= z.y + z.h) {
+              return { id: z.id, x: z.x, y: z.y, w: z.w, h: z.h };
+            }
+          }
+          return null;
+        };
+
+        editorPointerDown = (ev: PointerEvent) => {
+          const p = clientToPreview(ev.clientX, ev.clientY);
+          if (!p) return;
+          downTime = Date.now();
+          downPreviewPos = { x: p.px, y: p.py };
+
+          // 1. Check resize handles on selected item first
+          const resizeCorner = hitTestResizeHandle(p.px, p.py);
+          if (resizeCorner) {
+            const selId = selectedItemIdRef.current!;
+            const items = Array.isArray((layout as any)?.items) ? (layout as any).items : [];
+            const selItem = items.find((it: any) => String(it?.id) === selId);
+            if (selItem) {
+              dragState = {
+                type: 'item-resize',
+                id: selId,
+                startPreviewX: p.px,
+                startPreviewY: p.py,
+                startObjX: selItem.x ?? 0,
+                startObjY: selItem.y ?? 0,
+                startObjW: (typeof selItem.w === 'number' && selItem.w > 0) ? selItem.w : 32,
+                startObjH: (typeof selItem.h === 'number' && selItem.h > 0) ? selItem.h : 32,
+                corner: resizeCorner,
+              };
+              targetCanvas.setPointerCapture(ev.pointerId);
+              ev.preventDefault();
+              return;
+            }
+          }
+
+          // 2. Check item hit
+          const itemHit = hitTestItem(p.px, p.py);
+          if (itemHit) {
+            dragState = {
+              type: 'item-move',
+              id: itemHit.id,
+              startPreviewX: p.px,
+              startPreviewY: p.py,
+              startObjX: itemHit.x,
+              startObjY: itemHit.y,
+              startObjW: itemHit.w,
+              startObjH: itemHit.h,
+            };
+            targetCanvas.setPointerCapture(ev.pointerId);
+            ev.preventDefault();
+            return;
+          }
+
+          // 3. Check hotspot hit
+          const hsHit = hitTestHotspot(p.px, p.py);
+          if (hsHit) {
+            dragState = {
+              type: 'hotspot-move',
+              id: hsHit.id,
+              startPreviewX: p.px,
+              startPreviewY: p.py,
+              startObjX: hsHit.x,
+              startObjY: hsHit.y,
+              startObjW: hsHit.w,
+              startObjH: hsHit.h,
+            };
+            targetCanvas.setPointerCapture(ev.pointerId);
+            ev.preventDefault();
+            return;
+          }
+
+          // 4. Click on empty space → deselect
+          const fn = onItemSelectRef.current;
+          if (typeof fn === 'function') fn(null);
+        };
+
+        editorPointerMove = (ev: PointerEvent) => {
+          if (!dragState) return;
+          const p = clientToPreview(ev.clientX, ev.clientY);
+          if (!p) return;
+          const dx = p.px - dragState.startPreviewX;
+          const dy = p.py - dragState.startPreviewY;
+
+          if (dragState.type === 'item-move') {
+            // Update the local override immediately — this redraws without any React state update, keeping drag silky smooth.
+            dragOverrideRef.current = {
+              id: dragState.id,
+              x: Math.round(dragState.startObjX + dx),
+              y: Math.round(dragState.startObjY + dy),
+              w: dragState.startObjW,
+              h: dragState.startObjH,
+            };
+            try { drawFnRef.current?.(); } catch (_) { /* ignore */ }
+          } else if (dragState.type === 'item-resize') {
+            const c = dragState.corner!;
+            let nx = dragState.startObjX;
+            let ny = dragState.startObjY;
+            let nw = dragState.startObjW;
+            let nh = dragState.startObjH;
+            if (c === 'se') { nw = Math.max(8, dragState.startObjW + dx); nh = Math.max(8, dragState.startObjH + dy); }
+            else if (c === 'sw') { nw = Math.max(8, dragState.startObjW - dx); nh = Math.max(8, dragState.startObjH + dy); nx = dragState.startObjX + (dragState.startObjW - nw); }
+            else if (c === 'ne') { nw = Math.max(8, dragState.startObjW + dx); nh = Math.max(8, dragState.startObjH - dy); ny = dragState.startObjY + (dragState.startObjH - nh); }
+            else if (c === 'nw') { nw = Math.max(8, dragState.startObjW - dx); nh = Math.max(8, dragState.startObjH - dy); nx = dragState.startObjX + (dragState.startObjW - nw); ny = dragState.startObjY + (dragState.startObjH - nh); }
+            dragOverrideRef.current = { id: dragState.id, x: Math.round(nx), y: Math.round(ny), w: Math.round(nw), h: Math.round(nh) };
+            try { drawFnRef.current?.(); } catch (_) { /* ignore */ }
+          } else if (dragState.type === 'hotspot-move') {
+            const fn = onHotspotMove;
+            if (typeof fn === 'function') {
+              fn(dragState.id, Math.round(dragState.startObjX + dx), Math.round(dragState.startObjY + dy));
+            }
+          }
+        };
+
+        editorPointerUp = (ev: PointerEvent) => {
+          if (!dragState) return;
+          const p = clientToPreview(ev.clientX, ev.clientY);
+          const moved = p ? Math.hypot(p.px - downPreviewPos.x, p.py - downPreviewPos.y) : 0;
+          const elapsed = Date.now() - downTime;
+
+          // Commit final position to React state (single update on release, not on every move).
+          const ov = dragOverrideRef.current;
+          if (ov && dragState.type === 'item-move') {
+            const fn = onItemMoveRef.current;
+            if (typeof fn === 'function') fn(ov.id, ov.x, ov.y);
+          } else if (ov && dragState.type === 'item-resize') {
+            const fn = onItemResizeRef.current;
+            if (typeof fn === 'function') fn(ov.id, ov.x, ov.y, ov.w, ov.h);
+          }
+          dragOverrideRef.current = null;
+
+          // If barely moved and quick — treat as click (select)
+          if (moved < 5 && elapsed < 400 && (dragState.type === 'item-move' || dragState.type === 'item-resize')) {
+            const fn = onItemSelectRef.current;
+            if (typeof fn === 'function') fn(dragState.id);
+          }
+
+          try { targetCanvas.releasePointerCapture(ev.pointerId); } catch (_) { /* ignore */ }
+          dragState = null;
+        };
+
+        targetCanvas.addEventListener('pointerdown', editorPointerDown);
+        targetCanvas.addEventListener('pointermove', editorPointerMove);
+        targetCanvas.addEventListener('pointerup', editorPointerUp);
+        targetCanvas.addEventListener('pointercancel', editorPointerUp);
+        targetCanvas.style.cursor = 'default';
+        targetCanvas.style.touchAction = 'none'; // prevent scroll interference
+      }
+    }
+
     // Diagnostic pixel reads removed: extract.canvas can allocate huge buffers and break WebGL contexts.
 
     const resizeObserver = new ResizeObserver(() => {
@@ -1714,6 +2256,15 @@ export default function PixiRoom({
     if (containerRef.current) resizeObserver.observe(containerRef.current);
 
         cleanup = () => {
+          // Remove editor pointer event handlers
+          try {
+            const tc = createdCanvasRef.current;
+            if (tc) {
+              if (editorPointerDown) tc.removeEventListener('pointerdown', editorPointerDown);
+              if (editorPointerMove) tc.removeEventListener('pointermove', editorPointerMove);
+              if (editorPointerUp) { tc.removeEventListener('pointerup', editorPointerUp); tc.removeEventListener('pointercancel', editorPointerUp); }
+            }
+          } catch (_) { /* ignore */ }
           try {
             resizeObserver.disconnect();
           } catch (err) {

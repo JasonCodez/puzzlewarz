@@ -108,6 +108,7 @@ export async function GET(
       outro: escapeRoomData?.outro || undefined,
       scenes,
       userSpecialties: [], // Not implemented yet
+      isPublished: er.puzzle?.isActive ?? false,
     });
   } catch (error) {
     console.error('[ESCAPE ROOM DESIGNER GET] Failed to load escape room designer payload', error);
@@ -265,5 +266,33 @@ export async function PUT(
   } catch (error) {
     console.error('[ESCAPE ROOM DESIGNER UPDATE] Failed to update escape room designer payload', error);
     return NextResponse.json({ error: 'Failed to update escape room' }, { status: 500 });
+  }
+}
+
+// PATCH: Publish or unpublish the escape room (toggle puzzle.isActive)
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> } | { params: { id: string } }
+) {
+  try {
+    const admin = await requireAdminUser();
+    if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+    const resolved = params instanceof Promise ? await params : params;
+    const escapeRoomId = resolved.id;
+    if (!escapeRoomId) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+    const { publish } = await req.json() as { publish: boolean };
+    if (typeof publish !== 'boolean') return NextResponse.json({ error: 'publish must be a boolean' }, { status: 400 });
+
+    const er = await prisma.escapeRoomPuzzle.findUnique({ where: { id: escapeRoomId }, select: { puzzleId: true } });
+    if (!er?.puzzleId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    await prisma.puzzle.update({ where: { id: er.puzzleId }, data: { isActive: publish } });
+
+    return NextResponse.json({ success: true, isPublished: publish });
+  } catch (error) {
+    console.error('[ESCAPE ROOM DESIGNER PUBLISH] Failed to toggle publish state', error);
+    return NextResponse.json({ error: 'Failed to update publish state' }, { status: 500 });
   }
 }

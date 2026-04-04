@@ -165,7 +165,7 @@ export default function CreateForumPostPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="px-6 py-3 bg-gradient-to-r from-[#3891A6] to-[#FDE74C] hover:from-[#2a7f8f] hover:to-[#FDE74C] disabled:from-gray-500 disabled:to-gray-500 text-white font-semibold rounded-lg transition-all"
+                className="px-6 py-3 bg-[#3891A6] hover:bg-[#2a7f8f] disabled:bg-zinc-600 disabled:text-zinc-400 text-[#020202] font-semibold rounded-lg transition-colors"
               >
                 {loading ? "Creating..." : "Create Post"}
               </button>

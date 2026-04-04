@@ -120,7 +120,6 @@ export default function PublicProfilePage() {
     }
 
     try {
-      console.log("Fetching profile for userId:", userId);
       const response = await fetch(`/api/users/${userId}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

@@ -503,7 +503,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
       <Navbar />
 
       {/* Header */}
-      <div className="pt-24 pb-8 md:pb-16 px-4" style={{ backgroundImage: 'linear-gradient(135deg, rgba(56, 145, 166, 0.1) 0%, rgba(253, 231, 76, 0.05) 100%)' }}>
+      <div className="hero-bg pt-24 pb-8 md:pb-16 px-4" style={{ backgroundImage: 'linear-gradient(160deg, rgba(56,145,166,0.12) 0%, rgba(2,2,2,0) 60%, rgba(253,231,76,0.04) 100%)' }}>
         <div className="max-w-7xl mx-auto">
           <h1 className="text-3xl md:text-5xl font-bold text-white mb-4">Puzzles</h1>
           <p style={{ color: '#DDDBF1' }}>Tackle challenges at your own pace. Win points solo or team up for collaborative solving</p>
@@ -533,7 +533,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
 
           {/* Category Filters */}
           <div className="mt-6 mb-8">
-            <h3 className="text-sm font-semibold mb-3" style={{ color: '#FDE74C' }}>CATEGORIES</h3>
+            <h3 className="text-xs font-bold tracking-widest mb-3 uppercase" style={{ color: '#6baabb' }}>Categories</h3>
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setSelectedCategory("all")}
@@ -725,12 +725,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   <div
                     id={`puzzle-${puzzle.id}`}
                     key={puzzle.id}
-                    className="group rounded-lg border p-6 transition-all duration-300"
+                    className="group rounded-xl border p-6 transition-all duration-300"
                     style={{
-                      backgroundColor: 'rgba(170, 40, 40, 0.06)',
-                      borderColor: '#EF4444',
+                      backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                      borderColor: 'rgba(239,68,68,0.35)',
                       borderWidth: '1px',
-                      opacity: 0.6,
+                      opacity: 0.65,
                       cursor: 'not-allowed'
                     }}
                   >
@@ -789,13 +789,17 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   key={puzzle.id}
                   role="button"
                   onClick={() => handlePuzzleClick(puzzle)}
-                  className="group rounded-lg border p-6 transition-all duration-300 hover:scale-105"
+                  className="group rounded-xl border p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
                   style={{
-                    backgroundColor: 'rgba(56, 145, 166, 0.08)',
-                    borderColor: '#3891A6',
+                    backgroundColor: 'rgba(56, 145, 166, 0.06)',
+                    borderColor: 'rgba(56,145,166,0.28)',
                     borderWidth: '1px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    boxShadow: '0 0 0 0 transparent',
+                    transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s',
                   }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#3891A6'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(56,145,166,0.15)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(56,145,166,0.28)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 0 0 0 transparent'; }}
                 >
                   <div className="mb-4">
                     <div className="flex justify-between items-start mb-2">
@@ -886,12 +890,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   <div
                     id={`puzzle-${puzzle.id}`}
                     key={puzzle.id}
-                    className="group rounded-lg border p-4 transition-all duration-300 block"
+                    className="group rounded-xl border p-4 transition-all duration-300 block"
                     style={{
-                      backgroundColor: 'rgba(170, 40, 40, 0.04)',
-                      borderColor: '#EF4444',
+                      backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                      borderColor: 'rgba(239,68,68,0.35)',
                       borderWidth: '1px',
-                      opacity: 0.8,
+                      opacity: 0.7,
                       cursor: 'not-allowed'
                     }}
                   >
@@ -935,12 +939,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                 <div
                   id={`puzzle-${puzzle.id}`}
                   key={puzzle.id}
-                  className="group rounded-lg border p-4 transition-all duration-300 block"
+                  className="group rounded-xl border p-4 transition-all duration-300 block"
                   style={{
-                    backgroundColor: 'rgba(56, 145, 166, 0.08)',
-                    borderColor: '#3891A6',
+                    backgroundColor: 'rgba(56, 145, 166, 0.05)',
+                    borderColor: 'rgba(56,145,166,0.25)',
                     borderWidth: '1px',
-                    opacity: 0.6,
+                    opacity: 0.62,
                     cursor: 'not-allowed'
                   }}
                 >
@@ -1024,10 +1028,10 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   key={puzzle.id}
                   role="button"
                   onClick={() => handlePuzzleClick(puzzle)}
-                  className="group rounded-lg border p-4 transition-all duration-300 hover:translate-x-2 block"
+                  className="group rounded-xl border p-4 transition-all duration-300 hover:translate-x-1 block"
                   style={{
-                    backgroundColor: 'rgba(56, 145, 166, 0.08)',
-                    borderColor: '#3891A6',
+                    backgroundColor: 'rgba(56, 145, 166, 0.06)',
+                    borderColor: 'rgba(56,145,166,0.28)',
                     borderWidth: '1px',
                     cursor: 'pointer'
                   }}

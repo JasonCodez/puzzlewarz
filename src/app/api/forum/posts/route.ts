@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { validateSameOrigin } from "@/lib/requestSecurity";
+import { validateSameOrigin, enforceRateLimit, getClientAddress, containsLinks } from "@/lib/requestSecurity";
 
 export async function GET(request: NextRequest) {
   try {
@@ -75,6 +75,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Rate limit: 10 posts per hour per user + 30 per IP per hour
+    const [userLimit, ipLimit] = await Promise.all([
+      enforceRateLimit({ key: `forum:post:user:${user.id}`, limit: 10, windowMs: 60 * 60 * 1000, message: "You're posting too frequently. Please wait before creating another post." }),
+      enforceRateLimit({ key: `forum:post:ip:${getClientAddress(request)}`, limit: 30, windowMs: 60 * 60 * 1000, message: "Too many posts from this location." }),
+    ]);
+    if (userLimit) return userLimit;
+    if (ipLimit) return ipLimit;
+
     const body = await request.json();
     const { title, content, puzzleId } = body;
 
@@ -83,6 +91,16 @@ export async function POST(request: NextRequest) {
         { error: "Title and content are required" },
         { status: 400 }
       );
+    }
+
+    if (typeof title !== "string" || title.trim().length > 200) {
+      return NextResponse.json({ error: "Title must be 200 characters or fewer" }, { status: 400 });
+    }
+    if (typeof content !== "string" || content.trim().length > 10000) {
+      return NextResponse.json({ error: "Post content must be 10,000 characters or fewer" }, { status: 400 });
+    }
+    if (containsLinks(title) || containsLinks(content)) {
+      return NextResponse.json({ error: "Links are not allowed in forum posts." }, { status: 400 });
     }
 
     // Validate puzzle exists if provided

@@ -6,6 +6,8 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 
+import { calcLevel } from "@/lib/levels";
+
 // GET /api/puzzles/[id]/progress - Fetch user's progress for puzzle
 export async function GET(
   request: NextRequest,
@@ -475,6 +477,23 @@ export async function POST(
             }
           } catch (err) {
             console.error('Failed to award points on puzzle success:', err);
+          }
+
+          // ── Award XP and recalculate level/title ──────────────────────
+          try {
+            const xpGain = puzzleRecord?.xpReward ?? 50;
+            const freshUser = await prisma.user.findUnique({
+              where: { id: user.id },
+              select: { xp: true },
+            });
+            const newXp = (freshUser?.xp ?? 0) + xpGain;
+            const { level, title } = calcLevel(newXp);
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { xp: newXp, level, xpTitle: title },
+            });
+          } catch (err) {
+            console.error('Failed to award XP on puzzle success:', err);
           }
 
         break;

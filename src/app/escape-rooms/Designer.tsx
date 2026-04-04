@@ -1,6 +1,8 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import StageCelebration from '@/components/puzzle/StageCelebration';
+
+const PixiRoom = React.lazy(() => import('@/components/puzzle/PixiRoom'));
 
 // Types for the escape room builder
 interface EscapeRoomScene {
@@ -239,6 +241,10 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
   // Gate: only apply initialData once per mount (prevents infinite loop when parent
   // passes a new object reference on every render).
   const initialDataAppliedRef = useRef(false);
+  // Skip the very first fire of the notifyParent effect (mount fire is redundant
+  // — the parent already has initialData, so calling onChange immediately would
+  // trigger a setFormData → re-render → effect loop).
+  const notifyMountedRef = useRef(false);
 
   const [title, setTitle] = useState(initialData?.title || "");
   const [description, setDescription] = useState(initialData?.description || "");
@@ -273,6 +279,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
   const [validationError, setValidationError] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublished, setIsPublished] = useState<boolean>(initialData?.isPublished ?? false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [draftRestoredAt, setDraftRestoredAt] = useState<Date | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const DRAFT_KEY = 'escape-room-designer-draft';
@@ -601,6 +609,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
       if (initialData.playerMode !== undefined && initialData.playerMode !== playerMode) setPlayerMode(initialData.playerMode || 'shared');
       if (initialData.scenes && JSON.stringify(initialData.scenes) !== JSON.stringify(scenes)) setScenes(initialData.scenes || []);
       if (initialData.userSpecialties && JSON.stringify(initialData.userSpecialties) !== JSON.stringify(userSpecialties)) setUserSpecialties(initialData.userSpecialties || []);
+      if (initialData.isPublished !== undefined) setIsPublished(!!initialData.isPublished);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData]);
@@ -772,11 +781,122 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
     if (assignedSceneIdx >= 0) setPlaytestSceneIdx(assignedSceneIdx);
   }, [playtestPlayerSlot, previewMode, playerMode, scenes]);
 
-  // Call notifyParent whenever tracked fields change
+  // Call notifyParent whenever tracked fields change (skip initial mount fire
+  // to avoid the mount → onChange → setFormData → re-render → mount loop).
   useEffect(() => {
+    if (!notifyMountedRef.current) {
+      notifyMountedRef.current = true;
+      return;
+    }
     notifyParent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, description, timeLimit, startMode, minTeamSize, playerMode, scenes, userSpecialties, intro, outro]);
+
+  // ── PixiRoom-powered edit preview ──────────────────────────────────────────
+  // Build the layout object PixiRoom expects from the currently previewed scene.
+  // We use width:600, height:320 so that item/zone preview coords map 1:1.
+  const pixiEditLayout = useMemo(() => {
+    if (!scenes[previewSceneIdx]) return null;
+    const s = scenes[previewSceneIdx];
+    return {
+      id: s.id,
+      backgroundUrl: s.backgroundUrl || null,
+      width: 600,
+      height: 320,
+      items: (s.items || []).map((it: any) => ({
+        id: it.id,
+        imageUrl: it.imageUrl || null,
+        animationVideoUrl: it.animationVideoUrl || null,
+        x: it.x ?? 20,
+        y: it.y ?? 20,
+        w: it.w ?? 48,
+        h: it.h ?? 48,
+        zIndex: it.zIndex,
+        rotation: it.rotation,
+        scale: it.scale,
+        skewX: it.skewX,
+        skewY: it.skewY,
+        perspectiveRotateX: it.perspectiveRotateX,
+        perspectiveRotateY: it.perspectiveRotateY,
+        perspectiveDistance: it.perspectiveDistance,
+        properties: it.properties,
+      })),
+    };
+  }, [scenes, previewSceneIdx]);
+
+  const pixiEditHotspots = useMemo(() => {
+    if (!scenes[previewSceneIdx]) return [];
+    return (scenes[previewSceneIdx].interactiveZones || []).map((z: any) => ({
+      id: z.id,
+      x: z.x,
+      y: z.y,
+      w: z.width,
+      h: z.height,
+      type: z.type || 'action',
+      meta: z.label || null,
+    }));
+  }, [scenes, previewSceneIdx]);
+
+  // Selected item ID string for PixiRoom highlight
+  const pixiSelectedItemId = useMemo(() => {
+    if (!selectedItem) return null;
+    const item = scenes[selectedItem.sceneIdx]?.items?.[selectedItem.itemIdx];
+    return item?.id ?? null;
+  }, [selectedItem, scenes]);
+
+  const handlePixiItemMove = useCallback((itemId: string, x: number, y: number) => {
+    setScenes(prev => {
+      const copy = prev.map(s => ({ ...s, items: [...s.items] }));
+      const s = copy[previewSceneIdx];
+      if (!s) return prev;
+      const idx = s.items.findIndex((it: any) => it.id === itemId);
+      if (idx < 0) return prev;
+      s.items[idx] = { ...s.items[idx], x: Math.round(x), y: Math.round(y) };
+      return copy;
+    });
+  }, [previewSceneIdx]);
+
+  const handlePixiItemResize = useCallback((itemId: string, x: number, y: number, w: number, h: number) => {
+    setScenes(prev => {
+      const copy = prev.map(s => ({ ...s, items: [...s.items] }));
+      const s = copy[previewSceneIdx];
+      if (!s) return prev;
+      const idx = s.items.findIndex((it: any) => it.id === itemId);
+      if (idx < 0) return prev;
+      s.items[idx] = { ...s.items[idx], x: Math.round(x), y: Math.round(y), w: Math.max(8, Math.round(w)), h: Math.max(8, Math.round(h)) };
+      return copy;
+    });
+  }, [previewSceneIdx]);
+
+  const handlePixiItemSelect = useCallback((itemId: string | null) => {
+    if (!itemId) { setSelectedItem(null); setSelectedZone(null); return; }
+    const idx = scenes[previewSceneIdx]?.items?.findIndex((it: any) => it.id === itemId) ?? -1;
+    if (idx >= 0) { setSelectedItem({ sceneIdx: previewSceneIdx, itemIdx: idx }); setSelectedZone(null); }
+  }, [scenes, previewSceneIdx]);
+
+  const handlePixiHotspotMove = useCallback((hotspotId: string, x: number, y: number) => {
+    setScenes(prev => {
+      const copy = prev.map(s => ({ ...s, interactiveZones: [...s.interactiveZones] }));
+      const s = copy[previewSceneIdx];
+      if (!s) return prev;
+      const idx = s.interactiveZones.findIndex((z: any) => z.id === hotspotId);
+      if (idx < 0) return prev;
+      s.interactiveZones[idx] = { ...s.interactiveZones[idx], x: Math.round(x), y: Math.round(y) };
+      return copy;
+    });
+  }, [previewSceneIdx]);
+
+  const handlePixiHotspotTransform = useCallback((hotspotId: string, x: number, y: number, w: number, h: number) => {
+    setScenes(prev => {
+      const copy = prev.map(s => ({ ...s, interactiveZones: [...s.interactiveZones] }));
+      const s = copy[previewSceneIdx];
+      if (!s) return prev;
+      const idx = s.interactiveZones.findIndex((z: any) => z.id === hotspotId);
+      if (idx < 0) return prev;
+      s.interactiveZones[idx] = { ...s.interactiveZones[idx], x: Math.round(x), y: Math.round(y), width: Math.max(8, Math.round(w)), height: Math.max(8, Math.round(h)) };
+      return copy;
+    });
+  }, [previewSceneIdx]);
 
   return (
     <div className="max-w-4xl mx-auto py-8 text-white">
@@ -1679,13 +1799,17 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
 
                   if ((z?.actionType || '') === 'trigger') {
                     if (z?.sfx?.trigger) { try { new Audio(z.sfx.trigger).play().catch(() => {}); } catch {} }
-                    const nextIdx = playtestSceneIdx + 1;
-                    if (nextIdx >= scenes.length) {
-                      setPlaytestCompleted(true);
-                      setPlaytestMessage('Completed (playtest).');
+                    // Apply any useEffect (hide/show items, set states, change images, etc.)
+                    if (z?.useEffect && typeof z.useEffect === 'object') {
+                      applyUseEffect(z.useEffect, z);
+                      setPlaytestMessage('Trigger fired.');
                     } else {
-                      setPlaytestSceneIdx(nextIdx);
-                      setPlaytestMessage(`Moved to scene ${nextIdx + 1}.`);
+                      setPlaytestMessage('Trigger fired.');
+                    }
+                    // Optionally navigate to a specific scene
+                    if (typeof z?.targetSceneId === 'string' && z.targetSceneId) {
+                      const targetIdx = scenes.findIndex(s => s.id === z.targetSceneId);
+                      if (targetIdx >= 0) setPlaytestSceneIdx(targetIdx);
                     }
                     return;
                   }
@@ -1898,37 +2022,53 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     {/* Modal */}
                     {playtestModal && (
                       <div
+                        key={playtestModal.title + (playtestModal.imageUrl ?? '')}
                         onClick={(ev) => ev.stopPropagation()}
+                        className="designer-modal-enter"
                         style={{
                           position: 'absolute',
-                          left: 12,
-                          top: 12,
-                          right: 12,
-                          bottom: 12,
-                          background: 'rgba(10,10,10,0.92)',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: 10,
-                          padding: 12,
+                          inset: 0,
+                          background: 'rgba(10,10,10,0.94)',
+                          borderRadius: 8,
                           zIndex: 20,
                           overflow: 'auto',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          padding: '14px 16px 16px',
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-                          <div style={{ fontWeight: 700, color: '#fff' }}>{playtestModal.title}</div>
+                        {/* Header row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10 }}>
+                          <div style={{ fontWeight: 700, fontSize: 15, color: '#fff' }}>{playtestModal.title}</div>
                           <button
                             type="button"
-                            className="bg-slate-700 text-white px-3 py-1 rounded text-sm"
+                            className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded text-sm"
                             onClick={() => setPlaytestModal(null)}
                           >
-                            Close
+                            ✕ Close
                           </button>
                         </div>
+                        {/* Item image — centered, fills available width */}
                         {playtestModal.imageUrl ? (
-                          <div style={{ marginTop: 10 }}>
-                            <img src={playtestModal.imageUrl} alt="modal" style={{ maxHeight: 140, borderRadius: 8 }} />
+                          <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginBottom: 10, flex: '1 1 auto', minHeight: 0 }}>
+                            <img
+                              src={playtestModal.imageUrl}
+                              alt="modal"
+                              className="designer-modal-img-enter"
+                              style={{
+                                maxWidth: '100%',
+                                maxHeight: '100%',
+                                width: 'auto',
+                                height: 'auto',
+                                objectFit: 'contain',
+                                borderRadius: 8,
+                                border: '1px solid rgba(255,255,255,0.12)',
+                              }}
+                            />
                           </div>
                         ) : null}
-                        <div style={{ marginTop: 10, whiteSpace: 'pre-wrap', fontSize: 13, color: 'rgba(255,255,255,0.9)' }}>
+                        <div style={{ width: '100%', whiteSpace: 'pre-wrap', fontSize: 13, color: 'rgba(255,255,255,0.9)', textAlign: playtestModal.imageUrl ? 'center' : 'left' }}>
                           {playtestModal.content || '(No modal content)'}
                         </div>
                         {Array.isArray(playtestModal.choices) && playtestModal.choices.length > 0 && (
@@ -2298,417 +2438,30 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
           </div>
         )}
 
-        {scenes.length > 0 && previewMode !== 'playtest' && (
+        {scenes.length > 0 && previewMode !== 'playtest' && pixiEditLayout && (
           <div
-            ref={previewRef}
-            className="mb-6 border rounded-lg overflow-hidden"
-            style={{ background: '#222', minHeight: 320, position: 'relative', width: 600, maxWidth: '100%' }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => e.preventDefault()}
-            onClick={() => { setSelectedItem(null); setSelectedZone(null); }}
+            className="mb-6 border border-slate-600 rounded-lg overflow-hidden"
+            style={{ background: '#0b1220', position: 'relative', width: 600, maxWidth: '100%', height: 320 }}
           >
-            {/* Background image */}
-            {scenes[previewSceneIdx].backgroundUrl ? (
-              <>
-                <img
-                  src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(scenes[previewSceneIdx].backgroundUrl)}` : scenes[previewSceneIdx].backgroundUrl}
-                  alt="Background"
-                  style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }}
-                  onLoad={() => {
-                    setPreviewImageError(null);
-                  }}
-                  onError={() => {
-                    if (!previewProxying) {
-                      // first failure: attempt server-side proxy (requires ALLOWED_IMAGE_HOSTS configured)
-                      setPreviewImageError('Failed to load preview image; retrying via server proxy...');
-                      setPreviewProxying(true);
-                    } else {
-                      setPreviewImageError('Failed to load preview image (proxy failed or URL invalid)');
-                    }
-                  }}
-                />
-                {previewImageError && (
-                  <div style={{ padding: 8, color: '#ff7b7b', fontSize: 12 }}>{previewImageError}</div>
-                )}
-              </>
-            ) : null}
-            {/* Items */}
-            {scenes[previewSceneIdx].items.map((item, i) => (
-              <div
-                key={item.id}
-                onClick={(ev) => { ev.stopPropagation(); setSelectedItem({ sceneIdx: previewSceneIdx, itemIdx: i }); setSelectedZone(null); }}
-                onPointerDown={(ev) => {
-                  ev.stopPropagation();
-                  // primary button only (avoid right-click drag)
-                  if (ev.button !== 0) return;
-                  const parentRect = previewRef.current?.getBoundingClientRect();
-                  if (!parentRect) return;
-                  setSelectedItem({ sceneIdx: previewSceneIdx, itemIdx: i });
-                  setSelectedZone(null);
-
-                  const startXPos = item.x ?? (20 + i * 60);
-                  const startYPos = item.y ?? 20;
-                  const itemW = item.w ?? 48;
-                  const itemH = item.h ?? 48;
-
-                  const offsetX = ev.clientX - (parentRect.left + startXPos);
-                  const offsetY = ev.clientY - (parentRect.top + startYPos);
-
-                  try {
-                    (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
-                  } catch {
-                    // ignore if capture fails
-                  }
-
-                  draggingItemRef.current = {
-                    sceneIdx: previewSceneIdx,
-                    itemIdx: i,
-                    pointerId: ev.pointerId,
-                    offsetX,
-                    offsetY,
-                    parentRect,
-                    itemW,
-                    itemH,
-                    raf: null,
-                    latestClientX: ev.clientX,
-                    latestClientY: ev.clientY,
-                  };
-
-                  const scheduleUpdate = () => {
-                    const r = draggingItemRef.current;
-                    if (!r) return;
-                    if (r.raf != null) return;
-                    r.raf = window.requestAnimationFrame(() => {
-                      const rr = draggingItemRef.current;
-                      if (!rr) return;
-                      rr.raf = null;
-                      const newX = rr.latestClientX - rr.parentRect.left - rr.offsetX;
-                      const newY = rr.latestClientY - rr.parentRect.top - rr.offsetY;
-                      const clampedX = Math.max(0, Math.min(newX, rr.parentRect.width - rr.itemW));
-                      const clampedY = Math.max(0, Math.min(newY, rr.parentRect.height - rr.itemH));
-                      setScenes(prev => {
-                        const copy = [...prev];
-                        const it = copy[rr.sceneIdx]?.items?.[rr.itemIdx];
-                        if (!it) return prev;
-                        it.x = Math.round(clampedX);
-                        it.y = Math.round(clampedY);
-                        return copy;
-                      });
-                    });
-                  };
-
-                  const onPointerMove = (pm: PointerEvent) => {
-                    const r = draggingItemRef.current;
-                    if (!r) return;
-                    if (pm.pointerId !== r.pointerId) return;
-                    r.latestClientX = pm.clientX;
-                    r.latestClientY = pm.clientY;
-                    scheduleUpdate();
-                  };
-
-                  const onPointerUp = (pu: PointerEvent) => {
-                    const r = draggingItemRef.current;
-                    if (!r) return;
-                    if (pu.pointerId !== r.pointerId) return;
-                    if (r.raf != null) window.cancelAnimationFrame(r.raf);
-                    draggingItemRef.current = null;
-                    window.removeEventListener('pointermove', onPointerMove);
-                    window.removeEventListener('pointerup', onPointerUp);
-                  };
-
-                  window.addEventListener('pointermove', onPointerMove);
-                  window.addEventListener('pointerup', onPointerUp);
-                }}
-                style={(() => {
-                  const sf = (item.scale != null && item.scale > 0) ? item.scale : 1;
-                  const baseW = item.w ?? 48;
-                  const baseH = item.h ?? 48;
-                  const hasPerspective = (item.perspectiveRotateX || item.perspectiveRotateY);
-                  const wt = [hasPerspective ? `perspective(${item.perspectiveDistance ?? 600}px)` : '', sf !== 1 ? `scale(${sf})` : '', item.rotation ? `rotate(${item.rotation}deg)` : '', hasPerspective && item.perspectiveRotateX ? `rotateX(${item.perspectiveRotateX}deg)` : '', hasPerspective && item.perspectiveRotateY ? `rotateY(${item.perspectiveRotateY}deg)` : '', item.skewX ? `skewX(${item.skewX}deg)` : '', item.skewY ? `skewY(${item.skewY}deg)` : ''].filter(Boolean).join(' ') || undefined;
-                  return {
-                    position: 'absolute' as const,
-                    left: item.x ?? (20 + i * 60),
-                    top: item.y ?? 20,
-                    width: baseW,
-                    height: baseH,
-                    zIndex: 2,
-                    borderRadius: 4,
-                    cursor: 'move',
-                    userSelect: 'none' as const,
-                    touchAction: 'none' as const,
-                    transform: wt,
-                    transformOrigin: item.transformOrigin || 'center center',
-                    willChange: wt ? 'transform' : undefined,
-                  };
-                })()}
-              >
-                {item.imageUrl ? (
-                  <div style={{ position: 'relative', display: 'inline-block' }}>
-                    {(() => {
-                      const baseW = item.w ?? 48;
-                      const baseH = item.h ?? 48;
-                      const itemStyle: React.CSSProperties = { width: baseW, height: baseH, objectFit: 'contain' as const, display: 'block', borderRadius: 4, boxSizing: 'border-box' as const, outline: selectedItem && selectedItem.sceneIdx === previewSceneIdx && selectedItem.itemIdx === i ? '2px solid rgba(99,102,241,0.9)' : 'none' };
-                      return isVideoUrl(item.imageUrl) ? (
-                        <video src={item.imageUrl} autoPlay loop muted playsInline style={itemStyle} draggable={false} />
-                      ) : (
-                        <img src={item.imageUrl} alt={item.name} style={itemStyle} draggable={false} />
-                      );
-                    })()}
-                    {selectedItem && selectedItem.sceneIdx === previewSceneIdx && selectedItem.itemIdx === i && (
-                      // resize handles (se, sw, ne, nw)
-                      (() => {
-                        const handleW = item.w ?? 48;
-                        const handleH = item.h ?? 48;
-                        return (
-                      <>
-                        {(['nw','ne','sw','se'] as const).map(h => {
-                          const isCorner = true;
-                          const style: React.CSSProperties = {
-                            position: 'absolute',
-                            width: 10,
-                            height: 10,
-                            background: '#fff',
-                            border: '1px solid rgba(0,0,0,0.4)',
-                            borderRadius: 2,
-                            transform: 'translate(-50%, -50%)',
-                            zIndex: 10,
-                            touchAction: 'none',
-                            cursor: h === 'nw' || h === 'se' ? 'nwse-resize' : 'nesw-resize'
-                          };
-                          if (h === 'nw') Object.assign(style, { left: 0, top: 0 });
-                          if (h === 'ne') Object.assign(style, { left: handleW, top: 0 });
-                          if (h === 'sw') Object.assign(style, { left: 0, top: handleH });
-                          if (h === 'se') Object.assign(style, { left: handleW, top: handleH });
-                          return (
-                            <div
-                              key={h}
-                              style={style}
-                              onPointerDown={(ev) => {
-                                ev.stopPropagation();
-                                // prevent the drag handler from also starting
-                                try {
-                                  (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
-                                } catch {
-                                  // ignore
-                                }
-                                const rect = (ev.target as HTMLElement).closest('div')?.getBoundingClientRect();
-                                resizingRef.current = {
-                                  kind: 'item',
-                                  sceneIdx: previewSceneIdx,
-                                  idx: i,
-                                  startX: ev.clientX,
-                                  startY: ev.clientY,
-                                  startW: item.w ?? 48,
-                                  startH: item.h ?? 48,
-                                  handle: h,
-                                  aspect: (item.w && item.h) ? (item.w / item.h) : undefined,
-                                };
-                                // capture parent preview rect and original position so left/top handles update position
-                                const parentRect = previewRef.current?.getBoundingClientRect();
-                                const startXPos = item.x ?? (20 + i * 60);
-                                const startYPos = item.y ?? 20;
-                                // augment resizingRef with positional info
-                                (resizingRef.current as any).startXPos = startXPos;
-                                (resizingRef.current as any).startYPos = startYPos;
-                                (resizingRef.current as any).parentRect = parentRect;
-                                const onPointerMove = (pm: PointerEvent) => {
-                                  const r = resizingRef.current as any;
-                                  if (!r) return;
-                                  const dx = pm.clientX - r.startX;
-                                  const dy = pm.clientY - r.startY;
-                                  let newW = r.startW;
-                                  let newH = r.startH;
-                                  let newX = r.startXPos;
-                                  let newY = r.startYPos;
-                                  if (r.handle === 'se') { newW = Math.max(8, Math.round(r.startW + dx)); newH = Math.max(8, Math.round(r.startH + dy)); }
-                                  else if (r.handle === 'sw') { newW = Math.max(8, Math.round(r.startW - dx)); newH = Math.max(8, Math.round(r.startH + dy)); newX = r.startXPos + (r.startW - newW); }
-                                  else if (r.handle === 'ne') { newW = Math.max(8, Math.round(r.startW + dx)); newH = Math.max(8, Math.round(r.startH - dy)); newY = r.startYPos + (r.startH - newH); }
-                                  else if (r.handle === 'nw') { newW = Math.max(8, Math.round(r.startW - dx)); newH = Math.max(8, Math.round(r.startH - dy)); newX = r.startXPos + (r.startW - newW); newY = r.startYPos + (r.startH - newH); }
-                                  // if Shift is held preserve aspect
-                                  if (pm.shiftKey && r.aspect) { if (Math.abs(dx) > Math.abs(dy)) { newH = Math.max(8, Math.round(newW / r.aspect)); } else { newW = Math.max(8, Math.round(newH * r.aspect)); } }
-                                  // clamp within parent using captured rect
-                                  if (r.parentRect) {
-                                    newX = Math.max(0, Math.min(newX, r.parentRect.width - newW));
-                                    newY = Math.max(0, Math.min(newY, r.parentRect.height - newH));
-                                  }
-                                  setScenes(prev => {
-                                    const copy = [...prev];
-                                    const it = copy[r.sceneIdx].items[(r as any).idx];
-                                    it.w = Math.round(newW); it.h = Math.round(newH);
-                                    it.x = Math.round(newX); it.y = Math.round(newY);
-                                    return copy;
-                                  });
-                                };
-                                const onPointerUp = () => {
-                                  resizingRef.current = null;
-                                  window.removeEventListener('pointermove', onPointerMove);
-                                  window.removeEventListener('pointerup', onPointerUp);
-                                };
-                                window.addEventListener('pointermove', onPointerMove);
-                                window.addEventListener('pointerup', onPointerUp);
-                              }}
-                            />
-                          );
-                        })}
-                      </>
-                        );
-                      })()
-                    )}
-                  </div>
-                ) : <span>🧩</span>}
-                {item.name ? <div style={{ position: 'absolute', left: 0, top: '100%', fontSize: 10, whiteSpace: 'nowrap', pointerEvents: 'none', color: 'rgba(255,255,255,0.7)' }}>{item.name}</div> : null}
+            <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading room preview…</div>}>
+              <PixiRoom
+                puzzleId={pixiEditLayout.id}
+                layout={pixiEditLayout}
+                hotspots={pixiEditHotspots}
+                onHotspotAction={() => {}}
+                onHotspotMove={handlePixiHotspotMove}
+                onHotspotTransform={handlePixiHotspotTransform}
+                onItemMove={handlePixiItemMove}
+                onItemResize={handlePixiItemResize}
+                onItemSelect={handlePixiItemSelect}
+                selectedItemId={pixiSelectedItemId}
+              />
+            </Suspense>
+            {!scenes[previewSceneIdx]?.backgroundUrl && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 20 }}>
+                <span className="text-gray-500 text-sm">No background set — drag an image URL into the scene settings</span>
               </div>
-            ))}
-            {/* Interactive zones */}
-            {scenes[previewSceneIdx].interactiveZones.map((zone, i) => (
-              <div
-                key={zone.id}
-                onClick={(ev) => { ev.stopPropagation(); setSelectedZone({ sceneIdx: previewSceneIdx, zoneIdx: i }); setSelectedItem(null); }}
-                onPointerDown={(ev) => {
-                  ev.stopPropagation();
-                  if (ev.button !== 0) return;
-                  setSelectedZone({ sceneIdx: previewSceneIdx, zoneIdx: i });
-                  setSelectedItem(null);
-                  const parentRect = previewRef.current?.getBoundingClientRect();
-                  if (!parentRect) return;
-
-                  const offsetX = ev.clientX - (parentRect.left + zone.x);
-                  const offsetY = ev.clientY - (parentRect.top + zone.y);
-
-                  try {
-                    (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
-                  } catch {
-                    // ignore
-                  }
-
-                  draggingZoneRef.current = {
-                    sceneIdx: previewSceneIdx,
-                    zoneIdx: i,
-                    pointerId: ev.pointerId,
-                    offsetX,
-                    offsetY,
-                    parentRect,
-                    zoneW: zone.width,
-                    zoneH: zone.height,
-                    raf: null,
-                    latestClientX: ev.clientX,
-                    latestClientY: ev.clientY,
-                  };
-
-                  const scheduleUpdate = () => {
-                    const r = draggingZoneRef.current;
-                    if (!r) return;
-                    if (r.raf != null) return;
-                    r.raf = window.requestAnimationFrame(() => {
-                      const rr = draggingZoneRef.current;
-                      if (!rr) return;
-                      rr.raf = null;
-                      const newX = rr.latestClientX - rr.parentRect.left - rr.offsetX;
-                      const newY = rr.latestClientY - rr.parentRect.top - rr.offsetY;
-                      const clampedX = Math.max(0, Math.min(newX, rr.parentRect.width - rr.zoneW));
-                      const clampedY = Math.max(0, Math.min(newY, rr.parentRect.height - rr.zoneH));
-                      setScenes(prev => {
-                        const copy = [...prev];
-                        const z = copy[rr.sceneIdx]?.interactiveZones?.[rr.zoneIdx];
-                        if (!z) return prev;
-                        copy[rr.sceneIdx].interactiveZones[rr.zoneIdx] = { ...z, x: Math.round(clampedX), y: Math.round(clampedY) };
-                        return copy;
-                      });
-                    });
-                  };
-
-                  const onPointerMove = (pm: PointerEvent) => {
-                    const r = draggingZoneRef.current;
-                    if (!r) return;
-                    if (pm.pointerId !== r.pointerId) return;
-                    r.latestClientX = pm.clientX;
-                    r.latestClientY = pm.clientY;
-                    scheduleUpdate();
-                  };
-
-                  const onPointerUp = (pu: PointerEvent) => {
-                    const r = draggingZoneRef.current;
-                    if (!r) return;
-                    if (pu.pointerId !== r.pointerId) return;
-                    if (r.raf != null) window.cancelAnimationFrame(r.raf);
-                    draggingZoneRef.current = null;
-                    window.removeEventListener('pointermove', onPointerMove);
-                    window.removeEventListener('pointerup', onPointerUp);
-                  };
-
-                  window.addEventListener('pointermove', onPointerMove);
-                  window.addEventListener('pointerup', onPointerUp);
-                }}
-                style={{ position: 'absolute', left: zone.x, top: zone.y, width: zone.width, height: zone.height, border: '2px dashed #38bdf8', background: 'rgba(56,189,248,0.1)', zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', touchAction: 'none', cursor: 'move', userSelect: 'none' }}
-              >
-                <span style={{ color: '#38bdf8', fontSize: 12, fontWeight: 600 }}>{zone.label}</span>
-                {/* selected handles */}
-                {selectedZone && selectedZone.sceneIdx === previewSceneIdx && selectedZone.zoneIdx === i && (
-                  (['nw','ne','sw','se'] as const).map(h => {
-                    const style: React.CSSProperties = {
-                      position: 'absolute',
-                      width: 10,
-                      height: 10,
-                      background: '#fff',
-                      border: '1px solid rgba(0,0,0,0.4)',
-                      borderRadius: 2,
-                      transform: 'translate(-50%, -50%)',
-                      zIndex: 20,
-                      touchAction: 'none',
-                      cursor: h === 'nw' || h === 'se' ? 'nwse-resize' : 'nesw-resize'
-                    } as React.CSSProperties;
-                    if (h === 'nw') Object.assign(style, { left: 0, top: 0 });
-                    if (h === 'ne') Object.assign(style, { left: zone.width, top: 0 });
-                    if (h === 'sw') Object.assign(style, { left: 0, top: zone.height });
-                    if (h === 'se') Object.assign(style, { left: zone.width, top: zone.height });
-                    return (
-                      <div
-                        key={h}
-                        style={style}
-                        onPointerDown={(ev) => {
-                          ev.stopPropagation();
-                          const startX = ev.clientX;
-                          const startY = ev.clientY;
-                          const startW = zone.width;
-                          const startH = zone.height;
-                          const startXPos = zone.x;
-                          const startYPos = zone.y;
-                          resizingRef.current = { kind: 'zone', sceneIdx: previewSceneIdx, idx: i, startX, startY, startW, startH, handle: h as any };
-                          const parentRectForHandle = previewRef.current?.getBoundingClientRect();
-                          const onPointerMove = (pm: PointerEvent) => {
-                            const r = resizingRef.current;
-                            if (!r) return;
-                            const dx = pm.clientX - r.startX;
-                            const dy = pm.clientY - r.startY;
-                            let newW = r.startW;
-                            let newH = r.startH;
-                            let newX = startXPos;
-                            let newY = startYPos;
-                            if (r.handle === 'se') { newW = Math.max(8, Math.round(r.startW + dx)); newH = Math.max(8, Math.round(r.startH + dy)); }
-                            else if (r.handle === 'sw') { newW = Math.max(8, Math.round(r.startW - dx)); newH = Math.max(8, Math.round(r.startH + dy)); newX = startXPos + (r.startW - newW); }
-                            else if (r.handle === 'ne') { newW = Math.max(8, Math.round(r.startW + dx)); newH = Math.max(8, Math.round(r.startH - dy)); newY = startYPos + (r.startH - newH); }
-                            else if (r.handle === 'nw') { newW = Math.max(8, Math.round(r.startW - dx)); newH = Math.max(8, Math.round(r.startH - dy)); newX = startXPos + (r.startW - newW); newY = startYPos + (r.startH - newH); }
-                            // clamp within parent using captured rect
-                            if (parentRectForHandle) {
-                              newX = Math.max(0, Math.min(newX, parentRectForHandle.width - newW));
-                              newY = Math.max(0, Math.min(newY, parentRectForHandle.height - newH));
-                            }
-                            setScenes(prev => {
-                              const copy = [...prev];
-                              copy[previewSceneIdx].interactiveZones[i] = { ...copy[previewSceneIdx].interactiveZones[i], x: Math.round(newX), y: Math.round(newY), width: Math.round(newW), height: Math.round(newH) };
-                              return copy;
-                            });
-                          };
-                          const onPointerUp = () => { resizingRef.current = null; window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
-                          window.addEventListener('pointermove', onPointerMove);
-                          window.addEventListener('pointerup', onPointerUp);
-                        }}
-                      />
-                    );
-                  })
-                )}
-              </div>
-            ))}
+            )}
           </div>
         )}
 
@@ -3537,9 +3290,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                                         const updated = [...scenes];
                                         const cur = updated[idx].items[itemIdx];
                                         const curStates = { ...((cur.properties?.spriteStates && typeof cur.properties.spriteStates === 'object') ? cur.properties.spriteStates : {}) } as Record<string, string>;
-                                        const entries = Object.entries(curStates);
-                                        const currentKey = entries[stateIdx]?.[0] || stateKey;
-                                        if (currentKey.trim()) curStates[currentKey] = imageUrl;
+                                        // Use stateKey directly (avoids stale-index bug when states are added/removed mid-upload)
+                                        if (stateKey.trim()) curStates[stateKey] = imageUrl;
                                         const nextProps = { ...(cur.properties || {}), spriteStates: curStates };
                                         updated[idx].items[itemIdx] = { ...cur, properties: nextProps };
                                         setScenes(updated);
@@ -3567,6 +3319,27 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                                   {typeof stateImage === 'string' && stateImage && !spriteStateUploadState[`sprite-${idx}-${itemIdx}-${stateIdx}`]?.uploading && (
                                     <img src={stateImage} alt={stateKey} className="h-8 w-8 object-cover rounded ml-1" />
                                   )}
+                                  {!stateImage && !spriteStateUploadState[`sprite-${idx}-${itemIdx}-${stateIdx}`]?.uploading && (
+                                    <span className="text-[10px] text-yellow-400">⚠ No image set</span>
+                                  )}
+                                </div>
+                                <div className="flex gap-2 items-center mt-1">
+                                  <span className="text-[11px] text-gray-400 w-10 shrink-0">URL</span>
+                                  <input
+                                    type="text"
+                                    value={typeof stateImage === 'string' ? stateImage : ''}
+                                    onChange={(e) => {
+                                      const updated = [...scenes];
+                                      const cur = updated[idx].items[itemIdx];
+                                      const curStates = { ...((cur.properties?.spriteStates && typeof cur.properties.spriteStates === 'object') ? cur.properties.spriteStates : {}) } as Record<string, string>;
+                                      if (stateKey.trim()) curStates[stateKey] = e.target.value;
+                                      const nextProps = { ...(cur.properties || {}), spriteStates: curStates };
+                                      updated[idx].items[itemIdx] = { ...cur, properties: nextProps };
+                                      setScenes(updated);
+                                    }}
+                                    placeholder="Paste image URL or upload above"
+                                    className="border rounded px-2 py-1 text-xs flex-1 bg-slate-900 text-white"
+                                  />
                                 </div>
                               </div>
                             ))}
@@ -5388,6 +5161,11 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                   {!isSaving && !lastSavedAt && (
                     <span className="text-xs text-slate-500">Auto-saves every 15 s after changes</span>
                   )}
+                  {editId && (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isPublished ? 'bg-emerald-900/60 text-emerald-400' : 'bg-amber-900/60 text-amber-400'}`}>
+                      {isPublished ? '● Live' : '● Draft'}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
@@ -5438,6 +5216,40 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
             >
               {isSaving ? 'Saving…' : editId ? 'Save Escape Room' : 'Save Draft'}
             </button>
+            {editId && (
+              <button
+                type="button"
+                disabled={isPublishing}
+                className={`px-5 py-2 rounded font-semibold transition flex items-center gap-2 disabled:opacity-60 ${
+                  isPublished
+                    ? 'bg-slate-600 text-white hover:bg-slate-700'
+                    : 'bg-amber-500 text-white hover:bg-amber-600'
+                }`}
+                onClick={async () => {
+                  setIsPublishing(true);
+                  try {
+                    const res = await fetch(`/api/escape-rooms/designer/${encodeURIComponent(editId)}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ publish: !isPublished }),
+                    });
+                    const j = await res.json().catch(() => null);
+                    if (res.ok) {
+                      setIsPublished(!isPublished);
+                      setValidationError(!isPublished ? 'Escape room is now live.' : 'Escape room unpublished.');
+                    } else {
+                      setValidationError(j?.error || 'Failed to update publish state.');
+                    }
+                  } catch {
+                    setValidationError('Network error while publishing.');
+                  } finally {
+                    setIsPublishing(false);
+                  }
+                }}
+              >
+                {isPublishing ? 'Updating…' : isPublished ? '⏸ Unpublish' : '🚀 Publish'}
+              </button>
+            )}
             {!editId && (
               <button
                 type="button"
@@ -5467,6 +5279,25 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
         </div>
       </section>
       <style jsx global>{`
+        @keyframes modalZoomIn {
+          0%   { opacity: 0; transform: scale(0.15); }
+          60%  { opacity: 1; transform: scale(1.04); }
+          80%  { transform: scale(0.97); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes modalImgZoom {
+          0%   { opacity: 0; transform: scale(0.3); }
+          65%  { opacity: 1; transform: scale(1.06); }
+          85%  { transform: scale(0.96); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        .designer-modal-enter {
+          animation: modalZoomIn 0.38s cubic-bezier(0.22, 0.7, 0.2, 1) forwards;
+        }
+        .designer-modal-img-enter {
+          animation: modalImgZoom 0.45s cubic-bezier(0.22, 0.7, 0.2, 1) 0.05s both;
+        }
+
         @keyframes pickupVideoGrow {
           0%   { transform: scale(1); }
           100% { transform: scale(var(--pickup-video-grow, 1)); }

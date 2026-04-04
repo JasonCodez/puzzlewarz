@@ -50,6 +50,13 @@ function getHeaderOrigin(value: string | null) {
   }
 }
 
+// Matches http(s)://, www., and markdown-style [text](url) links
+const LINK_PATTERN = /https?:\/\/|www\.|\[.+?\]\(/i;
+
+export function containsLinks(text: string): boolean {
+  return LINK_PATTERN.test(text);
+}
+
 export function validateSameOrigin(request: NextRequest) {
   const expectedOrigin = getRequestOrigin(request);
   const origin = getHeaderOrigin(request.headers.get("origin"));
@@ -117,6 +124,37 @@ function buildRateLimitResponse(options: {
       },
     }
   );
+}
+
+/**
+ * Synchronous in-memory rate limit check for use where a NextResponse cannot
+ * be returned (e.g. inside NextAuth's authorize() callback).
+ * Returns true if the caller should be blocked.
+ */
+export function checkLocalRateLimit(options: {
+  key: string;
+  limit: number;
+  windowMs: number;
+}): boolean {
+  const now = Date.now();
+  const storageKey = `rate-limit:${options.key}`;
+
+  if (rateLimitStore.size > 10000) {
+    for (const [entryKey, entry] of rateLimitStore.entries()) {
+      if (entry.resetAt <= now) rateLimitStore.delete(entryKey);
+    }
+  }
+
+  const existing = rateLimitStore.get(storageKey);
+  const entry =
+    !existing || existing.resetAt <= now
+      ? { count: 0, resetAt: now + options.windowMs }
+      : existing;
+
+  entry.count += 1;
+  rateLimitStore.set(storageKey, entry);
+
+  return entry.count > options.limit;
 }
 
 function enforceLocalRateLimit(options: {

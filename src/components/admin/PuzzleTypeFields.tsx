@@ -1,6 +1,6 @@
 'use client';
 
-import React, { JSX, useEffect, useState } from 'react';
+import React, { JSX, useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 // Dynamically import the advanced Escape Room Designer (client-side only)
 const EscapeRoomDesigner = dynamic(() => import("@/app/escape-rooms/Designer"), { ssr: false });
@@ -1974,18 +1974,21 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
   );
 
   // Advanced Escape Room Designer integration
+  const escapeRoomOnChange = useCallback((designerData: any) => {
+    onDataChange('escapeRoomData', designerData);
+    if (designerData && typeof designerData.title === 'string') {
+      onDataChange('title', designerData.title);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onDataChange]);
+
   const renderEscapeRoomFields = () => {
     // Only render the EscapeRoomDesigner, no extra wrapper or heading
     return (
       <EscapeRoomDesigner
         initialData={puzzleData}
         editId={typeof puzzleData === 'object' && puzzleData && 'editId' in puzzleData ? (puzzleData.editId as string) : undefined}
-        onChange={(designerData: any) => {
-          onDataChange('escapeRoomData', designerData);
-          if (designerData && typeof designerData.title === 'string') {
-            onDataChange('title', designerData.title);
-          }
-        }}
+        onChange={escapeRoomOnChange}
       />
     );
   };

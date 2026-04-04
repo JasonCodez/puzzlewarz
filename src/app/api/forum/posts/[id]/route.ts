@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { validateSameOrigin } from "@/lib/requestSecurity";
+import { validateSameOrigin, enforceRateLimit, getClientAddress, containsLinks } from "@/lib/requestSecurity";
 
 export async function GET(
   request: NextRequest,
@@ -115,6 +115,14 @@ export async function POST(
       );
     }
 
+    // Rate limit: 30 comments per hour per user + 60 per IP per hour
+    const [userLimit, ipLimit] = await Promise.all([
+      enforceRateLimit({ key: `forum:comment:user:${user.id}`, limit: 30, windowMs: 60 * 60 * 1000, message: "You're commenting too frequently. Please slow down." }),
+      enforceRateLimit({ key: `forum:comment:ip:${getClientAddress(request)}`, limit: 60, windowMs: 60 * 60 * 1000, message: "Too many comments from this location." }),
+    ]);
+    if (userLimit) return userLimit;
+    if (ipLimit) return ipLimit;
+
     const body = await request.json();
     const { content, replyToId } = body;
 
@@ -123,6 +131,13 @@ export async function POST(
         { error: "Content is required" },
         { status: 400 }
       );
+    }
+
+    if (typeof content !== "string" || content.trim().length > 5000) {
+      return NextResponse.json({ error: "Comment must be 5,000 characters or fewer" }, { status: 400 });
+    }
+    if (containsLinks(content)) {
+      return NextResponse.json({ error: "Links are not allowed in comments." }, { status: 400 });
     }
 
     // Verify post exists

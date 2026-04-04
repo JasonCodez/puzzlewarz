@@ -1618,7 +1618,7 @@ export function EscapeRoomPuzzle({
   };
 
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4 relative">
+    <div className="rounded-xl border border-amber-900/30 bg-neutral-950/85 p-4 relative escape-room-player">
       {/* ── Room Intro overlay (shown once per session before the briefing) ── */}
       {(() => {
         const intro = data?.puzzle?.intro;
@@ -1674,55 +1674,55 @@ export function EscapeRoomPuzzle({
       ) : null}
 
       {failedAt ? (
-        <div className="mb-3 rounded border border-red-700/60 bg-red-950/40 p-3 text-red-200">
-          <div className="font-semibold">Run failed</div>
-          <div className="text-sm opacity-90">{failedReason || 'The run ended and cannot be retried.'}</div>
+        <div className="mb-3 rounded-lg border border-red-700/50 bg-red-950/25 p-4 text-red-200 shadow-[0_0_30px_rgba(180,0,0,0.18)]">
+          <div className="font-semibold tracking-wide uppercase text-xs text-red-400/80 mb-1">Run Failed</div>
+          <div className="text-sm leading-relaxed opacity-80">{failedReason || 'The run ended and cannot be retried.'}</div>
         </div>
       ) : null}
 
       {completedAt ? (
-        <div className="mb-3 rounded border border-emerald-700/60 bg-emerald-950/30 p-3 text-emerald-200">
-          <div className="font-semibold">Run complete</div>
-          <div className="text-sm opacity-90">Nice work — this run is finished.</div>
+        <div className="mb-3 rounded-lg border border-emerald-700/50 bg-emerald-950/20 p-4 text-emerald-200 shadow-[0_0_30px_rgba(0,160,80,0.15)]">
+          <div className="font-semibold tracking-wide uppercase text-xs text-emerald-400/80 mb-1">Run Complete</div>
+          <div className="text-sm leading-relaxed opacity-80">Well done — this run is finished.</div>
         </div>
       ) : null}
 
       {runStartedAt && runExpiresAt && !failedAt && !completedAt ? (
-        <div className="mb-3 flex items-center justify-between rounded border border-slate-700 bg-slate-950/30 px-3 py-2">
-          <div className="text-sm text-gray-200">Time remaining</div>
-          <div className={"font-mono text-sm " + ((timeRemainingMs ?? 0) <= 30_000 ? 'text-red-300' : 'text-gray-100')}>
+        <div className={`mb-3 flex items-center justify-between rounded-lg px-4 py-2.5 ${(timeRemainingMs ?? 0) <= 60_000 ? 'escape-timer-critical' : 'escape-timer-running'}`}>
+          <div className="text-xs uppercase tracking-widest text-amber-300/60 font-medium">⧗ Timer</div>
+          <div className={`font-mono text-base font-bold tracking-wider ${ (timeRemainingMs ?? 0) <= 30_000 ? 'text-red-300 escape-timer-text-pulse' : (timeRemainingMs ?? 0) <= 60_000 ? 'text-amber-400' : 'text-amber-100'}`}>
             {fmtRemaining(timeRemainingMs)}
           </div>
         </div>
       ) : null}
 
-      <div className="mb-3 rounded border border-slate-700 bg-slate-950/30 p-3">
-        <div className="text-white font-semibold">Team Collaboration Progress</div>
-        <div className="mt-2 text-sm text-gray-300">
+      <div className="mb-3 rounded-lg border border-amber-900/30 bg-neutral-950/50 p-3">
+        <div className="text-amber-100/80 font-semibold text-xs uppercase tracking-widest">Team Collaboration</div>
+        <div className="mt-2 text-sm text-amber-200/65">
           Stage {stageIndex}: {contributionProgress.distinct}/{contributionProgress.requiredDistinct} players have contributed.
         </div>
-        <div className="mt-1 text-xs text-gray-400">
-          Requirement: each player contributes at least {contributionProgress.minActionsPerPlayer} action before stage advance.
+        <div className="mt-1 text-xs text-amber-200/40">
+          Each player must contribute at least {contributionProgress.minActionsPerPlayer} action to advance.
         </div>
-        <div className="mt-2 h-2 w-full overflow-hidden rounded bg-slate-800">
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-900/80">
           <div
-            className={"h-full transition-all " + (contributionProgress.complete ? 'bg-emerald-500' : 'bg-amber-500')}
+            className={"h-full transition-all rounded-full " + (contributionProgress.complete ? 'bg-emerald-500/80 shadow-[0_0_8px_rgba(0,255,128,0.4)]' : 'bg-amber-600/80 shadow-[0_0_6px_rgba(251,191,36,0.3)]')}
             style={{ width: `${Math.max(0, Math.min(100, (contributionProgress.distinct / Math.max(1, contributionProgress.requiredDistinct)) * 100))}%` }}
           />
         </div>
       </div>
 
       {!runStartedAt && !failedAt && !completedAt ? (
-        <div className="mb-3 rounded border border-slate-700 bg-slate-950/30 p-3">
-          <div className="text-white font-semibold">Briefing</div>
-          <div className="text-gray-300 text-sm mt-1">{data.puzzle?.description || 'Read the briefing, then acknowledge when ready.'}</div>
-          <div className="mt-2 text-sm text-gray-200">Acknowledged: {ackCount}/{data?.minTeamSize ?? minTeamSizeRef.current ?? 1}</div>
+        <div className="mb-3 rounded-lg border border-amber-800/35 bg-neutral-950/55 p-4">
+          <div className="text-amber-200/90 font-semibold text-xs uppercase tracking-widest mb-2">Mission Briefing</div>
+          <div className="text-amber-100/65 text-sm leading-relaxed mt-1">{data.puzzle?.description || 'Read the briefing carefully, then acknowledge when ready.'}</div>
+          <div className="mt-2 text-xs text-amber-200/45">Acknowledged: {ackCount}/{data?.minTeamSize ?? minTeamSizeRef.current ?? 1}</div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               disabled={sessionBusy}
               onClick={ackBriefing}
-              className="px-3 py-2 rounded bg-indigo-600 text-white disabled:opacity-60"
+              className="px-3 py-2 rounded-lg bg-amber-800/60 border border-amber-600/40 text-amber-50 hover:bg-amber-700/70 disabled:opacity-50 text-sm"
             >
               I understand
             </button>
@@ -1731,13 +1731,13 @@ export function EscapeRoomPuzzle({
                 type="button"
                 disabled={sessionBusy || !allAcked}
                 onClick={startRun}
-                className="px-3 py-2 rounded bg-emerald-600 text-white disabled:opacity-60"
+                className="px-3 py-2 rounded-lg bg-amber-600/80 border border-amber-400/50 text-amber-50 hover:bg-amber-500/80 disabled:opacity-50 text-sm font-semibold shadow-[0_0_12px_rgba(251,191,36,0.2)]"
               >
-                Start run
+                Begin
               </button>
             ) : (
-              <div className="px-3 py-2 rounded bg-slate-900 border border-slate-700 text-gray-300 text-sm">
-                Waiting for leader to start…
+              <div className="px-3 py-2 rounded-lg bg-neutral-950/60 border border-amber-800/30 text-amber-200/50 text-sm italic">
+                Waiting for leader to begin…
               </div>
             )}
           </div>
@@ -1755,10 +1755,10 @@ export function EscapeRoomPuzzle({
                 type="button"
                 onClick={() => setStageIndex(s.order)}
                 className={
-                  "rounded px-3 py-1 text-sm border " +
+                  "rounded-lg px-3 py-1.5 text-sm border transition-all " +
                   (s.order === stageIndex
-                    ? "bg-indigo-600/60 border-indigo-400 text-white"
-                    : "bg-slate-800/40 border-slate-600 text-gray-200 hover:bg-slate-800/70")
+                    ? "bg-amber-800/50 border-amber-500/50 text-amber-50 shadow-[0_0_10px_rgba(251,191,36,0.18)]"
+                    : "bg-neutral-950/50 border-amber-900/35 text-amber-200/70 hover:bg-amber-900/25 hover:text-amber-100")
                 }
               >
                 {s.title || `Stage ${s.order}`}
@@ -1767,13 +1767,18 @@ export function EscapeRoomPuzzle({
         </div>
       ) : null}
 
-      <div className="mb-3">
-        <div className="text-white font-semibold">Stage {stage.order}: {stage.title}</div>
-        {stage.description && <div className="text-gray-300 text-sm mt-1">{stage.description}</div>}
+      <div className="mb-3 px-1">
+        <div className="flex items-center gap-2">
+          <span className="text-amber-500/40 text-xs select-none">▸</span>
+          <div className="text-amber-100 font-semibold tracking-wide">{stage.title || `Stage ${stage.order}`}</div>
+        </div>
+        {stage.description && <div className="text-amber-200/50 text-sm mt-1 pl-4 leading-relaxed">{stage.description}</div>}
       </div>
 
       {hints.length > 0 && (
-        <div className="mb-3 text-sm text-gray-400">Hints: {hints.join(" • ")}</div>
+        <div className="mb-3 px-3 py-2 rounded-lg border border-amber-800/20 bg-neutral-950/40 text-sm text-amber-200/55 italic">
+          <span className="text-amber-400/55 not-italic font-semibold text-xs uppercase tracking-wider">Hint </span>{hints.join(' • ')}
+        </div>
       )}
 
       {/* Stage answer input removed — not used for these puzzles */}
@@ -1805,6 +1810,9 @@ export function EscapeRoomPuzzle({
                     triggeredItemIds={triggeredItemIds}
                   />
                 </React.Suspense>
+
+                {/* Atmospheric vignette — dark edge framing around the scene */}
+                <div className="escape-vignette absolute inset-0 pointer-events-none" style={{ zIndex: 2, borderRadius: 'inherit' }} />
 
                 {/* Ambient item effect overlays — glowing auras positioned over items */}
                 {effectiveLayoutSize && (layout as any)?.items?.some((it: any) => it.ambientEffect && it.ambientEffect !== 'none') && (
@@ -2292,7 +2300,47 @@ export function EscapeRoomPuzzle({
         />
       )}
       <style jsx global>{`
-        @keyframes pickupVideoFadeGrow {
+        /* ── Atmospheric player shell ── */
+        .escape-room-player {
+          box-shadow:
+            0 0 0 1px rgba(120, 60, 0, 0.25),
+            0 8px 60px rgba(0, 0, 0, 0.85),
+            inset 0 0 120px rgba(0, 0, 0, 0.5);
+        }
+
+        /* ── Scene canvas vignette ── */
+        .escape-vignette {
+          background: radial-gradient(
+            ellipse at 50% 50%,
+            transparent 48%,
+            rgba(0, 0, 0, 0.52) 80%,
+            rgba(0, 0, 0, 0.72) 100%
+          );
+        }
+
+        /* ── Atmospheric timer bar ── */
+        .escape-timer-running {
+          background: linear-gradient(135deg, rgba(0, 0, 0, 0.65) 0%, rgba(28, 18, 4, 0.75) 100%);
+          border: 1px solid rgba(120, 70, 0, 0.45);
+          box-shadow: 0 0 12px rgba(180, 100, 0, 0.12), inset 0 1px 0 rgba(251, 191, 36, 0.06);
+        }
+        .escape-timer-critical {
+          background: linear-gradient(135deg, rgba(35, 4, 4, 0.85) 0%, rgba(70, 8, 8, 0.75) 100%);
+          border: 1px solid rgba(160, 28, 28, 0.6);
+          box-shadow: 0 0 24px rgba(220, 38, 38, 0.28), inset 0 1px 0 rgba(255, 80, 80, 0.08);
+          animation: escapeCriticalBorder 1.4s ease-in-out infinite;
+        }
+        .escape-timer-text-pulse {
+          animation: escapeTimerTextPulse 0.9s ease-in-out infinite;
+        }
+        @keyframes escapeCriticalBorder {
+          0%, 100% { box-shadow: 0 0 24px rgba(220, 38, 38, 0.28); border-color: rgba(160, 28, 28, 0.6); }
+          50%       { box-shadow: 0 0 44px rgba(220, 38, 38, 0.55); border-color: rgba(220, 38, 38, 0.9); }
+        }
+        @keyframes escapeTimerTextPulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.45; }
+        }
           0%   { opacity: 0; transform: scale(0.82); }
           40%  { opacity: 1; }
           100% { opacity: 1; transform: scale(1); }

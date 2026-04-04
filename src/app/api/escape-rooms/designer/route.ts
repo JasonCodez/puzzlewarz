@@ -13,7 +13,8 @@ export async function POST(req: NextRequest) {
     // Destructure the designer config
     const { title, description, timeLimit, scenes, userSpecialties } = data;
     // For now, require a dummy puzzleId (should be replaced with real puzzle linkage)
-    const dummyPuzzle = await prisma.puzzle.findFirst();
+    const dummyPuzzle = await prisma.puzzle.findFirst({ where: { isActive: false, puzzleType: 'escape_room' } })
+      || await prisma.puzzle.findFirst();
     if (!dummyPuzzle) return NextResponse.json({ error: 'No puzzle found. Please create a puzzle first.' }, { status: 400 });
     const createData: any = {
       roomTitle: title,

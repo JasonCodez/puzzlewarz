@@ -28,6 +28,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    // Honeypot: bots fill this field, humans don't
+    if (body.website && String(body.website).trim().length > 0) {
+      // Silently return success to fool bots
+      return NextResponse.json({ ok: true }, { status: 200 });
+    }
+
     const parsed = RegisterSchema.parse(body);
     const name = parsed.name.trim();
     const email = parsed.email.trim().toLowerCase();

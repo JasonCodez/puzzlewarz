@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 
+import { calcLevel } from "@/lib/levels";
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -21,6 +23,9 @@ export async function GET(request: NextRequest) {
         image: true,
         role: true,
         createdAt: true,
+        xp: true,
+        level: true,
+        xpTitle: true,
       },
     });
 
@@ -45,14 +50,32 @@ export async function GET(request: NextRequest) {
 
     const userRank = rank.findIndex((r: { userId: string }) => r.userId === user.id) + 1;
 
+    let level = user.level ?? 1;
+    let xpTitle = user.xpTitle ?? "Newcomer";
+    let xpProgress = 0;
+    let xpToNextLevel = 100;
+    try {
+      const lvl = calcLevel(user.xp ?? 0);
+      level = lvl.level;
+      xpTitle = lvl.title;
+      xpProgress = lvl.progress;
+      xpToNextLevel = lvl.nextLevelXp - lvl.currentXp;
+    } catch (xpErr) {
+      console.error("XP calc error:", xpErr);
+    }
+
     return NextResponse.json({
       ...user,
+      level,
+      xpTitle,
       totalPuzzlesSolved: stats._count,
       totalPoints: stats._sum.pointsEarned || 0,
       rank: userRank > 0 ? userRank : null,
+      xpProgress,
+      xpToNextLevel,
     });
   } catch (error) {
-    console.error("Profile GET error:", error);
+    console.error("Profile GET error:", error instanceof Error ? error.message : String(error), error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -87,6 +110,9 @@ export async function PUT(request: NextRequest) {
         image: true,
         role: true,
         createdAt: true,
+        xp: true,
+        level: true,
+        xpTitle: true,
       },
     });
 
@@ -111,8 +137,7 @@ export async function PUT(request: NextRequest) {
       ...user,
       totalPuzzlesSolved: stats._count,
       totalPoints: stats._sum.pointsEarned || 0,
-      rank: userRank > 0 ? userRank : null,
-    });
+      rank: userRank > 0 ? userRank : null,      xpProgress: calcLevel(user.xp ?? 0),    });
   } catch (error) {
     console.error("Profile PUT error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
