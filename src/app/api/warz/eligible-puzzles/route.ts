@@ -35,7 +35,7 @@ export async function GET(_request: NextRequest) {
     const puzzles = await prisma.puzzle.findMany({
       where: {
         isActive: true,
-        puzzleType: { in: ALLOWED_TYPES },
+        isWarzExclusive: true,
       },
       select: {
         id: true,

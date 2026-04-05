@@ -34,6 +34,7 @@ export async function GET(_req: NextRequest) {
         puzzleType: true,
         difficulty: true,
         isActive: true,
+        isWarzExclusive: true,
         createdAt: true,
         category: { select: { name: true } },
         escapeRoom: { select: { roomTitle: true } },
@@ -95,6 +96,7 @@ export async function POST(request: NextRequest) {
       sudokuDifficulty,
       timeLimitSeconds,
       puzzleData,
+      isWarzExclusive,
     } = body;
 
     // Validate input - title is required for most puzzle types but optional for Sudoku, Escape Room, and Word Crack
@@ -219,6 +221,7 @@ export async function POST(request: NextRequest) {
       difficulty: puzzleDifficulty,
       puzzleType: puzzleType || 'general',
       xpReward: typeof xpReward === 'number' && xpReward > 0 ? xpReward : 50,
+      isWarzExclusive: isWarzExclusive === true,
       ...(puzzleType === 'escape_room'
         ? {
             isTeamPuzzle: true,

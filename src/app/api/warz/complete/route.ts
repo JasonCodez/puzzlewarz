@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
       // Non-critical
     }
 
-    return NextResponse.json({ challenge: updatedChallenge, outcome, pot });
+    return NextResponse.json({ challenge: updatedChallenge, outcome, pot, winnerId });
   } catch (err) {
     console.error("[WARZ COMPLETE]", err);
     return NextResponse.json({ error: "Failed to complete challenge" }, { status: 500 });

@@ -64,6 +64,7 @@ export async function PUT(
     sudokuSolution,
     sudokuDifficulty,
     timeLimitSeconds,
+    isWarzExclusive,
   } = body;
 
   // Get or create category
@@ -88,6 +89,7 @@ export async function PUT(
         description: description || "",
         content: content || "",
         difficulty: safeDifficulty,
+        isWarzExclusive: isWarzExclusive === true,
         ...(categoryRecord ? { categoryId: categoryRecord.id } : {}),
         ...(!isSpecialType ? { riddleAnswer: correctAnswer } : {}),
         ...(([ "escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg"].includes(puzzleType)) && puzzleData != null

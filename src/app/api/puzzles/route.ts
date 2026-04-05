@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "100");
     const skip = parseInt(searchParams.get("skip") || "0");
 
-    const where: any = { isActive: true };
+    const where: any = { isActive: true, isWarzExclusive: false };
     // Optional filter for team puzzles
     const isTeam = searchParams.get("isTeam");
     if (isTeam === "true") where.isTeamPuzzle = true;

@@ -22,6 +22,7 @@ interface PuzzleFormData {
   isMultiPart: boolean;
   parts: PuzzlePart[];
   puzzleData: Record<string, unknown>;
+  isWarzExclusive: boolean;
 }
 
 interface PuzzlePart {
@@ -61,6 +62,7 @@ interface PuzzleListItem {
   puzzleType: string;
   difficulty: string;
   isActive: boolean;
+  isWarzExclusive: boolean;
   createdAt: string;
   category: { name: string } | null;
   escapeRoom?: { roomTitle: string } | null;
@@ -109,6 +111,7 @@ export default function AdminPuzzlesPage() {
       { title: "Part 2", content: "", answer: "", points: 50 },
     ],
     puzzleData: {},
+    isWarzExclusive: false,
   });
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
@@ -197,6 +200,7 @@ export default function AdminPuzzlesPage() {
           { title: "Part 2", content: "", answer: "", points: 50 },
         ],
         puzzleData: (p.data as Record<string, unknown>) || {},
+        isWarzExclusive: (p as any).isWarzExclusive === true,
       };
 
       // Merge jigsaw config into puzzleData
@@ -248,6 +252,7 @@ export default function AdminPuzzlesPage() {
         { title: "Part 2", content: "", answer: "", points: 50 },
       ],
       puzzleData: {},
+      isWarzExclusive: false,
     });
     setJigsawImageUrl("");
     setJigsawImagePreview("");
@@ -883,6 +888,7 @@ export default function AdminPuzzlesPage() {
             { title: "Part 2", content: "", answer: "", points: 50 },
           ],
           puzzleData: {},
+          isWarzExclusive: false,
         });
         setMediaFiles([]);
         setJigsawImagePreview("");
@@ -975,6 +981,7 @@ export default function AdminPuzzlesPage() {
                       <th className="px-4 py-3 font-semibold">Type</th>
                       <th className="px-4 py-3 font-semibold">Difficulty</th>
                       <th className="px-4 py-3 font-semibold">Category</th>
+                      <th className="px-4 py-3 font-semibold">Destination</th>
                       <th className="px-4 py-3 font-semibold">Created</th>
                       <th className="px-4 py-3 font-semibold">Status</th>
                       <th className="px-4 py-3 font-semibold text-right">Actions</th>
@@ -1003,6 +1010,13 @@ export default function AdminPuzzlesPage() {
                           }`}>{p.difficulty}</span>
                         </td>
                         <td className="px-4 py-3 text-gray-400">{p.category?.name || '—'}</td>
+                        <td className="px-4 py-3">
+                          {p.isWarzExclusive ? (
+                            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-500/20 text-yellow-300">⚔️ Warz</span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/20 text-blue-300">🧩 Regular</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{new Date(p.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded text-xs font-semibold ${p.isActive ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>
@@ -1111,6 +1125,45 @@ export default function AdminPuzzlesPage() {
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  {/* Destination */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                      Puzzle Destination *
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, isWarzExclusive: false }))}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg border-2 text-left transition-all ${
+                          !formData.isWarzExclusive
+                            ? "border-blue-500 bg-blue-500/15 text-blue-200"
+                            : "border-slate-600 bg-slate-700/40 text-gray-400 hover:border-slate-500"
+                        }`}
+                      >
+                        <span className="text-2xl">🧩</span>
+                        <div>
+                          <div className="font-semibold text-sm">Regular Puzzles</div>
+                          <div className="text-xs opacity-70">Shown on the main puzzle page</div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, isWarzExclusive: true }))}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg border-2 text-left transition-all ${
+                          formData.isWarzExclusive
+                            ? "border-yellow-500 bg-yellow-500/15 text-yellow-200"
+                            : "border-slate-600 bg-slate-700/40 text-gray-400 hover:border-slate-500"
+                        }`}
+                      >
+                        <span className="text-2xl">⚔️</span>
+                        <div>
+                          <div className="font-semibold text-sm">Warz Only</div>
+                          <div className="text-xs opacity-70">Exclusive to battle challenges</div>
+                        </div>
+                      </button>
+                    </div>
                   </div>
 
 

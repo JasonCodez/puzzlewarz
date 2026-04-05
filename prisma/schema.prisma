@@ -228,6 +228,7 @@ model Puzzle {
   rarity                   String                     @default("common")
   xpReward                 Int                        @default(50)
   isTeamPuzzle             Boolean                    @default(false)
+  isWarzExclusive          Boolean                    @default(false)
   minTeamSize              Int                        @default(1)
   puzzleType               String                     @default("general")
   riddleAnswer             String?

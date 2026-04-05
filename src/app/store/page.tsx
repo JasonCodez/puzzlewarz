@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -222,7 +222,7 @@ function CosmeticPreview({ item }: { item: StoreItem }) {
   return null;
 }
 
-export default function StorePage() {
+function StorePageInner() {
   const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -811,5 +811,17 @@ export default function StorePage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function StorePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#0a0c10" }}>
+        <div className="text-white text-xl">Loading store...</div>
+      </div>
+    }>
+      <StorePageInner />
+    </Suspense>
   );
 }
