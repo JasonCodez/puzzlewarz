@@ -1,15 +1,10 @@
 import type { NextConfig } from "next";
-import os from "os";
-import path from "path";
 
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   poweredByHeader: false,
   experimental: {
-    // Move the Turbopack dev cache out of the project tree and into the system
-    // temp directory to avoid Windows Defender scanning every incremental write.
-    turboCacheDir: path.join(os.tmpdir(), "puzzlewarz-turbo-cache"),
   },
   images: {
     remotePatterns: [
