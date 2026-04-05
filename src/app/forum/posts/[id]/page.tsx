@@ -181,7 +181,7 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
   return (
     <>
       <Navbar />
-      <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-16">
+      <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-20 sm:pt-24">
         <div className="max-w-4xl mx-auto px-4 py-12">
           {/* Back Link */}
           <Link href="/forum" className="text-sm" style={{ color: '#FDE74C' }}>

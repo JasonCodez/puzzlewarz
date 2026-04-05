@@ -259,7 +259,7 @@ export default function LearningPathsPage() {
     <div className="min-h-screen" style={{ backgroundColor: "#020202" }}>
       <Navbar />
 
-      <main className="max-w-4xl mx-auto px-4 py-12">
+      <main className="max-w-4xl mx-auto px-4 pt-24 pb-12">
         {/* ── Page header ──────────────────────────────────────────── */}
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-2">

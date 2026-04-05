@@ -322,7 +322,7 @@ export default function DailyPage() {
         .pw-bounce{ animation: pw-bounce 0.7s ease; }
       `}</style>
 
-      <main className="pt-20 pb-16 flex flex-col items-center px-2">
+      <main className="pt-24 pb-16 flex flex-col items-center px-2">
 
         {/* ── Header ── */}
         <div className="w-full max-w-xs mt-6 mb-5 text-center pb-4"

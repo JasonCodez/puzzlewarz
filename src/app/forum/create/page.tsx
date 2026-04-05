@@ -85,7 +85,7 @@ export default function CreateForumPostPage() {
   return (
     <>
       <Navbar />
-      <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-16">
+      <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-20 sm:pt-24">
         <div className="max-w-3xl mx-auto px-4 py-12">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white mb-2">Create New Forum Post</h1>

@@ -97,7 +97,7 @@ export default function ForumPage() {
   return (
     <>
       <Navbar />
-      <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-16">
+      <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-20 sm:pt-24">
         <div className="max-w-6xl mx-auto px-4 py-12">
           {/* Header */}
           <div className="mb-8">

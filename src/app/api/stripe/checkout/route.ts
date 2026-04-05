@@ -4,9 +4,11 @@ import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-03-25.dahlia",
-});
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY is not configured");
+  return new Stripe(key, { apiVersion: "2026-03-25.dahlia" });
+}
 
 const BUNDLES: Record<string, { priceId: string; points: number; label: string }> = {
   starter_pack: {
@@ -51,7 +53,16 @@ export async function POST(request: NextRequest) {
 
     const bundle = BUNDLES[bundleKey];
 
-    // Retrieve or create Stripe customer so receipts link to their email
+    // Guard: catch missing env vars before Stripe throws a cryptic error
+    if (!bundle.priceId || bundle.priceId === "undefined") {
+      console.error(`[STRIPE CHECKOUT] Missing env var for bundle "${bundleKey}" — priceId is undefined. Check STRIPE_PRICE_${bundleKey.replace("_pack", "").toUpperCase()} in Render env vars.`);
+      return NextResponse.json({ error: "Stripe price not configured for this bundle" }, { status: 500 });
+    }
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error("[STRIPE CHECKOUT] STRIPE_SECRET_KEY is not set");
+      return NextResponse.json({ error: "Stripe is not configured" }, { status: 500 });
+    }
+    const stripe = getStripe();
     const dbUser = await prisma.user.findUnique({
       where: { id: currentUser.id },
       select: { email: true, name: true, stripeCustomerId: true },
