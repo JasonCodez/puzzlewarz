@@ -27,6 +27,7 @@ import WordCrackPuzzle from "@/components/puzzle/WordCrackPuzzle";
 import WordSearchPuzzle from "@/components/puzzle/WordSearchPuzzle";
 import AnagramBlitz from "@/components/puzzle/AnagramBlitz";
 import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
+import { getSkinTokens } from "@/lib/puzzleSkins";
 
 interface XpModalData {
   xpGained: number;
@@ -265,6 +266,15 @@ export default function PuzzleDetailPage() {
     isFullscreen: boolean;
   };
   const [jigsawControls, setJigsawControls] = useState<JigsawControlsApi | null>(null);
+  const [activeSkin, setActiveSkin] = useState<string>("default");
+
+  // Fetch active skin once on mount
+  useEffect(() => {
+    fetch("/api/user/profile", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.activeSkin) setActiveSkin(d.activeSkin); })
+      .catch(() => {});
+  }, []);
 
   const jigsawPlayable: JigsawPuzzleType | null = (() => {
     if (!puzzle || puzzle.puzzleType !== 'jigsaw') return null;
@@ -978,12 +988,33 @@ export default function PuzzleDetailPage() {
     );
   }
 
+  const skin = getSkinTokens(activeSkin);
+
   return (
     <div
       style={{
-        backgroundColor: "#020202",
-        backgroundImage: "linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)",
-      }}
+        backgroundColor: skin.boardBg !== "rgba(15,18,25,0.97)" ? skin.boardBg : "#020202",
+        backgroundImage: activeSkin === "default"
+          ? "linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)"
+          : `linear-gradient(135deg, ${skin.boardBg} 0%, ${skin.tileBg} 50%, ${skin.boardBg} 100%)`,
+        fontFamily: skin.tileFontFamily || undefined,
+        // Expose skin tokens as CSS variables for child components
+        "--ps-board-bg":    skin.boardBg,
+        "--ps-board-border": skin.boardBorder,
+        "--ps-board-shadow": skin.boardShadow,
+        "--ps-tile-bg":     skin.tileBg,
+        "--ps-tile-border": skin.tileBorder,
+        "--ps-tile-text":   skin.tileText,
+        "--ps-correct":     skin.accentCorrect,
+        "--ps-wrong":       skin.accentWrong,
+        "--ps-active":      skin.accentActive,
+        "--ps-input-bg":    skin.inputBg,
+        "--ps-input-border": skin.inputBorder,
+        "--ps-input-text":  skin.inputText,
+        "--ps-btn-bg":      skin.btnBg,
+        "--ps-btn-text":    skin.btnText,
+        "--ps-label":       skin.labelColor,
+      } as React.CSSProperties}
       className="min-h-screen"
     >
       {timeLimitExceeded && (

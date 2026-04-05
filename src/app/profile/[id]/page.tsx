@@ -344,53 +344,114 @@ export default function PublicProfilePage() {
   const isOwnProfile = (currentUserId || (session?.user as any)?.id) === userId;
 
   // Theme colors
-  const themeMap: Record<string, { bg: string; accent: string; headerBg: string }> = {
-    gold:    { bg: '#0a0800', accent: '#FDE74C', headerBg: 'rgba(253,231,76,0.08)' },
-    neon:    { bg: '#05070a', accent: '#00FFFF', headerBg: 'rgba(0,255,255,0.06)' },
-    crimson: { bg: '#0a0303', accent: '#DC2626', headerBg: 'rgba(220,38,38,0.08)' },
-    default: { bg: '#020202', accent: '#3891A6', headerBg: 'rgba(56,145,166,0.1)' },
+  const themeMap: Record<string, {
+    bg: string; accent: string; secondary: string;
+    headerBg: string; headerGrad: string;
+    cardBg: string; cardBorder: string;
+    accentMuted: string; accentGlow: string;
+    btnBg: string; btnText: string;
+    topBar: string;
+  }> = {
+    gold: {
+      bg: '#0d0900',
+      accent: '#FDE74C', secondary: '#FFB86B',
+      headerBg: 'rgba(253,231,76,0.10)', headerGrad: 'linear-gradient(135deg, #2a1a00 0%, #1a1000 50%, #0d0900 100%)',
+      cardBg: 'rgba(253,231,76,0.07)', cardBorder: '#FDE74C',
+      accentMuted: 'rgba(253,231,76,0.15)', accentGlow: 'rgba(253,231,76,0.8)',
+      btnBg: 'linear-gradient(135deg, #FDE74C, #FFB86B)', btnText: '#1a1000',
+      topBar: 'linear-gradient(90deg, #FDE74C, #FFB86B)',
+    },
+    neon: {
+      bg: '#04000e',
+      accent: '#00FFFF', secondary: '#CC00FF',
+      headerBg: 'rgba(0,255,255,0.08)', headerGrad: 'linear-gradient(135deg, #0a0020 0%, #04000e 50%, #000a12 100%)',
+      cardBg: 'rgba(0,255,255,0.06)', cardBorder: '#00FFFF',
+      accentMuted: 'rgba(0,255,255,0.12)', accentGlow: 'rgba(0,255,255,0.9)',
+      btnBg: 'linear-gradient(135deg, #00FFFF, #CC00FF)', btnText: '#000',
+      topBar: 'linear-gradient(90deg, #00FFFF, #CC00FF)',
+    },
+    crimson: {
+      bg: '#0e0000',
+      accent: '#ef4444', secondary: '#F97316',
+      headerBg: 'rgba(220,38,38,0.10)', headerGrad: 'linear-gradient(135deg, #2d0000 0%, #1a0000 50%, #0e0000 100%)',
+      cardBg: 'rgba(220,38,38,0.08)', cardBorder: '#ef4444',
+      accentMuted: 'rgba(220,38,38,0.15)', accentGlow: 'rgba(220,38,38,0.85)',
+      btnBg: 'linear-gradient(135deg, #DC2626, #F97316)', btnText: '#fff',
+      topBar: 'linear-gradient(90deg, #DC2626, #F97316)',
+    },
+    default: {
+      bg: '#020202',
+      accent: '#3891A6', secondary: '#FDE74C',
+      headerBg: 'rgba(56,145,166,0.12)', headerGrad: 'linear-gradient(135deg, rgba(56,145,166,0.2) 0%, #020202 100%)',
+      cardBg: 'rgba(56,145,166,0.10)', cardBorder: '#3891A6',
+      accentMuted: 'rgba(56,145,166,0.15)', accentGlow: 'rgba(56,145,166,0)',
+      btnBg: '#3891A6', btnText: '#fff',
+      topBar: 'linear-gradient(90deg, #3891A6, #38D399)',
+    },
   };
   const theme = themeMap[profile.activeTheme || 'default'] ?? themeMap.default;
 
   // Avatar frame styles
-  const frameMap: Record<string, React.CSSProperties> = {
-    gold:    { borderColor: '#FDE74C', borderWidth: 4, boxShadow: '0 0 10px rgba(253,231,76,0.5)' },
-    neon:    { borderColor: '#00FFFF', borderWidth: 4, boxShadow: '0 0 12px rgba(0,255,255,0.6), 0 0 24px rgba(0,255,255,0.2)' },
-    flame:   { borderColor: '#F97316', borderWidth: 4, boxShadow: '0 0 12px rgba(249,115,22,0.7), 0 0 24px rgba(220,38,38,0.4)' },
-    none:    { borderColor: '#3891A6', borderWidth: 4 },
+  // Frame config: colors for the animated conic-gradient ring
+  const frameAnimConfig: Record<string, { colorA: string; colorB: string; glow: string } | null> = {
+    gold:  { colorA: '#FDE74C', colorB: '#FFB86B', glow: '0 0 20px rgba(253,231,76,0.7), 0 0 40px rgba(253,231,76,0.3)' },
+    neon:  { colorA: '#00FFFF', colorB: '#CC00FF', glow: '0 0 20px rgba(0,255,255,0.7), 0 0 40px rgba(204,0,255,0.4)' },
+    flame: { colorA: '#FF4500', colorB: '#FDE74C', glow: '0 0 20px rgba(255,69,0,0.8), 0 0 40px rgba(253,231,76,0.4)' },
+    none:  null,
   };
-  const frameStyle = frameMap[profile.activeFrame || 'none'] ?? frameMap.none;
+  const activeFrame = frameAnimConfig[profile.activeFrame || 'none'] ?? null;
+
+  // Render avatar (shared helper for header and card)
+  const renderAvatar = (sizeClass: string) => {
+    if (activeFrame) {
+      return (
+        <div
+          className={`${sizeClass} avatar-frame-animated flex-shrink-0`}
+          style={{
+            '--frame-color-a': activeFrame.colorA,
+            '--frame-color-b': activeFrame.colorB,
+            '--frame-inner-bg': theme.bg,
+            boxShadow: activeFrame.glow,
+          } as React.CSSProperties}
+        >
+          <div className="avatar-frame-inner">
+            {profile.image
+              ? <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
+              : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: theme.accentMuted }}>👤</div>}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div
+        className={`${sizeClass} rounded-full overflow-hidden border-4 flex-shrink-0 flex items-center justify-center`}
+        style={{ borderColor: theme.accent, boxShadow: `0 0 14px ${theme.accentGlow}` }}
+      >
+        {profile.image
+          ? <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
+          : <div className="w-full h-full flex items-center justify-center text-4xl" style={{ backgroundColor: theme.accentMuted }}>👤</div>}
+      </div>
+    );
+  };
 
   return (
-    <div style={{ backgroundColor: theme.bg, backgroundImage: `linear-gradient(135deg, ${theme.bg} 0%, #0a0a0a 50%, ${theme.bg} 100%)` }} className="min-h-screen">
+    <div style={{ backgroundColor: theme.bg, backgroundImage: theme.headerGrad }} className="min-h-screen">
+      {/* Theme accent bar */}
+      <div className="fixed top-0 left-0 right-0 h-[3px] z-50" style={{ background: theme.topBar, boxShadow: `0 0 12px ${theme.accentGlow}` }} />
       {/* Profile Section */}
       <div className="max-w-4xl mx-auto px-4 py-12 pt-28">
         {/* Profile Header */}
-          <div className="border rounded-lg p-8 mb-8" style={{ backgroundColor: theme.headerBg, borderColor: theme.accent }}>
+          <div className="border rounded-lg p-8 mb-8" style={{ backgroundColor: theme.headerBg, borderColor: theme.accent, boxShadow: `0 0 30px ${theme.accentMuted}` }}>
           <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between mb-6">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 w-full">
               <div className="relative flex-shrink-0 mb-4 sm:mb-0">
-                {profile.image ? (
-                  <img
-                    src={profile.image}
-                    alt={profile.name}
-                    className="w-24 h-24 rounded-full object-cover border-4 flex-shrink-0"
-                    style={frameStyle}
-                  />
-                ) : (
-                  <div
-                    className="w-24 h-24 rounded-full flex items-center justify-center text-4xl border-4 flex-shrink-0"
-                    style={{ backgroundColor: 'rgba(56, 145, 166, 0.2)', ...frameStyle }}
-                  >
-                    👤
-                  </div>
-                )}
+                {renderAvatar('w-24 h-24')}
                 {isOwnProfile && (
                   <>
                     <label
                       htmlFor="avatar-upload"
                       className="absolute bottom-0 right-0 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer border-2 border-white transition-opacity hover:opacity-80"
-                      style={{ backgroundColor: '#3891A6' }}
+                      style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
                       title="Upload avatar"
                     >
                       {avatarUploading ? (
@@ -427,7 +488,7 @@ export default function PublicProfilePage() {
                         setShowNameChangeConfirm(true);
                       }}
                       className="px-3 py-1 rounded text-sm font-medium transition-colors"
-                      style={{ backgroundColor: '#3891A6', color: 'white' }}
+                      style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
                     >
                       Edit
                     </button>
@@ -442,8 +503,8 @@ export default function PublicProfilePage() {
                         maxLength={50}
                         className="w-full sm:flex-1 sm:min-w-0 px-3 py-2 rounded border text-white text-2xl sm:text-4xl font-bold"
                         style={{
-                          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                          borderColor: '#3891A6',
+                          backgroundColor: 'rgba(0,0,0,0.5)',
+                          borderColor: theme.accent,
                         }}
                         placeholder="Enter your name"
                       />
@@ -453,7 +514,7 @@ export default function PublicProfilePage() {
                           onClick={handleUpdateName}
                           disabled={nameSaving}
                           className="flex-1 sm:flex-none w-full sm:w-auto px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
-                          style={{ backgroundColor: '#4CAF50', color: 'white' }}
+                          style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
                         >
                           {nameSaving ? 'Saving...' : 'Save'}
                         </button>
@@ -598,7 +659,7 @@ export default function PublicProfilePage() {
 
         {/* Social Stats */}
         <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="border rounded-lg p-4" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
+          <div className="border rounded-lg p-4" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
             <div className="flex items-center justify-between">
               <div>
                 <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Followers</p>
@@ -607,13 +668,13 @@ export default function PublicProfilePage() {
               <Heart className="w-8 h-8" style={{ color: '#EF4444' }} />
             </div>
           </div>
-          <div className="border rounded-lg p-4" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
+          <div className="border rounded-lg p-4" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
             <div className="flex items-center justify-between">
               <div>
                 <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Following</p>
                 <p className="text-2xl font-bold text-white">{profile.social.following}</p>
               </div>
-              <Users className="w-8 h-8" style={{ color: '#3891A6' }} />
+              <Users className="w-8 h-8" style={{ color: theme.accent }} />
             </div>
           </div>
         </div>
@@ -621,7 +682,7 @@ export default function PublicProfilePage() {
         {/* My Puzzles Archive (own profile only) - moved below Social Stats */}
         {isOwnProfile && (
           <div className="mb-8">
-            <div className="border rounded-lg p-6" style={{ backgroundColor: 'rgba(2,2,2,0.02)', borderColor: '#3891A6' }}>
+            <div className="border rounded-lg p-6" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-white">My Puzzles (Archive)</h3>
                 <button
@@ -643,7 +704,7 @@ export default function PublicProfilePage() {
                     }
                   }}
                   className="px-4 py-2 rounded text-sm font-semibold transition hover:opacity-90"
-                  style={{ backgroundColor: '#3891A6', color: 'white' }}
+                  style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
                 >
                   {showMyPuzzles ? 'Hide' : 'Open'}
                 </button>
@@ -658,7 +719,7 @@ export default function PublicProfilePage() {
                   ) : (
                     <div className="space-y-3">
                       {myPuzzles.map((p) => (
-                        <div key={p.id} className="block border rounded p-3" style={{ borderColor: '#3891A6' }} role="group" aria-disabled="true">
+                        <div key={p.id} className="block border rounded p-3" style={{ borderColor: theme.accent, backgroundColor: theme.accentMuted }} role="group" aria-disabled="true">
                           <div className="flex items-center justify-between">
                             <div>
                               <h4 className="font-semibold text-white">{p.title}</h4>
@@ -683,9 +744,9 @@ export default function PublicProfilePage() {
 
         {/* Teams Section */}
         {profile.teams.length > 0 && (
-          <div className="border rounded-lg p-6 mb-8" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
+          <div className="border rounded-lg p-6 mb-8" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
             <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-              <Users className="w-6 h-6" />
+              <Users className="w-6 h-6" style={{ color: theme.accent }} />
               Teams ({profile.teams.length})
             </h2>
             <div className="grid grid-cols-2 gap-4">
@@ -695,8 +756,8 @@ export default function PublicProfilePage() {
                   href={`/teams/${tm.team.id}`}
                   className="p-4 rounded-lg border transition-all hover:shadow-lg cursor-pointer"
                   style={{
-                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                    borderColor: '#3891A6',
+                    backgroundColor: theme.accentMuted,
+                    borderColor: theme.accent,
                   }}
                 >
                   <h3 className="font-semibold text-white mb-1">{tm.team.name}</h3>
@@ -713,9 +774,9 @@ export default function PublicProfilePage() {
 
         {/* Achievements Section */}
         {profile.achievements.length > 0 && (
-          <div className="border rounded-lg p-6" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
+          <div className="border rounded-lg p-6" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
             <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-              <Trophy className="w-6 h-6" />
+              <Trophy className="w-6 h-6" style={{ color: theme.accent }} />
               Achievements ({profile.achievements.length})
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -771,6 +832,10 @@ export default function PublicProfilePage() {
           targetUserId={userId}
           targetUserName={profile.name}
           onClose={() => setShowMessageModal(false)}
+          accentColor={theme.accent}
+          accentMuted={theme.accentMuted}
+          btnBg={theme.btnBg}
+          btnText={theme.btnText}
         />
       )}
 
@@ -785,8 +850,8 @@ export default function PublicProfilePage() {
             <div
               className="w-full max-w-md rounded-lg shadow-xl border p-6"
               style={{
-                backgroundColor: "rgba(2, 2, 2, 0.95)",
-                borderColor: "#3891A6",
+                backgroundColor: "rgba(2, 2, 2, 0.97)",
+                borderColor: theme.accent,
               }}
             >
               <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -812,8 +877,8 @@ export default function PublicProfilePage() {
                 <div
                   className="p-4 rounded-lg text-center"
                   style={{
-                    backgroundColor: "rgba(56, 145, 166, 0.1)",
-                    borderColor: "#3891A6",
+                    backgroundColor: theme.cardBg,
+                    borderColor: theme.accent,
                     borderWidth: "1px",
                     color: "#DDDBF1",
                   }}
@@ -821,8 +886,8 @@ export default function PublicProfilePage() {
                   <p>You haven't created or joined any teams yet.</p>
                   <Link
                     href="/teams"
-                    className="mt-4 inline-block px-4 py-2 rounded-lg text-white font-medium transition-colors"
-                    style={{ backgroundColor: "#3891A6" }}
+                    className="mt-4 inline-block px-4 py-2 rounded-lg font-medium transition-colors"
+                    style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
                   >
                     Create a Team
                   </Link>
@@ -837,9 +902,9 @@ export default function PublicProfilePage() {
                         style={{
                           backgroundColor:
                             selectedTeam === team.id
-                              ? "rgba(56, 145, 166, 0.2)"
+                              ? theme.accentMuted
                               : "rgba(51, 65, 85, 0.5)",
-                          borderColor: selectedTeam === team.id ? "#3891A6" : "#475569",
+                          borderColor: selectedTeam === team.id ? theme.accent : "#475569",
                           borderWidth: "1px",
                         }}
                       >
@@ -866,7 +931,7 @@ export default function PublicProfilePage() {
                       type="button"
                       onClick={() => setShowInviteModal(false)}
                       className="flex-1 px-4 py-2 rounded-lg text-white transition-colors"
-                      style={{ backgroundColor: "rgba(56, 145, 166, 0.2)" }}
+                      style={{ backgroundColor: theme.accentMuted }}
                     >
                       Cancel
                     </button>
@@ -874,8 +939,8 @@ export default function PublicProfilePage() {
                       type="submit"
                       onClick={handleSendTeamInvite}
                       disabled={inviteLoading || !selectedTeam}
-                      className="flex-1 px-4 py-2 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
-                      style={{ backgroundColor: "#3891A6" }}
+                      className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                      style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
                     >
                       {inviteLoading ? "Sending..." : "Send Invite"}
                     </button>
@@ -910,10 +975,18 @@ function DirectMessageModal({
   targetUserId,
   targetUserName,
   onClose,
+  accentColor = '#3891A6',
+  accentMuted = 'rgba(56,145,166,0.15)',
+  btnBg = '#3891A6',
+  btnText = '#fff',
 }: {
   targetUserId: string;
   targetUserName: string;
   onClose: () => void;
+  accentColor?: string;
+  accentMuted?: string;
+  btnBg?: string;
+  btnText?: string;
 }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -964,8 +1037,8 @@ function DirectMessageModal({
         <div
           className="w-full max-w-md rounded-lg shadow-xl border p-6"
           style={{
-            backgroundColor: "rgba(2, 2, 2, 0.95)",
-            borderColor: "#3891A6",
+            backgroundColor: "rgba(2, 2, 2, 0.97)",
+            borderColor: accentColor,
           }}
         >
           <h2 className="text-xl font-bold text-white mb-4">
@@ -1009,8 +1082,8 @@ function DirectMessageModal({
               rows={4}
               className="w-full px-4 py-2 rounded-lg text-white placeholder-gray-500 resize-none"
               style={{
-                backgroundColor: "rgba(56, 145, 166, 0.1)",
-                borderColor: "#3891A6",
+                backgroundColor: accentMuted,
+                borderColor: accentColor,
                 borderWidth: "1px",
               }}
             />
@@ -1020,15 +1093,15 @@ function DirectMessageModal({
                 type="button"
                 onClick={onClose}
                 className="flex-1 px-4 py-2 rounded-lg text-white transition-colors"
-                style={{ backgroundColor: "rgba(56, 145, 166, 0.2)" }}
+                style={{ backgroundColor: accentMuted }}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 px-4 py-2 rounded-lg text-white font-medium transition-colors disabled:opacity-50"
-                style={{ backgroundColor: "#3891A6" }}
+                className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                style={{ background: btnBg, color: btnText } as React.CSSProperties}
               >
                 {loading ? "Sending..." : "Send Message"}
               </button>

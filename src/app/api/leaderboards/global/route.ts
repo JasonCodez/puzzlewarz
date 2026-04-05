@@ -29,27 +29,29 @@ export async function GET(request: NextRequest) {
 
     // Get all users
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, totalPoints: true, activeFlair: true },
+      select: { id: true, name: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 
     // Calculate rankings with progress data
+    // earnedPoints = totalPoints - purchasedPoints so bought points never affect rank
     const entries = await Promise.all(
       users.map(async (user) => {
         const puzzlesSolved = await prisma.userPuzzleProgress.count({
           where: { userId: user.id, solved: true },
         });
+        const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
         return {
               userId: user.id,
               userName: user.name,
               activeFlair: resolveFlair(user.activeFlair),
               puzzlesSolved,
-              totalPoints: user.totalPoints ?? 0,
+              totalPoints: earnedPoints,
               rank: 0,
             };
       })
     );
 
-    // Sort by points descending
+    // Sort by earned points descending
     entries.sort((a, b) => b.totalPoints - a.totalPoints);
 
     // Re-rank after sorting

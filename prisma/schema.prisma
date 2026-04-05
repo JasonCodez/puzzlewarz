@@ -27,6 +27,7 @@ model User {
   level                  Int                        @default(1)
   xpTitle                String                     @default("Newcomer")
   totalPoints            Int                        @default(0)
+  purchasedPoints        Int                        @default(0)
   accounts               Account[]
   activities             Activity[]
   argPhaseProgress       ARGPhaseProgress[]
@@ -85,6 +86,10 @@ model User {
   // Point Store — inventory
   inventory              UserInventory[]
   dailyWordRecords       DailyWordRecord[]
+
+  // Stripe
+  stripeCustomerId       String?
+  pointPurchases         PointPurchase[]
 
   @@map("users")
 }
@@ -955,6 +960,21 @@ model UserInventory {
   @@index([userId])
   @@index([itemId])
   @@map("user_inventory")
+}
+
+model PointPurchase {
+  id              String   @id @default(cuid())
+  userId          String
+  stripeSessionId String   @unique
+  bundleKey       String
+  pointsGranted   Int
+  amountPaid      Int      // in smallest currency unit (pence/cents)
+  currency        String   @default("gbp")
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("point_purchases")
 }
 
 model DailyWordRecord {

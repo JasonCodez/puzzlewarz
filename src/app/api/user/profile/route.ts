@@ -26,6 +26,10 @@ export async function GET(request: NextRequest) {
         xp: true,
         level: true,
         xpTitle: true,
+        activeTheme: true,
+        activeFrame: true,
+        activeSkin: true,
+        activeFlair: true,
       },
     });
 

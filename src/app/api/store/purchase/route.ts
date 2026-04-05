@@ -67,7 +67,10 @@ export async function POST(request: NextRequest) {
     };
 
     if (itemKey === "streak_shield") userUpdate.streakShields = { increment: 1 };
-    else if (itemKey === "hint_token") userUpdate.hintTokens = { increment: 1 };
+    else if (itemKey === "hint_token" || itemKey === "hint_pack_3" || itemKey === "hint_pack_5" || itemKey === "hint_pack_10") {
+      const count = (item.metadata as { count?: number } | null)?.count ?? 1;
+      userUpdate.hintTokens = { increment: count };
+    }
     else if (itemKey === "skip_token") userUpdate.skipTokens = { increment: 1 };
     else if (itemKey === "warz_slot") userUpdate.warzChallengeSlots = { increment: 1 };
     else if (itemKey === "warz_rematch") userUpdate.warzRematchTokens = { increment: 1 };
