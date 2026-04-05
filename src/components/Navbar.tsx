@@ -30,6 +30,11 @@ interface UserInfo {
   id: string;
   role: string;
   image?: string | null;
+  level?: number;
+  title?: string;
+  currentXp?: number;
+  nextLevelXp?: number;
+  progress?: number;
 }
 
 
@@ -46,6 +51,13 @@ export default function Navbar() {
       setLoading(false);
     }
   }, [session?.user?.email]);
+
+  // Re-fetch whenever XP is awarded (e.g. after puzzle completion)
+  useEffect(() => {
+    const handler = () => fetchUserInfo();
+    window.addEventListener('puzzlewarz:xp-updated', handler);
+    return () => window.removeEventListener('puzzlewarz:xp-updated', handler);
+  }, []);
 
   const fetchUserInfo = async () => {
     try {
@@ -79,6 +91,7 @@ export default function Navbar() {
   };
 
   return (
+    <>
     <nav
       id="global-nav"
       className={`fixed w-full top-0 z-50 backdrop-blur-md${mobileOpen ? ' nav-mobile-open' : ''}`}
@@ -144,7 +157,16 @@ export default function Navbar() {
                 )}
                 <div className="hidden sm:block text-right">
                   <p className="text-white font-semibold text-sm max-w-[140px] truncate">{session.user?.name || session.user?.email}</p>
-                  <p style={{ color: "#3891A6" }} className="text-xs">Player</p>
+                  {userInfo?.level !== undefined ? (
+                    <>
+                      <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}</p>
+                      <div className="mt-0.5 h-1 w-28 rounded-full overflow-hidden" style={{ background: "rgba(129,140,248,0.15)" }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${userInfo.progress ?? 0}%`, background: "linear-gradient(90deg, #818cf8, #c084fc)" }} />
+                      </div>
+                    </>
+                  ) : (
+                    <p style={{ color: "#3891A6" }} className="text-xs">Player</p>
+                  )}
                 </div>
                 <Link href={`/profile/${getUserId()}`} className="px-3 py-2 rounded-md text-sm font-semibold transition-all duration-200 hover:brightness-110" style={{ backgroundColor: "#3891A6", color: "#020202" }}>Profile</Link>
                 <button onClick={handleSignOut} className="px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:opacity-80" style={{ backgroundColor: "rgba(220,38,38,0.12)", border: "1px solid rgba(220,38,38,0.3)", color: "#fca5a5" }}>Sign Out</button>
@@ -158,6 +180,7 @@ export default function Navbar() {
           </div>
         )}
       </div>
+    </nav>
 
       {/* Mobile Menu Overlay */}
       <div
@@ -167,8 +190,8 @@ export default function Navbar() {
       ></div>
       {/* Mobile Menu Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-72 max-w-full z-50 bg-[#0c1014] shadow-2xl transform transition-transform duration-300 backdrop-blur-md ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}
-        style={{ borderLeft: '1px solid rgba(56,145,166,0.35)' }}
+        className={`fixed top-0 right-0 h-full w-full sm:w-72 max-w-full z-50 shadow-2xl transform transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        style={{ borderLeft: '1px solid rgba(56,145,166,0.35)', backgroundColor: '#0c1014', isolation: 'isolate' }}
         role="dialog"
         aria-modal="true"
         aria-label="Mobile navigation menu"
@@ -218,14 +241,24 @@ export default function Navbar() {
                   }}
                 />
               )}
-              <div>
-                <p className="text-white font-semibold text-sm">{session.user?.name || session.user?.email}</p>
-                <p style={{ color: "#3891A6" }} className="text-xs">Player</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold text-sm truncate">{session.user?.name || session.user?.email}</p>
+                {userInfo?.level !== undefined ? (
+                  <>
+                    <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}</p>
+                    <div className="mt-1 h-1.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(129,140,248,0.15)" }}>
+                      <div className="h-full rounded-full transition-all" style={{ width: `${userInfo.progress ?? 0}%`, background: "linear-gradient(90deg, #818cf8, #c084fc)" }} />
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: "#475569" }}>{userInfo.currentXp} / {userInfo.nextLevelXp} XP</p>
+                  </>
+                ) : (
+                  <p style={{ color: "#3891A6" }} className="text-xs">Player</p>
+                )}
               </div>
             </div>
           )}
         </div>
       </div>
-    </nav>
+    </>
   );
 }

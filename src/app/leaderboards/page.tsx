@@ -74,19 +74,7 @@ export default function LeaderboardsPage() {
 
   return (
     <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen">
-      {/* Header with Logo */}
-      <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
-            <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Puzzle Warz
-            </div>
-          </Link>
-        </div>
-      </nav>
-      
-      <div className="p-8">
+      <div className="p-8 pt-28">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">

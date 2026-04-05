@@ -24,6 +24,11 @@ interface UserProfile {
   name: string;
   image: string;
   createdAt: string;
+  xp: number;
+  level: number;
+  xpTitle: string;
+  xpProgress: number;
+  xpToNextLevel: number;
   achievements: Array<{
     id: string;
     achievement: {
@@ -337,23 +342,8 @@ export default function PublicProfilePage() {
 
   return (
     <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen">
-      {/* Header */}
-      <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
-            <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Puzzle Warz
-            </div>
-          </Link>
-          <Link href="/dashboard" style={{ color: '#3891A6' }} className="hover:opacity-80">
-            Back to Dashboard
-          </Link>
-        </div>
-      </nav>
-
       {/* Profile Section */}
-      <div className="max-w-4xl mx-auto px-4 py-12">
+      <div className="max-w-4xl mx-auto px-4 py-12 pt-28">
         {/* Profile Header */}
           <div className="border rounded-lg p-8 mb-8" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
           <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between mb-6">
@@ -473,6 +463,19 @@ export default function PublicProfilePage() {
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
                     Joined {new Date(profile.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                {/* XP / Level bar */}
+                <div className="mt-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(129,140,248,0.2)', border: '1px solid rgba(129,140,248,0.4)', color: '#a5b4fc' }}>
+                      Lv.{profile.level}
+                    </span>
+                    <span className="text-sm font-semibold" style={{ color: '#818cf8' }}>{profile.xpTitle}</span>
+                    <span className="text-xs ml-auto" style={{ color: '#475569' }}>{profile.xpToNextLevel} XP to next level</span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden w-full max-w-xs" style={{ background: 'rgba(129,140,248,0.12)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${profile.xpProgress}%`, background: 'linear-gradient(90deg, #818cf8, #c084fc)' }} />
                   </div>
                 </div>
               </div>

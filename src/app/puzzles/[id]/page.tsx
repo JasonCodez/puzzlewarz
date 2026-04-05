@@ -15,6 +15,8 @@ import ImageViewer from "@/components/ImageViewer";
 import SudokuGrid from "@/components/puzzle/SudokuGrid";
 import { EscapeRoomPuzzle } from "@/components/puzzle/EscapeRoomPuzzle";
 import PuzzleCompletionRatingModal from "@/components/puzzle/PuzzleCompletionRatingModal";
+import PuzzleXpModal from "@/components/puzzle/PuzzleXpModal";
+import { calcLevel } from "@/lib/levels";
 import Toasts from '@/components/Toast';
 import type { JigsawPuzzle as JigsawPuzzleType } from "@/lib/puzzle-types";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
@@ -24,6 +26,15 @@ import CrackTheSafePuzzle from "@/components/puzzle/CrackTheSafePuzzle";
 import WordCrackPuzzle from "@/components/puzzle/WordCrackPuzzle";
 import WordSearchPuzzle from "@/components/puzzle/WordSearchPuzzle";
 
+interface XpModalData {
+  xpGained: number;
+  oldLevel: number;
+  newLevel: number;
+  newTitle: string;
+  oldProgress: number;
+  newProgress: number;
+}
+
 interface Puzzle {
   id: string;
   title: string;
@@ -31,6 +42,7 @@ interface Puzzle {
   content: string;
   difficulty: string;
   puzzleType?: string;
+  xpReward?: number;
   data?: Record<string, unknown>;
   escapeRoom?: {
     id: string;
@@ -213,6 +225,17 @@ export default function PuzzleDetailPage() {
   const [maxAttemptsExceeded, setMaxAttemptsExceeded] = useState(false);
   const [sudokuAttemptsUsed, setSudokuAttemptsUsed] = useState<number>(0);
   const [showGiveUpConfirm, setShowGiveUpConfirm] = useState(false);
+  const [userTotalXp, setUserTotalXp] = useState<number>(0);
+  const [showXpModal, setShowXpModal] = useState(false);
+  const [xpModalData, setXpModalData] = useState<XpModalData | null>(null);
+
+  // Fetch user's current total XP so we can animate the XP bar on puzzle completion
+  useEffect(() => {
+    fetch('/api/user/info')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.totalXp != null) setUserTotalXp(data.totalXp); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     sudokuLockSentRef.current = false;
@@ -734,16 +757,34 @@ export default function PuzzleDetailPage() {
     console.log(`Hint ${hintId} rated as ${wasHelpful ? "helpful" : "not helpful"}`);
   };
 
+  const handlePuzzleSolved = (xpOverride?: number) => {
+    const xp = xpOverride ?? (puzzle?.xpReward ?? 50);
+    const before = calcLevel(userTotalXp);
+    const after = calcLevel(userTotalXp + xp);
+    setXpModalData({
+      xpGained: xp,
+      oldLevel: before.level,
+      newLevel: after.level,
+      newTitle: after.title,
+      oldProgress: before.progress,
+      newProgress: after.progress,
+    });
+    setShowXpModal(true);
+    // Notify the Navbar (and any other listener) that XP has changed
+    window.dispatchEvent(new CustomEvent('puzzlewarz:xp-updated'));
+    const dismissDelay = after.level > before.level ? 5000 : 3000;
+    setTimeout(() => {
+      setShowXpModal(false);
+      setShowRatingModal(true);
+    }, dismissDelay);
+  };
+
   const handleSudokuSubmit = async (submittedGrid: number[][]) => {
     const prevPoints = progress?.pointsEarned || 0;
     setSuccess(true);
     setShowSolvedMessage(true);
-
-    // Show solved message, then rating modal after delay (let confetti play first)
-    setTimeout(() => {
-      setShowSolvedMessage(false);
-      setShowRatingModal(true);
-    }, 3000);
+    setTimeout(() => setShowSolvedMessage(false), 3000);
+    handlePuzzleSolved();
 
     // Record success and get updated progress (single request) including elapsed time
     const elapsedSeconds = sudokuStartRef.current ? Math.round((Date.now() - sudokuStartRef.current) / 1000) : 0;
@@ -902,8 +943,8 @@ export default function PuzzleDetailPage() {
           console.error("Failed to refresh progress:", err);
         }
 
-        // Delay rating modal so confetti / success animation plays first
-        setTimeout(() => setShowRatingModal(true), 3000);
+        // Show XP modal then rating modal
+        handlePuzzleSolved();
       } else {
         setError(data.message || "Incorrect answer. Try again!");
       }
@@ -1286,6 +1327,21 @@ export default function PuzzleDetailPage() {
               </div>
             )}
 
+            {showXpModal && xpModalData && (
+              <PuzzleXpModal
+                xpGained={xpModalData.xpGained}
+                oldLevel={xpModalData.oldLevel}
+                newLevel={xpModalData.newLevel}
+                newTitle={xpModalData.newTitle}
+                oldProgress={xpModalData.oldProgress}
+                newProgress={xpModalData.newProgress}
+                onDismiss={() => {
+                  setShowXpModal(false);
+                  setShowRatingModal(true);
+                }}
+              />
+            )}
+
             {showRatingModal && puzzle && (
               <PuzzleCompletionRatingModal
                 puzzleId={puzzleId}
@@ -1393,7 +1449,7 @@ export default function PuzzleDetailPage() {
                             setSuccess(true);
                             return 0;
                           }}
-                          onShowRatingModal={() => setTimeout(() => setShowRatingModal(true), 3000)}
+                          onShowRatingModal={() => handlePuzzleSolved()}
                         />
                       </div>
                     )}
@@ -1420,7 +1476,7 @@ export default function PuzzleDetailPage() {
                           teamId={teamIdParam}
                           onComplete={() => {
                             setSuccess(true);
-                            setTimeout(() => setShowRatingModal(true), 3000);
+                            handlePuzzleSolved();
                           }}
                         />
                       )}
@@ -1459,7 +1515,7 @@ export default function PuzzleDetailPage() {
                       safeData={(puzzle.data ?? {}) as Record<string, unknown>}
                       onSolved={() => {
                         setSuccess(true);
-                        setTimeout(() => setShowRatingModal(true), 4000);
+                        handlePuzzleSolved();
                       }}
                     />
                   </div>
@@ -1481,7 +1537,7 @@ export default function PuzzleDetailPage() {
                       alreadySolved={progress?.solved ?? false}
                       onSolved={() => {
                         setSuccess(true);
-                        setTimeout(() => setShowRatingModal(true), 4000);
+                        handlePuzzleSolved();
                       }}
                     />
                   </div>
@@ -1503,7 +1559,7 @@ export default function PuzzleDetailPage() {
                       alreadySolved={progress?.solved ?? false}
                       onSolved={() => {
                         setSuccess(true);
-                        setTimeout(() => setShowRatingModal(true), 4000);
+                        handlePuzzleSolved();
                       }}
                     />
                   </div>

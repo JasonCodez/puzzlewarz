@@ -160,7 +160,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
       if (current === "correct") continue;
       if (status === "correct" || current === undefined) {
         keyStates[letter] = status;
-      } else if (status === "present" && current !== "correct") {
+      } else if (status === "present" && current !== "present") {
         keyStates[letter] = "present";
       } else if (status === "absent" && !current) {
         keyStates[letter] = "absent";

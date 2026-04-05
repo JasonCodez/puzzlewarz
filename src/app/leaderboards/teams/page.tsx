@@ -81,19 +81,7 @@ export default function TeamLeaderboards() {
 
   return (
     <div style={{ backgroundColor: '#000' }} className="min-h-screen">
-      {/* Header with Logo */}
-      <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/leaderboards" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
-            <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Puzzle Warz
-            </div>
-          </Link>
-        </div>
-      </nav>
-      
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 pt-28">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Team Leaderboards</h1>
           <p style={{ color: '#DDDBF1' }}>See how teams rank by points earned</p>

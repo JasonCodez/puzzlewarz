@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { calcLevel } from "@/lib/levels";
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,14 +20,14 @@ export async function GET(request: NextRequest) {
     try {
       user = await (prisma.user as any).findUnique({
         where: { email: session.user.email },
-        select: { id: true, role: true, image: true, nameChanged: true },
+        select: { id: true, role: true, image: true, nameChanged: true, xp: true, level: true, xpTitle: true },
       });
     } catch (e) {
       // Fallback to older schema without `nameChanged`
       try {
-        user = await prisma.user.findUnique({
+      user = await prisma.user.findUnique({
           where: { email: session.user.email },
-          select: { id: true, role: true, image: true },
+          select: { id: true, role: true, image: true, xp: true, level: true, xpTitle: true },
         });
       } catch (ee) {
         throw ee;
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false });
+    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, ...calcLevel(user.xp ?? 0) });
   } catch (error) {
     console.error("Error fetching user info:", error);
     return NextResponse.json(

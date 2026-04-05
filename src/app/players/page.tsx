@@ -74,23 +74,8 @@ export default function PlayersPage() {
 
   return (
     <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen">
-      {/* Header */}
-      <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
-            <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Puzzle Warz
-            </div>
-          </Link>
-          <Link href="/dashboard" style={{ color: '#3891A6' }} className="hover:opacity-80">
-            Dashboard
-          </Link>
-        </div>
-      </nav>
-
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 py-12">
+      <div className="max-w-6xl mx-auto px-4 py-12 pt-28">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">🔍 Find Players</h1>

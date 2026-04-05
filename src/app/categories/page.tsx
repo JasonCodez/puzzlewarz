@@ -57,28 +57,6 @@ export default function CategoriesPage() {
 
   return (
     <div style={{ backgroundColor: '#020202' }} className="min-h-screen">
-      {/* Navigation */}
-      <nav className="fixed w-full top-0 z-50" style={{ backgroundColor: 'rgba(2, 2, 2, 0.95)', borderBottomColor: '#3891A6', borderBottomWidth: '1px' }}>
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-          <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-8 w-auto" />
-            <div className="text-xl font-bold" style={{ color: '#3891A6' }}>
-              Puzzle Warz
-            </div>
-          </Link>
-          <div className="flex gap-4 items-center">
-            <span className="text-sm" style={{ color: '#DDDBF1' }}>{session?.user?.name || session?.user?.email}</span>
-            <Link
-              href="/api/auth/signout"
-              className="px-3 py-1.5 rounded text-white text-sm transition hover:opacity-90"
-              style={{ backgroundColor: '#AB9F9D' }}
-            >
-              Sign Out
-            </Link>
-          </div>
-        </div>
-      </nav>
-
       {/* Header */}
       <div className="pt-24 pb-16 px-4" style={{ backgroundImage: 'linear-gradient(135deg, rgba(56, 145, 166, 0.1) 0%, rgba(253, 231, 76, 0.05) 100%)' }}>
         <div className="max-w-7xl mx-auto">

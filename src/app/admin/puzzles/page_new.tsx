@@ -935,35 +935,7 @@ export default function AdminPuzzlesPage() {
 
   return (
     <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen">
-      {/* Header */}
-      <nav className="backdrop-blur-md" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', backgroundColor: 'rgba(76, 91, 92, 0.7)' }}>
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-10 w-auto" />
-            <div className="text-2xl font-bold" style={{ color: '#3891A6' }}>
-              Puzzle Warz
-            </div>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/admin/arg"
-              className="px-4 py-2 rounded-lg border text-white hover:opacity-90 transition-all"
-              style={{ backgroundColor: 'rgba(56, 145, 166, 0.2)', borderColor: '#3891A6', color: '#3891A6' }}
-            >
-              🎮 ARG Manager
-            </Link>
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 rounded-lg border text-white hover:opacity-90 transition-all"
-              style={{ backgroundColor: '#2a3a3b', borderColor: '#3891A6' }}
-            >
-              ← Back to Dashboard
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <div className="pt-20">
+      <div className="pt-24">
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-4xl font-bold text-white mb-2">🧩 Universal Puzzle Maker</h1>
           <p className="text-[#9BD1D6] mb-8">Create any type of puzzle with advanced tools and testing capabilities</p>
