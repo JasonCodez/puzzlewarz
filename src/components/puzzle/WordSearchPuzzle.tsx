@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
 
 interface Props {
   puzzleId: string;
   wordSearchData: Record<string, unknown>;
   onSolved?: () => void;
   alreadySolved?: boolean;
+  warzMode?: boolean;
 }
 
 type CellCoord = { row: number; col: number };
@@ -72,6 +74,7 @@ export default function WordSearchPuzzle({
   wordSearchData,
   onSolved,
   alreadySolved,
+  warzMode,
 }: Props) {
   const grid = (wordSearchData.grid ?? []) as string[][];
   const words = ((wordSearchData.words ?? []) as string[]).map((w) =>
@@ -113,6 +116,7 @@ export default function WordSearchPuzzle({
   );
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const skin = usePuzzleSkin();
 
   // Persist found words across page reloads
   useEffect(() => {
@@ -174,6 +178,7 @@ export default function WordSearchPuzzle({
           word: matched,
           cells: cells.map((c) => ({ row: c.row, col: c.col })),
           allFoundWords: newFoundWords,
+          ...(warzMode && { warzMode: true }),
         }),
       });
       const data = await resp.json();
@@ -224,7 +229,7 @@ export default function WordSearchPuzzle({
     <>
       <div
         className="flex flex-col items-center gap-4 select-none pb-6"
-        style={{ fontFamily: "'Clear Sans', 'Helvetica Neue', Arial, sans-serif" }}
+        style={{ fontFamily: skin.tileFontFamily !== "inherit" ? skin.tileFontFamily : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif" }}
       >
         {/* Header */}
         <div className="text-center w-full px-4">
@@ -291,15 +296,15 @@ export default function WordSearchPuzzle({
                         fontSize: `clamp(0.55rem, 2.6vw, 0.875rem)`,
                         cursor: gameStatus === "playing" ? "crosshair" : "default",
                         background: isSelected
-                          ? "rgba(129,140,248,0.45)"
+                          ? skin.accentActive
                           : isFound
                           ? color!.bg
-                          : "rgba(30,41,59,0.85)",
+                          : skin.tileBg,
                         border: isSelected
-                          ? "2px solid #818cf8"
+                          ? `2px solid ${skin.boardBorder}`
                           : isFound
                           ? `2px solid ${color!.border}`
-                          : "2px solid rgba(71,85,105,0.5)",
+                          : `2px solid ${skin.tileBorder}`,
                         color: isSelected
                           ? "#c7d2fe"
                           : isFound
@@ -339,8 +344,8 @@ export default function WordSearchPuzzle({
                   key={word}
                   className="px-3 py-1.5 rounded-lg text-sm font-bold transition-all duration-200"
                   style={{
-                    background: found ? color!.bg : "rgba(30,41,59,0.6)",
-                    border: `1px solid ${found ? color!.border : "rgba(71,85,105,0.35)"}`,
+                    background: found ? color!.bg : skin.tileBg,
+                    border: `1px solid ${found ? color!.border : skin.tileBorder}`,
                     color: found ? color!.text : "#64748b",
                     textDecoration: found ? "line-through" : "none",
                     transform: isFlashing ? "scale(1.1)" : "scale(1)",

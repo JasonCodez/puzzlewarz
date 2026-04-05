@@ -2298,6 +2298,325 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     );
   };
 
+  const renderAnagramBlitzFields = () => {
+    const rawWords: string[] = Array.isArray(puzzleData.words) ? (puzzleData.words as string[]) : [];
+    const wordsText = rawWords.join('\n');
+    const timeLimit = Number(puzzleData.timeLimit ?? 60);
+    const hint = asString(puzzleData.hint, '');
+    return (
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Words to Anagram <span className="text-red-400">*</span></label>
+          <textarea
+            value={wordsText}
+            rows={6}
+            onChange={(e) => {
+              const words = e.target.value
+                .split('\n')
+                .map((w) => w.toUpperCase().replace(/[^A-Z]/g, ''))
+                .filter(Boolean);
+              onDataChange('words', words);
+            }}
+            placeholder={"PLANET\nGUITAR\nMONKEY\nLEMON\nBRIDGE"}
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 font-mono uppercase"
+          />
+          <p className="text-xs text-gray-500 mt-1">One word per line, letters only. Players must unscramble each word. Min 3 recommended.</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Time Limit (seconds)</label>
+            <input
+              type="number"
+              min={10}
+              max={600}
+              value={timeLimit}
+              onChange={(e) => onDataChange('timeLimit', Number(e.target.value))}
+              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+            />
+            <p className="text-xs text-gray-500 mt-1">Timer counts down from this value. 60s per word is a good baseline.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Hint <span className="text-xs font-normal text-gray-500">(optional)</span></label>
+            <input
+              type="text"
+              value={hint}
+              onChange={(e) => onDataChange('hint', e.target.value)}
+              placeholder="e.g. All nature-themed words"
+              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+            />
+          </div>
+        </div>
+
+        {rawWords.length > 0 && (
+          <div className="p-3 rounded-lg text-xs" style={{ background: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.3)', color: '#7dd3fc' }}>
+            {rawWords.length} word{rawWords.length !== 1 ? 's' : ''} · {timeLimit}s total · Words: {rawWords.join(', ')}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── ARG puzzle ────────────────────────────────────────────────────────────
+  const renderArgFields = () => {
+    const lore = asString(puzzleData.lore, '');
+    const finalMessage = asString(puzzleData.finalMessage, '');
+    const rawStages = Array.isArray(puzzleData.stages) ? (puzzleData.stages as Record<string, unknown>[]) : [];
+
+    const updateStage = (idx: number, key: string, value: unknown) => {
+      const updated = rawStages.map((s, i) => i === idx ? { ...s, [key]: value } : s);
+      onDataChange('stages', updated);
+    };
+    const addStage = () => {
+      onDataChange('stages', [...rawStages, {
+        id: rawStages.length + 1,
+        type: 'riddle',
+        title: `Stage ${rawStages.length + 1}`,
+        description: '',
+        riddle: '',
+        answer: '',
+        nudgeAfter: 5,
+        nudgeText: '',
+      }]);
+    };
+    const removeStage = (idx: number) => {
+      onDataChange('stages', rawStages.filter((_, i) => i !== idx));
+    };
+    const moveStage = (idx: number, dir: -1 | 1) => {
+      const arr = [...rawStages];
+      const target = idx + dir;
+      if (target < 0 || target >= arr.length) return;
+      [arr[idx], arr[target]] = [arr[target], arr[idx]];
+      onDataChange('stages', arr);
+    };
+
+    const STAGE_TYPE_OPTIONS = [
+      { value: 'riddle', label: '🧩 Riddle / Hunt' },
+      { value: 'cipher', label: '🔐 Cipher / Encoded Message' },
+      { value: 'image', label: '🖼️ Image Clue' },
+      { value: 'url', label: '🌐 External URL' },
+      { value: 'pattern', label: '🔢 Pattern Sequence' },
+    ];
+    const CIPHER_OPTIONS = [
+      { value: 'rot13', label: 'ROT-13' },
+      { value: 'base64', label: 'Base64' },
+      { value: 'morse', label: 'Morse Code' },
+      { value: 'vigenere', label: 'Vigenère' },
+      { value: 'binary', label: 'Binary' },
+      { value: 'hex', label: 'Hexadecimal' },
+      { value: 'reverse', label: 'Reversed Text' },
+    ];
+
+    const fieldCls = 'w-full px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-white placeholder-gray-500 text-sm';
+    const labelCls = 'block text-xs font-semibold text-gray-400 mb-1';
+
+    return (
+      <div className="space-y-6">
+        {/* Lore / intro */}
+        <div>
+          <label className={labelCls}>Opening Lore / Story <span className="font-normal text-gray-500">(optional — shown to player before stage 1)</span></label>
+          <textarea rows={3} value={lore} onChange={(e) => onDataChange('lore', e.target.value)}
+            placeholder="A signal was detected at 04:17 UTC. No one was supposed to see it…"
+            className={fieldCls} />
+        </div>
+
+        {/* Stages */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <label className="text-sm font-bold text-white">Stages <span className="text-red-400">*</span></label>
+            <button type="button" onClick={addStage}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:brightness-110"
+              style={{ background: 'rgba(56,145,166,0.2)', border: '1px solid rgba(56,145,166,0.4)', color: '#7dd3fc' }}>
+              + Add Stage
+            </button>
+          </div>
+
+          {rawStages.length === 0 && (
+            <p className="text-xs text-gray-500 italic">No stages yet. Add at least 2 stages to create an ARG puzzle.</p>
+          )}
+
+          <div className="space-y-4">
+            {rawStages.map((stage, idx) => {
+              const stageType = asString(stage.type, 'riddle') as string;
+              return (
+                <div key={idx} className="rounded-xl p-4 space-y-3"
+                  style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(71,85,105,0.6)' }}>
+                  {/* Stage header */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400 w-16 shrink-0">Stage {idx + 1}</span>
+                    <input
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-slate-700/50 border border-slate-600 text-white text-sm"
+                      value={asString(stage.title, '')}
+                      onChange={(e) => updateStage(idx, 'title', e.target.value)}
+                      placeholder={`Stage ${idx + 1} title…`}
+                    />
+                    <button type="button" onClick={() => moveStage(idx, -1)} disabled={idx === 0}
+                      className="px-2 py-1 rounded text-xs text-gray-400 disabled:opacity-30 hover:text-white">▲</button>
+                    <button type="button" onClick={() => moveStage(idx, 1)} disabled={idx === rawStages.length - 1}
+                      className="px-2 py-1 rounded text-xs text-gray-400 disabled:opacity-30 hover:text-white">▼</button>
+                    <button type="button" onClick={() => removeStage(idx)}
+                      className="px-2 py-1 rounded text-xs text-red-400 hover:text-red-300">✕</button>
+                  </div>
+
+                  {/* Type selector */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Challenge Type</label>
+                      <select value={stageType} onChange={(e) => updateStage(idx, 'type', e.target.value)} className={fieldCls}>
+                        {STAGE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Narrative / Flavour Text</label>
+                      <input className={fieldCls} value={asString(stage.description, '')}
+                        onChange={(e) => updateStage(idx, 'description', e.target.value)}
+                        placeholder="The file was corrupted. Only fragments remain…" />
+                    </div>
+                  </div>
+
+                  {/* Type-specific fields */}
+                  {stageType === 'cipher' && (
+                    <div className="space-y-3 pt-1 border-t border-slate-700">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={labelCls}>Cipher Type</label>
+                          <select value={asString(stage.cipherType, 'rot13')}
+                            onChange={(e) => updateStage(idx, 'cipherType', e.target.value)} className={fieldCls}>
+                            {CIPHER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        {asString(stage.cipherType, 'rot13') === 'vigenere' && (
+                          <div>
+                            <label className={labelCls}>Vigenère Key</label>
+                            <input className={`${fieldCls} uppercase`} value={asString(stage.vigenereKey, '')}
+                              onChange={(e) => updateStage(idx, 'vigenereKey', e.target.value.toUpperCase())}
+                              placeholder="KEYWORD" />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className={labelCls}>Cipher Text (shown to player)</label>
+                        <textarea rows={3} className={`${fieldCls} font-mono`} value={asString(stage.cipherText, '')}
+                          onChange={(e) => updateStage(idx, 'cipherText', e.target.value)}
+                          placeholder="SGVsbG8gV29ybGQ=" />
+                      </div>
+                    </div>
+                  )}
+
+                  {stageType === 'image' && (
+                    <div className="space-y-3 pt-1 border-t border-slate-700">
+                      <div>
+                        <label className={labelCls}>Image URL</label>
+                        <input className={fieldCls} value={asString(stage.imageUrl, '')}
+                          onChange={(e) => updateStage(idx, 'imageUrl', e.target.value)}
+                          placeholder="https://… or /uploads/…" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Image Caption <span className="font-normal text-gray-500">(optional)</span></label>
+                        <input className={fieldCls} value={asString(stage.imageCaption, '')}
+                          onChange={(e) => updateStage(idx, 'imageCaption', e.target.value)}
+                          placeholder="Taken at 3am. The coordinates are somewhere in this image." />
+                      </div>
+                    </div>
+                  )}
+
+                  {stageType === 'url' && (
+                    <div className="space-y-3 pt-1 border-t border-slate-700">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={labelCls}>URL</label>
+                          <input className={fieldCls} value={asString(stage.url, '')}
+                            onChange={(e) => updateStage(idx, 'url', e.target.value)}
+                            placeholder="https://example.com/hidden-page" />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Link Label <span className="font-normal text-gray-500">(optional)</span></label>
+                          <input className={fieldCls} value={asString(stage.urlLabel, '')}
+                            onChange={(e) => updateStage(idx, 'urlLabel', e.target.value)}
+                            placeholder="Access the dossier" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {stageType === 'riddle' && (
+                    <div className="pt-1 border-t border-slate-700">
+                      <label className={labelCls}>Riddle / Question Text</label>
+                      <textarea rows={3} className={fieldCls} value={asString(stage.riddle, '')}
+                        onChange={(e) => updateStage(idx, 'riddle', e.target.value)}
+                        placeholder="I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?" />
+                      <p className="text-xs text-gray-500 mt-1">Can be a traditional riddle or an internet-hunt question ("Which US president owned the most cats?").</p>
+                    </div>
+                  )}
+
+                  {stageType === 'pattern' && (
+                    <div className="space-y-3 pt-1 border-t border-slate-700">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={labelCls}>Pattern</label>
+                          <input className={`${fieldCls} font-mono`} value={asString(stage.pattern, '')}
+                            onChange={(e) => updateStage(idx, 'pattern', e.target.value)}
+                            placeholder="2, 3, 5, 8, 13, ?, 34" />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Pattern Label <span className="font-normal text-gray-500">(optional)</span></label>
+                          <input className={fieldCls} value={asString(stage.patternLabel, '')}
+                            onChange={(e) => updateStage(idx, 'patternLabel', e.target.value)}
+                            placeholder="Complete the sequence" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Answer + nudge */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-700">
+                    <div>
+                      <label className={labelCls}>Correct Answer <span className="text-red-400">*</span></label>
+                      <input className={fieldCls} value={asString(stage.answer, '')}
+                        onChange={(e) => updateStage(idx, 'answer', e.target.value)}
+                        placeholder="ECHO (case-insensitive exact match)" />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Nudge After (wrong attempts)</label>
+                      <input type="number" min={1} max={20} className={fieldCls}
+                        value={asNumber(stage.nudgeAfter, 5)}
+                        onChange={(e) => updateStage(idx, 'nudgeAfter', Number(e.target.value))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Nudge Hint Text <span className="font-normal text-gray-500">(shown after N wrong attempts)</span></label>
+                    <input className={fieldCls} value={asString(stage.nudgeText, '')}
+                      onChange={(e) => updateStage(idx, 'nudgeText', e.target.value)}
+                      placeholder="Try looking at the page source…" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Final message */}
+        <div>
+          <label className={labelCls}>Final Message <span className="font-normal text-gray-500">(shown after all stages completed)</span></label>
+          <input className={fieldCls} value={finalMessage}
+            onChange={(e) => onDataChange('finalMessage', e.target.value)}
+            placeholder="You cracked it. The truth was always hidden in plain sight." />
+        </div>
+
+        {/* Preview */}
+        {rawStages.length > 0 && (
+          <div className="p-3 rounded-lg text-xs space-y-1"
+            style={{ background: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.3)', color: '#7dd3fc' }}>
+            <p className="font-semibold">{rawStages.length} stage{rawStages.length !== 1 ? 's' : ''} configured</p>
+            {rawStages.map((s, i) => (
+              <p key={i}>Stage {i + 1}: [{asString(s.type, '?').toUpperCase()}] {asString(s.title, '')} — answer: "{asString(s.answer, '(missing)')}"</p>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const typeSpecificRenders: Record<string, () => JSX.Element> = {
     cipher: renderCipherFields,
     text_extraction: renderTextExtractionFields,
@@ -2314,6 +2633,8 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     crack_safe: renderCrackSafeFields,
     word_crack: renderWordleFields,
     word_search: renderWordSearchFields,
+    anagram_blitz: renderAnagramBlitzFields,
+    arg: renderArgFields,
   };
 
   const renderer = typeSpecificRenders[puzzleType];

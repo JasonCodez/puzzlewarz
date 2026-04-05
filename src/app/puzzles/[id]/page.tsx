@@ -25,6 +25,8 @@ import DetectiveCasePuzzle from "@/components/puzzle/DetectiveCasePuzzle";
 import CrackTheSafePuzzle from "@/components/puzzle/CrackTheSafePuzzle";
 import WordCrackPuzzle from "@/components/puzzle/WordCrackPuzzle";
 import WordSearchPuzzle from "@/components/puzzle/WordSearchPuzzle";
+import AnagramBlitz from "@/components/puzzle/AnagramBlitz";
+import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
 
 interface XpModalData {
   xpGained: number;
@@ -1556,6 +1558,50 @@ export default function PuzzleDetailPage() {
                     <WordSearchPuzzle
                       puzzleId={puzzleId}
                       wordSearchData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      alreadySolved={progress?.solved ?? false}
+                      onSolved={() => {
+                        setSuccess(true);
+                        handlePuzzleSolved();
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'anagram_blitz') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div className="mb-6 p-4 rounded-lg border text-white"
+                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
+                        🔀 You already unscrambled all the words!
+                      </div>
+                    )}
+                    <AnagramBlitz
+                      puzzleId={puzzleId}
+                      anagramData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      alreadySolved={progress?.solved ?? false}
+                      onSolved={() => {
+                        setSuccess(true);
+                        handlePuzzleSolved();
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'arg') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div className="mb-6 p-4 rounded-lg border text-white"
+                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
+                        🕵️ You already cracked this ARG!
+                      </div>
+                    )}
+                    <ArgPuzzle
+                      puzzleId={puzzleId}
+                      argData={(puzzle.data ?? {}) as Record<string, unknown>}
                       alreadySolved={progress?.solved ?? false}
                       onSolved={() => {
                         setSuccess(true);

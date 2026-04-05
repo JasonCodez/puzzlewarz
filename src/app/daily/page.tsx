@@ -87,6 +87,10 @@ export default function DailyPage() {
   const [countdown, setCountdown] = useState(getCountdown());
   const [copied, setCopied]       = useState(false);
   const [loading, setLoading]     = useState(true);
+  const [dailyStreak, setDailyStreak] = useState(0);
+  const [skipTokens, setSkipTokens]   = useState(0);
+  const [shieldNotice, setShieldNotice] = useState(false);
+  const [skipping, setSkipping]       = useState(false);
 
   const dateKey  = new Date().toISOString().slice(0, 10);
   const storeKey = `pw_daily_${dateKey}`;
@@ -109,6 +113,17 @@ export default function DailyPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+
+    // Fetch daily streak + token counts
+    fetch("/api/daily/complete")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) {
+          setDailyStreak(d.streak ?? 0);
+          setSkipTokens(d.skipTokens ?? 0);
+        }
+      })
+      .catch(() => {/* ignore – not logged in */});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -122,6 +137,54 @@ export default function DailyPage() {
   const flash = (text: string, ms = 2_000) => {
     setMsg(text);
     setTimeout(() => setMsg(""), ms);
+  };
+
+  const recordCompletion = (won: boolean, numGuesses: number) => {
+    fetch("/api/daily/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ won, guesses: numGuesses }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.shieldUsed) setShieldNotice(true);
+        // Refresh streak
+        return fetch("/api/daily/complete");
+      })
+      .then(r => r && r.ok ? r.json() : null)
+      .then(d => { if (d) setDailyStreak(d.streak ?? 0); })
+      .catch(() => {/* ignore */});
+  };
+
+  const handleSkip = async () => {
+    if (skipping || skipTokens < 1 || status !== "playing") return;
+    setSkipping(true);
+    try {
+      const res = await fetch("/api/daily/skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (res.ok) {
+        setSkipTokens(t => t - 1);
+        const gs = "lost";
+        save(guesses, gs);
+        setStatus(gs);
+        flash("Today's puzzle skipped! Streak preserved. 🛡️", 4_000);
+        // Refresh streak
+        fetch("/api/daily/complete")
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) setDailyStreak(d.streak ?? 0); })
+          .catch(() => {});
+      } else {
+        const data = await res.json();
+        flash(data.error || "Failed to skip", 3_000);
+      }
+    } catch {
+      flash("Failed to skip puzzle", 3_000);
+    } finally {
+      setSkipping(false);
+    }
   };
 
   const save = (g: string[], s: "playing" | "won" | "lost") =>
@@ -163,10 +226,12 @@ export default function DailyPage() {
       const gs = "won";
       save(next, gs);
       setTimeout(() => { setStatus(gs); flash(WIN_MSGS[Math.min(guesses.length, 5)], 3_000); }, WORD_LEN * 120 + 600);
+      setTimeout(() => recordCompletion(true, next.length), WORD_LEN * 120 + 700);
     } else if (next.length >= MAX_ROWS) {
       const gs = "lost";
       save(next, gs);
       setTimeout(() => { setStatus(gs); flash(word, 5_000); }, WORD_LEN * 120 + 600);
+      setTimeout(() => recordCompletion(false, next.length), WORD_LEN * 120 + 700);
     } else {
       save(next, "playing");
     }
@@ -270,6 +335,14 @@ export default function DailyPage() {
           <p className="text-xs mt-1.5" style={{ color: "#555" }}>
             Guess the 5-letter word in 6 tries
           </p>
+          {/* Streak badge */}
+          {dailyStreak > 0 && (
+            <div className="flex justify-center mt-2">
+              <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(56,145,166,0.15)', border: '1px solid rgba(56,145,166,0.3)', color: '#3891A6' }}>
+                🔥 {dailyStreak} day streak
+              </span>
+            </div>
+          )}
 
           {/* ── Color legend ── */}
           <div className="flex justify-center gap-4 mt-3">
@@ -291,6 +364,15 @@ export default function DailyPage() {
           <div className="mb-3 px-5 py-2 rounded-xl font-bold text-sm text-black pw-fadein"
                style={{ background: "#FFF", boxShadow: "0 4px 24px rgba(0,0,0,0.6)", zIndex: 10 }}>
             {msg}
+          </div>
+        )}
+
+        {/* ── Shield notice ── */}
+        {shieldNotice && (
+          <div className="mb-3 px-5 py-2 rounded-xl font-bold text-sm pw-fadein flex items-center gap-2"
+               style={{ background: 'rgba(56,145,166,0.15)', border: '1px solid #3891A6', color: '#3891A6' }}>
+            🛡️ Streak shield used! Your streak was protected.
+            <button onClick={() => setShieldNotice(false)} className="ml-auto text-xs opacity-60 hover:opacity-100">✕</button>
           </div>
         )}
 
@@ -407,6 +489,20 @@ export default function DailyPage() {
                 </div>
               ))}
             </div>
+
+            {/* ── Skip token button ── */}
+            {status === "playing" && skipTokens > 0 && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={handleSkip}
+                  disabled={skipping}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ backgroundColor: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.3)', color: '#3891A6' }}
+                >
+                  {skipping ? "Skipping..." : `🎫 Skip today (${skipTokens} token${skipTokens !== 1 ? "s" : ""})`}
+                </button>
+              </div>
+            )}
 
             {/* ── Stats strip (past attempts) ── */}
             {status !== "playing" && (

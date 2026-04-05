@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -16,6 +17,7 @@ interface Props {
   wordCrackData: Record<string, unknown>;
   onSolved?: () => void;
   alreadySolved?: boolean;
+  warzMode?: boolean;
 }
 
 // â”€â”€â”€ Keyboard layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -131,7 +133,8 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
 
 // â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alreadySolved }: Props) {
+export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alreadySolved, warzMode }: Props) {
+  const skin = usePuzzleSkin();
   const wordLength = Math.max(3, Math.min(10, Number(wordCrackData.wordLength ?? 5)));
   const maxGuesses = Math.max(1, Math.min(10, Number(wordCrackData.maxGuesses ?? 6)));
   const hint = String(wordCrackData.hint ?? "");
@@ -151,6 +154,18 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
 
   const isPlaying = gameStatus === "playing" && !showInstructions;
   const onSolvedFired = useRef(false);
+
+  // skin-derived colour overrides
+  const tileColors = {
+    ...COLORS,
+    empty: { bg: "transparent", border: skin.tileBorder, glow: "none" },
+    active: { bg: skin.accentActive, border: skin.boardBorder, glow: "none" },
+  };
+  const keyBg: Record<string, string> = {
+    ...KEY_COLORS,
+    unused: skin.tileBg,
+    absent: skin.tileBg,
+  };
 
   // â”€â”€ Derived: keyboard letter states â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const keyStates: Record<string, LetterStatus | "unused"> = {};
@@ -194,7 +209,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
       const resp = await fetch(`/api/puzzles/${puzzleId}/word_crack`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guess: word }),
+        body: JSON.stringify({ guess: word, ...(warzMode && { warzMode: true }) }),
         credentials: "same-origin",
       });
 
@@ -332,7 +347,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
       <div
         className="flex flex-col items-center gap-4 select-none pb-6"
         style={{
-          fontFamily: "'Clear Sans', 'Helvetica Neue', Arial, sans-serif",
+          fontFamily: skin.tileFontFamily !== "inherit" ? skin.tileFontFamily : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif",
           "--tile-sz": `min(56px, calc((100vw - 3rem - ${(wordLength - 1) * 4}px) / ${wordLength}))`,
         } as React.CSSProperties}
       >
@@ -428,7 +443,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
                 className={`flex gap-1 sm:gap-2 ${isShaking ? "wc-shake" : ""}`}
               >
                 {letters.map(({ char, kind }, colIndex) => {
-                  const c = COLORS[kind];
+                  const c = tileColors[kind];
                   const isPopping = popCol?.row === rowIndex && popCol?.col === colIndex;
                   const revealDelay = isRevealing ? colIndex * 350 : 0;
                   const shouldFlip = isRevealing || isDone;
@@ -446,7 +461,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
                         height: "var(--tile-sz)",
                       } as React.CSSProperties}
                     >
-                      <div className="wc-tile-front" style={{ borderColor: COLORS[kind === "empty" || kind === "active" ? kind : "empty"].border }}>
+                      <div className="wc-tile-front" style={{ borderColor: tileColors[kind === "empty" || kind === "active" ? kind : "empty"].border }}>
                         {char}
                       </div>
                       <div className="wc-tile-back">{char}</div>
@@ -466,7 +481,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
                 {row.map((key) => {
                   const state = keyStates[key] ?? "unused";
                   const isWide = key === "ENTER" || key === "⌫";
-                  const bg = KEY_COLORS[state as keyof typeof KEY_COLORS];
+                  const bg = keyBg[state] ?? keyBg.unused;
                   const glow = state === "correct" ? "0 0 10px rgba(34,197,94,0.5)" :
                                state === "present" ? "0 0 10px rgba(234,179,8,0.5)" : "none";
                   return (
@@ -480,7 +495,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
                         background: bg,
                         boxShadow: glow,
                         fontSize: isWide ? "clamp(9px, 2.5vw, 11px)" : "clamp(11px, 3.5vw, 14px)",
-                        border: "1px solid rgba(255,255,255,0.05)",
+                        border: `1px solid ${skin.tileBorder}`,
                       }}
                       aria-label={key}
                     >

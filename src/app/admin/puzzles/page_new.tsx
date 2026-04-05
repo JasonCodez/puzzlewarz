@@ -50,6 +50,7 @@ const PUZZLE_TYPES = [
   { value: 'crack_safe', label: 'Crack the Safe 🔐' },
   { value: 'word_crack', label: 'Word Crack 🟩' },
   { value: 'word_search', label: 'Word Search 🔍' },
+  { value: 'anagram_blitz', label: 'Anagram Blitz 🔀' },
   { value: 'arg', label: 'ARG' },
   { value: 'escape_room', label: 'Escape Room' },
 ];
@@ -1337,6 +1338,7 @@ export default function AdminPuzzlesPage() {
                             <option value="challenge">Challenge</option>
                             <option value="word_crack">Word Crack</option>
                             <option value="word_search">Word Search</option>
+                            <option value="anagram_blitz">Anagram Blitz</option>
                           </select>
                         </div>
                       </div>
@@ -1360,6 +1362,7 @@ export default function AdminPuzzlesPage() {
                             <option value="challenge">Challenge</option>
                             <option value="word_crack">Word Crack</option>
                             <option value="word_search">Word Search</option>
+                            <option value="anagram_blitz">Anagram Blitz</option>
                           </select>
                         </div>
                         <div>

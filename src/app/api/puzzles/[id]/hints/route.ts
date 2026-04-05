@@ -70,6 +70,7 @@ export async function GET(
 // POST /api/puzzles/[id]/hints/[hintId]/reveal - Reveal a hint and track usage
 const RevealHintSchema = z.object({
   hintId: z.string(),
+  useHintToken: z.boolean().optional(),
 });
 
 export async function POST(
@@ -93,7 +94,7 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { hintId } = RevealHintSchema.parse(body);
+    const { hintId, useHintToken } = RevealHintSchema.parse(body);
 
     // Verify hint exists and belongs to puzzle
     const hint = await prisma.puzzleHint.findUnique({
@@ -117,10 +118,22 @@ export async function POST(
       });
 
       if (userUsageCount >= hint.maxUsesPerUser) {
-        return NextResponse.json(
-          { error: "You have reached the maximum uses for this hint" },
-          { status: 400 }
-        );
+        // Allow bypass if the user has a hint token
+        const freshUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { hintTokens: true },
+        });
+        if (!freshUser || freshUser.hintTokens < 1) {
+          return NextResponse.json(
+            { error: "You have reached the maximum uses for this hint. Purchase a hint token in the Store to bypass this limit." },
+            { status: 400 }
+          );
+        }
+        // Consume the hint token
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { hintTokens: { decrement: 1 } },
+        });
       }
     }
 

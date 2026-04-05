@@ -29,6 +29,9 @@ interface UserProfile {
   xpTitle: string;
   xpProgress: number;
   xpToNextLevel: number;
+  activeFlair: string;
+  activeFrame: string;
+  activeTheme: string;
   achievements: Array<{
     id: string;
     achievement: {
@@ -340,12 +343,30 @@ export default function PublicProfilePage() {
 
   const isOwnProfile = (currentUserId || (session?.user as any)?.id) === userId;
 
+  // Theme colors
+  const themeMap: Record<string, { bg: string; accent: string; headerBg: string }> = {
+    gold:    { bg: '#0a0800', accent: '#FDE74C', headerBg: 'rgba(253,231,76,0.08)' },
+    neon:    { bg: '#05070a', accent: '#00FFFF', headerBg: 'rgba(0,255,255,0.06)' },
+    crimson: { bg: '#0a0303', accent: '#DC2626', headerBg: 'rgba(220,38,38,0.08)' },
+    default: { bg: '#020202', accent: '#3891A6', headerBg: 'rgba(56,145,166,0.1)' },
+  };
+  const theme = themeMap[profile.activeTheme || 'default'] ?? themeMap.default;
+
+  // Avatar frame styles
+  const frameMap: Record<string, React.CSSProperties> = {
+    gold:    { borderColor: '#FDE74C', borderWidth: 4, boxShadow: '0 0 10px rgba(253,231,76,0.5)' },
+    neon:    { borderColor: '#00FFFF', borderWidth: 4, boxShadow: '0 0 12px rgba(0,255,255,0.6), 0 0 24px rgba(0,255,255,0.2)' },
+    flame:   { borderColor: '#F97316', borderWidth: 4, boxShadow: '0 0 12px rgba(249,115,22,0.7), 0 0 24px rgba(220,38,38,0.4)' },
+    none:    { borderColor: '#3891A6', borderWidth: 4 },
+  };
+  const frameStyle = frameMap[profile.activeFrame || 'none'] ?? frameMap.none;
+
   return (
-    <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen">
+    <div style={{ backgroundColor: theme.bg, backgroundImage: `linear-gradient(135deg, ${theme.bg} 0%, #0a0a0a 50%, ${theme.bg} 100%)` }} className="min-h-screen">
       {/* Profile Section */}
       <div className="max-w-4xl mx-auto px-4 py-12 pt-28">
         {/* Profile Header */}
-          <div className="border rounded-lg p-8 mb-8" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>
+          <div className="border rounded-lg p-8 mb-8" style={{ backgroundColor: theme.headerBg, borderColor: theme.accent }}>
           <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between mb-6">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 w-full">
               <div className="relative flex-shrink-0 mb-4 sm:mb-0">
@@ -354,12 +375,12 @@ export default function PublicProfilePage() {
                     src={profile.image}
                     alt={profile.name}
                     className="w-24 h-24 rounded-full object-cover border-4 flex-shrink-0"
-                    style={{ borderColor: '#3891A6' }}
+                    style={frameStyle}
                   />
                 ) : (
                   <div
                     className="w-24 h-24 rounded-full flex items-center justify-center text-4xl border-4 flex-shrink-0"
-                    style={{ backgroundColor: 'rgba(56, 145, 166, 0.2)', borderColor: '#3891A6' }}
+                    style={{ backgroundColor: 'rgba(56, 145, 166, 0.2)', ...frameStyle }}
                   >
                     👤
                   </div>
@@ -398,7 +419,7 @@ export default function PublicProfilePage() {
                 {isOwnProfile && !isEditingName && !currentUserNameChanged ? (
                   <div className="flex items-center gap-3 mb-2">
                     <h1 className="text-4xl font-bold text-white">
-                      {profile.name || "Anonymous Player"}
+                      {profile.name || "Anonymous Player"}{profile.activeFlair && profile.activeFlair !== "none" ? ` ${profile.activeFlair}` : ""}
                     </h1>
                     <button
                       onClick={() => {
@@ -456,7 +477,7 @@ export default function PublicProfilePage() {
                   </div>
                 ) : (
                   <h1 className="text-4xl font-bold text-white mb-2">
-                    {profile.name || "Anonymous Player"}
+                    {profile.name || "Anonymous Player"}{profile.activeFlair && profile.activeFlair !== "none" ? ` ${profile.activeFlair}` : ""}
                   </h1>
                 )}
                 <div className="flex items-center gap-4" style={{ color: '#DDDBF1' }}>

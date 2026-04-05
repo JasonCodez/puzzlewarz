@@ -17,10 +17,11 @@ export async function POST(
 
     const { id: puzzleId } = await context.params;
     const body = await request.json();
-    const { word, cells, allFoundWords } = body as {
+    const { word, cells, allFoundWords, warzMode } = body as {
       word: string;
       cells: { row: number; col: number }[];
       allFoundWords: string[];
+      warzMode?: boolean;
     };
 
     if (!word || typeof word !== "string") {
@@ -75,7 +76,7 @@ export async function POST(
     const allFound = validFoundWords.length >= puzzleWords.length;
 
     // Persist progress
-    try {
+    if (!warzMode) try {
       const now = new Date();
 
       let progress = await prisma.userPuzzleProgress.findUnique({

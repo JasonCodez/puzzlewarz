@@ -17,7 +17,7 @@ export async function POST(
 
     const { id: puzzleId } = await context.params;
     const body = await request.json();
-    const { guess } = body as { guess: string };
+    const { guess, warzMode } = body as { guess: string; warzMode?: boolean };
 
     if (!guess || typeof guess !== "string") {
       return NextResponse.json({ error: "No guess provided" }, { status: 400 });
@@ -96,7 +96,7 @@ export async function POST(
     const solved = result.every((r) => r.status === "correct");
 
     // ── Persist progress ─────────────────────────────────────────────────
-    try {
+    if (!warzMode) try {
       const now = new Date();
 
       // Upsert the progress record: increment attempts each guess, mark solved when correct.

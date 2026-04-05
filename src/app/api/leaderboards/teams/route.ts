@@ -19,16 +19,17 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         name: true,
+        isPublic: true,
       },
     });
 
     // Calculate team rankings
     const entries = await Promise.all(
-      teams.map(async (team: { id: string; name?: string | null }) => {
+      teams.map(async (team: { id: string; name?: string | null; isPublic: boolean }) => {
         // Get team members with their persistent point totals
         const members = await prisma.teamMember.findMany({
           where: { teamId: team.id },
-          select: { userId: true, user: { select: { totalPoints: true } } },
+          select: { userId: true, user: { select: { totalPoints: true, teamBannerColor: true, activeFlair: true } } },
         });
 
         const memberIds = members.map((m: { userId: string }) => m.userId);
@@ -36,9 +37,13 @@ export async function GET(request: NextRequest) {
           where: { userId: { in: memberIds }, solved: true },
         });
 
+        // Use the first member's banner color as the team banner (or "none" if not set)
+        const bannerColor = members.find((m: any) => m.user?.teamBannerColor && m.user.teamBannerColor !== "none")?.user?.teamBannerColor ?? "none";
         return {
           teamId: team.id,
           teamName: team.name,
+          isPublic: team.isPublic,
+          bannerColor,
           totalPoints: members.reduce((sum: number, m: { user?: { totalPoints?: number | null } }) => sum + (m.user?.totalPoints ?? 0), 0),
           totalPuzzlesSolved: puzzlesSolved,
           memberCount: members.length,
@@ -47,9 +52,10 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Sort and rank
-    entries.sort((a, b) => b.totalPoints - a.totalPoints);
-    entries.forEach((entry: any, index: any) => {
+    // Sort and rank — exclude disbanded teams (no members)
+    const activeEntries = entries.filter((e) => e.memberCount > 0);
+    activeEntries.sort((a, b) => b.totalPoints - a.totalPoints);
+    activeEntries.forEach((entry: any, index: any) => {
       entry.rank = index + 1;
     });
 
@@ -67,13 +73,13 @@ export async function GET(request: NextRequest) {
 
     let userTeamRank = null;
     if (userTeams.length > 0) {
-      userTeamRank = entries.find((e: { teamId: string }) => e.teamId === userTeams[0].id) || null;
+      userTeamRank = activeEntries.find((e: { teamId: string }) => e.teamId === userTeams[0].id) || null;
     }
 
-    return NextResponse.json({
-      entries,
-      userTeamRank,
-    });
+    return NextResponse.json(
+      { entries: activeEntries, userTeamRank },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     console.error("Error fetching team leaderboard:", error);
     return NextResponse.json(

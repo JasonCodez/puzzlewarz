@@ -3,6 +3,19 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
+// Map legacy word values to their emoji (for users who equipped before the fix)
+const FLAIR_EMOJI: Record<string, string> = {
+  crown: "👑",
+  fire: "🔥",
+  lightning: "⚡",
+  warz_legend: "⚔️🏆",
+};
+
+function resolveFlair(value: string | null | undefined): string {
+  if (!value || value === "none") return "none";
+  return FLAIR_EMOJI[value] ?? value; // already an emoji → pass through
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -16,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     // Get all users
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, totalPoints: true },
+      select: { id: true, name: true, totalPoints: true, activeFlair: true },
     });
 
     // Calculate rankings with progress data
@@ -28,6 +41,7 @@ export async function GET(request: NextRequest) {
         return {
               userId: user.id,
               userName: user.name,
+              activeFlair: resolveFlair(user.activeFlair),
               puzzlesSolved,
               totalPoints: user.totalPoints ?? 0,
               rank: 0,

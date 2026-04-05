@@ -90,7 +90,7 @@ export async function PUT(
         difficulty: safeDifficulty,
         ...(categoryRecord ? { categoryId: categoryRecord.id } : {}),
         ...(!isSpecialType ? { riddleAnswer: correctAnswer } : {}),
-        ...(([ "escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search"].includes(puzzleType)) && puzzleData != null
+        ...(([ "escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg"].includes(puzzleType)) && puzzleData != null
           ? { data: puzzleData }
           : {}),
       },

@@ -9,6 +9,7 @@ interface LeaderboardEntry {
   userId: string;
   userName: string | null;
   email: string;
+  activeFlair: string;
   totalPoints: number;
   puzzlesSolved: number;
   rank: number;
@@ -173,7 +174,7 @@ export default function LeaderboardsPage() {
                             href={`/profile/${entry.userId}`}
                             className="text-white font-semibold hover:underline hover:text-[#3891A6]"
                           >
-                            {entry.userName || "Anonymous"}
+                            {entry.userName || "Anonymous"}{entry.activeFlair && entry.activeFlair !== "none" ? ` ${entry.activeFlair}` : ""}
                           </Link>
                         ) : (
                           <span className="text-white font-semibold">{entry.userName || "Anonymous"}</span>

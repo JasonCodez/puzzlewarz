@@ -8,6 +8,8 @@ import { redirect } from "next/navigation";
 interface TeamLeaderboardEntry {
   teamId: string;
   teamName: string;
+  isPublic: boolean;
+  bannerColor: string;
   totalPoints: number;
   totalPuzzlesSolved: number;
   memberCount: number;
@@ -28,7 +30,7 @@ export default function TeamLeaderboards() {
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        const response = await fetch("/api/leaderboards/teams");
+        const response = await fetch("/api/leaderboards/teams", { cache: "no-store" });
         if (!response.ok) throw new Error("Failed to fetch team leaderboard");
         const data = await response.json();
         setEntries(data.entries);
@@ -42,6 +44,13 @@ export default function TeamLeaderboards() {
 
     fetchLeaderboard();
   }, []);
+
+  const getBannerBg = (bannerColor: string) => {
+    if (bannerColor === "gold") return "rgba(253,231,76,0.07)";
+    if (bannerColor === "crimson") return "rgba(220,38,38,0.09)";
+    if (bannerColor === "neon") return "rgba(0,255,255,0.06)";
+    return "transparent";
+  };
 
   const getMedalEmoji = (rank: number) => {
     if (rank === 1) return "🥇";
@@ -111,11 +120,26 @@ export default function TeamLeaderboards() {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry) => (
+                {entries.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-16 text-center">
+                      <div className="text-4xl mb-3">🏆</div>
+                      <p className="font-semibold text-white mb-1">No teams yet</p>
+                      <p className="text-sm" style={{ color: '#AB9F9D' }}>
+                        Be the first to&nbsp;
+                        <Link href="/teams" className="underline underline-offset-2 hover:opacity-80" style={{ color: '#3891A6' }}>
+                          create a team
+                        </Link>
+                        &nbsp;and claim the top spot!
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  entries.map((entry) => (
                   <tr
                     key={entry.teamId}
                     className={`transition-colors ${getRankColor(entry.rank)}`}
-                    style={{ borderBottom: `1px solid rgba(56, 145, 166, 0.2)` }}
+                    style={{ borderBottom: `1px solid rgba(56, 145, 166, 0.2)`, backgroundColor: getBannerBg(entry.bannerColor) }}
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -125,13 +149,20 @@ export default function TeamLeaderboards() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <Link
-                        href={`/teams/${entry.teamId}`}
-                        className="font-semibold text-white transition-colors hover:opacity-80"
-                        style={{ color: '#DDDBF1' }}
-                      >
-                        {entry.teamName}
-                      </Link>
+                      {entry.isPublic ? (
+                        <Link
+                          href={`/teams/${entry.teamId}`}
+                          className="font-semibold transition-colors hover:opacity-80"
+                          style={{ color: '#DDDBF1' }}
+                        >
+                          {entry.teamName}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold flex items-center gap-1.5" style={{ color: '#DDDBF1' }}>
+                          {entry.teamName}
+                          <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(171,159,157,0.15)', color: '#AB9F9D' }}>Private</span>
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right" style={{ color: '#DDDBF1' }}>
                       {entry.memberCount}
@@ -145,7 +176,8 @@ export default function TeamLeaderboards() {
                       </span>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>

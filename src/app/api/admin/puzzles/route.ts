@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate input - title is required for most puzzle types but optional for Sudoku, Escape Room, and Word Crack
-    if (!title && puzzleType !== 'sudoku' && puzzleType !== 'escape_room' && puzzleType !== 'word_crack' && puzzleType !== 'word_search') {
+    if (!title && puzzleType !== 'sudoku' && puzzleType !== 'escape_room' && puzzleType !== 'word_crack' && puzzleType !== 'word_search' && puzzleType !== 'anagram_blitz' && puzzleType !== 'arg') {
       return NextResponse.json(
         { error: "Missing required field: title" },
         { status: 400 }
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case' && puzzleType !== 'crack_safe' && puzzleType !== 'word_crack' && puzzleType !== 'word_search') {
+    } else if (puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case' && puzzleType !== 'crack_safe' && puzzleType !== 'word_crack' && puzzleType !== 'word_search' && puzzleType !== 'anagram_blitz' && puzzleType !== 'arg') {
       if (!correctAnswer) {
         return NextResponse.json(
           { error: "Single-part puzzles must have a correct answer" },
@@ -204,6 +204,8 @@ export async function POST(request: NextRequest) {
       (puzzleType === 'sudoku' ? `Sudoku (${(sudokuDifficulty || 'medium').toString().toUpperCase()})` :
       puzzleType === 'word_crack' ? 'Word Crack' :
       puzzleType === 'word_search' ? 'Word Search' :
+      puzzleType === 'anagram_blitz' ? 'Anagram Blitz' :
+      puzzleType === 'arg' ? 'ARG' :
       'Untitled Puzzle');
 
     // Create puzzle
@@ -280,7 +282,7 @@ export async function POST(request: NextRequest) {
         : undefined,
     };
 
-    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search') && typeof puzzleData !== 'undefined') {
+    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search' || puzzleType === 'anagram_blitz' || puzzleType === 'arg') && typeof puzzleData !== 'undefined') {
       createData.data = puzzleData;
     }
 

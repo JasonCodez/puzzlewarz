@@ -63,6 +63,28 @@ model User {
   referredBy             UserReferral[]             @relation("Referee")
   referrals              UserReferral[]             @relation("Referrer")
   streak                 UserStreak?
+  warzChallengesIssued   PuzzleWarzChallenge[]  @relation("WarzChallenger")
+  warzChallengesReceived PuzzleWarzChallenge[]  @relation("WarzInvited")
+  warzChallengesOpposed  PuzzleWarzChallenge[]  @relation("WarzOpponent")
+  warzWins               PuzzleWarzChallenge[]  @relation("WarzWinner")
+
+  // Point Store — consumables
+  streakShields          Int                        @default(0)
+  hintTokens             Int                        @default(0)
+  skipTokens             Int                        @default(0)
+  warzChallengeSlots     Int                        @default(3)
+  warzRematchTokens      Int                        @default(0)
+
+  // Point Store — active cosmetics
+  activeTheme            String                     @default("default")
+  activeFrame            String                     @default("none")
+  activeSkin             String                     @default("default")
+  activeFlair            String                     @default("none")
+  teamBannerColor        String                     @default("none")
+
+  // Point Store — inventory
+  inventory              UserInventory[]
+  dailyWordRecords       DailyWordRecord[]
 
   @@map("users")
 }
@@ -231,6 +253,7 @@ model Puzzle {
   partAssignments          TeamPuzzlePartAssignment[] @relation("PuzzlePartAssignments")
   partSubmissions          TeamPuzzlePartSubmission[] @relation("PuzzleSubmissions")
   userProgress             UserPuzzleProgress[]
+  warzChallenges           PuzzleWarzChallenge[]  @relation("WarzChallenges")
 
   @@index([categoryId])
   @@index([order])
@@ -901,6 +924,55 @@ model UserPreferences {
   @@map("user_preferences")
 }
 
+model StoreItem {
+  id          String          @id @default(cuid())
+  key         String          @unique  // e.g. "theme_gold", "streak_shield", "hint_token"
+  name        String
+  description String
+  category    String          // "cosmetic" | "streak" | "puzzle" | "warz" | "social"
+  subcategory String          // "theme" | "frame" | "skin" | "flair" | "token" | "slot" | "banner"
+  price       Int
+  isConsumable Boolean        @default(false)  // true = stackable quantity, false = one-time unlock
+  isActive    Boolean         @default(true)
+  iconEmoji   String          @default("🎁")
+  metadata    Json?           // e.g. { "value": "gold", "color": "#FDE74C" }
+  createdAt   DateTime        @default(now())
+  purchases   UserInventory[]
+
+  @@map("store_items")
+}
+
+model UserInventory {
+  id          String    @id @default(cuid())
+  userId      String
+  itemId      String
+  quantity    Int       @default(1)
+  purchasedAt DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item        StoreItem @relation(fields: [itemId], references: [id])
+
+  @@unique([userId, itemId])
+  @@index([userId])
+  @@index([itemId])
+  @@map("user_inventory")
+}
+
+model DailyWordRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  dayNumber  Int      // Puzzle day number (1-based from 2026-03-31)
+  won        Boolean
+  guesses    Int      // Number of guesses used (1-6), 0 if skipped
+  skipped    Boolean  @default(false)
+  shieldUsed Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayNumber])
+  @@index([userId])
+  @@map("daily_word_records")
+}
+
 model Activity {
   id          String   @id @default(cuid())
   userId      String
@@ -1448,4 +1520,49 @@ model BulkOperation {
   @@index([status])
   @@index([operationType])
   @@map("bulk_operations")
+}
+
+// ─── Puzzle Warz ─────────────────────────────────────────────────────────────
+
+enum WarzChallengeStatus {
+  OPEN          // posted, waiting for an opponent
+  IN_PROGRESS   // opponent accepted, playing now
+  COMPLETED     // both players finished — winner determined
+  EXPIRED       // 24h passed with no opponent; wager refunded
+  CANCELLED     // challenger withdrew before anyone accepted
+  FORFEITED     // one player forfeited; rules: if only one forfeits, the other wins the pot
+}
+
+model PuzzleWarzChallenge {
+  id               String               @id @default(cuid())
+  puzzleId         String
+  challengerId     String
+  challengerTime   Int                  // seconds to complete
+  challengerWager  Int                  // 1–500 pts; held in escrow on creation
+  // Optional: challenger can invite a specific player
+  invitedUserId    String?
+  // Opponent fields — populated when someone accepts
+  opponentId       String?
+  opponentTime     Int?                 // seconds; set when opponent finishes (or DNF sentinel 999999)
+  // Outcome
+  status           WarzChallengeStatus  @default(OPEN)
+  winnerId         String?              // null = tie/split (both forfeited)
+  potPaid          Boolean              @default(false)  // guard against double-pay
+  expiresAt        DateTime             // createdAt + 24h (or extended via item)
+  spotlightUntil   DateTime?            // if set, pinned at top of open challenges list
+  createdAt        DateTime             @default(now())
+  completedAt      DateTime?
+  // Relations
+  puzzle           Puzzle               @relation("WarzChallenges", fields: [puzzleId], references: [id], onDelete: Cascade)
+  challenger       User                 @relation("WarzChallenger", fields: [challengerId], references: [id], onDelete: Cascade)
+  invitedUser      User?                @relation("WarzInvited", fields: [invitedUserId], references: [id], onDelete: SetNull)
+  opponent         User?                @relation("WarzOpponent", fields: [opponentId], references: [id], onDelete: SetNull)
+  winner           User?                @relation("WarzWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([challengerId])
+  @@index([opponentId])
+  @@index([puzzleId])
+  @@index([expiresAt])
+  @@map("puzzle_warz_challenges")
 }

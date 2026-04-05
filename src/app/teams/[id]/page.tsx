@@ -61,6 +61,17 @@ export default function TeamDetailPage() {
     const fetchTeam = async () => {
       try {
         const response = await fetch(`/api/teams/${teamId}`);
+        if (response.status === 404) {
+          // Team was disbanded or never existed — show clean not-found screen
+          setLoading(false);
+          return;
+        }
+        if (response.status === 403) {
+          // Team exists but is private and user is not a member
+          if (!cancelled) setError("private");
+          if (!cancelled) setLoading(false);
+          return;
+        }
         if (!response.ok) throw new Error("Failed to fetch team");
         const data = await response.json();
         setTeam(data);
@@ -187,10 +198,32 @@ export default function TeamDetailPage() {
     );
   }
 
+  if (error === "private") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: '#020202' }}>
+        <div className="text-center">
+          <div className="text-5xl mb-4">🔒</div>
+          <h2 className="text-2xl font-bold text-white mb-2">Private Team</h2>
+          <p className="mb-6" style={{ color: '#AB9F9D' }}>This team is private. You must be a member to view it.</p>
+          <Link href="/leaderboards/teams" className="px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors" style={{ backgroundColor: 'rgba(253,231,76,0.15)', color: '#FDE74C', border: '1px solid rgba(253,231,76,0.3)' }}>
+            ← Back to Leaderboards
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!team) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#020202' }}>
-        <div style={{ color: '#AB9F9D' }} className="text-lg">Team not found</div>
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: '#020202' }}>
+        <div className="text-center">
+          <div className="text-5xl mb-4">🏚️</div>
+          <h2 className="text-2xl font-bold text-white mb-2">Team Not Found</h2>
+          <p className="mb-6" style={{ color: '#AB9F9D' }}>This team may have been disbanded or the link is no longer valid.</p>
+          <Link href="/teams" className="px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors" style={{ backgroundColor: 'rgba(253,231,76,0.15)', color: '#FDE74C', border: '1px solid rgba(253,231,76,0.3)' }}>
+            ← Back to Teams
+          </Link>
+        </div>
       </div>
     );
   }

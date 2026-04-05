@@ -20,14 +20,14 @@ export async function GET(request: NextRequest) {
     try {
       user = await (prisma.user as any).findUnique({
         where: { email: session.user.email },
-        select: { id: true, role: true, image: true, nameChanged: true, xp: true, level: true, xpTitle: true },
+        select: { id: true, role: true, image: true, nameChanged: true, xp: true, level: true, xpTitle: true, name: true, totalPoints: true, activeFlair: true, activeSkin: true },
       });
     } catch (e) {
       // Fallback to older schema without `nameChanged`
       try {
       user = await prisma.user.findUnique({
           where: { email: session.user.email },
-          select: { id: true, role: true, image: true, xp: true, level: true, xpTitle: true },
+          select: { id: true, role: true, image: true, xp: true, level: true, xpTitle: true, name: true, totalPoints: true, activeFlair: true, activeSkin: true },
         });
       } catch (ee) {
         throw ee;
@@ -62,7 +62,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, ...calcLevel(user.xp ?? 0) });
+    // Map legacy word flair values to emojis
+    const FLAIR_EMOJI: Record<string, string> = { crown: "👑", fire: "🔥", lightning: "⚡", warz_legend: "⚔️🏆" };
+    const resolvedFlair = (() => { const f = user.activeFlair; if (!f || f === "none") return null; return FLAIR_EMOJI[f] ?? f; })();
+    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, totalPoints: user.totalPoints ?? 0, username: user.name ?? null, activeFlair: resolvedFlair, activeSkin: user.activeSkin ?? 'default', ...calcLevel(user.xp ?? 0) });
   } catch (error) {
     console.error("Error fetching user info:", error);
     return NextResponse.json(

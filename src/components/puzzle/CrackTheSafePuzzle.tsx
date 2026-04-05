@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
 
 type GuessResult = {
   guess: string;
@@ -43,6 +44,7 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const safeContainerRef = useRef<HTMLDivElement>(null);
   const [safeScale, setSafeScale] = useState(1);
+  const skin = usePuzzleSkin();
 
   const attemptsLeft = maxAttempts - history.length;
   const isPlaying = status === "playing";
@@ -687,7 +689,7 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
         {/* ── Clue ──────────────────────────────────────────────────── */}
         {clue && (
           <div className="mb-5 p-3 rounded-xl text-sm text-center"
-               style={{ background: "rgba(56,145,166,0.12)", border: "1px solid rgba(56,145,166,0.25)", color: "#9BD1D6" }}>
+        style={{ background: skin.boardBg, border: `1px solid ${skin.boardBorder}`, color: skin.tileText }}>
             {clue}
           </div>
         )}
@@ -721,8 +723,8 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
                 style={{
                   width: `clamp(38px, ${100 / digits - 2}vw, 52px)`,
                   height: `clamp(48px, ${100 / digits - 2}vw, 62px)`,
-                  background: d ? "rgba(56,145,166,0.2)" : "#111",
-                  border: d ? "2px solid #3891A6" : "2px solid #333",
+                  background: d ? skin.inputBg : "#111",
+                  border: d ? `2px solid ${skin.inputBorder}` : "2px solid #333",
                   color: d ? "#FFF" : "#444",
                   outline: "none",
                   caretColor: "transparent",
@@ -743,7 +745,7 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
             onClick={submit}
             disabled={submitting || curr.some((d) => d === "")}
             className="w-full py-3 rounded-xl font-black text-sm tracking-widest transition-opacity hover:opacity-80 disabled:opacity-40 mb-6"
-            style={{ background: "#3891A6", color: "#020202" }}
+            style={{ background: skin.btnBg, color: skin.btnText }}
           >
             {submitting ? "CHECKING…" : `🔐 TRY COMBINATION`}
           </button>

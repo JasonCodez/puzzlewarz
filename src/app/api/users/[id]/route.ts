@@ -5,6 +5,19 @@ import prisma from "@/lib/prisma";
 
 import { calcLevel } from "@/lib/levels";
 
+// Map legacy word values to their emoji (for users who equipped before the emoji fix)
+const FLAIR_EMOJI: Record<string, string> = {
+  crown: "👑",
+  fire: "🔥",
+  lightning: "⚡",
+  warz_legend: "⚔️🏆",
+};
+
+function resolveFlair(value: string | null | undefined): string {
+  if (!value || value === "none") return "none";
+  return FLAIR_EMOJI[value] ?? value;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,6 +38,9 @@ export async function GET(
         level: true,
         xpTitle: true,
         totalPoints: true,
+        activeFlair: true,
+        activeFrame: true,
+        activeTheme: true,
         achievements: {
           include: {
             achievement: {
@@ -98,6 +114,7 @@ export async function GET(
 
     return NextResponse.json({
       ...user,
+      activeFlair: resolveFlair(user.activeFlair),
       level,
       xpTitle: title,
       stats: {

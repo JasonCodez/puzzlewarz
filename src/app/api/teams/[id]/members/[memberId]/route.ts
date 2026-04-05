@@ -66,6 +66,8 @@ export async function DELETE(
     const memberCount = await prisma.teamMember.count({ where: { teamId } });
     if (memberCount === 0) {
       try {
+        // LobbyMessage has no cascade — delete manually first
+        await prisma.lobbyMessage.deleteMany({ where: { teamId } });
         await prisma.team.delete({ where: { id: teamId } });
         return NextResponse.json({ message: "Member removed and team deleted", count: result.count });
       } catch (e) {
