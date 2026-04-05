@@ -58,6 +58,7 @@ export default function TeamDetailPage() {
 
   useEffect(() => {
     // Allow public viewing; fetch team data regardless of auth status.
+    let cancelled = false;
     const fetchTeam = async () => {
       try {
         const response = await fetch(`/api/teams/${teamId}`);
@@ -107,6 +108,7 @@ export default function TeamDetailPage() {
     };
 
     if (teamId) fetchTeam();
+    return () => { cancelled = true; };
   }, [teamId, status, router]);
 
   useEffect(() => {
