@@ -184,21 +184,32 @@ function CosmeticPreview({ item }: { item: StoreItem }) {
   }
 
   if (sub === "skin") {
-    const skinPalettes: Record<string, { cell: string; alt: string; border: string; bg: string }> = {
-      retro:   { cell: "#4ade80", alt: "#166534", border: "#22c55e", bg: "#030a03" },
-      minimal: { cell: "#e5e7eb", alt: "#374151", border: "#6b7280", bg: "#111827" },
-      neon:    { cell: "#c084fc", alt: "#1e0035", border: "#7c3aed", bg: "#0a0014" },
+    type SkinDef = { bg: string; border: string; cell: string; cellGlow: string; alt: string; label: string; accent: string; shadow: string };
+    const skinDefs: Record<string, SkinDef> = {
+      retro:   { bg: "#0a0020",  border: "#B43CFF", cell: "#B43CFF",  cellGlow: "rgba(180,60,255,0.7)",  alt: "#120030", label: "#00FF88", accent: "rgba(0,255,136,0.6)", shadow: "0 0 0 2px #B43CFF, 0 0 18px rgba(180,60,255,0.5)" },
+      minimal: { bg: "#080808",  border: "rgba(255,255,255,0.12)", cell: "rgba(255,255,255,0.55)", cellGlow: "none", alt: "rgba(255,255,255,0.05)", label: "#aaaaaa", accent: "rgba(255,255,255,0.3)", shadow: "none" },
+      neon:    { bg: "#010012",  border: "#00FFE5", cell: "#00FFE5",  cellGlow: "rgba(0,255,229,0.8)",  alt: "rgba(0,255,229,0.06)", label: "#00FFE5", accent: "rgba(255,0,204,0.7)", shadow: "0 0 0 2px #00FFE5, 0 0 18px rgba(0,255,229,0.55)" },
+      lava:    { bg: "#060100",  border: "#FF5500", cell: "#FF5500",  cellGlow: "rgba(255,85,0,0.75)",  alt: "rgba(255,85,0,0.07)",  label: "#FF9030", accent: "rgba(255,160,0,0.65)", shadow: "0 0 0 2px #FF5500, 0 0 18px rgba(255,85,0,0.5)" },
+      galaxy:  { bg: "#04001a",  border: "#8B5CF6", cell: "#8B5CF6",  cellGlow: "rgba(139,92,246,0.75)", alt: "rgba(139,92,246,0.08)", label: "#D8B4FE", accent: "rgba(200,0,255,0.6)", shadow: "0 0 0 2px #8B5CF6, 0 0 18px rgba(139,92,246,0.55)" },
+      ice:     { bg: "#000d1f",  border: "#67E8F9", cell: "#67E8F9",  cellGlow: "rgba(103,232,249,0.7)", alt: "rgba(103,232,249,0.06)", label: "#E0F9FF", accent: "rgba(103,232,249,0.5)", shadow: "0 0 0 2px #67E8F9, 0 0 18px rgba(103,232,249,0.45)" },
     };
-    const sp = skinPalettes[meta?.value ?? ""] ?? skinPalettes.minimal;
-    const pattern = [1,0,0,1,0,1,1,0,1,0,0,1,0,1,0,1];
+    const sd = skinDefs[meta?.value ?? ""] ?? skinDefs.minimal;
+    const tiles = [1,0,1,0,1,1,0,1,0,1,1,0,1,0,0,1];
     return (
-      <div className="h-16 flex items-center justify-center mb-3 rounded-xl overflow-hidden"
-        style={{ backgroundColor: sp.bg, border: `1px solid ${sp.border}33` }}>
-        <div className="grid gap-0.5" style={{ gridTemplateColumns: "repeat(4, 1.25rem)" }}>
-          {pattern.map((filled, i) => (
-            <div key={i} className="h-5 rounded-sm"
-              style={{ backgroundColor: filled ? sp.cell : sp.alt, border: `1px solid ${sp.border}44`, boxShadow: filled ? `0 0 4px ${sp.cell}66` : "none" }} />
+      <div className="h-16 flex items-center justify-center mb-3 rounded-xl overflow-hidden relative"
+        style={{ backgroundColor: sd.bg, border: `1px solid ${sd.border}55`, boxShadow: sd.shadow }}>
+        <div className="grid gap-0.5" style={{ gridTemplateColumns: "repeat(4, 1.1rem)" }}>
+          {tiles.map((filled, i) => (
+            <div key={i} className="h-4 rounded-sm transition-all"
+              style={{
+                backgroundColor: filled ? sd.cell : sd.alt,
+                border: `1px solid ${filled ? sd.border : sd.border}44`,
+                boxShadow: filled ? `0 0 5px ${sd.cellGlow}` : "none",
+              }} />
           ))}
+        </div>
+        <div className="absolute bottom-1.5 right-2.5 text-xs font-bold tracking-wider" style={{ color: sd.label, fontFamily: meta?.value === "retro" || meta?.value === "neon" ? "'Courier New', monospace" : "inherit" }}>
+          {(meta?.value ?? "").toUpperCase()}
         </div>
       </div>
     );

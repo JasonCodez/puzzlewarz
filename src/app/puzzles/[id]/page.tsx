@@ -1184,14 +1184,14 @@ export default function PuzzleDetailPage() {
         </div>
       </nav>
 
-      <div className="flex-1 w-screen relative left-1/2 -translate-x-1/2 px-0 py-4 sm:p-8 sm:w-auto sm:static sm:translate-x-0">
+      <div className="flex-1 w-full px-2 py-4 sm:p-8">
         <div className="w-full">
           <div
-            className="border rounded-2xl p-8 mb-8"
+            className="border rounded-2xl p-4 sm:p-8 mb-6 sm:mb-8"
             style={{ backgroundColor: "rgba(255,255,255,0.025)", borderColor: "rgba(56,145,166,0.22)", boxShadow: "0 0 0 1px rgba(56,145,166,0.08) inset" }}
           >
             {/* Puzzle Title */}
-            <h1 className="text-4xl font-bold text-white mb-4">{(() => {
+            <h1 className="text-2xl sm:text-4xl font-bold text-white mb-3 sm:mb-4">{(() => {
               const escapeTitle = (puzzle?.escapeRoom?.roomTitle || '').toString().trim();
               const puzzleTitle = (puzzle?.title || '').toString().trim();
               if (puzzle?.puzzleType === 'escape_room' && escapeTitle) return escapeTitle;
@@ -1247,7 +1247,7 @@ export default function PuzzleDetailPage() {
               </div>
             )}
             {/* Main Puzzle Content */}
-            {puzzle.puzzleType !== 'sudoku' && puzzle.puzzleType !== 'code_master' && puzzle.puzzleType !== 'jigsaw' && (
+            {puzzle.puzzleType !== 'sudoku' && puzzle.puzzleType !== 'code_master' && puzzle.puzzleType !== 'jigsaw' && puzzle.content?.trim() && (
               <div className="prose prose-invert max-w-none mb-8">
                 <div
                   className="whitespace-pre-wrap rounded-lg p-6 border"

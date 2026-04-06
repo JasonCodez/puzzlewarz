@@ -1,7 +1,14 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
+
+const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
+const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), { ssr: false });
+const IceBackground = dynamic(() => import("@/components/IceBackground"), { ssr: false });
+const NeonBackground = dynamic(() => import("@/components/NeonBackground"), { ssr: false });
+const RetroBackground = dynamic(() => import("@/components/RetroBackground"), { ssr: false });
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -161,9 +168,28 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
     empty: { bg: "transparent", border: skin.tileBorder, glow: "none" },
     active: { bg: skin.accentActive, border: skin.boardBorder, glow: "none" },
   };
+
+  // Per-skin keyboard key background — opaque so keys are readable over canvas backgrounds
+  const KEY_SURFACES: Record<string, string> = {
+    retro:      "rgba(12,4,32,0.88)",
+    skin_retro: "rgba(12,4,32,0.88)",
+    neon:       "rgba(4,12,18,0.88)",
+    skin_neon:  "rgba(4,12,18,0.88)",
+    lava:       "rgba(40,8,2,0.85)",
+    skin_lava:  "rgba(40,8,2,0.85)",
+    galaxy:     "rgba(10,6,28,0.88)",
+    skin_galaxy:"rgba(10,6,28,0.88)",
+    ice:        "rgba(6,16,32,0.85)",
+    skin_ice:   "rgba(6,16,32,0.85)",
+    minimal:    "rgba(255,255,255,0.09)",
+    skin_minimal:"rgba(255,255,255,0.09)",
+    default:    "rgba(56,145,166,0.18)",
+  };
+  const keySurface = KEY_SURFACES[skin._key ?? "default"] ?? KEY_SURFACES.default;
+
   const keyBg: Record<string, string> = {
     ...KEY_COLORS,
-    unused: skin.tileBg,
+    unused: keySurface,
     absent: skin.tileBg,
   };
 
@@ -345,39 +371,96 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
       )}
 
       <div
+        className="wc-skin-root"
+        data-skin={skin._key ?? "default"}
+        style={{
+          position: "relative",
+          borderRadius: "1rem",
+          overflow: "hidden",
+          width: "100%",
+          maxWidth: "100vw",
+        }}
+      >
+        {/* Animated skin backgrounds */}
+        {(skin._key === "lava" || skin._key === "skin_lava") && <LavaBackground />}
+        {(skin._key === "galaxy" || skin._key === "skin_galaxy") && <GalaxyBackground />}
+        {(skin._key === "ice" || skin._key === "skin_ice") && <IceBackground />}
+        {(skin._key === "neon" || skin._key === "skin_neon") && <NeonBackground />}
+        {(skin._key === "retro" || skin._key === "skin_retro") && <RetroBackground />}
+
+      <div
         className="flex flex-col items-center gap-4 select-none pb-6"
         style={{
+          position: "relative",
+          zIndex: 1,
           fontFamily: skin.tileFontFamily !== "inherit" ? skin.tileFontFamily : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif",
-          "--tile-sz": `min(56px, calc((100vw - 3rem - ${(wordLength - 1) * 4}px) / ${wordLength}))`,
+          "--tile-sz": `clamp(26px, calc((100vw - 4rem - ${(wordLength - 1) * 4}px) / ${wordLength}), 56px)`,
+          "--tile-sz-sm": `clamp(26px, calc((100vw - 5rem - ${(wordLength - 1) * 8}px) / ${wordLength}), 56px)`,
+          "--skin-tile-bg": skin.tileBg,
+          "--skin-tile-border": skin.tileBorder,
+          "--skin-tile-text": skin.tileText,
+          "--skin-board-border": skin.boardBorder,
+          "--skin-accent-active": skin.accentActive,
         } as React.CSSProperties}
       >
         {/* â”€â”€ Header â”€â”€ */}
         <div className="text-center relative w-full px-8">
           <h2
             className="text-2xl sm:text-3xl font-black tracking-[0.25em] mb-1"
-            style={{
-              background: "linear-gradient(135deg, #818cf8, #c084fc, #f472b6)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              filter: "drop-shadow(0 0 12px rgba(129,140,248,0.5))",
-            }}
+            style={(() => {
+              const key = skin._key ?? "default";
+              const gradients: Record<string, string> = {
+                retro:       "linear-gradient(135deg, #B43CFF, #FF55AA, #00FF88)",
+                skin_retro:  "linear-gradient(135deg, #B43CFF, #FF55AA, #00FF88)",
+                neon:        "linear-gradient(135deg, #00FFE5, #FFFFFF, #FF00CC)",
+                skin_neon:   "linear-gradient(135deg, #00FFE5, #FFFFFF, #FF00CC)",
+                lava:        "linear-gradient(135deg, #FF5500, #FFAA00, #FF3000)",
+                skin_lava:   "linear-gradient(135deg, #FF5500, #FFAA00, #FF3000)",
+                galaxy:      "linear-gradient(135deg, #8B5CF6, #E0BAFF, #C026D3)",
+                skin_galaxy: "linear-gradient(135deg, #8B5CF6, #E0BAFF, #C026D3)",
+                ice:         "linear-gradient(135deg, #67E8F9, #FFFFFF, #38BDF8)",
+                skin_ice:    "linear-gradient(135deg, #67E8F9, #FFFFFF, #38BDF8)",
+                default:     "linear-gradient(135deg, #818cf8, #c084fc, #f472b6)",
+              };
+              const glows: Record<string, string> = {
+                retro:       "drop-shadow(0 0 14px rgba(180,60,255,0.7))",
+                skin_retro:  "drop-shadow(0 0 14px rgba(180,60,255,0.7))",
+                neon:        "drop-shadow(0 0 16px rgba(0,255,229,0.85))",
+                skin_neon:   "drop-shadow(0 0 16px rgba(0,255,229,0.85))",
+                lava:        "drop-shadow(0 0 14px rgba(255,85,0,0.75))",
+                skin_lava:   "drop-shadow(0 0 14px rgba(255,85,0,0.75))",
+                galaxy:      "drop-shadow(0 0 14px rgba(139,92,246,0.7))",
+                skin_galaxy: "drop-shadow(0 0 14px rgba(139,92,246,0.7))",
+                ice:         "drop-shadow(0 0 14px rgba(103,232,249,0.65))",
+                skin_ice:    "drop-shadow(0 0 14px rgba(103,232,249,0.65))",
+                default:     "drop-shadow(0 0 12px rgba(129,140,248,0.5))",
+              };
+              return {
+                display: "inline-block",
+                backgroundImage: gradients[key] ?? gradients.default,
+                backgroundClip: "text",
+                WebkitBackgroundClip: "text",
+                color: "transparent",
+                WebkitTextFillColor: "transparent",
+              };
+            })()}
           >
             WORD CRACK
           </h2>
           <button
             onClick={() => setShowInstructions(true)}
-            className="absolute right-0 top-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center transition-all hover:scale-110"
+            className="absolute right-0 top-0 w-8 h-8 sm:w-6 sm:h-6 rounded-full text-sm sm:text-xs font-bold flex items-center justify-center transition-all hover:scale-110"
             style={{ background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.4)", color: "#818cf8" }}
             title="How to play"
           >
             ?
           </button>
           {hint && (
-            <p className="text-sm mt-1" style={{ color: "#94a3b8" }}>
+            <p className="text-sm mt-1" style={{ color: "#cbd5e1", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
               💡 <span className="italic">{hint}</span>
             </p>
           )}
-          <p className="text-xs mt-1" style={{ color: "#64748b" }}>
+          <p className="text-xs mt-1 font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
             {wordLength} letters · {maxGuesses - guesses.length} guess{maxGuesses - guesses.length !== 1 ? "es" : ""} left
           </p>
         </div>
@@ -429,8 +512,22 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
           </div>
         )}
 
-        {/* â”€â”€ Grid â”€â”€ */}
-        <div className="flex flex-col gap-1 sm:gap-2">
+        {/* ─── Grid ─── */}
+        <div
+          className="wc-board"
+          data-skin={skin._key ?? "default"}
+          style={{
+            background: skin.boardBg,
+            border: `2px solid ${skin.boardBorder}`,
+            boxShadow: skin.boardShadow !== "none" ? skin.boardShadow : undefined,
+            borderRadius: skin.boardRadius,
+            padding: "1.25rem",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <div className="wc-skin-overlay" />
+          <div className="flex flex-col gap-[3px] sm:gap-1.5" style={{ position: "relative", zIndex: 1 }}>
           {rows.map(({ letters, rowIndex }) => {
             const isCurrentRow = rowIndex === guesses.length && gameStatus === "playing";
             const isRevealing = revealingRow === rowIndex;
@@ -440,7 +537,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
             return (
               <div
                 key={rowIndex}
-                className={`flex gap-1 sm:gap-2 ${isShaking ? "wc-shake" : ""}`}
+                className={`flex gap-[3px] sm:gap-1.5 ${isShaking ? "wc-shake" : ""}`}
               >
                 {letters.map(({ char, kind }, colIndex) => {
                   const c = tileColors[kind];
@@ -474,10 +571,12 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
         </div>
 
         {/* â”€â”€ On-screen keyboard â”€â”€ */}
+        </div>
+
         {gameStatus === "playing" && (
-          <div className="flex flex-col items-center gap-1.5 mt-2 w-full max-w-[95vw] sm:max-w-sm">
+          <div className="flex flex-col items-center gap-1 sm:gap-1.5 mt-2 w-full max-w-[100vw] px-1 sm:px-0 sm:max-w-sm">
             {KEYBOARD_ROWS.map((row, ri) => (
-              <div key={ri} className="flex gap-1">
+              <div key={ri} className="flex gap-[3px] sm:gap-1">
                 {row.map((key) => {
                   const state = keyStates[key] ?? "unused";
                   const isWide = key === "ENTER" || key === "⌫";
@@ -490,12 +589,13 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
                       onClick={() => handleKey(key)}
                       className="rounded-lg font-bold text-white transition-all duration-150 active:scale-90"
                       style={{
-                        width: isWide ? "clamp(50px, 14vw, 62px)" : "clamp(28px, 8.5vw, 36px)",
-                        height: "clamp(42px, 12vw, 54px)",
+                        width: isWide ? "clamp(40px, 12vw, 62px)" : "clamp(24px, 8vw, 36px)",
+                        height: "clamp(40px, 11vw, 54px)",
                         background: bg,
                         boxShadow: glow,
                         fontSize: isWide ? "clamp(9px, 2.5vw, 11px)" : "clamp(11px, 3.5vw, 14px)",
-                        border: `1px solid ${skin.tileBorder}`,
+                        border: `1px solid ${skin.boardBorder}`,
+                        color: skin.tileText,
                       }}
                       aria-label={key}
                     >
@@ -507,8 +607,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
             ))}
           </div>
         )}
-      </div>
-
+      </div>      </div>
       {/* â”€â”€ All animations â”€â”€ */}
       <style>{`
         /* Tile 3D structure */
@@ -535,14 +634,106 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
           letter-spacing: 0.05em;
         }
         .wc-tile-front {
-          background: transparent;
-          border-color: #374151;
+          background: var(--skin-tile-bg, transparent);
+          border-color: var(--skin-tile-border, #374151);
+          color: var(--skin-tile-text, white);
         }
         .wc-tile-back {
           background: var(--tile-bg);
           border-color: var(--tile-border);
           box-shadow: 0 0 16px var(--tile-glow);
           transform: rotateX(180deg);
+          color: var(--skin-tile-text, white);
+        }
+        /* Board skin overlay */
+        .wc-skin-overlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 0;
+          border-radius: inherit;
+        }
+        /* Lava: board border pulse only */
+        .wc-board[data-skin="lava"],
+        .wc-board[data-skin="skin_lava"] {
+          animation: wc-lava-glow 2.5s ease-in-out infinite;
+        }
+        @keyframes wc-lava-glow {
+          0%, 100% { box-shadow: 0 0 0 2px #FF5500, 0 0 30px rgba(255,85,0,0.5), 0 0 70px rgba(255,85,0,0.18), inset 0 0 30px rgba(255,20,0,0.07); }
+          50%      { box-shadow: 0 0 0 2px #FF7700, 0 0 48px rgba(255,110,0,0.75), 0 0 95px rgba(255,60,0,0.3), inset 0 0 38px rgba(255,40,0,0.12); }
+        }
+        .wc-board[data-skin="lava"] .wc-skin-overlay,
+        .wc-board[data-skin="skin_lava"] .wc-skin-overlay {
+          background: radial-gradient(ellipse at 50% 110%, rgba(255,60,0,0.18) 0%, transparent 60%);
+        }
+        /* Neon: electric cyan pulse + scanlines */
+        .wc-board[data-skin="neon"],
+        .wc-board[data-skin="skin_neon"] {
+          animation: wc-neon-glow 2s ease-in-out infinite;
+        }
+        @keyframes wc-neon-glow {
+          0%, 100% { box-shadow: 0 0 0 2px #00FFE5, 0 0 25px rgba(0,255,229,0.65), 0 0 70px rgba(0,255,229,0.2), inset 0 0 25px rgba(0,255,229,0.05); }
+          50%      { box-shadow: 0 0 0 2px #00FFE5, 0 0 40px rgba(0,255,229,0.9), 0 0 100px rgba(0,255,229,0.35), inset 0 0 35px rgba(0,255,229,0.1); }
+        }
+        .wc-board[data-skin="neon"] .wc-skin-overlay,
+        .wc-board[data-skin="skin_neon"] .wc-skin-overlay {
+          background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,229,0.025) 3px, rgba(0,255,229,0.025) 4px);
+        }
+        /* Galaxy: purple nebula pulse + starfield */
+        .wc-board[data-skin="galaxy"],
+        .wc-board[data-skin="skin_galaxy"] {
+          animation: wc-galaxy-glow 3s ease-in-out infinite;
+        }
+        @keyframes wc-galaxy-glow {
+          0%, 100% { box-shadow: 0 0 0 2px #8B5CF6, 0 0 25px rgba(139,92,246,0.55), 0 0 65px rgba(200,0,255,0.18), inset 0 0 25px rgba(139,92,246,0.06); }
+          50%      { box-shadow: 0 0 0 2px #9B6DFF, 0 0 40px rgba(160,100,255,0.75), 0 0 90px rgba(200,0,255,0.3), inset 0 0 35px rgba(150,80,255,0.1); }
+        }
+        .wc-board[data-skin="galaxy"] .wc-skin-overlay,
+        .wc-board[data-skin="skin_galaxy"] .wc-skin-overlay {
+          background:
+            radial-gradient(1.5px 1.5px at 15% 20%, rgba(200,160,255,0.9) 0%, transparent 100%),
+            radial-gradient(1px 1px at 80% 15%, rgba(220,180,255,0.7) 0%, transparent 100%),
+            radial-gradient(2px 2px at 55% 75%, rgba(139,92,246,0.8) 0%, transparent 100%),
+            radial-gradient(1px 1px at 90% 65%, rgba(200,150,255,0.6) 0%, transparent 100%),
+            radial-gradient(1.5px 1.5px at 25% 55%, rgba(170,100,255,0.7) 0%, transparent 100%),
+            radial-gradient(1px 1px at 70% 40%, rgba(210,170,255,0.5) 0%, transparent 100%),
+            radial-gradient(1px 1px at 40% 10%, rgba(180,120,255,0.6) 0%, transparent 100%),
+            radial-gradient(ellipse at 30% 80%, rgba(139,92,246,0.12) 0%, transparent 50%),
+            radial-gradient(ellipse at 70% 20%, rgba(200,0,255,0.08) 0%, transparent 50%);
+        }
+        /* Ice: crystal shimmer + frost gradient */
+        .wc-board[data-skin="ice"],
+        .wc-board[data-skin="skin_ice"] {
+          animation: wc-ice-glow 3.5s ease-in-out infinite;
+        }
+        @keyframes wc-ice-glow {
+          0%, 100% { box-shadow: 0 0 0 2px #67E8F9, 0 0 22px rgba(103,232,249,0.45), 0 0 55px rgba(103,232,249,0.12), inset 0 0 22px rgba(103,232,249,0.05); }
+          50%      { box-shadow: 0 0 0 2px #7EEDFF, 0 0 35px rgba(103,232,249,0.65), 0 0 75px rgba(103,232,249,0.2), inset 0 0 30px rgba(103,232,249,0.1); }
+        }
+        .wc-board[data-skin="ice"] .wc-skin-overlay,
+        .wc-board[data-skin="skin_ice"] .wc-skin-overlay {
+          background:
+            linear-gradient(180deg, rgba(103,232,249,0.1) 0%, transparent 35%),
+            linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 50%);
+        }
+        /* Retro: CRT flicker + scanlines + vignette */
+        .wc-board[data-skin="retro"],
+        .wc-board[data-skin="skin_retro"] {
+          animation: wc-retro-flicker 8s steps(1) infinite, wc-retro-glow 3s ease-in-out infinite;
+        }
+        @keyframes wc-retro-flicker {
+          0%, 94%, 96%, 100% { opacity: 1; }
+          95% { opacity: 0.93; }
+        }
+        @keyframes wc-retro-glow {
+          0%, 100% { box-shadow: 0 0 0 3px #B43CFF, 0 0 30px rgba(180,60,255,0.55), 0 0 70px rgba(180,60,255,0.18); }
+          50%      { box-shadow: 0 0 0 3px #D060FF, 0 0 45px rgba(200,80,255,0.75), 0 0 90px rgba(180,60,255,0.28); }
+        }
+        .wc-board[data-skin="retro"] .wc-skin-overlay,
+        .wc-board[data-skin="skin_retro"] .wc-skin-overlay {
+          background:
+            repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 4px),
+            radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.45) 100%);
         }
         /* Reveal flip */
         .wc-flipped {

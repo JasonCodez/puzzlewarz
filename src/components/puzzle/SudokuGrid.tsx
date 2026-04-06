@@ -2,6 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
+import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
+
+const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
+const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), { ssr: false });
+const IceBackground = dynamic(() => import("@/components/IceBackground"), { ssr: false });
+const NeonBackground = dynamic(() => import("@/components/NeonBackground"), { ssr: false });
+const RetroBackground = dynamic(() => import("@/components/RetroBackground"), { ssr: false });
 
 interface SudokuGridProps {
   puzzle: number[][];
@@ -22,6 +30,7 @@ interface SudokuGridProps {
 }
 
 export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disabled = false, solution, validateOnChange = false, onValidatedSuccess, onNotify, maxAttempts = 5, usedAttempts, onAttempt, onGiveUp, onRequestGiveUp }: SudokuGridProps) {
+  const skin = usePuzzleSkin();
   const [grid, setGrid] = useState<number[][]>(() => puzzle.map((row) => [...row]));
   const initialPuzzleRef = ((): { current: number[][] } => {
     const ref: { current: number[][] } = { current: puzzle.map((r) => [...r]) };
@@ -187,11 +196,49 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
   const attemptsLeft = Math.max(0, (maxAttempts || 0) - (effectiveAttempts || 0));
 
   return (
-    <div className="flex flex-col gap-4 items-center justify-center">
+    <div
+      data-skin={skin._key ?? "default"}
+      style={{
+        position: "relative",
+        borderRadius: "1rem",
+        overflow: "hidden",
+        width: "100%",
+        maxWidth: "100vw",
+      }}
+    >
+      {/* Animated skin backgrounds */}
+      {(skin._key === "lava" || skin._key === "skin_lava") && <LavaBackground />}
+      {(skin._key === "galaxy" || skin._key === "skin_galaxy") && <GalaxyBackground />}
+      {(skin._key === "ice" || skin._key === "skin_ice") && <IceBackground />}
+      {(skin._key === "neon" || skin._key === "skin_neon") && <NeonBackground />}
+      {(skin._key === "retro" || skin._key === "skin_retro") && <RetroBackground />}
+
+    <div className="flex flex-col gap-4 items-center justify-center py-6 px-2" style={{ position: "relative", zIndex: 1 }}>
+      {/* Title */}
+      <h2
+        className="text-2xl sm:text-3xl font-black tracking-[0.2em] mb-1 text-center"
+        style={{
+          backgroundImage: "linear-gradient(135deg, #FDE74C, #FFB86B, #3891A6)",
+          backgroundClip: "text",
+          WebkitBackgroundClip: "text",
+          color: "transparent",
+          WebkitTextFillColor: "transparent",
+          filter: "drop-shadow(0 0 12px rgba(253,231,76,0.4))",
+        }}
+      >
+        SUDOKU
+      </h2>
+      <p className="text-xs font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
+        Attempts left: <span className="font-semibold">{attemptsLeft}</span>
+      </p>
+
       <motion.div
-          className="w-full border-4 p-3 bg-[#071016] rounded"
+          className="w-full border-4 p-3 rounded"
           style={{
-            borderColor: "#FDE74C",
+            background: skin.boardBg,
+            borderColor: skin.boardBorder,
+            boxShadow: skin.boardShadow !== "none" ? skin.boardShadow : undefined,
+            borderRadius: skin.boardRadius,
             width: '100%',
             maxWidth: 'min(90vw,720px)',
             aspectRatio: '1 / 1',
@@ -226,7 +273,7 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
                       value={cell === 0 ? "" : String(cell)}
                       disabled={disabled || isGiven}
                       onChange={(e) => handleCellChange(rowIdx, colIdx, e.target.value)}
-                      className="w-full h-full text-center bg-slate-800 border focus:outline-none disabled:opacity-80"
+                      className="w-full h-full text-center border focus:outline-none disabled:opacity-80"
                       style={{
                         width: '100%',
                         height: '100%',
@@ -235,13 +282,14 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
                         fontSize: 'clamp(16px, 4vw, 28px)',
                         borderRightWidth: thickRight ? "3px" : "1px",
                         borderBottomWidth: thickBottom ? "3px" : "1px",
-                        borderRightColor: thickRight ? "#3891A6" : undefined,
-                        borderBottomColor: thickBottom ? "#3891A6" : undefined,
+                        borderRightColor: thickRight ? skin.boardBorder : undefined,
+                        borderBottomColor: thickBottom ? skin.boardBorder : undefined,
                         fontWeight: isGiven ? 700 : 500,
                         padding: 0,
                         lineHeight: '1',
-                        color: isGiven ? '#FFFFFF' : '#FDE74C',
-                        borderColor: '#334155',
+                        color: isGiven ? skin.tileText : skin.accentActive.replace(/[\d.]+\)$/, "1)"),
+                        background: skin.tileBg,
+                        borderColor: skin.tileBorder,
                         boxShadow: undefined,
                       }}
                     />
@@ -257,7 +305,8 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
           type="button"
           onClick={handleSubmit}
           disabled={disabled || !isComplete}
-          className="px-4 py-2 rounded bg-slate-700 text-white disabled:opacity-50"
+          className="px-4 py-2 rounded font-bold transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+          style={{ background: skin.btnBg, color: skin.btnText }}
         >
           Submit Sudoku
         </button>
@@ -274,17 +323,15 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
           I Give Up!
         </button>
       </div>
-      <div className="w-full mt-2" style={{ maxWidth: 'min(90vw,720px)' }}>
-        <div className="text-sm text-left text-yellow-300">Attempts left: <span className="font-semibold text-white">{attemptsLeft}</span></div>
-      </div>
       {submitMessage && (
         <div className={`mt-2 text-sm ${submitMessage.type === 'error' ? 'text-red-400' : submitMessage.type === 'success' ? 'text-green-400' : 'text-yellow-300'}`}>
           {submitMessage.message}
         </div>
       )}
       {!isComplete && !disabled && (
-        <div className="text-sm text-yellow-300 text-center">Please complete all cells before submitting.</div>
+        <div className="text-sm text-center font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>Please complete all cells before submitting.</div>
       )}
+    </div>
     </div>
   );
 }

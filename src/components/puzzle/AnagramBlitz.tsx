@@ -1,7 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
+
+const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
+const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), { ssr: false });
+const IceBackground = dynamic(() => import("@/components/IceBackground"), { ssr: false });
+const NeonBackground = dynamic(() => import("@/components/NeonBackground"), { ssr: false });
+const RetroBackground = dynamic(() => import("@/components/RetroBackground"), { ssr: false });
 
 interface AnagramBlitzProps {
   puzzleId: string;
@@ -39,9 +46,30 @@ export default function AnagramBlitz({
   const hint = anagramData.hint ? String(anagramData.hint) : null;
   const skin = usePuzzleSkin();
 
+  // Skin background wrapper used by all return paths
+  const skinWrap = (children: ReactNode) => (
+    <div
+      data-skin={skin._key ?? "default"}
+      style={{
+        position: "relative",
+        borderRadius: "1rem",
+        overflow: "hidden",
+        width: "100%",
+        maxWidth: "100vw",
+      }}
+    >
+      {(skin._key === "lava" || skin._key === "skin_lava") && <LavaBackground />}
+      {(skin._key === "galaxy" || skin._key === "skin_galaxy") && <GalaxyBackground />}
+      {(skin._key === "ice" || skin._key === "skin_ice") && <IceBackground />}
+      {(skin._key === "neon" || skin._key === "skin_neon") && <NeonBackground />}
+      {(skin._key === "retro" || skin._key === "skin_retro") && <RetroBackground />}
+      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+    </div>
+  );
+
   // Guard: no words configured
   if (words.length === 0) {
-    return (
+    return skinWrap(
       <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(15,18,25,0.97)", border: "1px solid rgba(248,113,113,0.3)" }}>
         <p className="text-red-400 font-semibold">⚠️ This puzzle has no words configured yet.</p>
       </div>
@@ -168,7 +196,7 @@ export default function AnagramBlitz({
 
   // ── Already solved banner ──
   if (alreadySolved) {
-    return (
+    return skinWrap(
       <div
         className="rounded-2xl p-6 text-center"
         style={{
@@ -185,7 +213,7 @@ export default function AnagramBlitz({
 
   // ── Pre-start screen ──
   if (!started) {
-    return (
+    return skinWrap(
       <div
         className="rounded-2xl p-8 flex flex-col items-center gap-5 text-center"
         style={{
@@ -225,7 +253,7 @@ export default function AnagramBlitz({
     const score = solvedWords.length;
     const total = words.length;
     const perfect = score === total;
-    return (
+    return skinWrap(
       <div
         className="rounded-2xl p-8 flex flex-col items-center gap-4 text-center"
         style={{
@@ -276,7 +304,7 @@ export default function AnagramBlitz({
   const currentWord = words[currentIdx];
   const currentScrambled = scrambledWords[currentIdx];
 
-  return (
+  return skinWrap(
     <div
       className="rounded-2xl p-6 flex flex-col gap-5"
       style={{
@@ -287,7 +315,7 @@ export default function AnagramBlitz({
     >
       {/* Header row */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-400">
+        <span className="text-sm font-semibold" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
           Word {currentIdx + 1} / {words.length}
         </span>
         <span
@@ -332,7 +360,7 @@ export default function AnagramBlitz({
 
       {/* Scrambled word */}
       <div className="text-center">
-        <p className="text-xs uppercase tracking-widest text-gray-500 mb-2">Unscramble this word</p>
+        <p className="text-xs uppercase tracking-widest mb-2 font-medium" style={{ color: "#cbd5e1", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>Unscramble this word</p>
         <div
           className={`flex justify-center gap-2 flex-wrap transition-all ${shake ? "animate-bounce" : ""}`}
         >

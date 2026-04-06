@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Rarity, rarityColors } from '@/lib/rarity';
+import { THEME_CONFIGS, FRAME_CONFIGS, type ThemeConfig } from '@/lib/profileThemes';
 import './profile-actions.css';
 
 interface UserProfile {
@@ -27,133 +28,86 @@ interface UserProfile {
   activeFlair: string;
 }
 
-// ─── Theme system ───────────────────────────────────────────────────────────
-interface ThemeConfig {
-  pageBg: string;
-  headerGradient: string;
-  headerParticle1: string;
-  headerParticle2: string;
-  primary: string;
-  primaryMuted: string;       // primary at ~15% opacity bg
-  primaryBorder: string;      // primary border
-  secondary: string;
-  cardBg: string;
-  cardBorder: string;
-  statCardBg: string;
-  statCardBorder: string;
-  accentText: string;
-  subtleText: string;
-  inputBg: string;
-  inputBorder: string;
-  btnPrimary: string;
-  btnPrimaryText: string;
-  xpBarGradient: string;
-  avatarRing: string;
-  avatarGlow: string;
+// ─── Cosmetics Drawer ─────────────────────────────────────────────────────────
+type DrawerItem = {
+  key: string; name: string; subcategory: string; iconEmoji: string;
+  metadata: Record<string, unknown> | null; owned: number;
+};
+
+function DrawerItemPreview({ item }: { item: DrawerItem }) {
+  const meta = item.metadata as Record<string, string> | null;
+  const sub = item.subcategory;
+
+  if (sub === 'theme') {
+    const p = meta?.primaryColor ?? '#FDE74C';
+    const a = meta?.accentColor ?? '#FFB86B';
+    return (
+      <div className="rounded-lg h-10 mb-3 flex items-center px-3 gap-2 overflow-hidden"
+        style={{ background: `linear-gradient(135deg, ${p}22, ${a}18, rgba(10,12,16,0.9))`, border: `1px solid ${p}33` }}>
+        <div className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${p}, ${a})`, boxShadow: `0 0 6px ${p}66` }} />
+        <div className="h-1.5 flex-1 rounded-full" style={{ background: `linear-gradient(90deg, ${p}, ${a})` }} />
+        <div className="flex gap-1 shrink-0">
+          {[p, a].map((c, i) => <div key={i} className="w-3 h-3 rounded" style={{ backgroundColor: c }} />)}
+        </div>
+      </div>
+    );
+  }
+  if (sub === 'frame') {
+    const fs: Record<string, { ring: string; glow: string }> = {
+      gold:  { ring: 'linear-gradient(135deg, #FDE74C, #FFB86B, #FDE74C)', glow: 'rgba(253,231,76,0.55)' },
+      neon:  { ring: 'linear-gradient(135deg, #00FFFF, #CC00FF, #00FFFF)',  glow: 'rgba(0,255,255,0.45)' },
+      flame: { ring: 'linear-gradient(135deg, #FF4500, #FDE74C, #FF4500)',  glow: 'rgba(255,69,0,0.55)' },
+    };
+    const f = fs[meta?.value ?? ''] ?? fs.gold;
+    return (
+      <div className="h-10 flex items-center gap-3 mb-3">
+        <div className="relative w-8 h-8 shrink-0">
+          <div className="absolute inset-0 rounded-full" style={{ background: f.ring, padding: '2px', boxShadow: `0 0 10px ${f.glow}` }}>
+            <div className="w-full h-full rounded-full flex items-center justify-center text-xs" style={{ background: '#0d1117' }}>👤</div>
+          </div>
+        </div>
+        <span className="text-xs text-white font-semibold opacity-75">{item.name}</span>
+      </div>
+    );
+  }
+  if (sub === 'flair') {
+    const emoji = meta?.emoji ?? item.iconEmoji;
+    return (
+      <div className="h-10 flex items-center gap-2 mb-3 rounded-lg px-3"
+        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <span className="text-xs text-white font-semibold">PlayerName</span>
+        <span className="text-base">{emoji}</span>
+      </div>
+    );
+  }
+  if (sub === 'skin') {
+    type SkinDef = { bg: string; border: string; cell: string; cellGlow: string; alt: string; label: string; shadow: string };
+    const skinDefs: Record<string, SkinDef> = {
+      retro:   { bg: '#0a0020', border: '#B43CFF', cell: '#B43CFF',  cellGlow: 'rgba(180,60,255,0.7)', alt: '#120030', label: '#00FF88', shadow: '0 0 0 2px #B43CFF, 0 0 12px rgba(180,60,255,0.5)' },
+      minimal: { bg: '#080808', border: 'rgba(255,255,255,0.12)', cell: 'rgba(255,255,255,0.55)', cellGlow: 'none', alt: 'rgba(255,255,255,0.05)', label: '#aaaaaa', shadow: 'none' },
+      neon:    { bg: '#010012', border: '#00FFE5', cell: '#00FFE5',  cellGlow: 'rgba(0,255,229,0.8)', alt: 'rgba(0,255,229,0.06)', label: '#00FFE5', shadow: '0 0 0 2px #00FFE5, 0 0 12px rgba(0,255,229,0.55)' },
+      lava:    { bg: '#060100', border: '#FF5500', cell: '#FF5500',  cellGlow: 'rgba(255,85,0,0.75)', alt: 'rgba(255,85,0,0.07)', label: '#FF9030', shadow: '0 0 0 2px #FF5500, 0 0 12px rgba(255,85,0,0.5)' },
+      galaxy:  { bg: '#04001a', border: '#8B5CF6', cell: '#8B5CF6',  cellGlow: 'rgba(139,92,246,0.75)', alt: 'rgba(139,92,246,0.08)', label: '#D8B4FE', shadow: '0 0 0 2px #8B5CF6, 0 0 12px rgba(139,92,246,0.55)' },
+      ice:     { bg: '#000d1f', border: '#67E8F9', cell: '#67E8F9',  cellGlow: 'rgba(103,232,249,0.7)', alt: 'rgba(103,232,249,0.06)', label: '#E0F9FF', shadow: '0 0 0 2px #67E8F9, 0 0 12px rgba(103,232,249,0.45)' },
+    };
+    const sd = skinDefs[meta?.value ?? ''] ?? skinDefs.minimal;
+    return (
+      <div className="h-10 flex items-center justify-between px-3 mb-3 rounded-lg relative overflow-hidden"
+        style={{ backgroundColor: sd.bg, border: `1px solid ${sd.border}55`, boxShadow: sd.shadow }}>
+        <div className="flex gap-0.5">
+          {[1,0,1,1,0,1,0,1].map((f, i) => (
+            <div key={i} className="w-4 h-6 rounded-sm"
+              style={{ backgroundColor: f ? sd.cell : sd.alt, border: `1px solid ${sd.border}44`, boxShadow: f ? `0 0 4px ${sd.cellGlow}` : 'none' }} />
+          ))}
+        </div>
+        <span className="text-xs font-bold tracking-widest" style={{ color: sd.label, fontFamily: meta?.value === 'retro' || meta?.value === 'neon' ? "'Courier New', monospace" : 'inherit' }}>
+          {(meta?.value ?? '').toUpperCase()}
+        </span>
+      </div>
+    );
+  }
+  return null;
 }
-
-const THEME_CONFIGS: Record<string, ThemeConfig> = {
-  default: {
-    pageBg: '#020202',
-    headerGradient: 'linear-gradient(135deg, rgba(56,145,166,0.25) 0%, rgba(56,145,166,0.10) 50%, rgba(253,231,76,0.06) 100%)',
-    headerParticle1: 'rgba(56,145,166,0.25)',
-    headerParticle2: 'rgba(253,231,76,0.12)',
-    primary: '#3891A6',
-    primaryMuted: 'rgba(56,145,166,0.18)',
-    primaryBorder: '#3891A6',
-    secondary: '#FDE74C',
-    cardBg: 'rgba(56,145,166,0.12)',
-    cardBorder: '#3891A6',
-    statCardBg: 'rgba(56,145,166,0.10)',
-    statCardBorder: 'rgba(56,145,166,0.6)',
-    accentText: '#FDE74C',
-    subtleText: '#AB9F9D',
-    inputBg: 'rgba(0,0,0,0.5)',
-    inputBorder: '#3891A6',
-    btnPrimary: '#3891A6',
-    btnPrimaryText: '#fff',
-    xpBarGradient: 'linear-gradient(90deg, #3891A6, #38D399)',
-    avatarRing: '#FDE74C',
-    avatarGlow: 'rgba(253,231,76,0)',
-  },
-  gold: {
-    pageBg: '#0d0900',
-    headerGradient: 'linear-gradient(135deg, #2a1a00 0%, #1a1000 50%, #0d0900 100%)',
-    headerParticle1: 'rgba(253,231,76,0.35)',
-    headerParticle2: 'rgba(255,184,107,0.25)',
-    primary: '#FDE74C',
-    primaryMuted: 'rgba(253,231,76,0.18)',
-    primaryBorder: '#FDE74C',
-    secondary: '#FFB86B',
-    cardBg: 'rgba(253,231,76,0.08)',
-    cardBorder: '#FDE74C',
-    statCardBg: 'rgba(255,184,107,0.10)',
-    statCardBorder: '#FFB86B',
-    accentText: '#FDE74C',
-    subtleText: '#c9a84c',
-    inputBg: 'rgba(30,20,0,0.7)',
-    inputBorder: '#FDE74C',
-    btnPrimary: 'linear-gradient(135deg, #FDE74C, #FFB86B)',
-    btnPrimaryText: '#1a1000',
-    xpBarGradient: 'linear-gradient(90deg, #FDE74C, #FFB86B)',
-    avatarRing: '#FDE74C',
-    avatarGlow: 'rgba(253,231,76,0.8)',
-  },
-  neon: {
-    pageBg: '#04000e',
-    headerGradient: 'linear-gradient(135deg, #0a0020 0%, #04000e 50%, #000a12 100%)',
-    headerParticle1: 'rgba(0,255,255,0.35)',
-    headerParticle2: 'rgba(204,0,255,0.30)',
-    primary: '#00FFFF',
-    primaryMuted: 'rgba(0,255,255,0.15)',
-    primaryBorder: '#00FFFF',
-    secondary: '#CC00FF',
-    cardBg: 'rgba(0,255,255,0.07)',
-    cardBorder: '#00FFFF',
-    statCardBg: 'rgba(204,0,255,0.08)',
-    statCardBorder: '#CC00FF',
-    accentText: '#00FFFF',
-    subtleText: '#8ab8bb',
-    inputBg: 'rgba(0,5,20,0.85)',
-    inputBorder: '#00FFFF',
-    btnPrimary: 'linear-gradient(135deg, #00FFFF, #CC00FF)',
-    btnPrimaryText: '#000',
-    xpBarGradient: 'linear-gradient(90deg, #00FFFF, #CC00FF)',
-    avatarRing: '#00FFFF',
-    avatarGlow: 'rgba(0,255,255,0.9)',
-  },
-  crimson: {
-    pageBg: '#0e0000',
-    headerGradient: 'linear-gradient(135deg, #2d0000 0%, #1a0000 50%, #0e0000 100%)',
-    headerParticle1: 'rgba(220,38,38,0.40)',
-    headerParticle2: 'rgba(249,115,22,0.28)',
-    primary: '#ef4444',
-    primaryMuted: 'rgba(220,38,38,0.18)',
-    primaryBorder: '#ef4444',
-    secondary: '#F97316',
-    cardBg: 'rgba(220,38,38,0.10)',
-    cardBorder: '#ef4444',
-    statCardBg: 'rgba(249,115,22,0.08)',
-    statCardBorder: '#F97316',
-    accentText: '#ef4444',
-    subtleText: '#b87070',
-    inputBg: 'rgba(30,0,0,0.75)',
-    inputBorder: '#ef4444',
-    btnPrimary: 'linear-gradient(135deg, #DC2626, #F97316)',
-    btnPrimaryText: '#fff',
-    xpBarGradient: 'linear-gradient(90deg, #DC2626, #F97316)',
-    avatarRing: '#DC2626',
-    avatarGlow: 'rgba(220,38,38,0.85)',
-  },
-};
-
-// ─── Frame system ─────────────────────────────────────────────────────────
-const FRAME_CONFIGS: Record<string, { ring: string; glow: string; colorA?: string; colorB?: string }> = {
-  none:  { ring: '', glow: '' },
-  gold:  { ring: 'linear-gradient(135deg, #FDE74C, #FFB86B, #FDE74C)', glow: '0 0 20px rgba(253,231,76,0.7), 0 0 40px rgba(253,231,76,0.3)', colorA: '#FDE74C', colorB: '#FFB86B' },
-  neon:  { ring: 'linear-gradient(135deg, #00FFFF, #CC00FF, #00FFFF)',  glow: '0 0 20px rgba(0,255,255,0.7), 0 0 40px rgba(204,0,255,0.4)', colorA: '#00FFFF', colorB: '#CC00FF' },
-  flame: { ring: 'linear-gradient(135deg, #FF4500, #FDE74C, #FF4500)',  glow: '0 0 20px rgba(255,69,0,0.8), 0 0 40px rgba(253,231,76,0.4)', colorA: '#FF4500', colorB: '#FDE74C' },
-};
 
 export default function ProfilePage() {
   const { data: session, status } = useSession();
@@ -172,6 +126,13 @@ export default function ProfilePage() {
   const [showMyPuzzles, setShowMyPuzzles] = useState(false);
   const [myPuzzles, setMyPuzzles] = useState<Array<any>>([]);
   const [myPuzzlesLoading, setMyPuzzlesLoading] = useState(false);
+
+  const [showCosmeticsDrawer, setShowCosmeticsDrawer] = useState(false);
+  const [drawerItems, setDrawerItems] = useState<DrawerItem[]>([]);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'theme' | 'frame' | 'skin' | 'flair'>('theme');
+  const [drawerEquipping, setDrawerEquipping] = useState<string | null>(null);
+  const [drawerToast, setDrawerToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -318,6 +279,43 @@ export default function ProfilePage() {
     }
   };
 
+  const openCosmeticsDrawer = async () => {
+    setShowCosmeticsDrawer(true);
+    setDrawerLoading(true);
+    try {
+      const res = await fetch('/api/store', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setDrawerItems(
+          (data.items ?? []).filter(
+            (i: DrawerItem) => ['theme', 'frame', 'skin', 'flair'].includes(i.subcategory) && i.owned > 0
+          )
+        );
+      }
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
+  const handleDrawerEquip = async (itemKey: string, subcategory: string, unequip: boolean) => {
+    if (drawerEquipping) return;
+    setDrawerEquipping(itemKey);
+    try {
+      const res = await fetch('/api/store/equip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemKey: unequip ? `unequip_${subcategory}` : itemKey }),
+      });
+      if (res.ok) {
+        setDrawerToast(unequip ? 'Unequipped!' : 'Equipped!');
+        setTimeout(() => setDrawerToast(null), 2500);
+        await fetchProfile();
+      }
+    } finally {
+      setDrawerEquipping(null);
+    }
+  };
+
   if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#020202' }}>
@@ -340,7 +338,7 @@ export default function ProfilePage() {
   return (
     <main style={{ backgroundColor: t.pageBg, transition: 'background-color 0.4s ease' }} className="min-h-screen">
 
-      {/* Theme accent bar — immediately visible color indicator at the very top */}
+      {/* Theme accent bar ΓÇö immediately visible color indicator at the very top */}
       <div className="fixed top-0 left-0 right-0 h-[3px] z-50" style={{ background: t.btnPrimary.startsWith('linear') ? t.btnPrimary : `linear-gradient(90deg, ${t.primary}, ${t.secondary})`, boxShadow: `0 0 12px ${t.avatarGlow}` }} />
 
       {/* Animated header */}
@@ -378,17 +376,27 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
-            <div>
-              <h1 className="text-4xl font-extrabold text-white mb-1">{profile?.name || 'Player'}{flair}</h1>
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-sm font-semibold px-3 py-1 rounded-full" style={{ backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primary}`, boxShadow: `0 0 8px ${t.avatarGlow}` }}>
-                  LVL {profile?.level ?? 1} · {profile?.xpTitle ?? 'Newcomer'}
-                </span>
-                {profile?.role === 'admin' && (
-                  <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(171,159,157,0.2)', color: '#c9b9b7' }}>👑 Admin</span>
-                )}
+            <div className="flex-1 flex items-start justify-between gap-3">
+              <div>
+                <h1 className="text-4xl font-extrabold text-white mb-1">{profile?.name || 'Player'}{flair}</h1>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm font-semibold px-3 py-1 rounded-full" style={{ backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primary}`, boxShadow: `0 0 8px ${t.avatarGlow}` }}>
+                    LVL {profile?.level ?? 1} &middot; {profile?.xpTitle ?? 'Newcomer'}
+                  </span>
+                  {profile?.role === 'admin' && (
+                    <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(171,159,157,0.2)', color: '#c9b9b7' }}>Admin</span>
+                  )}
+                </div>
+                <p className="text-sm mt-1" style={{ color: t.subtleText }}>Member since {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' }) : 'ΓÇö'}</p>
               </div>
-              <p className="text-sm mt-1" style={{ color: t.subtleText }}>Member since {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' }) : '—'}</p>
+              <button
+                onClick={openCosmeticsDrawer}
+                title="My Cosmetics"
+                className="mt-1 w-9 h-9 flex items-center justify-center rounded-full text-base transition-all hover:scale-110 shrink-0"
+                style={{ backgroundColor: t.primaryMuted, border: `1px solid ${t.primaryBorder}`, color: t.primary }}
+              >
+                ⚙️
+              </button>
             </div>
           </div>
         </div>
@@ -534,7 +542,7 @@ export default function ProfilePage() {
                 <div style={{ borderTopColor: `${t.primaryBorder}40`, borderTopWidth: 1, paddingTop: 16 }}>
                   <p className="text-sm mb-0.5" style={{ color: t.subtleText }}>Role</p>
                   <span className="inline-block px-3 py-1 rounded text-sm font-semibold" style={{ backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primaryBorder}` }}>
-                    {profile?.role === 'admin' ? '👑 Administrator' : '🎮 Player'}
+                    {profile?.role === 'admin' ? '🛡️ Administrator' : '🎮 Player'}
                   </span>
                 </div>
               </div>
@@ -570,7 +578,7 @@ export default function ProfilePage() {
             {[
               { label: 'Puzzles Solved', value: profile?.totalPuzzlesSolved ?? 0 },
               { label: 'Total Points',   value: (profile?.totalPoints ?? 0).toLocaleString() },
-              { label: 'Global Rank',    value: profile?.rank ? `#${profile.rank}` : '—' },
+              { label: 'Global Rank',    value: profile?.rank ? `#${profile.rank}` : 'ΓÇö' },
             ].map(({ label, value }) => (
               <div key={label} style={{ borderTopColor: `${t.primaryBorder}33`, borderTopWidth: 1, paddingTop: 12 }}>
                 <p className="text-xs mb-0.5" style={{ color: t.subtleText }}>{label}</p>
@@ -615,11 +623,11 @@ export default function ProfilePage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold text-white text-sm">{p.title}</p>
-                          <p className="text-xs" style={{ color: t.subtleText }}>{p.category?.name || 'General'} · {p.difficulty}</p>
+                          <p className="text-xs" style={{ color: t.subtleText }}>{p.category?.name || 'General'} &middot; {p.difficulty}</p>
                         </div>
                         <div className="text-right">
                           <span className="text-xs px-2 py-1 rounded font-semibold" style={{ backgroundColor: p.solved ? 'rgba(56,201,153,0.12)' : 'rgba(239,68,68,0.08)', color: p.solved ? '#38D399' : '#EF4444' }}>
-                            {p.solved ? '✓ Solved' : '✗ Failed'}
+                            {p.solved ? '✔ Solved' : '✘ Failed'}
                           </span>
                           <div className="text-xs mt-1" style={{ color: t.subtleText }}>{p.attempts ?? 0} attempts</div>
                         </div>
@@ -634,7 +642,7 @@ export default function ProfilePage() {
 
         {/* Unlocked Badges */}
         <div className="mb-8">
-          <div className="border rounded-xl p-6" style={{ backgroundColor: t.statCardBg, borderColor: t.statCardBorder }}>
+          <div className="border rounded-xl p-6" style={{ backgroundColor: t.statCardBg, borderColor: t.secondary }}>
             <h3 className="text-lg font-bold text-white mb-4">🏅 Unlocked Badges</h3>
             {badgesLoading ? (
               <p className="text-sm" style={{ color: t.subtleText }}>Loading badges...</p>
@@ -645,7 +653,7 @@ export default function ProfilePage() {
                 {unlockedBadges.map((b) => {
                   const color = rarityColors[b.rarity] || rarityColors.common;
                   return (
-                    <div key={b.id} className="flex flex-col items-center p-3 rounded-xl border" style={{ backgroundColor: color.bg, borderColor: color.border }}>
+                    <div key={b.id} className="flex flex-col items-center p-3 rounded-xl border" style={{ backgroundColor: color.bg, borderColor: t.primary }}>
                       <div className="text-3xl mb-2">{b.icon}</div>
                       <div className="text-sm font-semibold text-center" style={{ color: color.text }}>{b.title}</div>
                       {b.unlockedAt && <div className="text-xs mt-1" style={{ color: t.subtleText }}>{new Date(b.unlockedAt).toLocaleDateString()}</div>}
@@ -672,11 +680,111 @@ export default function ProfilePage() {
             className="border rounded-xl p-6 transition hover:scale-[1.02]"
             style={{ backgroundColor: t.primaryMuted, borderColor: t.primaryBorder }}
           >
-            <h3 className="text-lg font-bold text-white mb-1">🛍️ Point Store</h3>
+            <h3 className="text-lg font-bold text-white mb-1">🛒 Point Store</h3>
             <p style={{ color: t.subtleText }}>Change your active theme, frame & flair</p>
           </Link>
         </div>
       </div>
+
+      {/* ── Cosmetics Drawer ─────────────────────────────────────────────── */}
+      {showCosmeticsDrawer && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowCosmeticsDrawer(false)}
+          />
+          {/* Panel */}
+          <div
+            className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-xs flex flex-col"
+            style={{ backgroundColor: t.pageBg, borderLeft: `1px solid ${t.primaryBorder}40`, boxShadow: '-12px 0 48px rgba(0,0,0,0.75)' }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 shrink-0 border-b" style={{ borderColor: `${t.primaryBorder}33` }}>
+              <div>
+                <h2 className="font-extrabold text-white text-base">⚙️ My Cosmetics</h2>
+                <p className="text-xs mt-0.5" style={{ color: t.subtleText }}>Equip items you own</p>
+              </div>
+              <button onClick={() => setShowCosmeticsDrawer(false)} className="text-gray-500 hover:text-white text-xl leading-none transition-colors">✕</button>
+            </div>
+
+            {/* Toast */}
+            {drawerToast && (
+              <div className="mx-4 mt-3 px-4 py-2 rounded-lg text-sm font-semibold text-center shrink-0"
+                style={{ backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primaryBorder}` }}>
+                {drawerToast}
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div className="flex gap-1 px-4 pt-3 pb-2 shrink-0">
+              {(['theme', 'frame', 'skin', 'flair'] as const).map((tab) => {
+                const icons: Record<string, string> = { theme: '🎨', frame: '🖼️', skin: '🎮', flair: '✨' };
+                const count = drawerItems.filter(i => i.subcategory === tab).length;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setDrawerTab(tab)}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+                    style={drawerTab === tab
+                      ? { backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primaryBorder}` }
+                      : { color: t.subtleText, backgroundColor: 'transparent', border: '1px solid transparent' }}
+                  >
+                    {icons[tab]}{count > 0 && <span className="ml-0.5 opacity-60">({count})</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Item list */}
+            <div className="flex-1 overflow-y-auto px-4 pb-6 pt-1 space-y-3">
+              {drawerLoading && (
+                <div className="text-center py-10 text-sm" style={{ color: t.subtleText }}>Loading…</div>
+              )}
+              {!drawerLoading && drawerItems.filter(i => i.subcategory === drawerTab).length === 0 && (
+                <div className="text-center py-10">
+                  <p className="text-sm" style={{ color: t.subtleText }}>No {drawerTab}s owned yet.</p>
+                  <a href="/store" className="text-xs mt-2 inline-block underline" style={{ color: t.primary }}>Browse the store →</a>
+                </div>
+              )}
+              {!drawerLoading && drawerItems.filter(i => i.subcategory === drawerTab).map(item => {
+                const meta = item.metadata as Record<string, string> | null;
+                const equipped = (() => {
+                  if (!profile) return false;
+                  const value = item.subcategory === 'flair'
+                    ? (meta?.emoji ?? meta?.value ?? item.key)
+                    : (meta?.value ?? item.key);
+                  if (item.subcategory === 'theme') return profile.activeTheme === value;
+                  if (item.subcategory === 'frame') return profile.activeFrame === value;
+                  if (item.subcategory === 'skin')  return profile.activeSkin  === value;
+                  if (item.subcategory === 'flair') return profile.activeFlair === value;
+                  return false;
+                })();
+                return (
+                  <div key={item.key} className="rounded-xl border p-4 transition-colors"
+                    style={{ backgroundColor: equipped ? t.primaryMuted : t.cardBg, borderColor: equipped ? t.primaryBorder : `${t.primaryBorder}30` }}>
+                    <DrawerItemPreview item={item} />
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{item.name}</p>
+                        {equipped && <p className="text-xs font-bold" style={{ color: t.primary }}>● Equipped</p>}
+                      </div>
+                      <button
+                        onClick={() => handleDrawerEquip(item.key, item.subcategory, equipped)}
+                        disabled={!!drawerEquipping}
+                        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 hover:opacity-90"
+                        style={{ background: equipped ? 'rgba(255,255,255,0.08)' : t.btnPrimary, color: equipped ? t.subtleText : t.btnPrimaryText } as React.CSSProperties}
+                      >
+                        {drawerEquipping === item.key ? '…' : equipped ? 'Unequip' : 'Equip'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </main>
   );
 }

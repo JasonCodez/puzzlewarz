@@ -1,9 +1,17 @@
 // Puzzle board skin definitions
 // Each skin provides CSS-in-JS tokens used by puzzle components.
 
-export type SkinKey = "default" | "retro" | "minimal" | "neon" | "skin_retro" | "skin_minimal" | "skin_neon";
+export type SkinKey =
+  | "default"
+  | "retro"    | "skin_retro"
+  | "minimal"  | "skin_minimal"
+  | "neon"     | "skin_neon"
+  | "lava"     | "skin_lava"
+  | "galaxy"   | "skin_galaxy"
+  | "ice"      | "skin_ice";
 
 export interface PuzzleSkinTokens {
+  _key?: string;
   // Board wrapper
   boardBg: string;
   boardBorder: string;
@@ -49,76 +57,144 @@ const DEFAULT: PuzzleSkinTokens = {
   labelColor: "#9ca3af",
 };
 
+// ── RETRO: 80s/90s arcade neon ──────────────────────────────────────────────
 const RETRO: PuzzleSkinTokens = {
-  boardBg: "#1a0a00",
-  boardBorder: "#c47c00",
-  boardShadow: "0 0 0 3px #c47c00, 0 0 16px rgba(196,124,0,0.4)",
-  boardRadius: "0px",
-  tileBg: "#2a1400",
-  tileBorder: "#c47c00",
-  tileText: "#ffdd88",
+  boardBg: "#0a0020",
+  boardBorder: "#B43CFF",
+  boardShadow: "0 0 0 3px #B43CFF, 0 0 30px rgba(180,60,255,0.55), 0 0 70px rgba(180,60,255,0.18), inset 0 0 20px rgba(180,60,255,0.05)",
+  boardRadius: "0",
+  tileBg: "#120030",
+  tileBorder: "#B43CFF",
+  tileText: "#00FF88",
   tileFontFamily: "'Courier New', monospace",
-  accentCorrect: "rgba(0,200,80,0.45)",
-  accentWrong: "rgba(220,40,40,0.45)",
-  accentActive: "rgba(255,200,0,0.35)",
-  inputBg: "#2a1400",
-  inputBorder: "#c47c00",
-  inputText: "#ffdd88",
-  btnBg: "#c47c00",
-  btnText: "#1a0a00",
-  labelColor: "#c47c00",
+  accentCorrect: "rgba(0,255,136,0.55)",
+  accentWrong: "rgba(255,51,102,0.55)",
+  accentActive: "rgba(255,170,0,0.45)",
+  inputBg: "#120030",
+  inputBorder: "#B43CFF",
+  inputText: "#00FF88",
+  btnBg: "linear-gradient(135deg,#B43CFF,#FF55AA)",
+  btnText: "#ffffff",
+  labelColor: "#B43CFF",
 };
 
+// ── MINIMAL: Polished obsidian ─────────────────────────────────────────────
 const MINIMAL: PuzzleSkinTokens = {
-  boardBg: "#0e0e0e",
+  boardBg: "#080808",
   boardBorder: "rgba(255,255,255,0.1)",
-  boardShadow: "none",
+  boardShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 24px rgba(0,0,0,0.6)",
   boardRadius: "0.5rem",
-  tileBg: "rgba(255,255,255,0.04)",
-  tileBorder: "rgba(255,255,255,0.12)",
-  tileText: "#e5e5e5",
-  tileFontFamily: "'Inter', sans-serif",
-  accentCorrect: "rgba(255,255,255,0.25)",
-  accentWrong: "rgba(180,180,180,0.2)",
-  accentActive: "rgba(255,255,255,0.15)",
-  inputBg: "rgba(255,255,255,0.05)",
-  inputBorder: "rgba(255,255,255,0.15)",
-  inputText: "#e5e5e5",
+  tileBg: "rgba(255,255,255,0.035)",
+  tileBorder: "rgba(255,255,255,0.1)",
+  tileText: "#f0f0f0",
+  tileFontFamily: "'Inter', 'SF Pro Display', sans-serif",
+  accentCorrect: "rgba(255,255,255,0.2)",
+  accentWrong: "rgba(180,180,180,0.14)",
+  accentActive: "rgba(255,255,255,0.12)",
+  inputBg: "rgba(255,255,255,0.04)",
+  inputBorder: "rgba(255,255,255,0.14)",
+  inputText: "#f0f0f0",
   btnBg: "#ffffff",
-  btnText: "#0e0e0e",
-  labelColor: "#6b7280",
+  btnText: "#080808",
+  labelColor: "#555555",
 };
 
+// ── NEON: Electric cyberpunk ───────────────────────────────────────────────
 const NEON: PuzzleSkinTokens = {
-  boardBg: "#050510",
-  boardBorder: "#00f5ff",
-  boardShadow: "0 0 18px rgba(0,245,255,0.35), inset 0 0 12px rgba(0,245,255,0.06)",
-  boardRadius: "0.75rem",
-  tileBg: "rgba(0,245,255,0.07)",
-  tileBorder: "rgba(0,245,255,0.4)",
-  tileText: "#00f5ff",
+  boardBg: "#010012",
+  boardBorder: "#00FFE5",
+  boardShadow: "0 0 0 2px #00FFE5, 0 0 25px rgba(0,255,229,0.65), 0 0 70px rgba(0,255,229,0.2), inset 0 0 25px rgba(0,255,229,0.05)",
+  boardRadius: "0.25rem",
+  tileBg: "rgba(0,255,229,0.04)",
+  tileBorder: "rgba(0,255,229,0.55)",
+  tileText: "#00FFE5",
   tileFontFamily: "'Courier New', monospace",
-  accentCorrect: "rgba(0,255,128,0.45)",
-  accentWrong: "rgba(255,0,100,0.45)",
-  accentActive: "rgba(180,0,255,0.35)",
-  inputBg: "rgba(0,245,255,0.05)",
-  inputBorder: "rgba(0,245,255,0.5)",
-  inputText: "#00f5ff",
-  btnBg: "linear-gradient(135deg,#00f5ff,#b400ff)",
-  btnText: "#050510",
-  labelColor: "#00c8cc",
+  accentCorrect: "rgba(0,255,128,0.55)",
+  accentWrong: "rgba(255,0,128,0.55)",
+  accentActive: "rgba(180,0,255,0.5)",
+  inputBg: "rgba(0,255,229,0.04)",
+  inputBorder: "rgba(0,255,229,0.65)",
+  inputText: "#00FFE5",
+  btnBg: "linear-gradient(135deg,#00FFE5,#FF00CC)",
+  btnText: "#010012",
+  labelColor: "#00BFAD",
+};
+
+// ── LAVA: Volcanic molten rock ─────────────────────────────────────────────
+const LAVA: PuzzleSkinTokens = {
+  boardBg: "#060100",
+  boardBorder: "#FF5500",
+  boardShadow: "0 0 0 2px #FF5500, 0 0 25px rgba(255,85,0,0.5), 0 0 65px rgba(255,40,0,0.18), inset 0 0 30px rgba(255,20,0,0.07)",
+  boardRadius: "0.375rem",
+  tileBg: "rgba(255,85,0,0.07)",
+  tileBorder: "rgba(255,85,0,0.5)",
+  tileText: "#FF9030",
+  tileFontFamily: "inherit",
+  accentCorrect: "rgba(255,200,0,0.55)",
+  accentWrong: "rgba(255,0,30,0.55)",
+  accentActive: "rgba(255,100,0,0.5)",
+  inputBg: "rgba(255,85,0,0.06)",
+  inputBorder: "rgba(255,85,0,0.55)",
+  inputText: "#FF9030",
+  btnBg: "linear-gradient(135deg,#FF5500,#FF9000)",
+  btnText: "#060100",
+  labelColor: "#FF6030",
+};
+
+// ── GALAXY: Deep space nebula ──────────────────────────────────────────────
+const GALAXY: PuzzleSkinTokens = {
+  boardBg: "#04001a",
+  boardBorder: "#8B5CF6",
+  boardShadow: "0 0 0 2px #8B5CF6, 0 0 25px rgba(139,92,246,0.55), 0 0 65px rgba(200,0,255,0.18), inset 0 0 25px rgba(139,92,246,0.06)",
+  boardRadius: "1rem",
+  tileBg: "rgba(139,92,246,0.09)",
+  tileBorder: "rgba(139,92,246,0.5)",
+  tileText: "#D8B4FE",
+  tileFontFamily: "inherit",
+  accentCorrect: "rgba(196,245,208,0.42)",
+  accentWrong: "rgba(255,100,180,0.5)",
+  accentActive: "rgba(200,0,255,0.45)",
+  inputBg: "rgba(139,92,246,0.07)",
+  inputBorder: "rgba(139,92,246,0.55)",
+  inputText: "#D8B4FE",
+  btnBg: "linear-gradient(135deg,#7C3AED,#C026D3)",
+  btnText: "#ffffff",
+  labelColor: "#9B6DFF",
+};
+
+// ── ICE: Crystal frost ─────────────────────────────────────────────────────
+const ICE: PuzzleSkinTokens = {
+  boardBg: "#000d1f",
+  boardBorder: "#67E8F9",
+  boardShadow: "0 0 0 2px #67E8F9, 0 0 22px rgba(103,232,249,0.45), 0 0 55px rgba(103,232,249,0.12), inset 0 0 22px rgba(103,232,249,0.05)",
+  boardRadius: "1.25rem",
+  tileBg: "rgba(103,232,249,0.05)",
+  tileBorder: "rgba(103,232,249,0.38)",
+  tileText: "#E0F9FF",
+  tileFontFamily: "inherit",
+  accentCorrect: "rgba(103,232,249,0.48)",
+  accentWrong: "rgba(255,100,100,0.42)",
+  accentActive: "rgba(186,230,253,0.4)",
+  inputBg: "rgba(103,232,249,0.05)",
+  inputBorder: "rgba(103,232,249,0.45)",
+  inputText: "#E0F9FF",
+  btnBg: "linear-gradient(135deg,#67E8F9,#38BDF8)",
+  btnText: "#000d1f",
+  labelColor: "#67E8F9",
 };
 
 export const SKIN_TOKENS: Record<SkinKey, PuzzleSkinTokens> = {
-  default: DEFAULT,
-  retro: RETRO,
-  minimal: MINIMAL,
-  neon: NEON,
-  skin_retro: RETRO,
-  skin_minimal: MINIMAL,
-  skin_neon: NEON,
+  default:      DEFAULT,
+  retro:        RETRO,   skin_retro:   RETRO,
+  minimal:      MINIMAL, skin_minimal: MINIMAL,
+  neon:         NEON,    skin_neon:    NEON,
+  lava:         LAVA,    skin_lava:    LAVA,
+  galaxy:       GALAXY,  skin_galaxy:  GALAXY,
+  ice:          ICE,     skin_ice:     ICE,
 };
 
 export function getSkinTokens(key: string | undefined | null): PuzzleSkinTokens {
-  return SKIN_TOKENS[(key ?? "default") as SkinKey] ?? DEFAULT;
+  const resolved = (key ?? "default") as SkinKey;
+  const tokens = SKIN_TOKENS[resolved] ?? DEFAULT;
+  return { ...tokens, _key: resolved };
 }

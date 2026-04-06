@@ -444,7 +444,13 @@ function WarzLobbyInner() {
   };
 
   // Filter challenges by tab
-  const openChallenges = challenges.filter((c) => c.status === "OPEN");
+  const now = new Date();
+  const featuredChallenges = challenges
+    .filter((c) => c.status === "OPEN" && c.spotlightUntil && new Date(c.spotlightUntil) > now)
+    .sort((a, b) => new Date(b.spotlightUntil!).getTime() - new Date(a.spotlightUntil!).getTime());
+  const featuredIds = new Set(featuredChallenges.map((c) => c.id));
+
+  const openChallenges = challenges.filter((c) => c.status === "OPEN" && !featuredIds.has(c.id));
   const myChallenges = currentUser
     ? challenges.filter((c) =>
         c.challenger.id === currentUser.id || c.opponent?.id === currentUser.id
@@ -522,6 +528,100 @@ function WarzLobbyInner() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Featured Challenges ── */}
+      {featuredChallenges.length > 0 && (
+        <div className="max-w-3xl mx-auto px-4 pt-8">
+          <div
+            className="rounded-2xl border p-5 mb-6"
+            style={{
+              background: "linear-gradient(135deg, rgba(253,231,76,0.07) 0%, rgba(255,184,107,0.05) 100%)",
+              borderColor: "rgba(253,231,76,0.35)",
+              boxShadow: "0 0 40px rgba(253,231,76,0.08) inset",
+            }}
+          >
+            {/* Section header */}
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-lg leading-none">✨</span>
+              <span className="font-extrabold text-sm uppercase tracking-widest" style={{ color: "#FDE74C" }}>
+                Featured Challenges
+              </span>
+              <span
+                className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold"
+                style={{ backgroundColor: "rgba(253,231,76,0.15)", color: "#FDE74C" }}
+              >
+                {featuredChallenges.length} spotlighted
+              </span>
+            </div>
+            <div className="space-y-3">
+              {featuredChallenges.map((c, i) => {
+                const remainingMs = new Date(c.spotlightUntil!).getTime() - now.getTime();
+                const remainingMins = Math.ceil(remainingMs / 60000);
+                const pot = c.challengerWager * 2;
+                return (
+                  <motion.div
+                    key={c.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0, transition: { delay: i * 0.05 } }}
+                    className="rounded-xl border p-4 relative overflow-hidden"
+                    style={{
+                      backgroundColor: "rgba(253,231,76,0.04)",
+                      borderColor: "rgba(253,231,76,0.4)",
+                      boxShadow: "0 0 20px rgba(253,231,76,0.06)",
+                    }}
+                  >
+                    {/* Gold shimmer strip */}
+                    <div
+                      className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl"
+                      style={{ background: "linear-gradient(90deg, transparent, rgba(253,231,76,0.6), transparent)" }}
+                    />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-white font-bold text-sm">{c.puzzle.title}</span>
+                          <span
+                            className="px-1.5 py-0.5 rounded text-xs font-bold"
+                            style={{ color: DIFFICULTY_COLORS[c.puzzle.difficulty] ?? "#9ca3af", backgroundColor: "rgba(255,255,255,0.05)" }}
+                          >
+                            {c.puzzle.difficulty.toUpperCase()}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-xs font-bold" style={{ color: "#FFB86B", backgroundColor: "rgba(255,184,107,0.07)" }}>
+                            {TYPE_LABELS[c.puzzle.puzzleType] ?? c.puzzle.puzzleType}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                          <span className="text-xs" style={{ color: "#6b7280" }}>
+                            by <span className="font-medium" style={{ color: "#9ca3af" }}>@{c.challenger.name ?? "Unknown"}</span>
+                          </span>
+                          <span className="text-xs font-semibold" style={{ color: "#FDE74C" }}>
+                            ⏱ {remainingMins}m spotlight left
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <span className="text-sm font-bold" style={{ color: "#FFB86B" }}>
+                          🪙 pot: <span style={{ color: "#4ade80" }}>{pot}</span> pts
+                        </span>
+                        {currentUser && c.challenger.id !== currentUser.id && (
+                          (!c.invitedUser || c.invitedUser.id === currentUser.id) && (
+                            <a
+                              href={`/warz/challenge/${c.id}`}
+                              className="px-4 py-1.5 rounded-lg text-xs font-extrabold transition-all hover:scale-105"
+                              style={{ background: "linear-gradient(135deg, #FDE74C, #FFB86B)", color: "#1a1400" }}
+                            >
+                              ⚔️ Accept
+                            </a>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div className="max-w-3xl mx-auto px-4 pt-6">

@@ -189,7 +189,7 @@ export default function Navbar() {
                     <p style={{ color: "#3891A6" }} className="text-xs">Player</p>
                   )}
                 </div>
-                <Link href={`/profile/${getUserId()}`} className="px-3 py-2 rounded-md text-sm font-semibold transition-all duration-200 hover:brightness-110" style={{ backgroundColor: "#3891A6", color: "#020202" }}>Profile</Link>
+                <Link href="/profile" className="px-3 py-2 rounded-md text-sm font-semibold transition-all duration-200 hover:brightness-110" style={{ backgroundColor: "#3891A6", color: "#020202" }}>Profile</Link>
                 <button onClick={handleSignOut} className="px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:opacity-80" style={{ backgroundColor: "rgba(220,38,38,0.12)", border: "1px solid rgba(220,38,38,0.3)", color: "#fca5a5" }}>Sign Out</button>
               </>
             ) : (
@@ -217,7 +217,7 @@ export default function Navbar() {
         aria-modal="true"
         aria-label="Mobile navigation menu"
       >
-        <div className="flex flex-col h-full p-6 gap-6">
+        <div className="flex flex-col h-full p-6 gap-6 overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
@@ -238,7 +238,7 @@ export default function Navbar() {
                 <Link href="/leaderboards" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Leaderboards</Link>
                 <Link href="/teams" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Teams</Link>
                 <Link href="/achievements" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Achievements</Link>
-                <Link href={`/profile/${getUserId()}`} className="py-2.5 px-4 rounded-lg font-semibold text-base transition-all duration-200 hover:brightness-110" style={{ backgroundColor: '#3891A6', color: '#020202' }} onClick={() => setMobileOpen(false)}>Profile</Link>
+                <Link href="/profile" className="py-2.5 px-4 rounded-lg font-semibold text-base transition-all duration-200 hover:brightness-110" style={{ backgroundColor: '#3891A6', color: '#020202' }} onClick={() => setMobileOpen(false)}>Profile</Link>
                 <button onClick={() => { setMobileOpen(false); handleSignOut(); }} className="py-2.5 px-4 rounded-lg text-base font-medium transition-all duration-200 hover:opacity-80 text-left" style={{ backgroundColor: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)', color: '#fca5a5' }}>Sign Out</button>
               </>
             ) : (

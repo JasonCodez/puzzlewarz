@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
+
+const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
+const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), { ssr: false });
+const IceBackground = dynamic(() => import("@/components/IceBackground"), { ssr: false });
+const NeonBackground = dynamic(() => import("@/components/NeonBackground"), { ssr: false });
+const RetroBackground = dynamic(() => import("@/components/RetroBackground"), { ssr: false });
 
 interface Props {
   puzzleId: string;
@@ -228,23 +235,42 @@ export default function WordSearchPuzzle({
   return (
     <>
       <div
+        data-skin={skin._key ?? "default"}
+        style={{
+          position: "relative",
+          borderRadius: "1rem",
+          overflow: "hidden",
+          width: "100%",
+          maxWidth: "100vw",
+        }}
+      >
+        {/* Animated skin backgrounds */}
+        {(skin._key === "lava" || skin._key === "skin_lava") && <LavaBackground />}
+        {(skin._key === "galaxy" || skin._key === "skin_galaxy") && <GalaxyBackground />}
+        {(skin._key === "ice" || skin._key === "skin_ice") && <IceBackground />}
+        {(skin._key === "neon" || skin._key === "skin_neon") && <NeonBackground />}
+        {(skin._key === "retro" || skin._key === "skin_retro") && <RetroBackground />}
+
+      <div
         className="flex flex-col items-center gap-4 select-none pb-6"
-        style={{ fontFamily: skin.tileFontFamily !== "inherit" ? skin.tileFontFamily : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif" }}
+        style={{ position: "relative", zIndex: 1, fontFamily: skin.tileFontFamily !== "inherit" ? skin.tileFontFamily : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif" }}
       >
         {/* Header */}
         <div className="text-center w-full px-4">
           <h2
             className="text-2xl sm:text-3xl font-black tracking-[0.2em] mb-1"
             style={{
-              background: "linear-gradient(135deg, #818cf8, #c084fc, #f472b6)",
+              backgroundImage: "linear-gradient(135deg, #818cf8, #c084fc, #f472b6)",
+              backgroundClip: "text",
               WebkitBackgroundClip: "text",
+              color: "transparent",
               WebkitTextFillColor: "transparent",
               filter: "drop-shadow(0 0 12px rgba(129,140,248,0.4))",
             }}
           >
             WORD SEARCH
           </h2>
-          <p className="text-xs" style={{ color: "#64748b" }}>
+          <p className="text-xs font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
             {foundWords.length} / {words.length} words found
           </p>
         </div>
@@ -329,7 +355,7 @@ export default function WordSearchPuzzle({
           <div className="flex-1 flex flex-wrap sm:flex-col gap-2 sm:min-w-[110px]">
             <p
               className="w-full text-xs font-semibold tracking-wider mb-1 hidden sm:block"
-              style={{ color: "#475569" }}
+              style={{ color: "#cbd5e1", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}
             >
               FIND THESE WORDS
             </p>
@@ -346,7 +372,7 @@ export default function WordSearchPuzzle({
                   style={{
                     background: found ? color!.bg : skin.tileBg,
                     border: `1px solid ${found ? color!.border : skin.tileBorder}`,
-                    color: found ? color!.text : "#64748b",
+                    color: found ? color!.text : "#cbd5e1",
                     textDecoration: found ? "line-through" : "none",
                     transform: isFlashing ? "scale(1.1)" : "scale(1)",
                     boxShadow: isFlashing ? `0 0 14px ${color!.border}` : "none",
@@ -358,6 +384,7 @@ export default function WordSearchPuzzle({
             })}
           </div>
         </div>
+      </div>
       </div>
     </>
   );

@@ -4,18 +4,18 @@ import React, { useState, useEffect } from "react";
 import "./profile-actions.css";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
+import { PuzzleSkinContext } from "@/contexts/PuzzleSkinContext";
 import Link from "next/link";
 import ConfirmModal from '@/components/ConfirmModal';
 import { Rarity, rarityColors } from '@/lib/rarity';
+import { THEME_CONFIGS, FRAME_CONFIGS, getThemeConfig, getTopBarGradient } from '@/lib/profileThemes';
 import {
   UserPlus,
   UserMinus,
-  Mail,
   Trophy,
   Users,
   Heart,
   Share2,
-  Calendar,
   MessageCircle,
 } from "lucide-react";
 
@@ -32,6 +32,7 @@ interface UserProfile {
   activeFlair: string;
   activeFrame: string;
   activeTheme: string;
+  activeSkin: string;
   achievements: Array<{
     id: string;
     achievement: {
@@ -134,6 +135,7 @@ export default function PublicProfilePage() {
         throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch profile`);
       }
       const data = await response.json();
+      console.log("[PublicProfile] activeTheme from API:", data.activeTheme, "activeSkin:", data.activeSkin);
       setProfile(data);
       setIsFollowing(data.social.isFollowing);
       setError("");
@@ -343,346 +345,176 @@ export default function PublicProfilePage() {
 
   const isOwnProfile = (currentUserId || (session?.user as any)?.id) === userId;
 
-  // Theme colors
-  const themeMap: Record<string, {
-    bg: string; accent: string; secondary: string;
-    headerBg: string; headerGrad: string;
-    cardBg: string; cardBorder: string;
-    accentMuted: string; accentGlow: string;
-    btnBg: string; btnText: string;
-    topBar: string;
-  }> = {
-    gold: {
-      bg: '#0d0900',
-      accent: '#FDE74C', secondary: '#FFB86B',
-      headerBg: 'rgba(253,231,76,0.10)', headerGrad: 'linear-gradient(135deg, #2a1a00 0%, #1a1000 50%, #0d0900 100%)',
-      cardBg: 'rgba(253,231,76,0.07)', cardBorder: '#FDE74C',
-      accentMuted: 'rgba(253,231,76,0.15)', accentGlow: 'rgba(253,231,76,0.8)',
-      btnBg: 'linear-gradient(135deg, #FDE74C, #FFB86B)', btnText: '#1a1000',
-      topBar: 'linear-gradient(90deg, #FDE74C, #FFB86B)',
-    },
-    neon: {
-      bg: '#04000e',
-      accent: '#00FFFF', secondary: '#CC00FF',
-      headerBg: 'rgba(0,255,255,0.08)', headerGrad: 'linear-gradient(135deg, #0a0020 0%, #04000e 50%, #000a12 100%)',
-      cardBg: 'rgba(0,255,255,0.06)', cardBorder: '#00FFFF',
-      accentMuted: 'rgba(0,255,255,0.12)', accentGlow: 'rgba(0,255,255,0.9)',
-      btnBg: 'linear-gradient(135deg, #00FFFF, #CC00FF)', btnText: '#000',
-      topBar: 'linear-gradient(90deg, #00FFFF, #CC00FF)',
-    },
-    crimson: {
-      bg: '#0e0000',
-      accent: '#ef4444', secondary: '#F97316',
-      headerBg: 'rgba(220,38,38,0.10)', headerGrad: 'linear-gradient(135deg, #2d0000 0%, #1a0000 50%, #0e0000 100%)',
-      cardBg: 'rgba(220,38,38,0.08)', cardBorder: '#ef4444',
-      accentMuted: 'rgba(220,38,38,0.15)', accentGlow: 'rgba(220,38,38,0.85)',
-      btnBg: 'linear-gradient(135deg, #DC2626, #F97316)', btnText: '#fff',
-      topBar: 'linear-gradient(90deg, #DC2626, #F97316)',
-    },
-    default: {
-      bg: '#020202',
-      accent: '#3891A6', secondary: '#FDE74C',
-      headerBg: 'rgba(56,145,166,0.12)', headerGrad: 'linear-gradient(135deg, rgba(56,145,166,0.2) 0%, #020202 100%)',
-      cardBg: 'rgba(56,145,166,0.10)', cardBorder: '#3891A6',
-      accentMuted: 'rgba(56,145,166,0.15)', accentGlow: 'rgba(56,145,166,0)',
-      btnBg: '#3891A6', btnText: '#fff',
-      topBar: 'linear-gradient(90deg, #3891A6, #38D399)',
-    },
-  };
-  const theme = themeMap[profile.activeTheme || 'default'] ?? themeMap.default;
+  // Use the same theme system as the own-profile page
+  const t = getThemeConfig(profile.activeTheme);
+  const topBar = getTopBarGradient(t);
+  const frame = FRAME_CONFIGS[profile.activeFrame || 'none'] ?? FRAME_CONFIGS.none;
+  const flair = profile.activeFlair && profile.activeFlair !== 'none' ? ` ${profile.activeFlair}` : '';
+  const btnStyle = t.btnPrimary.startsWith('linear')
+    ? { background: t.btnPrimary, color: t.btnPrimaryText }
+    : { backgroundColor: t.btnPrimary, color: t.btnPrimaryText };
 
-  // Avatar frame styles
-  // Frame config: colors for the animated conic-gradient ring
-  const frameAnimConfig: Record<string, { colorA: string; colorB: string; glow: string } | null> = {
-    gold:  { colorA: '#FDE74C', colorB: '#FFB86B', glow: '0 0 20px rgba(253,231,76,0.7), 0 0 40px rgba(253,231,76,0.3)' },
-    neon:  { colorA: '#00FFFF', colorB: '#CC00FF', glow: '0 0 20px rgba(0,255,255,0.7), 0 0 40px rgba(204,0,255,0.4)' },
-    flame: { colorA: '#FF4500', colorB: '#FDE74C', glow: '0 0 20px rgba(255,69,0,0.8), 0 0 40px rgba(253,231,76,0.4)' },
-    none:  null,
-  };
-  const activeFrame = frameAnimConfig[profile.activeFrame || 'none'] ?? null;
-
-  // Render avatar (shared helper for header and card)
+  // Render avatar (shared helper)
   const renderAvatar = (sizeClass: string) => {
-    if (activeFrame) {
+    if (frame.colorA) {
       return (
         <div
           className={`${sizeClass} avatar-frame-animated flex-shrink-0`}
           style={{
-            '--frame-color-a': activeFrame.colorA,
-            '--frame-color-b': activeFrame.colorB,
-            '--frame-inner-bg': theme.bg,
-            boxShadow: activeFrame.glow,
+            '--frame-color-a': frame.colorA,
+            '--frame-color-b': frame.colorB,
+            '--frame-inner-bg': t.pageBg,
+            boxShadow: frame.glow,
           } as React.CSSProperties}
         >
           <div className="avatar-frame-inner">
             {profile.image
               ? <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: theme.accentMuted }}>👤</div>}
+              : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: t.primaryMuted }}>👤</div>}
           </div>
         </div>
       );
     }
     return (
       <div
-        className={`${sizeClass} rounded-full overflow-hidden border-4 flex-shrink-0 flex items-center justify-center`}
-        style={{ borderColor: theme.accent, boxShadow: `0 0 14px ${theme.accentGlow}` }}
+        className={`${sizeClass} rounded-full overflow-hidden border-[3px] flex-shrink-0 flex items-center justify-center`}
+        style={{ borderColor: t.primary, boxShadow: `0 0 18px ${t.avatarGlow}, 0 0 40px ${t.avatarGlow}` }}
       >
         {profile.image
           ? <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
-          : <div className="w-full h-full flex items-center justify-center text-4xl" style={{ backgroundColor: theme.accentMuted }}>👤</div>}
+          : <div className="w-full h-full flex items-center justify-center text-4xl" style={{ backgroundColor: t.primaryMuted }}>👤</div>}
       </div>
     );
   };
 
   return (
-    <div style={{ backgroundColor: theme.bg, backgroundImage: theme.headerGrad }} className="min-h-screen">
+    <PuzzleSkinContext.Provider value={profile.activeSkin || "default"}>
+    <main style={{ backgroundColor: t.pageBg, transition: 'background-color 0.4s ease' }} className="min-h-screen">
+
       {/* Theme accent bar */}
-      <div className="fixed top-0 left-0 right-0 h-[3px] z-50" style={{ background: theme.topBar, boxShadow: `0 0 12px ${theme.accentGlow}` }} />
-      {/* Profile Section */}
-      <div className="max-w-4xl mx-auto px-4 py-12 pt-28">
-        {/* Profile Header */}
-          <div className="border rounded-lg p-8 mb-8" style={{ backgroundColor: theme.headerBg, borderColor: theme.accent, boxShadow: `0 0 30px ${theme.accentMuted}` }}>
-          <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between mb-6">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 w-full">
-              <div className="relative flex-shrink-0 mb-4 sm:mb-0">
-                {renderAvatar('w-24 h-24')}
-                {isOwnProfile && (
-                  <>
-                    <label
-                      htmlFor="avatar-upload"
-                      className="absolute bottom-0 right-0 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer border-2 border-white transition-opacity hover:opacity-80"
-                      style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
-                      title="Upload avatar"
-                    >
-                      {avatarUploading ? (
-                        <span className="text-white text-xs">...</span>
-                      ) : (
-                        <span className="text-white text-lg">📷</span>
-                      )}
-                    </label>
-                    <input
-                      id="avatar-upload"
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                      className="hidden"
-                      onChange={handleAvatarUpload}
-                      disabled={avatarUploading}
-                    />
-                  </>
-                )}
-              </div>
-              {avatarError && (
-                <div className="px-3 py-2 rounded text-sm max-w-xs" style={{ backgroundColor: '#EF4444', color: 'white' }}>
-                  {avatarError}
-                </div>
-              )}
-              <div>
-                {isOwnProfile && !isEditingName && !currentUserNameChanged ? (
-                  <div className="flex items-center gap-3 mb-2">
-                    <h1 className="text-4xl font-bold text-white">
-                      {profile.name || "Anonymous Player"}{profile.activeFlair && profile.activeFlair !== "none" ? ` ${profile.activeFlair}` : ""}
-                    </h1>
-                    <button
-                      onClick={() => {
-                        // Show one-time-change confirmation before allowing edit
-                        setShowNameChangeConfirm(true);
-                      }}
-                      className="px-3 py-1 rounded text-sm font-medium transition-colors"
-                      style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
-                    >
-                      Edit
-                    </button>
-                  </div>
-                ) : isOwnProfile && isEditingName ? (
-                  <div className="mb-2">
-                    <div className="flex flex-col sm:flex-row items-center gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        maxLength={50}
-                        className="w-full sm:flex-1 sm:min-w-0 px-3 py-2 rounded border text-white text-2xl sm:text-4xl font-bold"
-                        style={{
-                          backgroundColor: 'rgba(0,0,0,0.5)',
-                          borderColor: theme.accent,
-                        }}
-                        placeholder="Enter your name"
-                      />
+      <div className="fixed top-0 left-0 right-0 h-[3px] z-50" style={{ background: topBar, boxShadow: `0 0 12px ${t.avatarGlow}` }} />
 
-                      <div className="flex w-full sm:w-auto gap-2">
-                        <button
-                          onClick={handleUpdateName}
-                          disabled={nameSaving}
-                          className="flex-1 sm:flex-none w-full sm:w-auto px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
-                          style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
-                        >
-                          {nameSaving ? 'Saving...' : 'Save'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setIsEditingName(false);
-                            setNewName("");
-                            setNameError("");
-                          }}
-                          disabled={nameSaving}
-                          className="flex-1 sm:flex-none w-full sm:w-auto px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
-                          style={{ backgroundColor: '#AB9F9D', color: 'white' }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                    {nameError && (
-                      <p className="text-sm" style={{ color: '#EF4444' }}>{nameError}</p>
-                    )}
-                  </div>
-                ) : (
-                  <h1 className="text-4xl font-bold text-white mb-2">
-                    {profile.name || "Anonymous Player"}{profile.activeFlair && profile.activeFlair !== "none" ? ` ${profile.activeFlair}` : ""}
-                  </h1>
-                )}
-                <div className="flex items-center gap-4" style={{ color: '#DDDBF1' }}>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    Joined {new Date(profile.createdAt).toLocaleDateString()}
-                  </div>
-                </div>
-                {/* XP / Level bar */}
-                <div className="mt-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(129,140,248,0.2)', border: '1px solid rgba(129,140,248,0.4)', color: '#a5b4fc' }}>
-                      Lv.{profile.level}
-                    </span>
-                    <span className="text-sm font-semibold" style={{ color: '#818cf8' }}>{profile.xpTitle}</span>
-                    <span className="text-xs ml-auto" style={{ color: '#475569' }}>{profile.xpToNextLevel} XP to next level</span>
-                  </div>
-                  <div className="h-2 rounded-full overflow-hidden w-full max-w-xs" style={{ background: 'rgba(129,140,248,0.12)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${profile.xpProgress}%`, background: 'linear-gradient(90deg, #818cf8, #c084fc)' }} />
-                  </div>
-                </div>
-              </div>
+      {/* Animated header — same as own-profile page */}
+      <div className="pt-24 pb-20 px-4 relative overflow-hidden" style={{ background: t.headerGradient }}>
+        <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full pointer-events-none" style={{ background: t.headerParticle1, filter: 'blur(70px)', transform: 'translateY(-30%)' }} />
+        <div className="absolute bottom-0 right-1/4 w-64 h-64 rounded-full pointer-events-none" style={{ background: t.headerParticle2, filter: 'blur(55px)', transform: 'translateY(30%)' }} />
+        <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ background: topBar, opacity: 0.7 }} />
+        <div className="max-w-4xl mx-auto relative">
+          <div className="flex items-center gap-5">
+            <div className="relative shrink-0">
+              {renderAvatar('w-20 h-20')}
             </div>
-
-            {!isOwnProfile && (
-              <div className="profile-action-buttons flex flex-row gap-2 mt-2 items-center whitespace-nowrap">
-                <button
-                  onClick={handleFollowToggle}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-sm"
-                  style={{
-                    backgroundColor: isFollowing ? '#EF4444' : '#38A169', // red for unfollow, green for follow
-                    color: 'white',
-                    minWidth: 90,
-                  }}
-                >
-                  {isFollowing ? (
-                    <>
-                      <UserMinus className="w-4 h-4" />
-                      Unfollow
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-4 h-4" />
-                      Follow
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowInviteModal(true);
-                    fetchUserTeams();
-                  }}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-sm"
-                  style={{ backgroundColor: '#2563EB', color: 'white', minWidth: 110 }}
-                  title="Invite to your team"
-                >
-                  <Users className="w-4 h-4" />
-                  Invite to Team
-                </button>
-                {!isOwnProfile && session && (
-                  <button
-                    onClick={() => setShowMessageModal(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-sm"
-                    style={{ backgroundColor: '#FDE74C', color: '#222', minWidth: 90 }}
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    Message
-                  </button>
-                )}
+            <div className="flex-1">
+              <h1 className="text-4xl font-extrabold text-white mb-1">{profile.name || 'Player'}{flair}</h1>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-semibold px-3 py-1 rounded-full" style={{ backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primary}`, boxShadow: `0 0 8px ${t.avatarGlow}` }}>
+                  LVL {profile.level} &middot; {profile.xpTitle}
+                </span>
               </div>
+              <p className="text-sm mt-1" style={{ color: t.subtleText }}>Member since {new Date(profile.createdAt).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' })}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="px-4 py-8 max-w-4xl mx-auto">
+        {/* Action buttons for visitors */}
+        {!isOwnProfile && (
+          <div className="flex flex-wrap items-center gap-2 mb-8">
+            <button
+              onClick={handleFollowToggle}
+              className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+              style={{
+                backgroundColor: isFollowing ? '#EF4444' : '#38A169',
+                color: 'white',
+              }}
+            >
+              {isFollowing ? <><UserMinus className="w-4 h-4" /> Unfollow</> : <><UserPlus className="w-4 h-4" /> Follow</>}
+            </button>
+            <button
+              onClick={() => { setShowInviteModal(true); fetchUserTeams(); }}
+              className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+              style={{ backgroundColor: '#2563EB', color: 'white' }}
+            >
+              <Users className="w-4 h-4" /> Invite to Team
+            </button>
+            {session && (
+              <button
+                onClick={() => setShowMessageModal(true)}
+                className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                style={btnStyle as React.CSSProperties}
+              >
+                <MessageCircle className="w-4 h-4" /> Message
+              </button>
             )}
           </div>
+        )}
 
-          
+        {/* XP Progress */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: t.primaryMuted, border: `1px solid ${t.primary}`, color: t.primary }}>
+              Lv.{profile.level}
+            </span>
+            <span className="text-sm font-semibold" style={{ color: t.primary }}>{profile.xpTitle}</span>
+            <span className="text-xs ml-auto" style={{ color: t.subtleText }}>{profile.xpToNextLevel} XP to next level</span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden w-full max-w-xs" style={{ background: t.primaryMuted }}>
+            <div className="h-full rounded-full" style={{ width: `${profile.xpProgress}%`, background: t.xpBarGradient }} />
+          </div>
+        </div>
 
-          {/* Stats Grid */}
-          <div className="grid justify-items-center grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
-              <div className="flex-shrink-0">
-                <Trophy className="w-8 h-8 text-white/80 mx-auto" />
-              </div>
-              <div>
-                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Puzzles Solved</p>
-                <p className="text-4xl font-extrabold text-white">{profile.stats.puzzlesSolved}</p>
-              </div>
-            </div>
-            <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
-              <div className="flex-shrink-0">
-                <Share2 className="w-8 h-8 text-yellow-400/80 mx-auto" />
-              </div>
-              <div>
-                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Total Points</p>
-                <p className="text-4xl font-extrabold" style={{ color: '#FDE74C' }}>
-                  {profile.stats.totalPoints}
-                </p>
-              </div>
-            </div>
-            <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
-              <div className="flex-shrink-0">
-                <Trophy className="w-8 h-8 text-emerald-400/80 mx-auto" />
-              </div>
-              <div>
-                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Achievements</p>
-                <p className="text-4xl font-extrabold text-white">{profile.stats.achievementsCount}</p>
-              </div>
-            </div>
-            <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
-              <div className="flex-shrink-0">
-                <Users className="w-8 h-8 text-sky-400/80 mx-auto" />
-              </div>
-              <div>
-                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Teams</p>
-                <p className="text-4xl font-extrabold text-white">{profile.stats.teamsCount}</p>
-              </div>
-            </div>
+        {/* Stats Grid */}
+        <div className="grid justify-items-center grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+            <Trophy className="w-8 h-8 mx-auto" style={{ color: t.primary }} />
+            <p style={{ color: t.subtleText }} className="text-sm mb-1">Puzzles Solved</p>
+            <p className="text-4xl font-extrabold" style={{ color: t.primary }}>{profile.stats.puzzlesSolved}</p>
+          </div>
+          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+            <Share2 className="w-8 h-8 mx-auto" style={{ color: t.primary }} />
+            <p style={{ color: t.subtleText }} className="text-sm mb-1">Total Points</p>
+            <p className="text-4xl font-extrabold" style={{ color: t.primary }}>{profile.stats.totalPoints}</p>
+          </div>
+          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+            <Trophy className="w-8 h-8 mx-auto" style={{ color: t.primary }} />
+            <p style={{ color: t.subtleText }} className="text-sm mb-1">Achievements</p>
+            <p className="text-4xl font-extrabold" style={{ color: t.primary }}>{profile.stats.achievementsCount}</p>
+          </div>
+          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+            <Users className="w-8 h-8 mx-auto" style={{ color: t.primary }} />
+            <p style={{ color: t.subtleText }} className="text-sm mb-1">Teams</p>
+            <p className="text-4xl font-extrabold" style={{ color: t.primary }}>{profile.stats.teamsCount}</p>
           </div>
         </div>
 
         {/* Social Stats */}
         <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="border rounded-lg p-4" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
+          <div className="border rounded-lg p-4" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
             <div className="flex items-center justify-between">
               <div>
-                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Followers</p>
+                <p style={{ color: t.subtleText }} className="text-sm mb-1">Followers</p>
                 <p className="text-2xl font-bold text-white">{profile.social.followers}</p>
               </div>
               <Heart className="w-8 h-8" style={{ color: '#EF4444' }} />
             </div>
           </div>
-          <div className="border rounded-lg p-4" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
+          <div className="border rounded-lg p-4" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
             <div className="flex items-center justify-between">
               <div>
-                <p style={{ color: '#DDDBF1' }} className="text-sm mb-1">Following</p>
+                <p style={{ color: t.subtleText }} className="text-sm mb-1">Following</p>
                 <p className="text-2xl font-bold text-white">{profile.social.following}</p>
               </div>
-              <Users className="w-8 h-8" style={{ color: theme.accent }} />
+              <Users className="w-8 h-8" style={{ color: t.primary }} />
             </div>
           </div>
         </div>
 
-        {/* My Puzzles Archive (own profile only) - moved below Social Stats */}
+        {/* My Puzzles Archive (own profile only) */}
         {isOwnProfile && (
           <div className="mb-8">
-            <div className="border rounded-lg p-6" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
+            <div className="border rounded-lg p-6" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-white">My Puzzles (Archive)</h3>
                 <button
@@ -704,7 +536,7 @@ export default function PublicProfilePage() {
                     }
                   }}
                   className="px-4 py-2 rounded text-sm font-semibold transition hover:opacity-90"
-                  style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
+                  style={btnStyle as React.CSSProperties}
                 >
                   {showMyPuzzles ? 'Hide' : 'Open'}
                 </button>
@@ -713,23 +545,23 @@ export default function PublicProfilePage() {
               {showMyPuzzles && (
                 <div>
                   {myPuzzlesLoading ? (
-                    <p className="text-sm" style={{ color: '#AB9F9D' }}>Loading...</p>
+                    <p className="text-sm" style={{ color: t.subtleText }}>Loading...</p>
                   ) : myPuzzles.length === 0 ? (
-                    <p className="text-sm" style={{ color: '#AB9F9D' }}>No archived puzzles yet.</p>
+                    <p className="text-sm" style={{ color: t.subtleText }}>No archived puzzles yet.</p>
                   ) : (
                     <div className="space-y-3">
                       {myPuzzles.map((p) => (
-                        <div key={p.id} className="block border rounded p-3" style={{ borderColor: theme.accent, backgroundColor: theme.accentMuted }} role="group" aria-disabled="true">
+                        <div key={p.id} className="block border rounded p-3" style={{ borderColor: t.primaryBorder, backgroundColor: t.primaryMuted }} role="group" aria-disabled="true">
                           <div className="flex items-center justify-between">
                             <div>
                               <h4 className="font-semibold text-white">{p.title}</h4>
-                              <p className="text-xs" style={{ color: '#AB9F9D' }}>{p.category?.name || 'General'} · {p.difficulty}</p>
+                              <p className="text-xs" style={{ color: t.subtleText }}>{p.category?.name || 'General'} · {p.difficulty}</p>
                             </div>
                             <div className="text-right">
                               <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: p.solved ? 'rgba(56, 201, 153, 0.12)' : 'rgba(239, 68, 68, 0.08)', color: p.solved ? '#38D399' : '#EF4444' }}>
                                 {p.solved ? '✓ Solved' : '✗ Failed'}
                               </span>
-                              <div className="text-xs mt-1" style={{ color: '#AB9F9D' }}>{p.attempts ?? 0} attempts</div>
+                              <div className="text-xs mt-1" style={{ color: t.subtleText }}>{p.attempts ?? 0} attempts</div>
                             </div>
                           </div>
                         </div>
@@ -744,9 +576,9 @@ export default function PublicProfilePage() {
 
         {/* Teams Section */}
         {profile.teams.length > 0 && (
-          <div className="border rounded-lg p-6 mb-8" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
+          <div className="border rounded-lg p-6 mb-8" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
             <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-              <Users className="w-6 h-6" style={{ color: theme.accent }} />
+              <Users className="w-6 h-6" style={{ color: t.primary }} />
               Teams ({profile.teams.length})
             </h2>
             <div className="grid grid-cols-2 gap-4">
@@ -755,16 +587,11 @@ export default function PublicProfilePage() {
                   key={tm.team.id}
                   href={`/teams/${tm.team.id}`}
                   className="p-4 rounded-lg border transition-all hover:shadow-lg cursor-pointer"
-                  style={{
-                    backgroundColor: theme.accentMuted,
-                    borderColor: theme.accent,
-                  }}
+                  style={{ backgroundColor: t.primaryMuted, borderColor: t.primaryBorder }}
                 >
                   <h3 className="font-semibold text-white mb-1">{tm.team.name}</h3>
                   {tm.team.description && (
-                    <p style={{ color: '#DDDBF1' }} className="text-sm line-clamp-2">
-                      {tm.team.description}
-                    </p>
+                    <p style={{ color: t.subtleText }} className="text-sm line-clamp-2">{tm.team.description}</p>
                   )}
                 </Link>
               ))}
@@ -774,9 +601,9 @@ export default function PublicProfilePage() {
 
         {/* Achievements Section */}
         {profile.achievements.length > 0 && (
-          <div className="border rounded-lg p-6" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent }}>
+          <div className="border rounded-lg p-6" style={{ backgroundColor: t.cardBg, borderColor: t.secondary }}>
             <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-              <Trophy className="w-6 h-6" style={{ color: theme.accent }} />
+              <Trophy className="w-6 h-6" style={{ color: t.secondary }} />
               Achievements ({profile.achievements.length})
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -787,27 +614,13 @@ export default function PublicProfilePage() {
                   <div
                     key={ach.id}
                     className="p-4 rounded-lg border text-center transition-all hover:shadow-lg"
-                    style={{
-                      backgroundColor: color.bg,
-                      borderColor: color.border,
-                    }}
+                    style={{ backgroundColor: color.bg, borderColor: t.primary }}
                     title={ach.achievement.description}
                   >
                     <div className="text-4xl mb-2">{ach.achievement.icon}</div>
-                    <h3 className="font-semibold text-sm mb-1" style={{ color: color.text }}>
-                      {ach.achievement.title}
-                    </h3>
-                    <p style={{ color: '#DDDBF1' }} className="text-xs mb-2">
-                      {ach.achievement.category}
-                    </p>
-                    <span
-                      className="inline-block px-2 py-1 rounded text-xs font-bold capitalize"
-                      style={{
-                        backgroundColor: color.bg,
-                        color: color.text,
-                        border: `1px solid ${color.border}`,
-                      }}
-                    >
+                    <h3 className="font-semibold text-sm mb-1" style={{ color: color.text }}>{ach.achievement.title}</h3>
+                    <p style={{ color: t.subtleText }} className="text-xs mb-2">{ach.achievement.category}</p>
+                    <span className="inline-block px-2 py-1 rounded text-xs font-bold capitalize" style={{ backgroundColor: color.bg, color: color.text, border: `1px solid ${color.border}` }}>
                       {ach.achievement.rarity}
                     </span>
                   </div>
@@ -819,7 +632,7 @@ export default function PublicProfilePage() {
 
         {profile.achievements.length === 0 && profile.teams.length === 0 && (
           <div className="text-center py-12">
-            <p style={{ color: '#DDDBF1' }} className="text-lg">
+            <p style={{ color: t.subtleText }} className="text-lg">
               This player hasn't earned any achievements or joined teams yet.
             </p>
           </div>
@@ -832,10 +645,10 @@ export default function PublicProfilePage() {
           targetUserId={userId}
           targetUserName={profile.name}
           onClose={() => setShowMessageModal(false)}
-          accentColor={theme.accent}
-          accentMuted={theme.accentMuted}
-          btnBg={theme.btnBg}
-          btnText={theme.btnText}
+          accentColor={t.primary}
+          accentMuted={t.primaryMuted}
+          btnBg={t.btnPrimary}
+          btnText={t.btnPrimaryText}
         />
       )}
 
@@ -851,7 +664,7 @@ export default function PublicProfilePage() {
               className="w-full max-w-md rounded-lg shadow-xl border p-6"
               style={{
                 backgroundColor: "rgba(2, 2, 2, 0.97)",
-                borderColor: theme.accent,
+                borderColor: t.primary,
               }}
             >
               <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -877,8 +690,8 @@ export default function PublicProfilePage() {
                 <div
                   className="p-4 rounded-lg text-center"
                   style={{
-                    backgroundColor: theme.cardBg,
-                    borderColor: theme.accent,
+                    backgroundColor: t.cardBg,
+                    borderColor: t.primary,
                     borderWidth: "1px",
                     color: "#DDDBF1",
                   }}
@@ -887,7 +700,7 @@ export default function PublicProfilePage() {
                   <Link
                     href="/teams"
                     className="mt-4 inline-block px-4 py-2 rounded-lg font-medium transition-colors"
-                    style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
+                    style={btnStyle as React.CSSProperties}
                   >
                     Create a Team
                   </Link>
@@ -902,9 +715,9 @@ export default function PublicProfilePage() {
                         style={{
                           backgroundColor:
                             selectedTeam === team.id
-                              ? theme.accentMuted
+                              ? t.primaryMuted
                               : "rgba(51, 65, 85, 0.5)",
-                          borderColor: selectedTeam === team.id ? theme.accent : "#475569",
+                          borderColor: selectedTeam === team.id ? t.primary : "#475569",
                           borderWidth: "1px",
                         }}
                       >
@@ -931,7 +744,7 @@ export default function PublicProfilePage() {
                       type="button"
                       onClick={() => setShowInviteModal(false)}
                       className="flex-1 px-4 py-2 rounded-lg text-white transition-colors"
-                      style={{ backgroundColor: theme.accentMuted }}
+                      style={{ backgroundColor: t.primaryMuted }}
                     >
                       Cancel
                     </button>
@@ -940,7 +753,7 @@ export default function PublicProfilePage() {
                       onClick={handleSendTeamInvite}
                       disabled={inviteLoading || !selectedTeam}
                       className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-                      style={{ background: theme.btnBg, color: theme.btnText } as React.CSSProperties}
+                      style={btnStyle as React.CSSProperties}
                     >
                       {inviteLoading ? "Sending..." : "Send Invite"}
                     </button>
@@ -967,7 +780,8 @@ export default function PublicProfilePage() {
         }}
         onCancel={() => setShowNameChangeConfirm(false)}
       />
-    </div>
+    </main>
+    </PuzzleSkinContext.Provider>
   );
 }
 

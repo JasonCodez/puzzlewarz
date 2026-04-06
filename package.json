@@ -48,6 +48,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
+    "react-p5": "^1.4.1",
     "redis": "^5.10.0",
     "remark-gfm": "^4.0.1",
     "socket.io": "^4.8.3",

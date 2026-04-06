@@ -102,10 +102,10 @@ function getDisplayTitle(puzzle: any) {
   return title || 'Untitled Puzzle';
 }
 
-function getDisplayDescription(puzzle: any) {
+function getDisplayDescription(puzzle: any): string {
   const raw = (puzzle && (puzzle.description ?? puzzle.summary ?? puzzle.content ?? puzzle?.escapeRoom?.roomDescription)) as unknown;
   const desc = typeof raw === 'string' ? raw.trim() : '';
-  return desc || 'No description yet.';
+  return desc;
 }
 
 function formatFailedReason(reason: string | null | undefined) {
@@ -625,7 +625,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
             <p style={{ color: '#AB9F9D' }} className="text-sm">Try adjusting your search or filters</p>
           </div>
           ) : viewMode === "grid" ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {displayed.map((puzzle, idx) => {
               const progress = puzzle.userProgress?.[0];
               // Treat puzzles with attempts >= 5 and not solved as 'failed'
@@ -678,12 +678,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                     </div>
                     <p className="text-xs font-semibold" style={{ color: '#AB9F9D' }}>✓ Puzzle Complete</p>
                   </div>
-                  <div className="mb-3">
+                  {getDisplayDescription(puzzle) && (<div className="mb-3">
                     <p className="text-sm line-clamp-3" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                     {getDisplayDescription(puzzle).length > 120 && (
                       <button type="button" onClick={(e) => { e.stopPropagation(); setDescriptionModal(puzzle); }} className="text-xs mt-1 font-medium hover:underline" style={{ color: '#3891A6' }}>Read more →</button>
                     )}
-                  </div>
+                  </div>)}
                   <div className="flex gap-2 flex-wrap mb-2">
                     <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                       {puzzle.category?.name || 'General'}
@@ -725,7 +725,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   <div
                     id={`puzzle-${puzzle.id}`}
                     key={puzzle.id}
-                    className="group rounded-xl border p-6 transition-all duration-300"
+                    className="group rounded-xl border p-4 sm:p-6 transition-all duration-300"
                     style={{
                       backgroundColor: 'rgba(239, 68, 68, 0.05)',
                       borderColor: 'rgba(239,68,68,0.35)',
@@ -757,12 +757,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                         </p>
                       )}
                     </div>
-                    <div className="mb-3">
+                    {getDisplayDescription(puzzle) && (<div className="mb-3">
                       <p className="text-sm line-clamp-3" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                       {getDisplayDescription(puzzle).length > 120 && (
                         <button type="button" onClick={(e) => { e.stopPropagation(); setDescriptionModal(puzzle); }} className="text-xs mt-1 font-medium hover:underline" style={{ color: '#3891A6' }}>Read more →</button>
                       )}
-                    </div>
+                    </div>)}
                     <div className="flex gap-2 flex-wrap mb-2">
                       <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                         {puzzle.category?.name || 'General'}
@@ -789,7 +789,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   key={puzzle.id}
                   role="button"
                   onClick={() => handlePuzzleClick(puzzle)}
-                  className="group rounded-xl border p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+                  className="group rounded-xl border p-4 sm:p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
                   style={{
                     backgroundColor: 'rgba(56, 145, 166, 0.06)',
                     borderColor: 'rgba(56,145,166,0.28)',
@@ -817,12 +817,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                         </div>
                       </div>
                     </div>
-                    <div className="mb-3">
+                    {getDisplayDescription(puzzle) && (<div className="mb-3">
                       <p className="text-sm line-clamp-3" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                       {getDisplayDescription(puzzle).length > 120 && (
                         <button type="button" onClick={(e) => { e.stopPropagation(); setDescriptionModal(puzzle); }} className="text-xs mt-1 font-medium hover:underline" style={{ color: '#3891A6' }}>Read more →</button>
                       )}
-                    </div>
+                    </div>)}
                     <div className="flex gap-2 flex-wrap mb-2">
                       <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                         {puzzle.category?.name || 'General'}
@@ -915,12 +915,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                             ✗ Failed
                           </span>
                         </div>
-                        <div className="mb-2">
+                        {getDisplayDescription(puzzle) && (<div className="mb-2">
                           <p className="text-sm line-clamp-2" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                           {getDisplayDescription(puzzle).length > 120 && (
                             <button type="button" onClick={(e) => { e.stopPropagation(); setDescriptionModal(puzzle); }} className="text-xs mt-1 font-medium hover:underline" style={{ color: '#3891A6' }}>Read more →</button>
                           )}
-                        </div>
+                        </div>)}
                         {puzzle.failedReason && (
                             <p className="text-sm mt-1" style={{ color: '#FFB4B4' }}>
                               Reason: {formatFailedReason(puzzle.failedReason) || 'Failed'}
@@ -964,12 +964,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                           ✓ Complete
                         </span>
                       </div>
-                      <div className="mb-2">
+                      {getDisplayDescription(puzzle) && (<div className="mb-2">
                         <p className="text-sm line-clamp-2" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                         {getDisplayDescription(puzzle).length > 120 && (
                           <button type="button" onClick={(e) => { e.stopPropagation(); setDescriptionModal(puzzle); }} className="text-xs mt-1 font-medium hover:underline" style={{ color: '#3891A6' }}>Read more →</button>
                         )}
-                      </div>
+                      </div>)}
                       <div className="flex flex-wrap gap-2 mb-2">
                         <span className="text-xs px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                           {puzzle.category?.name || 'General'}
@@ -1049,12 +1049,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                           {puzzle.isTeamPuzzle ? 'Team' : 'Solo'}
                         </span>
                       </div>
-                      <div className="mb-2">
+                      {getDisplayDescription(puzzle) && (<div className="mb-2">
                         <p className="text-sm line-clamp-2" style={{ color: '#DDDBF1' }}>{getDisplayDescription(puzzle)}</p>
                         {getDisplayDescription(puzzle).length > 120 && (
                           <button type="button" onClick={(e) => { e.stopPropagation(); setDescriptionModal(puzzle); }} className="text-xs mt-1 font-medium hover:underline" style={{ color: '#3891A6' }}>Read more →</button>
                         )}
-                      </div>
+                      </div>)}
                       <div className="flex flex-wrap gap-2 mb-2">
                         <span className="text-xs px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
                           {puzzle.category?.name || 'General'}
@@ -1116,7 +1116,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                 {descriptionModal.puzzleType?.replace(/_/g, ' ')}
               </span>
             </div>
-            <p className="text-sm whitespace-pre-wrap mb-6" style={{ color: '#DDDBF1' }}>{getDisplayDescription(descriptionModal)}</p>
+            {getDisplayDescription(descriptionModal) ? (
+              <p className="text-sm whitespace-pre-wrap mb-6" style={{ color: '#DDDBF1' }}>{getDisplayDescription(descriptionModal)}</p>
+            ) : (
+              <p className="text-sm italic mb-6" style={{ color: '#64748b' }}>No description provided.</p>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setDescriptionModal(null)}

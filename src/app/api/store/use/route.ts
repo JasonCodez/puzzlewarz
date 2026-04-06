@@ -82,7 +82,12 @@ export async function POST(request: NextRequest) {
 
       const meta = item.metadata as { durationMinutes?: number } | null;
       const durationMs = (meta?.durationMinutes ?? 60) * 60 * 1000;
-      const spotlightUntil = new Date(Date.now() + durationMs);
+
+      // If already spotlighted, extend from the existing expiry rather than overwriting it
+      const baseTime = challenge.spotlightUntil && challenge.spotlightUntil > new Date()
+        ? challenge.spotlightUntil.getTime()
+        : Date.now();
+      const spotlightUntil = new Date(baseTime + durationMs);
 
       await prisma.$transaction([
         prisma.puzzleWarzChallenge.update({

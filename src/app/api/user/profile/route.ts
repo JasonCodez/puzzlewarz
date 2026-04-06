@@ -104,6 +104,24 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid name" }, { status: 400 });
     }
 
+    // Validate display name against profanity + reserved words
+    const { isAllowedDisplayName } = await import("@/lib/display-name-validator");
+    const nameCheck = isAllowedDisplayName(name.trim());
+    if (!nameCheck.ok) {
+      return NextResponse.json({ error: nameCheck.reason }, { status: 400 });
+    }
+
+    // Check if display name is already taken by another user (case-insensitive)
+    const nameTaken = await prisma.user.findFirst({
+      where: {
+        name: { equals: name.trim(), mode: "insensitive" },
+        NOT: { email: session.user.email },
+      },
+    });
+    if (nameTaken) {
+      return NextResponse.json({ error: "Display name is already taken" }, { status: 400 });
+    }
+
     const user = await prisma.user.update({
       where: { email: session.user.email },
       data: { name: name.trim() },

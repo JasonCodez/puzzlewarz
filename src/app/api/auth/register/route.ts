@@ -5,6 +5,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { sendEmail, generateEmailVerificationEmail } from "@/lib/mail";
 import { enforceRateLimit, getClientAddress } from "@/lib/requestSecurity";
+import { isAllowedDisplayName } from "@/lib/display-name-validator";
 
 const RegisterSchema = z.object({
   name: z.string().min(1).max(100),
@@ -40,6 +41,15 @@ export async function POST(request: NextRequest) {
     const email = parsed.email.trim().toLowerCase();
     const { password, referralCode } = parsed;
 
+    // Validate display name against profanity + reserved words
+    const nameCheck = isAllowedDisplayName(name);
+    if (!nameCheck.ok) {
+      return NextResponse.json(
+        { error: nameCheck.reason },
+        { status: 400 }
+      );
+    }
+
     const emailRateLimit = await enforceRateLimit({
       key: `auth:register:email:${email}`,
       limit: 3,
@@ -58,6 +68,17 @@ export async function POST(request: NextRequest) {
     if (existingUser) {
       return NextResponse.json(
         { error: "Email already registered" },
+        { status: 400 }
+      );
+    }
+
+    // Check if display name is already taken (case-insensitive)
+    const nameTaken = await prisma.user.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
+    });
+    if (nameTaken) {
+      return NextResponse.json(
+        { error: "Display name is already taken" },
         { status: 400 }
       );
     }

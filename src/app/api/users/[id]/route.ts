@@ -41,6 +41,7 @@ export async function GET(
         activeFlair: true,
         activeFrame: true,
         activeTheme: true,
+        activeSkin: true,
         achievements: {
           include: {
             achievement: {
