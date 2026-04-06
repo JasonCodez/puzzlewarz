@@ -8,6 +8,7 @@ import Link from "next/link";
 interface LeaderboardEntry {
   userId: string;
   userName: string | null;
+  userImage: string | null;
   email: string;
   activeFlair: string;
   totalPoints: number;
@@ -168,13 +169,19 @@ export default function LeaderboardsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <div>
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={entry.userImage || '/images/default-avatar.svg'}
+                          alt=""
+                          className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                          onError={(e) => { const img = e.currentTarget; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
+                        />
                         {entry.userId ? (
                           <Link
                             href={`/profile/${entry.userId}`}
                             className="text-white font-semibold hover:underline hover:text-[#3891A6]"
                           >
-                            {entry.userName || "Anonymous"}{entry.activeFlair && entry.activeFlair !== "none" ? ` ${entry.activeFlair}` : ""}
+                            {entry.userName || "Anonymous"}{entry.activeFlair && entry.activeFlair !== "none" ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {entry.activeFlair}</span> : ""}
                           </Link>
                         ) : (
                           <span className="text-white font-semibold">{entry.userName || "Anonymous"}</span>

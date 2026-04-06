@@ -172,12 +172,12 @@ export default function Navbar() {
                     onError={(e) => {
                       const img = e.currentTarget as HTMLImageElement;
                       img.onerror = null;
-                      img.src = '/images/puzzle_warz_logo.png';
+                      img.src = '/images/default-avatar.svg';
                     }}
                   />
                 )}
                 <div className="hidden sm:block text-right">
-                  <p className="text-white font-semibold text-sm max-w-[140px] truncate">{session.user?.name || session.user?.email}{userInfo?.activeFlair ? ` ${userInfo.activeFlair}` : ""}</p>
+                  <p className="text-white font-semibold text-sm max-w-[140px] truncate">{session.user?.name || session.user?.email}{userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}</p>
                   {userInfo?.level !== undefined ? (
                     <>
                       <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}</p>
@@ -260,12 +260,12 @@ export default function Navbar() {
                   onError={(e) => {
                     const img = e.currentTarget as HTMLImageElement;
                     img.onerror = null;
-                    img.src = '/images/puzzle_warz_logo.png';
+                    img.src = '/images/default-avatar.svg';
                   }}
                 />
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold text-sm truncate">{session.user?.name || session.user?.email}{userInfo?.activeFlair ? ` ${userInfo.activeFlair}` : ""}</p>
+                <p className="text-white font-semibold text-sm truncate">{session.user?.name || session.user?.email}{userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}</p>
                 {userInfo?.level !== undefined ? (
                   <>
                     <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}</p>

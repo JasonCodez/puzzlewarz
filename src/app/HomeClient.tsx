@@ -3,25 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 
-/* ── Animated counter ─────────────────────────────────────── */
-function useCountUp(target: number, duration = 2200, trigger = false) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!trigger) return;
-    let startTime: number | null = null;
-    const step = (ts: number) => {
-      if (!startTime) startTime = ts;
-      const progress = Math.min((ts - startTime) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setCount(Math.floor(eased * target));
-      if (progress < 1) requestAnimationFrame(step);
-      else setCount(target);
-    };
-    requestAnimationFrame(step);
-  }, [target, duration, trigger]);
-  return count;
-}
-
 /* ── Intersection observer hook ───────────────────────────── */
 function useReveal(threshold = 0.12) {
   const ref = useRef<HTMLDivElement>(null);
@@ -39,45 +20,6 @@ function useReveal(threshold = 0.12) {
   return { ref, visible };
 }
 
-/* ── Stats row ────────────────────────────────────────────── */
-function StatsRow() {
-  const { ref, visible } = useReveal(0.3);
-  const players = useCountUp(12400, 2000, visible);
-  const puzzles = useCountUp(520, 1800, visible);
-  const teams = useCountUp(3200, 2100, visible);
-  const solved = useCountUp(98600, 2400, visible);
-
-  const stats = [
-    { value: players, suffix: "+", label: "Active Players" },
-    { value: puzzles, suffix: "+", label: "Puzzles" },
-    { value: teams, suffix: "+", label: "Teams Formed" },
-    { value: solved, suffix: "+", label: "Puzzles Solved" },
-  ];
-
-  return (
-    <div ref={ref} className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-16 max-w-3xl">
-      {stats.map((s, i) => (
-        <div
-          key={i}
-          className="text-center"
-          style={{
-            opacity: visible ? 1 : 0,
-            transform: visible ? "translateY(0)" : "translateY(20px)",
-            transition: `opacity 0.6s ease ${i * 0.12}s, transform 0.6s ease ${i * 0.12}s`,
-          }}
-        >
-          <div className="text-2xl md:text-3xl font-bold" style={{ color: "#FDE74C" }}>
-            {s.value.toLocaleString()}{s.suffix}
-          </div>
-          <div className="text-xs mt-1 tracking-wide uppercase" style={{ color: "#6B7280" }}>
-            {s.label}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ── Feature card ─────────────────────────────────────────── */
 interface FeatureCardProps {
   icon: string;
@@ -86,8 +28,10 @@ interface FeatureCardProps {
   accent: "teal" | "gold";
   delay?: number;
   visible?: boolean;
+  comingSoon?: boolean;
+  comingSoonLabel?: string;
 }
-function FeatureCard({ icon, title, desc, accent, delay = 0, visible = false }: FeatureCardProps) {
+function FeatureCard({ icon, title, desc, accent, delay = 0, visible = false, comingSoon = false, comingSoonLabel }: FeatureCardProps) {
   const [hovered, setHovered] = useState(false);
   const isTeal = accent === "teal";
   const color = isTeal ? "#3891A6" : "#FDE74C";
@@ -129,7 +73,12 @@ function FeatureCard({ icon, title, desc, accent, delay = 0, visible = false }: 
       >
         {icon}
       </div>
-      <h3 style={{ color: "#fff", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <h3 style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{title}</h3>
+        {comingSoon && (
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", padding: "2px 8px", borderRadius: 999, color: "#a78bfa", backgroundColor: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.3)", whiteSpace: "nowrap" }}>{comingSoonLabel || "Coming Soon"}</span>
+        )}
+      </div>
       <p style={{ color: "#9CA3AF", fontSize: 14, lineHeight: 1.6 }}>{desc}</p>
     </div>
   );
@@ -174,13 +123,12 @@ function StepCard({ num, title, desc, delay, visible }: { num: string; title: st
 interface TestimonialProps {
   quote: string;
   name: string;
-  sub: string;
   initials: string;
   accent: "teal" | "gold";
   delay: number;
   visible: boolean;
 }
-function TestimonialCard({ quote, name, sub, initials, accent, delay, visible }: TestimonialProps) {
+function TestimonialCard({ quote, name, initials, accent, delay, visible }: TestimonialProps) {
   const isTeal = accent === "teal";
   return (
     <div
@@ -219,7 +167,6 @@ function TestimonialCard({ quote, name, sub, initials, accent, delay, visible }:
         </div>
         <div>
           <p style={{ color: "#fff", fontWeight: 600, fontSize: 14 }}>{name}</p>
-          <p style={{ color: "#555", fontSize: 12 }}>{sub}</p>
         </div>
       </div>
     </div>
@@ -330,8 +277,8 @@ export default function HomeClient() {
   }, []);
 
   const features = [
-    { icon: "🧩", title: "Progressive Puzzles", desc: "Unlock challenges in stages with smart dependencies. Each solved clue opens a new layer of the mystery.", accent: "teal" as const },
-    { icon: "🎯", title: "Solo or Team", desc: "Play solo at your own pace or team up with friends for collaborative, real-time puzzle solving.", accent: "gold" as const },
+    { icon: "🧩", title: "Progressive Puzzles", desc: "Unlock challenges in stages with smart dependencies. Each solved clue opens a new layer of the mystery.", accent: "teal" as const, comingSoon: true },
+    { icon: "🎯", title: "Solo or Team", desc: "Play solo at your own pace or team up with friends for collaborative puzzle solving.", accent: "gold" as const, comingSoon: true, comingSoonLabel: "Team Puzzles Coming Soon" },
     { icon: "🏆", title: "Live Leaderboards", desc: "Track your global position in real-time and compete against hundreds of other solvers.", accent: "teal" as const },
     { icon: "⚔️", title: "Warz Battles", desc: "Challenge opponents head-to-head. Wager points on who can crack the same puzzle faster.", accent: "gold" as const },
     { icon: "⚡", title: "Strategic Hints", desc: "Use hints wisely—each one trims your score multiplier. Big brain plays beat the grind.", accent: "teal" as const },
@@ -339,12 +286,12 @@ export default function HomeClient() {
   ];
 
   const testimonials = [
-    { quote: "The Warz battles had me up until 3am. My heart was pounding the entire race. Nothing comes close to PuzzleWarz.", name: "Jake R.", sub: "Ranked #12 Global", initials: "JR", accent: "teal" as const },
-    { quote: "Our office team has a weekly puzzle night now. The team mode forces you to actually communicate and divide clues. Brilliant.", name: "Sarah M.", sub: "Team Captain · CodeBreakers", initials: "SM", accent: "gold" as const },
-    { quote: "The daily challenge is the first thing I open every morning. 47-day streak and counting. The variety keeps it completely fresh.", name: "Alex T.", sub: "47-day streak", initials: "AT", accent: "teal" as const },
-    { quote: "Wagering points on a live race is a different kind of rush. Lost my first three Warz then went on a 9-win streak.", name: "Dana K.", sub: "9-win Warz streak", initials: "DK", accent: "gold" as const },
-    { quote: "These aren't your typical word searches. They make you think sideways. I've genuinely changed how I analyze information.", name: "Marcus P.", sub: "42 puzzles solved", initials: "MP", accent: "teal" as const },
-    { quote: "Free to play, genuinely hard, and the forum community is helpful without spoilers. Already got three friends hooked.", name: "Riley L.", sub: "Forum contributor", initials: "RL", accent: "gold" as const },
+    { quote: "The Warz battles had me up until 3am. My heart was pounding the entire time. Nothing comes close to PuzzleWarz.", name: "Jake R.", initials: "JR", accent: "teal" as const },
+    { quote: "I got my whole office hooked. We compete on the daily puzzle every morning and trash talk all afternoon. It's perfect.", name: "Sarah M.", initials: "SM", accent: "gold" as const },
+    { quote: "The daily challenge is the first thing I open every morning. 47-day streak and counting. The variety keeps it completely fresh.", name: "Alex T.", initials: "AT", accent: "teal" as const },
+    { quote: "Wagering points on a Warz is a different kind of rush. Lost my first three then went on a 9-win streak.", name: "Dana K.", initials: "DK", accent: "gold" as const },
+    { quote: "These aren't your typical word searches. They make you think sideways. I've genuinely changed how I analyze information.", name: "Marcus P.", initials: "MP", accent: "teal" as const },
+    { quote: "Free to play, genuinely hard, and the forum community is helpful without spoilers. Already got three friends hooked.", name: "Riley L.", initials: "RL", accent: "gold" as const },
   ];
 
   return (
@@ -465,7 +412,7 @@ export default function HomeClient() {
                 }}
               >
                 <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#FDE74C", flexShrink: 0, boxShadow: "0 0 8px #FDE74C" }} />
-                Live Puzzle Platform
+                Head-To-Head Puzzle Warz
               </span>
             </div>
 
@@ -496,8 +443,8 @@ export default function HomeClient() {
                 transition: "opacity 0.7s ease 0.22s, transform 0.7s ease 0.22s",
               }}
             >
-              ARG-style puzzle challenges for solo solvers and competitive teams.
-              Earn points, race opponents in real-time, and climb the leaderboard.
+              Puzzle challenges for solo solvers and competitive rivals.
+              Earn points, wage head-to-head battles, and climb the leaderboard.
             </p>
 
             {/* CTAs */}
@@ -550,9 +497,6 @@ export default function HomeClient() {
                 Sign In
               </Link>
             </div>
-
-            {/* Stats */}
-            <StatsRow />
           </div>
         </section>
 
@@ -626,16 +570,17 @@ export default function HomeClient() {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, position: "relative" }}>
-              {/* Connector lines */}
+              {/* Connector lines between step circles (hidden on mobile where grid stacks) */}
               {[0, 1].map(i => (
                 <div
                   key={i}
                   aria-hidden
+                  className="hidden md:block"
                   style={{
                     position: "absolute",
                     top: 28,
-                    left: `calc(${(i + 1) * 33.33}% - 16px)`,
-                    width: "calc(33.33% - 16px)",
+                    left: `calc(${(2 * i + 1) * 16.666}% + 44px)`,
+                    width: `calc(33.33% - 56px)`,
                     height: 1,
                     background: "linear-gradient(90deg, rgba(56,145,166,0.6), rgba(56,145,166,0.15))",
                     opacity: stepsReveal.visible ? 1 : 0,
@@ -677,7 +622,7 @@ export default function HomeClient() {
                 Race a Rival. Win Their Points.
               </h3>
               <p style={{ color: "#9CA3AF", fontSize: 15, lineHeight: 1.7 }}>
-                Challenge any player to solve the same puzzle simultaneously. Wager a stake — the faster solver takes the pot.
+                Challenge any player to solve the same puzzle head-to-head. Wager a stake — the faster solver takes the pot.
                 Pure skill. Pure stakes.
               </p>
             </div>

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     // Get all users
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
+      select: { id: true, name: true, image: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 
     // Calculate rankings with progress data
@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
         return {
               userId: user.id,
               userName: user.name,
+              userImage: user.image,
               activeFlair: resolveFlair(user.activeFlair),
               puzzlesSolved,
               totalPoints: earnedPoints,

@@ -330,7 +330,7 @@ export default function ProfilePage() {
 
   const t = THEME_CONFIGS[profile?.activeTheme ?? 'default'] ?? THEME_CONFIGS.default;
   const frame = FRAME_CONFIGS[profile?.activeFrame ?? 'none'] ?? FRAME_CONFIGS.none;
-  const flair = profile?.activeFlair && profile.activeFlair !== 'none' ? ` ${profile.activeFlair}` : '';
+  const flair = profile?.activeFlair && profile.activeFlair !== 'none' ? <span style={{ display: 'inline-block', transform: 'translateY(-4px)' }}> {profile.activeFlair}</span> : null;
   const btnStyle = t.btnPrimary.startsWith('linear')
     ? { background: t.btnPrimary, color: t.btnPrimaryText }
     : { backgroundColor: t.btnPrimary, color: t.btnPrimaryText };
