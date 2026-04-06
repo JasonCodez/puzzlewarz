@@ -11,11 +11,7 @@ export async function GET(_request: NextRequest) {
     const currentUser = await requireAuthenticatedUser();
     if (currentUser instanceof NextResponse) return currentUser;
 
-    const [items, inventory, user] = await Promise.all([
-      prisma.storeItem.findMany({
-        where: { isActive: true },
-        orderBy: [{ category: "asc" }, { price: "asc" }],
-      }),
+    const [inventory, user] = await Promise.all([
       prisma.userInventory.findMany({
         where: { userId: currentUser.id },
         select: { itemId: true, quantity: true },
@@ -39,6 +35,12 @@ export async function GET(_request: NextRequest) {
     ]);
 
     const inventoryMap = Object.fromEntries(inventory.map((i) => [i.itemId, i.quantity]));
+
+    // Only fetch non-exclusive items for the store; exclusive items are managed via the profile page
+    const items = await prisma.storeItem.findMany({
+      where: { isActive: true, isExclusive: false },
+      orderBy: [{ category: "asc" }, { price: "asc" }],
+    });
 
     const itemsWithOwnership = items.map((item) => ({
       ...item,

@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
         name,
         email,
         password: hashedPassword,
+        marketingOptIn: body.marketingOptIn === true,
         // In non-production, keep dev flow simple if SMTP isn't configured.
         ...(requireVerification ? {} : { emailVerified: new Date() }),
       },

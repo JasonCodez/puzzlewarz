@@ -367,30 +367,13 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
       return;
     }
 
-    // Team puzzle: verify team membership
-    try {
-      const res = await fetch(`/api/user/team-admin?puzzleId=${puzzle.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.teamId && (data.isMember || data.isAdmin)) {
-          router.push(`/teams/${data.teamId}/lobby?puzzleId=${encodeURIComponent(puzzle.id)}`);
-          return;
-        }
-      }
-      setTeamModalTitle('Team Required');
-      setTeamModalConfirmText('OK');
-      setTeamModalCancelText(null);
-      setTeamModalConfirmAction(null);
-      setTeamModalMessage("You must be part of a team to start team puzzles.");
-      setShowTeamModal(true);
-    } catch (e) {
-      setTeamModalTitle('Error');
-      setTeamModalConfirmText('OK');
-      setTeamModalCancelText(null);
-      setTeamModalConfirmAction(null);
-      setTeamModalMessage("Unable to verify team membership. Please try again later.");
-      setShowTeamModal(true);
-    }
+    // Team puzzles/lobbies disabled — coming soon
+    setTeamModalTitle('Coming Soon');
+    setTeamModalConfirmText('OK');
+    setTeamModalCancelText(null);
+    setTeamModalConfirmAction(null);
+    setTeamModalMessage("Team puzzles are coming soon! For now, solve solo puzzles to earn points for your team leaderboard.");
+    setShowTeamModal(true);
   }
 
   function closeTeamModal() {

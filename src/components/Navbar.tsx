@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import MessagesBell from "@/components/notifications/MessagesBell";
 
@@ -38,13 +39,50 @@ interface UserInfo {
   activeFlair?: string | null;
 }
 
+/* Nav link config */
+const NAV_LINKS = [
+  { href: "/dashboard", label: "Dashboard", emoji: null },
+  { href: "/puzzles",   label: "Puzzles",   emoji: null },
+  { href: "/daily",     label: "Daily",     emoji: "🟩" },
+  { href: "/warz",      label: "Warz",      emoji: "⚔️", accent: "#FDE74C" },
+  { href: "/season-pass", label: "Season",  emoji: "🏅" },
+  { href: "/store",     label: "Store",     emoji: "🛍️", accent: "#a78bfa" },
+  { href: "/leaderboards", label: "Ranks",  emoji: null },
+];
+
+const MORE_LINKS = [
+  { href: "/teams",        label: "Teams" },
+  { href: "/achievements", label: "Achievements" },
+  { href: "/learn",        label: "Learn" },
+  { href: "/forum",        label: "Forum" },
+  { href: "/faq",          label: "FAQ" },
+];
+
+function isActive(pathname: string, href: string) {
+  if (href === "/dashboard") return pathname === "/dashboard";
+  return pathname.startsWith(href);
+}
 
 export default function Navbar() {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -54,7 +92,6 @@ export default function Navbar() {
     }
   }, [session?.user?.email]);
 
-  // Re-fetch whenever XP is awarded (e.g. after puzzle completion)
   useEffect(() => {
     const handler = () => fetchUserInfo();
     window.addEventListener('puzzlewarz:xp-updated', handler);
@@ -67,8 +104,6 @@ export default function Navbar() {
       if (response.ok) {
         const data = await response.json();
         setUserInfo(data);
-      } else {
-        console.error("Failed to fetch user info:", response.status, response.statusText);
       }
     } catch (error) {
       console.error("Failed to fetch user info:", error);
@@ -79,209 +114,438 @@ export default function Navbar() {
 
   const getUserId = () => {
     const sessionUser = session?.user as { id?: string } | undefined;
-    const id = userInfo?.id || sessionUser?.id || "";
-    return id;
+    return userInfo?.id || sessionUser?.id || "";
   };
 
   const handleSignOut = async () => {
     try {
-      // Use NextAuth client signOut to properly clear cookies and session
       await signOut({ callbackUrl: '/auth/signin?logout=true' });
     } catch (error) {
       console.error('Logout error:', error);
     }
   };
 
+  const avatarSrc = userInfo?.image || "/images/default-avatar.svg";
+
   return (
     <>
     <nav
       id="global-nav"
-      className={`fixed w-full top-0 z-50 backdrop-blur-md${mobileOpen ? ' nav-mobile-open' : ''}`}
+      className={`fixed w-full top-0 z-50${mobileOpen ? ' nav-mobile-open' : ''}`}
       style={{
-        backgroundColor: "rgba(2, 4, 8, 0.82)",
-        borderBottom: "1px solid rgba(56, 145, 166, 0.3)",
-        boxShadow: "0 1px 0 rgba(56,145,166,0.06)",
+        backgroundColor: "rgba(6, 8, 14, 0.88)",
+        backdropFilter: "blur(16px) saturate(1.4)",
+        WebkitBackdropFilter: "blur(16px) saturate(1.4)",
+        borderBottom: "1px solid rgba(56, 145, 166, 0.15)",
       }}
     >
-      <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-        {/* Logo: disabled link when signed in */}
+      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+        {/* Logo */}
         {session ? (
-          <div className="flex items-center gap-3 opacity-80 select-none" aria-disabled="true" role="img" tabIndex={-1}>
-              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-9 w-auto" />
-            <div className="text-xs font-bold tracking-widest uppercase" style={{ color: "#3891A6" }}>
+          <div className="flex items-center gap-2.5 select-none shrink-0" aria-disabled="true" role="img" tabIndex={-1}>
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-8 w-auto" />
+            <span className="text-xs font-bold tracking-widest uppercase hidden sm:block" style={{ color: "#FDE74C" }}>
               Puzzle Warz
-            </div>
+            </span>
           </div>
         ) : (
-          <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition">
-              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-9 w-auto" />
-            <div className="text-xs font-bold tracking-widest uppercase" style={{ color: "#3891A6" }}>
+          <Link href="/" className="flex items-center gap-2.5 hover:opacity-80 transition shrink-0">
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-8 w-auto" />
+            <span className="text-xs font-bold tracking-widest uppercase hidden sm:block" style={{ color: "#FDE74C" }}>
               Puzzle Warz
-            </div>
+            </span>
           </Link>
         )}
 
         {/* Hamburger for mobile */}
         <Hamburger open={mobileOpen} setOpen={setMobileOpen} />
 
-        {/* Center Navigation - Only for authenticated users (desktop) */}
+        {/* Center nav links (desktop) */}
         {session && !mobileOpen && (
-          <div className="desktop-nav hidden nav:flex items-center">
-            <Link href="/dashboard" className="px-2.5 py-2 text-zinc-400 hover:text-white text-sm font-medium transition-colors duration-200">Dashboard</Link>
-            <Link href="/puzzles" className="px-2.5 py-2 text-zinc-400 hover:text-white text-sm font-medium transition-colors duration-200">Puzzles</Link>
-            <Link href="/daily" className="px-2.5 py-2 text-zinc-400 hover:text-white text-sm font-medium transition-colors duration-200 flex items-center gap-1">Daily <span>🟩</span></Link>
-            <Link href="/warz" className="px-2.5 py-2 text-sm font-bold transition-colors duration-200 flex items-center gap-1" style={{ color: "#FDE74C" }}><span>⚔️</span>Warz</Link>
-            <Link href="/store" className="px-2.5 py-2 text-sm font-bold transition-colors duration-200 flex items-center gap-1" style={{ color: "#a78bfa" }}><span>🛍️</span>Store</Link>
+          <div className="desktop-nav hidden nav:flex items-center gap-0.5 mx-auto">
+            {NAV_LINKS.map((link) => {
+              const active = isActive(pathname, link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="relative px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1"
+                  style={{
+                    color: active
+                      ? (link.accent ?? "#fff")
+                      : (link.accent ? `${link.accent}bb` : "#9ca3af"),
+                    backgroundColor: active ? "rgba(56,145,166,0.12)" : "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  {link.emoji && <span className="text-sm">{link.emoji}</span>}
+                  {link.label}
+                  {/* Active indicator bar */}
+                  {active && (
+                    <span
+                      className="absolute -bottom-[9px] left-3 right-3 h-[2px] rounded-full"
+                      style={{
+                        background: link.accent
+                          ? `linear-gradient(90deg, ${link.accent}, ${link.accent}66)`
+                          : "linear-gradient(90deg, #3891A6, #3891A666)",
+                        boxShadow: `0 0 8px ${link.accent ?? "#3891A6"}55`,
+                      }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
             {/* More dropdown */}
-            <div className="relative">
+            <div className="relative" ref={moreRef}>
               <button
                 onClick={() => setMoreOpen(o => !o)}
-                onBlur={() => setTimeout(() => setMoreOpen(false), 150)}
-                className="px-2.5 py-2 text-zinc-400 hover:text-white text-sm font-medium transition-colors duration-200 flex items-center gap-1"
+                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1"
+                style={{
+                  color: MORE_LINKS.some(l => isActive(pathname, l.href)) ? "#fff" : "#9ca3af",
+                  backgroundColor: MORE_LINKS.some(l => isActive(pathname, l.href)) ? "rgba(56,145,166,0.12)" : "transparent",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"}
+                onMouseLeave={(e) => {
+                  if (!MORE_LINKS.some(l => isActive(pathname, l.href)))
+                    e.currentTarget.style.backgroundColor = "transparent";
+                }}
               >
-                More <span className="text-xs">{moreOpen ? '▲' : '▼'}</span>
+                More
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" className={`transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`}>
+                  <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {MORE_LINKS.some(l => isActive(pathname, l.href)) && (
+                  <span
+                    className="absolute -bottom-[9px] left-3 right-3 h-[2px] rounded-full"
+                    style={{ background: "linear-gradient(90deg, #3891A6, #3891A666)", boxShadow: "0 0 8px #3891A655" }}
+                  />
+                )}
               </button>
               {moreOpen && (
                 <div
-                  className="absolute top-full left-0 mt-1 rounded-lg py-1 z-50 min-w-[160px]"
-                  style={{ backgroundColor: 'rgba(10,14,20,0.97)', border: '1px solid rgba(56,145,166,0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+                  className="absolute top-full left-1/2 -translate-x-1/2 mt-3 rounded-xl py-1.5 z-50 min-w-[160px] overflow-hidden"
+                  style={{ backgroundColor: 'rgba(12,16,22,0.98)', border: '1px solid rgba(56,145,166,0.2)', boxShadow: '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.3)', backdropFilter: "blur(12px)" }}
                 >
-                  <Link href="/leaderboards" className="block px-4 py-2 text-zinc-300 hover:text-white hover:bg-white/5 text-sm transition-colors" onClick={() => setMoreOpen(false)}>Leaderboards</Link>
-                  <Link href="/teams" className="block px-4 py-2 text-zinc-300 hover:text-white hover:bg-white/5 text-sm transition-colors" onClick={() => setMoreOpen(false)}>Teams</Link>
-                  <Link href="/achievements" className="block px-4 py-2 text-zinc-300 hover:text-white hover:bg-white/5 text-sm transition-colors" onClick={() => setMoreOpen(false)}>Achievements</Link>
-                  <Link href="/learn" className="block px-4 py-2 text-zinc-300 hover:text-white hover:bg-white/5 text-sm transition-colors" onClick={() => setMoreOpen(false)}>Learn</Link>
-                  <Link href="/forum" className="block px-4 py-2 text-zinc-300 hover:text-white hover:bg-white/5 text-sm transition-colors" onClick={() => setMoreOpen(false)}>Forum</Link>
+                  {MORE_LINKS.map((link) => {
+                    const active = isActive(pathname, link.href);
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className="block px-4 py-2 text-sm transition-colors"
+                        style={{ color: active ? "#3891A6" : "#9ca3af", backgroundColor: active ? "rgba(56,145,166,0.08)" : "transparent" }}
+                        onClick={() => setMoreOpen(false)}
+                        onMouseEnter={(e) => { if (!active) { e.currentTarget.style.color = "#fff"; e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}}
+                        onMouseLeave={(e) => { if (!active) { e.currentTarget.style.color = "#9ca3af"; e.currentTarget.style.backgroundColor = "transparent"; }}}
+                      >
+                        {link.label}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Right Side (desktop) */}
+        {/* Right side (desktop) */}
         {!mobileOpen && (
-          <div className="desktop-nav hidden nav:flex items-center gap-4">
+          <div className="desktop-nav hidden nav:flex items-center gap-2 shrink-0">
             {session && !loading ? (
               <>
                 <NotificationBell onActivate={() => setMobileOpen(false)} />
                 <MessagesBell onActivate={() => setMobileOpen(false)} />
-                {userInfo?.image && (
-                  <img
-                    src={userInfo.image}
-                    alt="Avatar"
-                    className="h-8 w-8 rounded-full object-cover"
-                    onError={(e) => {
-                      const img = e.currentTarget as HTMLImageElement;
-                      img.onerror = null;
-                      img.src = '/images/default-avatar.svg';
+
+                {/* User avatar dropdown */}
+                <div className="relative" ref={profileRef}>
+                  <button
+                    onClick={() => setProfileOpen(o => !o)}
+                    className="flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-full transition-all duration-200"
+                    style={{
+                      backgroundColor: profileOpen ? "rgba(56,145,166,0.15)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${profileOpen ? "rgba(56,145,166,0.4)" : "rgba(255,255,255,0.08)"}`,
                     }}
-                  />
-                )}
-                <div className="hidden sm:block text-right">
-                  <p className="text-white font-semibold text-sm max-w-[140px] truncate">{session.user?.name || session.user?.email}{userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}</p>
-                  {userInfo?.level !== undefined ? (
-                    <>
-                      <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}</p>
-                      <div className="mt-0.5 h-1 w-28 rounded-full overflow-hidden" style={{ background: "rgba(129,140,248,0.15)" }}>
-                        <div className="h-full rounded-full transition-all" style={{ width: `${userInfo.progress ?? 0}%`, background: "linear-gradient(90deg, #818cf8, #c084fc)" }} />
+                    onMouseEnter={(e) => { if (!profileOpen) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.07)"; }}
+                    onMouseLeave={(e) => { if (!profileOpen) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                  >
+                    <span className="text-sm font-medium text-zinc-300 max-w-[100px] truncate hidden lg:block">
+                      {session.user?.name || "Player"}
+                    </span>
+                    <img
+                      src={avatarSrc}
+                      alt="Avatar"
+                      className="h-7 w-7 rounded-full object-cover ring-1 ring-white/10"
+                      onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
+                    />
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" className={`text-zinc-500 transition-transform duration-200 ${profileOpen ? "rotate-180" : ""}`}>
+                      <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+
+                  {profileOpen && (
+                    <div
+                      className="absolute top-full right-0 mt-2 w-64 rounded-xl overflow-hidden z-50"
+                      style={{ backgroundColor: 'rgba(12,16,22,0.98)', border: '1px solid rgba(56,145,166,0.2)', boxShadow: '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.3)', backdropFilter: "blur(12px)" }}
+                    >
+                      {/* User info header */}
+                      <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={avatarSrc}
+                            alt="Avatar"
+                            className="h-10 w-10 rounded-full object-cover border-2"
+                            style={{ borderColor: "#3891A6" }}
+                            onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">
+                              {session.user?.name || session.user?.email}
+                              {userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}
+                            </p>
+                            {userInfo?.level !== undefined ? (
+                              <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}</p>
+                            ) : (
+                              <p className="text-xs" style={{ color: "#3891A6" }}>Player</p>
+                            )}
+                          </div>
+                        </div>
+                        {/* XP bar */}
+                        {userInfo?.level !== undefined && (
+                          <div className="mt-2.5">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs" style={{ color: "#6b7280" }}>{userInfo.currentXp} / {userInfo.nextLevelXp} XP</span>
+                              <span className="text-xs font-medium" style={{ color: "#818cf8" }}>{userInfo.progress ?? 0}%</span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(129,140,248,0.12)" }}>
+                              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${userInfo.progress ?? 0}%`, background: "linear-gradient(90deg, #818cf8, #c084fc)" }} />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </>
-                  ) : (
-                    <p style={{ color: "#3891A6" }} className="text-xs">Player</p>
+                      {/* Dropdown links */}
+                      <div className="py-1.5">
+                        <Link
+                          href="/profile"
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-zinc-300 transition-colors"
+                          onClick={() => setProfileOpen(false)}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = "#d4d4d8"; e.currentTarget.style.backgroundColor = "transparent"; }}
+                        >
+                          <span className="text-base w-5 text-center">👤</span> My Profile
+                        </Link>
+
+                        <Link
+                          href="/settings"
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-zinc-300 transition-colors"
+                          onClick={() => setProfileOpen(false)}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = "#d4d4d8"; e.currentTarget.style.backgroundColor = "transparent"; }}
+                        >
+                          <span className="text-base w-5 text-center">⚙️</span> Settings
+                        </Link>
+
+                        {userInfo?.role === "ADMIN" && (
+                          <Link
+                            href="/admin"
+                            className="flex items-center gap-2.5 px-4 py-2 text-sm transition-colors"
+                            style={{ color: "#FDE74C" }}
+                            onClick={() => setProfileOpen(false)}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(253,231,76,0.06)"}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                          >
+                            <span className="text-base w-5 text-center">🛡️</span> Admin Panel
+                          </Link>
+                        )}
+                      </div>
+                      {/* Sign out */}
+                      <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} className="py-1.5">
+                        <button
+                          onClick={() => { setProfileOpen(false); handleSignOut(); }}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm w-full text-left transition-colors"
+                          style={{ color: "#fca5a5" }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(220,38,38,0.08)"}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                        >
+                          <span className="text-base w-5 text-center">🚪</span> Sign Out
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                <Link href="/profile" className="px-3 py-2 rounded-md text-sm font-semibold transition-all duration-200 hover:brightness-110" style={{ backgroundColor: "#3891A6", color: "#020202" }}>Profile</Link>
-                <button onClick={handleSignOut} className="px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:opacity-80" style={{ backgroundColor: "rgba(220,38,38,0.12)", border: "1px solid rgba(220,38,38,0.3)", color: "#fca5a5" }}>Sign Out</button>
               </>
-            ) : (
-              <>
-                <Link href="/auth/signin" className="px-3 py-2 rounded text-white text-sm transition hover:opacity-90" style={{ backgroundColor: "rgba(56, 145, 166, 0.8)" }}>Sign In</Link>
-                <Link href="/auth/register" className="px-3 py-2 rounded text-white text-sm font-semibold transition hover:opacity-90" style={{ backgroundColor: "#3891A6" }}>Join Now</Link>
-              </>
-            )}
+            ) : !loading ? (
+              <div className="flex items-center gap-2">
+                <Link href="/auth/signin" className="px-3.5 py-1.5 rounded-lg text-sm font-medium text-zinc-300 transition-all hover:text-white hover:bg-white/5">
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/register"
+                  className="px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all hover:brightness-110"
+                  style={{ backgroundColor: "#3891A6", color: "#020202" }}
+                >
+                  Join Now
+                </Link>
+              </div>
+            ) : null}
           </div>
         )}
       </div>
     </nav>
 
-      {/* Mobile Menu Overlay */}
-      <div
-        className={`fixed inset-0 z-40 bg-black bg-opacity-60 transition-opacity duration-300 ${mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
-        onClick={() => setMobileOpen(false)}
-        aria-hidden={!mobileOpen}
-      ></div>
-      {/* Mobile Menu Drawer */}
-      <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-72 max-w-full z-50 shadow-2xl transform transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}
-        style={{ borderLeft: '1px solid rgba(56,145,166,0.35)', backgroundColor: '#0c1014', isolation: 'isolate' }}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Mobile navigation menu"
-      >
-        <div className="flex flex-col h-full p-6 gap-6 overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-12 w-auto" />
-              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#3891A6' }}>Puzzle Warz</span>
-            </div>
-            <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="text-white text-2xl focus:outline-none">&times;</button>
+    {/* Mobile Menu Overlay */}
+    <div
+      className={`fixed inset-0 z-40 transition-opacity duration-300 ${mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+      style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+      onClick={() => setMobileOpen(false)}
+      aria-hidden={!mobileOpen}
+    />
+
+    {/* Mobile Menu Drawer */}
+    <div
+      className={`fixed top-0 right-0 h-full w-full sm:w-80 max-w-full z-50 shadow-2xl transform transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      style={{ backgroundColor: '#0a0e14', borderLeft: '1px solid rgba(56,145,166,0.15)', isolation: 'isolate' }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Mobile navigation menu"
+    >
+      <div className="flex flex-col h-full overflow-y-auto">
+        {/* Drawer header */}
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          <div className="flex items-center gap-2">
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-9 w-auto" />
+            <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#FDE74C' }}>Puzzle Warz</span>
           </div>
-          <nav className="flex flex-col gap-3">
-            {session ? (
-              <>
-                <Link href="/dashboard" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Dashboard</Link>
-                <Link href="/puzzles" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Puzzles</Link>
-                <Link href="/daily" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200 flex items-center gap-1" onClick={() => setMobileOpen(false)}>Daily <span>🟩</span></Link>
-                <Link href="/warz" className="py-2.5 px-4 rounded-lg text-base font-bold transition-colors duration-200 flex items-center gap-1" style={{ color: "#FDE74C" }} onClick={() => setMobileOpen(false)}><span>⚔️</span>Warz</Link>
-                <Link href="/store" className="py-2.5 px-4 rounded-lg text-base font-bold transition-colors duration-200 flex items-center gap-1" style={{ color: "#a78bfa" }} onClick={() => setMobileOpen(false)}><span>🛍️</span>Store</Link>
-                <Link href="/learn" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Learn</Link>
-                <Link href="/forum" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Forum</Link>
-                <Link href="/leaderboards" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Leaderboards</Link>
-                <Link href="/teams" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Teams</Link>
-                <Link href="/achievements" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Achievements</Link>
-                <Link href="/profile" className="py-2.5 px-4 rounded-lg font-semibold text-base transition-all duration-200 hover:brightness-110" style={{ backgroundColor: '#3891A6', color: '#020202' }} onClick={() => setMobileOpen(false)}>Profile</Link>
-                <button onClick={() => { setMobileOpen(false); handleSignOut(); }} className="py-2.5 px-4 rounded-lg text-base font-medium transition-all duration-200 hover:opacity-80 text-left" style={{ backgroundColor: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)', color: '#fca5a5' }}>Sign Out</button>
-              </>
-            ) : (
-              <>
-                <Link href="/auth/signin" className="py-2.5 px-4 rounded-lg text-zinc-300 hover:text-[#3891A6] hover:bg-white/5 text-base font-medium transition-colors duration-200" onClick={() => setMobileOpen(false)}>Sign In</Link>
-                <Link href="/auth/register" className="py-2.5 px-4 rounded-lg text-base font-bold transition-all duration-200 hover:brightness-110" style={{ backgroundColor: '#3891A6', color: '#020202' }} onClick={() => setMobileOpen(false)}>Join Now</Link>
-              </>
-            )}
-          </nav>
-          {session && !loading && (
-            <div className="mt-auto flex items-center gap-3 border-t border-brand-teal pt-4">
-              <NotificationBell onActivate={() => setMobileOpen(false)} />
-              <MessagesBell onActivate={() => setMobileOpen(false)} />
-              {userInfo?.image && (
-                <img
-                  src={userInfo.image}
-                  alt="Avatar"
-                  className="h-8 w-8 rounded-full object-cover"
-                  onError={(e) => {
-                    const img = e.currentTarget as HTMLImageElement;
-                    img.onerror = null;
-                    img.src = '/images/default-avatar.svg';
-                  }}
-                />
-              )}
+          <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition-colors" style={{ backgroundColor: "rgba(255,255,255,0.05)" }}>
+            ✕
+          </button>
+        </div>
+
+        {/* User card (mobile) */}
+        {session && !loading && (
+          <div className="px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex items-center gap-3">
+              <img
+                src={avatarSrc}
+                alt="Avatar"
+                className="h-10 w-10 rounded-full object-cover border-2"
+                style={{ borderColor: "#3891A6" }}
+                onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
+              />
               <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold text-sm truncate">{session.user?.name || session.user?.email}{userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}</p>
+                <p className="text-sm font-semibold text-white truncate">
+                  {session.user?.name || session.user?.email}
+                  {userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}
+                </p>
                 {userInfo?.level !== undefined ? (
                   <>
                     <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}</p>
-                    <div className="mt-1 h-1.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(129,140,248,0.15)" }}>
+                    <div className="mt-1.5 h-1.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(129,140,248,0.12)" }}>
                       <div className="h-full rounded-full transition-all" style={{ width: `${userInfo.progress ?? 0}%`, background: "linear-gradient(90deg, #818cf8, #c084fc)" }} />
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: "#475569" }}>{userInfo.currentXp} / {userInfo.nextLevelXp} XP</p>
                   </>
                 ) : (
-                  <p style={{ color: "#3891A6" }} className="text-xs">Player</p>
+                  <p className="text-xs" style={{ color: "#3891A6" }}>Player</p>
                 )}
               </div>
             </div>
+            <div className="flex items-center gap-2 mt-3">
+              <NotificationBell onActivate={() => setMobileOpen(false)} />
+              <MessagesBell onActivate={() => setMobileOpen(false)} />
+            </div>
+          </div>
+        )}
+
+        {/* Nav links (mobile) */}
+        <nav className="flex-1 px-3 py-3">
+          {session ? (
+            <div className="flex flex-col gap-0.5">
+              {[...NAV_LINKS, ...MORE_LINKS].map((link) => {
+                const active = isActive(pathname, link.href);
+                const accent = 'accent' in link ? (link as typeof NAV_LINKS[number]).accent : undefined;
+                const emoji = 'emoji' in link ? (link as typeof NAV_LINKS[number]).emoji : undefined;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-base font-medium transition-all duration-200"
+                    style={{
+                      color: active ? (accent ?? "#fff") : (accent ? `${accent}bb` : "#9ca3af"),
+                      backgroundColor: active ? "rgba(56,145,166,0.1)" : "transparent",
+                      borderLeft: active ? `2px solid ${accent ?? "#3891A6"}` : "2px solid transparent",
+                    }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    {emoji && <span>{emoji}</span>}
+                    {link.label}
+                  </Link>
+                );
+              })}
+              <div className="my-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
+              <Link
+                href="/profile"
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-base font-medium transition-all duration-200"
+                style={{
+                  color: isActive(pathname, "/profile") ? "#3891A6" : "#9ca3af",
+                  backgroundColor: isActive(pathname, "/profile") ? "rgba(56,145,166,0.1)" : "transparent",
+                  borderLeft: isActive(pathname, "/profile") ? "2px solid #3891A6" : "2px solid transparent",
+                }}
+                onClick={() => setMobileOpen(false)}
+              >
+                👤 My Profile
+              </Link>
+
+              <Link
+                href="/settings"
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-base font-medium transition-all duration-200"
+                style={{
+                  color: isActive(pathname, "/settings") ? "#3891A6" : "#9ca3af",
+                  backgroundColor: isActive(pathname, "/settings") ? "rgba(56,145,166,0.1)" : "transparent",
+                  borderLeft: isActive(pathname, "/settings") ? "2px solid #3891A6" : "2px solid transparent",
+                }}
+                onClick={() => setMobileOpen(false)}
+              >
+                ⚙️ Settings
+              </Link>
+
+              {userInfo?.role === "ADMIN" && (
+                <Link
+                  href="/admin"
+                  className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-base font-medium transition-all duration-200"
+                  style={{ color: "#FDE74C" }}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  🛡️ Admin Panel
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              <Link href="/auth/signin" className="px-4 py-2.5 rounded-lg text-base font-medium text-zinc-300 hover:text-white transition-colors" onClick={() => setMobileOpen(false)}>Sign In</Link>
+              <Link href="/auth/register" className="px-4 py-2.5 rounded-lg text-base font-semibold transition-all hover:brightness-110" style={{ backgroundColor: '#3891A6', color: '#020202' }} onClick={() => setMobileOpen(false)}>Join Now</Link>
+            </div>
           )}
-        </div>
+        </nav>
+
+        {/* Sign out (mobile) */}
+        {session && (
+          <div className="px-5 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <button
+              onClick={() => { setMobileOpen(false); handleSignOut(); }}
+              className="flex items-center gap-2 w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all"
+              style={{ color: "#fca5a5", backgroundColor: "rgba(220,38,38,0.06)" }}
+            >
+              🚪 Sign Out
+            </button>
+          </div>
+        )}
       </div>
+    </div>
     </>
   );
 }

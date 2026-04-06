@@ -64,7 +64,7 @@ const SECTIONS = [
   },
   {
     title: "15. Contact Us",
-    body: `If you have questions about these Terms, please contact us at:\n\nPuzzleWarz Support\nsupport@puzzlewarz.com`,
+    body: `If you have questions about these Terms, please contact us at:\n\nPuzzleWarz Support\nadmin@puzzlewarz.com`,
   },
 ];
 

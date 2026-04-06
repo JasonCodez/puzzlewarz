@@ -232,7 +232,7 @@ export async function enforceRateLimit(options: {
   } catch (error) {
     console.error("Rate limit enforcement failed:", error);
 
-    if (process.env.NODE_ENV === "production" || isRedisConfigured()) {
+    if (process.env.NODE_ENV === "production") {
       return NextResponse.json(
         { error: "Rate limiting is temporarily unavailable. Please try again later." },
         { status: 503 }

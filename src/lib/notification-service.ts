@@ -7,6 +7,12 @@ import {
   generateLeaderboardEmail,
 } from "@/lib/mail";
 
+// Disable bulk notification emails to conserve Resend quota (100/day).
+// Essential emails (verification, password reset) are sent directly from their
+// API routes and are NOT affected by this flag.
+// Set to true when you upgrade to a higher Resend plan.
+const NOTIFICATION_EMAILS_ENABLED = false;
+
 interface CreateNotificationOptions {
   userId: string;
   type: "puzzle_released" | "achievement_unlocked" | "team_update" | "leaderboard_change" | "system";
@@ -134,30 +140,32 @@ export async function notifyPuzzleRelease(userIds: string[], data: PuzzleRelease
 
       if (!notification) continue;
 
-      // Send email
-      const puzzleUrl = `${baseUrl}/puzzles/${data.puzzleId}`;
-      const html = generatePuzzleReleaseEmail(
-        user.name || user.email,
-        data.puzzleTitle,
-        puzzleUrl,
-        data.difficulty,
-        data.points
-      );
+      // Send email (skipped when NOTIFICATION_EMAILS_ENABLED is false)
+      if (NOTIFICATION_EMAILS_ENABLED) {
+        const puzzleUrl = `${baseUrl}/puzzles/${data.puzzleId}`;
+        const html = generatePuzzleReleaseEmail(
+          user.name || user.email,
+          data.puzzleTitle,
+          puzzleUrl,
+          data.difficulty,
+          data.points
+        );
 
-      const emailSent = await sendEmail({
-        to: user.email,
-        subject: `🎯 New Puzzle Released: ${data.puzzleTitle}`,
-        html,
-      });
-
-      if (emailSent) {
-        await prisma.notification.update({
-          where: { id: notification.id },
-          data: {
-            emailSent: true,
-            emailSentAt: new Date(),
-          },
+        const emailSent = await sendEmail({
+          to: user.email,
+          subject: `🎯 New Puzzle Released: ${data.puzzleTitle}`,
+          html,
         });
+
+        if (emailSent) {
+          await prisma.notification.update({
+            where: { id: notification.id },
+            data: {
+              emailSent: true,
+              emailSentAt: new Date(),
+            },
+          });
+        }
       }
     } catch (error) {
       console.error(`Failed to notify puzzle release for user ${userId}:`, error);
@@ -188,6 +196,7 @@ export async function notifyAchievementUnlock(userId: string, data: AchievementD
 
     // Send email only if user has email and preferences allow it
     if (
+      NOTIFICATION_EMAILS_ENABLED &&
       preference.emailNotificationsEnabled &&
       preference.emailOnAchievement &&
       user?.email
@@ -263,7 +272,7 @@ export async function notifyTeamUpdate(
       // Send email only if user has email and preferences allow it
       try {
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
-        if (user?.email && preference.emailNotificationsEnabled && preference.emailOnTeamUpdate) {
+        if (NOTIFICATION_EMAILS_ENABLED && user?.email && preference.emailNotificationsEnabled && preference.emailOnTeamUpdate) {
           const teamUrl = `${baseUrl}/teams/${data.teamId}`;
           const html = generateTeamUpdateEmail(
             user.name || user.email,
@@ -302,7 +311,7 @@ export async function notifyLeaderboardChange(userId: string, data: LeaderboardC
   try {
     const preference = await getUserNotificationPreference(userId);
 
-    if (!preference.emailNotificationsEnabled || !preference.emailOnLeaderboard) {
+    if (!NOTIFICATION_EMAILS_ENABLED || !preference.emailNotificationsEnabled || !preference.emailOnLeaderboard) {
       return;
     }
 

@@ -8,6 +8,11 @@ import PuzzleTypeFields from "@/components/admin/PuzzleTypeFields";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import SudokuGenerator from "@/components/puzzle/SudokuGenerator";
 
+interface HintEntry {
+  text: string;
+  costPoints: number;
+}
+
 interface PuzzleFormData {
   title: string;
   description: string;
@@ -18,7 +23,7 @@ interface PuzzleFormData {
   correctAnswer: string;
   pointsReward: number;
   xpReward: number;
-  hints: string[];
+  hints: HintEntry[];
   isMultiPart: boolean;
   parts: PuzzlePart[];
   puzzleData: Record<string, unknown>;
@@ -193,7 +198,7 @@ export default function AdminPuzzlesPage() {
         correctAnswer: p.solutions?.[0]?.answer || "",
         pointsReward: p.solutions?.[0]?.points || 100,
         xpReward: (p as any).xpReward || 50,
-        hints: p.hints?.map((h: { text: string }) => h.text) || [],
+        hints: p.hints?.map((h: { text: string; costPoints?: number }) => ({ text: h.text, costPoints: h.costPoints ?? 10 })) || [],
         isMultiPart: false,
         parts: [
           { title: "Part 1", content: "", answer: "", points: 50 },
@@ -271,9 +276,9 @@ export default function AdminPuzzlesPage() {
     }));
   };
 
-  const handleHintChange = (index: number, value: string) => {
+  const handleHintChange = (index: number, field: keyof HintEntry, value: string | number) => {
     const newHints = [...formData.hints];
-    newHints[index] = value;
+    newHints[index] = { ...newHints[index], [field]: value };
     setFormData((prev) => ({
       ...prev,
       hints: newHints,
@@ -283,7 +288,7 @@ export default function AdminPuzzlesPage() {
   const handleAddHint = () => {
     setFormData((prev) => ({
       ...prev,
-      hints: [...prev.hints, ""],
+      hints: [...prev.hints, { text: "", costPoints: 10 }],
     }));
   };
 
@@ -516,7 +521,7 @@ export default function AdminPuzzlesPage() {
 
       // Title is now optional for all puzzle types
 
-      const filteredHints = formData.hints.filter((h) => h.trim() !== "");
+      const filteredHints = formData.hints.filter((h) => h.text.trim() !== "");
 
       console.log("[SUBMIT] Submitting puzzle data:", {
         title: formData.title,
@@ -881,7 +886,7 @@ export default function AdminPuzzlesPage() {
           correctAnswer: "",
           pointsReward: 100,
           xpReward: 50,
-          hints: ["", "", ""],
+          hints: [{ text: "", costPoints: 10 }, { text: "", costPoints: 10 }, { text: "", costPoints: 10 }],
           isMultiPart: false,
           parts: [
             { title: "Part 1", content: "", answer: "", points: 50 },
@@ -1491,15 +1496,16 @@ export default function AdminPuzzlesPage() {
                   {formData.puzzleType !== 'sudoku' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">
-                        Hints ({formData.hints.filter(h => h.trim()).length})
+                        Hints ({formData.hints.filter(h => h.text.trim()).length})
                       </label>
+                      <p className="text-xs text-gray-500 mb-3">Each hint costs the player 1 hint token to reveal (purchased in the Store).</p>
                       <div className="space-y-2 mb-3">
                         {formData.hints.map((hint, index) => (
-                          <div key={index} className="flex gap-2">
+                          <div key={index} className="flex gap-2 items-center">
                             <input
                               type="text"
-                              value={hint}
-                              onChange={(e) => handleHintChange(index, e.target.value)}
+                              value={hint.text}
+                              onChange={(e) => handleHintChange(index, 'text', e.target.value)}
                               placeholder={`Hint ${index + 1}`}
                               className="flex-1 px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
                             />

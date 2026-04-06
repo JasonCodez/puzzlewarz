@@ -121,6 +121,7 @@ export default function WordSearchPuzzle({
   const [gameStatus, setGameStatus] = useState<"playing" | "won">(() =>
     alreadySolved || foundWords.length === words.length ? "won" : "playing"
   );
+  const [wsHintCount, setWsHintCount] = useState(0);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const skin = usePuzzleSkin();
@@ -142,6 +143,23 @@ export default function WordSearchPuzzle({
   });
 
   const selectedSet = new Set(selectedCells.map(serializeCoord));
+
+  // Hint: reveal a random unfound word
+  const useWordSearchHint = () => {
+    if (wsHintCount >= 2 || gameStatus !== "playing") return;
+    const unfound = words.filter((w) => !foundWords.includes(w));
+    if (unfound.length === 0) return;
+    const word = unfound[Math.floor(Math.random() * unfound.length)];
+    const cells = findWordInGrid(word, grid);
+    if (!cells) return;
+    setFoundState((prev) => ({
+      foundWords: [...prev.foundWords, word],
+      foundWordCells: new Map(prev.foundWordCells).set(word, cells),
+    }));
+    setFlashWord(word);
+    setTimeout(() => setFlashWord(null), 1200);
+    setWsHintCount((c) => c + 1);
+  };
 
   // ── Drag handlers ───────────────────────────────────────────────────────────
 
@@ -382,6 +400,15 @@ export default function WordSearchPuzzle({
                 </div>
               );
             })}
+            {gameStatus === "playing" && wsHintCount < 2 && (
+              <button
+                onClick={useWordSearchHint}
+                className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+                style={{ background: "rgba(56,145,166,0.15)", border: "1px solid rgba(56,145,166,0.4)", color: "#3891A6" }}
+              >
+                💡 Hint ({2 - wsHintCount} left)
+              </button>
+            )}
           </div>
         </div>
       </div>

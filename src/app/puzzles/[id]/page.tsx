@@ -257,6 +257,7 @@ export default function PuzzleDetailPage() {
   const [revealedHints, setRevealedHints] = useState<Set<string>>(new Set());
   const [revealingHint, setRevealingHint] = useState<string | null>(null);
   const [usedHintIds, setUsedHintIds] = useState<string[]>([]);
+  const [hintTokens, setHintTokens] = useState<number>(0);
 
   type JigsawControlsApi = {
     reset: () => void;
@@ -507,7 +508,23 @@ export default function PuzzleDetailPage() {
         const response = await fetch(`/api/puzzles/${puzzleId}/hints`);
         if (!response.ok) throw new Error("Failed to fetch hints");
         const data = await response.json();
-        setHints(data);
+        const hintsArr: HintWithStats[] = Array.isArray(data) ? data : (data.hints ?? []);
+        setHints(hintsArr);
+        if (data.hintTokens != null) setHintTokens(data.hintTokens);
+
+        // Auto-reveal hints the user has already used (they paid the token previously)
+        const alreadyRevealed = new Set<string>();
+        const alreadyUsedIds: string[] = [];
+        for (const h of hintsArr) {
+          if (h.userHistory && h.userHistory.length > 0) {
+            alreadyRevealed.add(h.id);
+            alreadyUsedIds.push(h.id);
+          }
+        }
+        if (alreadyRevealed.size > 0) {
+          setRevealedHints((prev) => new Set([...prev, ...alreadyRevealed]));
+          setUsedHintIds((prev) => [...new Set([...prev, ...alreadyUsedIds])]);
+        }
       } catch (err) {
         console.error("Failed to fetch hints:", err);
       }
@@ -746,6 +763,12 @@ export default function PuzzleDetailPage() {
         return;
       }
 
+      const revealData = await response.json();
+      // Update token balance from the response
+      if (revealData.remainingTokens != null) {
+        setHintTokens(revealData.remainingTokens);
+      }
+
       // Mark hint as revealed
       setRevealedHints((prev) => new Set([...prev, hintId]));
       setUsedHintIds((prev) => [...prev, hintId]);
@@ -753,8 +776,10 @@ export default function PuzzleDetailPage() {
       // Refresh hints to get updated stats
       const hintsResponse = await fetch(`/api/puzzles/${puzzleId}/hints`);
       if (hintsResponse.ok) {
-        const updatedHints = await hintsResponse.json();
-        setHints(updatedHints);
+        const updatedData = await hintsResponse.json();
+        const hintsArr = Array.isArray(updatedData) ? updatedData : (updatedData.hints ?? []);
+        setHints(hintsArr);
+        if (updatedData.hintTokens != null) setHintTokens(updatedData.hintTokens);
       }
     } catch (err) {
       setError("Failed to reveal hint");
@@ -2013,13 +2038,24 @@ export default function PuzzleDetailPage() {
                 <>
                   {/* Hints Section */}
                   <div className="flex items-center justify-between mb-4">
-                    <button
-                      onClick={() => setShowHints(!showHints)}
-                      className="font-semibold transition-colors hover:opacity-80"
-                      style={{ color: "#FDE74C" }}
-                    >
-                      {showHints ? "Hide Hints ↑" : "Show Hints ↓"} ({hints.length})
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setShowHints(!showHints)}
+                        className="font-semibold transition-colors hover:opacity-80"
+                        style={{ color: "#FDE74C" }}
+                      >
+                        {showHints ? "Hide Hints ↑" : "Show Hints ↓"} ({hints.length})
+                      </button>
+                      <span
+                        className="text-xs px-2 py-1 rounded-full font-medium"
+                        style={{
+                          backgroundColor: hintTokens > 0 ? "rgba(253, 231, 76, 0.15)" : "rgba(255, 107, 107, 0.15)",
+                          color: hintTokens > 0 ? "#FDE74C" : "#FF6B6B",
+                        }}
+                      >
+                        💡 {hintTokens} token{hintTokens !== 1 ? "s" : ""}
+                      </span>
+                    </div>
                     {hints.length > 0 && (
                       <button
                         onClick={() => setShowStats(!showStats)}
@@ -2049,6 +2085,7 @@ export default function PuzzleDetailPage() {
                             index={index}
                             isRevealed={revealedHints.has(hint.id)}
                             isLoading={revealingHint === hint.id}
+                            hintTokens={hintTokens}
                             onReveal={handleRevealHint}
                             onRateHelpfulness={handleRateHelpfulness}
                           />

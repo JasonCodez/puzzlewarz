@@ -277,10 +277,11 @@ export async function POST(request: NextRequest) {
         : undefined,
       hints: hints && hints.length > 0
         ? {
-            create: hints.map((hint: string, index: number) => ({
-              text: hint,
-              order: index,
-            })),
+            create: hints.map((hint: string | { text: string; costPoints?: number }, index: number) => {
+              const text = typeof hint === 'string' ? hint : hint.text;
+              const costPoints = typeof hint === 'string' ? 10 : (hint.costPoints ?? 10);
+              return { text, order: index, costPoints };
+            }),
           }
         : undefined,
     };

@@ -316,11 +316,11 @@ export default function LearningPathsPage() {
         )}
 
         {!loading && !error && tracks.length === 0 && (
-          <div className="rounded-xl border border-slate-700 bg-slate-900/40 px-8 py-12 text-center">
-            <p className="text-4xl mb-4">🚧</p>
-            <h2 className="text-lg font-semibold text-white mb-2">No learning tracks yet</h2>
-            <p className="text-slate-400 text-sm">
-              Admins can add Code Master puzzles and assign them to a learning track — they'll appear here.
+          <div className="rounded-2xl px-8 py-16 text-center" style={{ border: "1px solid rgba(56,145,166,0.2)", background: "rgba(56,145,166,0.04)" }}>
+            <p className="text-5xl mb-5">📚</p>
+            <h2 className="text-2xl font-black text-white mb-3">Learning tracks, coming soon!</h2>
+            <p className="text-sm leading-relaxed max-w-sm mx-auto" style={{ color: "#6B7280" }}>
+              We're building structured tracks to help you level up — from beginner puzzles all the way to advanced challenges. Check back soon.
             </p>
           </div>
         )}

@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 
 import { calcLevel } from "@/lib/levels";
+import { awardSeasonXp } from "@/lib/seasonXp";
 
 // GET /api/puzzles/[id]/progress - Fetch user's progress for puzzle
 export async function GET(
@@ -498,6 +499,8 @@ export async function POST(
               where: { id: user.id },
               data: { xp: newXp, level, xpTitle: title },
             });
+            // Season pass XP
+            await awardSeasonXp(user.id, xpGain);
           } catch (err) {
             console.error('Failed to award XP on puzzle success:', err);
           }

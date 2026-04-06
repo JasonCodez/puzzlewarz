@@ -531,7 +531,7 @@ export default function HomeClient() {
                   transition: "opacity 0.6s ease 0.16s",
                 }}
               >
-                Solo challenge, team collaboration, or head-to-head combat — one platform, your rules.
+                Solo challenge, team collaboration, or head-to-head puzzle challenges — one platform, your rules.
               </p>
             </div>
 

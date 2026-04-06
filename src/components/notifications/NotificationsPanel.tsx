@@ -69,7 +69,7 @@ export default function NotificationsPanel({
   const fetchNotifications = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/user/notifications?limit=10&skip=0");
+      const response = await fetch("/api/user/notifications?limit=100&skip=0");
       const data = await response.json();
       setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
     } catch (error) {
@@ -162,11 +162,11 @@ export default function NotificationsPanel({
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-white truncate">
+                        <p className="font-medium text-white">
                           {notification.title}
                         </p>
                         {notification.message && (
-                          <p className="text-sm text-gray-400 line-clamp-2 mt-1">
+                          <p className="text-sm text-gray-400 mt-1">
                             {notification.message}
                           </p>
                         )}
@@ -219,33 +219,7 @@ export default function NotificationsPanel({
                           </a>
                         )}
 
-                        {notification.type === "team_lobby_invite" && notification.relatedId && (
-                          (() => {
-                            const parts = (notification.relatedId || "").split("::");
-                            const teamId = parts[0];
-                            const puzzleId = parts[1];
-                            return (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  onClose();
-                                  try {
-                                    router.push(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}`);
-                                  } catch (err) {
-                                    setModalTitle('Unable to open lobby');
-                                    setModalMessage('There was a problem navigating to the lobby.');
-                                    setModalVariant('error');
-                                    setModalOpen(true);
-                                  }
-                                }}
-                                className="px-2 py-0.5 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700"
-                                title="Join lobby"
-                              >
-                                Join
-                              </button>
-                            );
-                          })()
-                        )}
+                        {/* Team lobby invites disabled until team puzzles are ready */}
 
                         <button
                           onClick={(e) => {

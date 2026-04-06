@@ -57,7 +57,17 @@ export async function GET(
       userHistory: hint.history,
     }));
 
-    return NextResponse.json(hintsWithStats);
+    // Include user's hint token balance so the UI can show it
+    let hintTokens = 0;
+    if (session?.user?.email) {
+      const user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { hintTokens: true },
+      });
+      hintTokens = user?.hintTokens ?? 0;
+    }
+
+    return NextResponse.json({ hints: hintsWithStats, hintTokens });
   } catch (error) {
     console.error("Failed to fetch hints:", error);
     return NextResponse.json(
@@ -108,6 +118,20 @@ export async function POST(
       return NextResponse.json({ error: "Hint not found" }, { status: 404 });
     }
 
+    // Every new hint reveal costs 1 hint token (purchased from the Store)
+    if (user.hintTokens < 1) {
+      return NextResponse.json(
+        { error: "You need a hint token to reveal this hint. Purchase them in the Store!" },
+        { status: 400 }
+      );
+    }
+
+    // Decrement the hint token
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { hintTokens: { decrement: 1 } },
+    });
+
     // Check if user has already hit the max uses per user limit
     if (hint.maxUsesPerUser) {
       const userUsageCount = await prisma.hintHistory.count({
@@ -118,22 +142,10 @@ export async function POST(
       });
 
       if (userUsageCount >= hint.maxUsesPerUser) {
-        // Allow bypass if the user has a hint token
-        const freshUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { hintTokens: true },
-        });
-        if (!freshUser || freshUser.hintTokens < 1) {
-          return NextResponse.json(
-            { error: "You have reached the maximum uses for this hint. Purchase a hint token in the Store to bypass this limit." },
-            { status: 400 }
-          );
-        }
-        // Consume the hint token
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { hintTokens: { decrement: 1 } },
-        });
+        return NextResponse.json(
+          { error: "You have reached the maximum uses for this hint." },
+          { status: 400 }
+        );
       }
     }
 
@@ -207,12 +219,19 @@ export async function POST(
       },
     });
 
+    // Fetch updated token balance
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { hintTokens: true },
+    });
+
     return NextResponse.json(
       {
         hintText: hint.text,
         costPoints: hint.costPoints,
         usageId: hintUsage.id,
         revealedAt: hintUsage.revealedAt,
+        remainingTokens: updatedUser?.hintTokens ?? 0,
       },
       { status: 200 }
     );

@@ -20,6 +20,22 @@ export default function TeamLobbyPage() {
   const searchParams = useSearchParams();
   const puzzleIdFromQuery = searchParams.get('puzzleId') || '';
 
+  // Team lobbies disabled — redirect to team page
+  useEffect(() => {
+    router.replace(`/teams/${teamId}`);
+  }, [router, teamId]);
+
+  return (
+    <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center">
+      <div className="text-center text-white">
+        <h1 className="text-2xl font-bold mb-2">Coming Soon</h1>
+        <p className="text-gray-400">Team puzzles are not available yet. Redirecting...</p>
+      </div>
+    </div>
+  );
+
+  // --- Original lobby code below (disabled) ---
+
   const [puzzleId, setPuzzleId] = useState("");
   const [teamPuzzles, setTeamPuzzles] = useState<any[]>([]);
   const [selectedPuzzle, setSelectedPuzzle] = useState<any | null>(null);

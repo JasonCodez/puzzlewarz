@@ -4,6 +4,16 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { THEME_CONFIGS, FRAME_CONFIGS, type ThemeConfig } from "@/lib/profileThemes";
+import { SKIN_TOKENS, getSkinTokens, type PuzzleSkinTokens } from "@/lib/puzzleSkins";
+import dynamic from "next/dynamic";
+import Tooltip from "@/components/Tooltip";
+
+const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
+const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), { ssr: false });
+const IceBackground = dynamic(() => import("@/components/IceBackground"), { ssr: false });
+const NeonBackground = dynamic(() => import("@/components/NeonBackground"), { ssr: false });
+const RetroBackground = dynamic(() => import("@/components/RetroBackground"), { ssr: false });
 
 /** Smoothly counts from one number to another over `duration` ms */
 function useAnimatedCounter(target: number, duration = 1200) {
@@ -82,6 +92,7 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
   token: "Token",
   slot: "Slot Upgrade",
   theme: "Profile Theme",
+  team_theme: "Team Page Theme",
   frame: "Avatar Frame",
   skin: "Puzzle Skin",
   flair: "Name Flair",
@@ -128,7 +139,7 @@ function CosmeticPreview({ item }: { item: StoreItem }) {
   const meta = item.metadata as Record<string, string> | null;
   const sub = item.subcategory;
 
-  if (sub === "theme") {
+  if (sub === "theme" || sub === "team_theme") {
     const p = meta?.primaryColor ?? "#FDE74C";
     const a = meta?.accentColor ?? "#FFB86B";
     return (
@@ -233,6 +244,318 @@ function CosmeticPreview({ item }: { item: StoreItem }) {
   return null;
 }
 
+/* ── Live Preview Modal ─────────────────────────────────────────────────── */
+
+function ThemePreviewContent({ themeKey }: { themeKey: string }) {
+  const t = THEME_CONFIGS[themeKey] ?? THEME_CONFIGS.default;
+  return (
+    <div className="w-full max-w-sm mx-auto rounded-2xl overflow-hidden" style={{ backgroundColor: t.pageBg, border: `1px solid ${t.cardBorder}44` }}>
+      {/* Header */}
+      <div className="h-20 relative overflow-hidden" style={{ background: t.headerGradient }}>
+        <div className="absolute inset-0 flex items-end px-4 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full flex items-center justify-center text-lg"
+              style={{ background: t.avatarRing ? `linear-gradient(135deg, ${t.avatarRing}, ${t.secondary})` : undefined, boxShadow: t.avatarGlow ? `0 0 14px ${t.avatarGlow}` : undefined }}>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: t.pageBg }}>👤</div>
+            </div>
+            <div>
+              <p className="text-sm font-extrabold text-white leading-tight">PlayerName</p>
+              <p className="text-xs" style={{ color: t.subtleText }}>Level 42</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Stats row */}
+      <div className="px-4 py-3 flex gap-2">
+        {["Puzzles", "Wins", "Streak"].map((label, i) => (
+          <div key={label} className="flex-1 rounded-lg px-2 py-2 text-center" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+            <p className="text-base font-extrabold" style={{ color: t.accentText }}>{[127, 84, 15][i]}</p>
+            <p className="text-xs" style={{ color: t.subtleText }}>{label}</p>
+          </div>
+        ))}
+      </div>
+      {/* Card section */}
+      <div className="px-4 pb-3">
+        <div className="rounded-xl p-3" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}44` }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: t.primary }}>Recent Activity</p>
+          {["Solved Sudoku #482", "Won Warz vs Rival"].map((txt) => (
+            <div key={txt} className="flex items-center gap-2 mb-1.5 last:mb-0">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: t.secondary }} />
+              <p className="text-xs" style={{ color: t.subtleText }}>{txt}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* XP bar */}
+      <div className="px-4 pb-3">
+        <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: `${t.primary}22` }}>
+          <div className="h-full w-3/5 rounded-full" style={{ background: t.xpBarGradient }} />
+        </div>
+      </div>
+      {/* Button */}
+      <div className="px-4 pb-4">
+        <div className="text-center py-2 rounded-lg text-xs font-bold"
+          style={{ background: t.btnPrimary.startsWith("linear") ? t.btnPrimary : undefined, backgroundColor: t.btnPrimary.startsWith("linear") ? undefined : t.btnPrimary, color: t.btnPrimaryText }}>
+          View Full Profile
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FramePreviewContent({ frameKey }: { frameKey: string }) {
+  const f = FRAME_CONFIGS[frameKey] ?? FRAME_CONFIGS.gold;
+  const hasFrame = !!(f.colorA && f.colorB);
+  return (
+    <>
+      {/* Inline keyframes for spinning frame animation */}
+      <style>{`
+        @keyframes store-frame-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes store-frame-counter-spin { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+        .store-frame-animated {
+          border-radius: 9999px;
+          padding: 5px;
+          background: conic-gradient(
+            var(--sf-color-a) 0deg,
+            var(--sf-color-b) 85deg,
+            rgba(255,255,255,0.85) 150deg,
+            var(--sf-color-b) 215deg,
+            var(--sf-color-a) 300deg,
+            var(--sf-color-b) 360deg
+          );
+          animation: store-frame-spin 3s linear infinite;
+        }
+        .store-frame-animated .store-frame-inner {
+          width: 100%; height: 100%; border-radius: 9999px; overflow: hidden;
+          animation: store-frame-counter-spin 3s linear infinite;
+        }
+        @keyframes store-frame-glow-pulse {
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+      <div className="flex flex-col items-center gap-6">
+        {/* Large animated frame */}
+        <div className="relative" style={{ width: 140, height: 140 }}>
+          {hasFrame ? (
+            <div
+              className="store-frame-animated"
+              style={{
+                width: 140, height: 140,
+                '--sf-color-a': f.colorA,
+                '--sf-color-b': f.colorB,
+                boxShadow: f.glow,
+                animation: "store-frame-spin 3s linear infinite, store-frame-glow-pulse 2s ease-in-out infinite",
+              } as React.CSSProperties}
+            >
+              <div className="store-frame-inner flex items-center justify-center" style={{ backgroundColor: "#0d1117" }}>
+                <span className="text-5xl">👤</span>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full h-full rounded-full flex items-center justify-center" style={{ backgroundColor: "#0d1117", border: "2px solid rgba(255,255,255,0.1)" }}>
+              <span className="text-5xl">👤</span>
+            </div>
+          )}
+        </div>
+        {/* Small contextual preview */}
+        <div className="w-full max-w-xs rounded-xl p-4 flex items-center gap-3" style={{ backgroundColor: "rgba(15,18,25,0.95)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="shrink-0" style={{ width: 44, height: 44 }}>
+            {hasFrame ? (
+              <div
+                className="store-frame-animated"
+                style={{
+                  width: 44, height: 44,
+                  '--sf-color-a': f.colorA,
+                  '--sf-color-b': f.colorB,
+                  boxShadow: f.glow,
+                  padding: 3,
+                } as React.CSSProperties}
+              >
+                <div className="store-frame-inner flex items-center justify-center" style={{ backgroundColor: "#0d1117" }}>
+                  <span className="text-base">👤</span>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full h-full rounded-full flex items-center justify-center" style={{ backgroundColor: "#0d1117", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <span className="text-base">👤</span>
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-bold text-white">PlayerName</p>
+            <p className="text-xs" style={{ color: "#6b7280" }}>As seen on leaderboards</p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function SkinPreviewContent({ skinKey }: { skinKey: string }) {
+  const s = getSkinTokens(skinKey);
+  const resolvedKey = skinKey.replace(/^skin_/, "");
+  const hasAnimatedBg = ["lava", "galaxy", "ice", "neon", "retro"].includes(resolvedKey);
+  // 5×5 grid for a more realistic puzzle board feel
+  const letters = [
+    "P","U","Z","Z","L",
+    "W","A","R","Z","E",
+    "Q","I","X","M","B",
+    "E","S","T","N","O",
+    "G","R","I","D","S",
+  ];
+  const highlighted = [0,1,2,3,4]; // "PUZZL" row
+  const activeCell = 7; // "R"
+  return (
+    <div className="w-full">
+      {/* Outer wrapper — this is where the animated background lives (like the real puzzle page) */}
+      <div className="relative rounded-2xl overflow-hidden" style={{ borderRadius: "1rem" }}>
+        {/* Animated canvas background — full bleed behind everything */}
+        {hasAnimatedBg && (
+          <div className="absolute inset-0 z-0">
+            {resolvedKey === "lava" && <LavaBackground />}
+            {resolvedKey === "galaxy" && <GalaxyBackground />}
+            {resolvedKey === "ice" && <IceBackground />}
+            {resolvedKey === "neon" && <NeonBackground />}
+            {resolvedKey === "retro" && <RetroBackground />}
+          </div>
+        )}
+        {/* Non-animated skins still show the page background */}
+        {!hasAnimatedBg && (
+          <div className="absolute inset-0 z-0" style={{ backgroundColor: "#0a0c10" }} />
+        )}
+
+        {/* Content on top of canvas — mimics the real puzzle page layout */}
+        <div className="relative z-10 flex flex-col items-center py-6 px-4 gap-3">
+          {/* Title */}
+          <h3
+            className="text-lg font-black tracking-[0.2em] text-center"
+            style={{
+              backgroundImage: "linear-gradient(135deg, #FDE74C, #FFB86B, #3891A6)",
+              backgroundClip: "text",
+              WebkitBackgroundClip: "text",
+              color: "transparent",
+              WebkitTextFillColor: "transparent",
+              filter: "drop-shadow(0 0 12px rgba(253,231,76,0.4))",
+            }}
+          >
+            WORD SEARCH
+          </h3>
+          <p className="text-xs font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8)" }}>
+            Attempts left: <span className="font-semibold">3</span>
+          </p>
+
+          {/* Puzzle board — opaque card sitting ON TOP of the animation */}
+          <div className="w-full border-4 p-3" style={{
+            background: s.boardBg,
+            borderColor: s.boardBorder,
+            boxShadow: s.boardShadow !== "none" ? s.boardShadow : undefined,
+            borderRadius: s.boardRadius,
+          }}>
+            {/* Board header inside the card */}
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-xs font-bold" style={{ color: s.labelColor }}>Find the words</p>
+              <p className="text-xs font-semibold" style={{ color: s.accentCorrect }}>1/3 found</p>
+            </div>
+            {/* Grid */}
+            <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+              {letters.map((letter, i) => {
+                const isHighlighted = highlighted.includes(i);
+                const isActive = i === activeCell;
+                return (
+                  <div key={i} className="aspect-square flex items-center justify-center text-sm font-bold"
+                    style={{
+                      backgroundColor: isHighlighted ? s.accentCorrect : isActive ? s.accentActive : s.tileBg,
+                      border: `1.5px solid ${isHighlighted ? s.accentCorrect : isActive ? s.accentActive : s.tileBorder}`,
+                      color: s.tileText,
+                      fontFamily: s.tileFontFamily,
+                      borderRadius: "0.25rem",
+                      boxShadow: isHighlighted ? `0 0 8px ${s.accentCorrect}` : isActive ? `0 0 8px ${s.accentActive}` : "none",
+                    }}>
+                    {letter}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Input area mock */}
+            <div className="mt-2.5 flex gap-2">
+              <div className="flex-1 rounded-lg px-3 py-1.5 text-xs" style={{ backgroundColor: s.inputBg, border: `1px solid ${s.inputBorder}`, color: s.inputText }}>
+                Type answer...
+              </div>
+              <div className="rounded-lg px-3 py-1.5 text-xs font-bold" style={{ background: s.btnBg, color: s.btnText }}>
+                Submit
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CosmeticPreviewModal({ item, onClose }: { item: StoreItem; onClose: () => void }) {
+  const meta = item.metadata as Record<string, string> | null;
+  const sub = item.subcategory;
+  const value = meta?.value ?? "";
+  const isSkin = sub === "skin";
+
+  let title = "Live Preview";
+  let content: React.ReactNode = null;
+
+  if (sub === "theme" || sub === "team_theme") {
+    title = `${item.name}`;
+    content = <ThemePreviewContent themeKey={value || "default"} />;
+  } else if (sub === "frame") {
+    title = `${item.name} Frame`;
+    content = <FramePreviewContent frameKey={value || "gold"} />;
+  } else if (sub === "skin") {
+    title = `${item.name} Skin`;
+    content = <SkinPreviewContent skinKey={value || "default"} />;
+  }
+
+  if (!content) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)" }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 10 }}
+        transition={{ type: "spring", stiffness: 340, damping: 26 }}
+        className={`rounded-2xl p-6 w-full max-h-[85vh] overflow-y-auto relative ${isSkin ? "max-w-lg" : "max-w-md"}`}
+        style={{ backgroundColor: "rgba(15,18,25,0.98)", border: "1px solid rgba(255,255,255,0.12)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors"
+          style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#9ca3af" }}
+        >
+          ✕
+        </button>
+        {/* Title */}
+        <div className="flex items-center gap-2 mb-5">
+          <span className="text-xl">{item.iconEmoji}</span>
+          <div>
+            <p className="text-lg font-extrabold text-white">{title}</p>
+            <p className="text-xs" style={{ color: "#6b7280" }}>Preview how this looks in-game</p>
+          </div>
+        </div>
+        {/* Preview content */}
+        {content}
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function StorePageInner() {
   const { status } = useSession();
   const router = useRouter();
@@ -248,6 +571,7 @@ function StorePageInner() {
   const [purchaseSuccess, setPurchaseSuccess] = useState<{ points: number; bundleKey: string } | null>(null);
   const [balancePoints, setBalancePoints] = useState(0);
   const [showGlow, setShowGlow] = useState(false);
+  const [previewItem, setPreviewItem] = useState<StoreItem | null>(null);
 
   // Keep displayed balance in sync during normal browsing; freeze it while modal is open
   useEffect(() => {
@@ -397,24 +721,40 @@ function StorePageInner() {
           {user && (
             <div className="flex flex-wrap gap-3 text-sm">
               {user.streakShields > 0 && (
-                <span className="px-3 py-1 rounded-full font-semibold" style={{ backgroundColor: "rgba(34,197,94,0.12)", color: "#4ade80" }}>
-                  🛡️ {user.streakShields} shields
-                </span>
+                <Tooltip content={
+                  <><strong style={{ color: "#4ade80" }}>🛡️ Streak Shield</strong><br />Protects your daily streak if you miss a day. Consumed automatically.</>
+                }>
+                  <span className="px-3 py-1 rounded-full font-semibold cursor-default" style={{ backgroundColor: "rgba(34,197,94,0.12)", color: "#4ade80" }}>
+                    🛡️ {user.streakShields} streak shield{user.streakShields !== 1 ? 's' : ''}
+                  </span>
+                </Tooltip>
               )}
               {user.hintTokens > 0 && (
-                <span className="px-3 py-1 rounded-full font-semibold" style={{ backgroundColor: "rgba(253,231,76,0.1)", color: "#FDE74C" }}>
-                  💡 {user.hintTokens} hints
-                </span>
+                <Tooltip content={
+                  <><strong style={{ color: "#FDE74C" }}>💡 Hint Token</strong><br />Reveals a hint on any puzzle without a point penalty.</>
+                }>
+                  <span className="px-3 py-1 rounded-full font-semibold cursor-default" style={{ backgroundColor: "rgba(253,231,76,0.1)", color: "#FDE74C" }}>
+                    💡 {user.hintTokens} hint token{user.hintTokens !== 1 ? 's' : ''}
+                  </span>
+                </Tooltip>
               )}
               {user.skipTokens > 0 && (
-                <span className="px-3 py-1 rounded-full font-semibold" style={{ backgroundColor: "rgba(139,92,246,0.12)", color: "#a78bfa" }}>
-                  ⏭️ {user.skipTokens} skips
-                </span>
+                <Tooltip content={
+                  <><strong style={{ color: "#a78bfa" }}>⏭️ Skip Token</strong><br />Skip a puzzle entirely and still earn a small point reward.</>
+                }>
+                  <span className="px-3 py-1 rounded-full font-semibold cursor-default" style={{ backgroundColor: "rgba(139,92,246,0.12)", color: "#a78bfa" }}>
+                    ⏭️ {user.skipTokens} skip token{user.skipTokens !== 1 ? 's' : ''}
+                  </span>
+                </Tooltip>
               )}
               {user.warzChallengeSlots > 3 && (
-                <span className="px-3 py-1 rounded-full font-semibold" style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#fca5a5" }}>
-                  ⚔️ {user.warzChallengeSlots} slots
-                </span>
+                <Tooltip content={
+                  <><strong style={{ color: "#fca5a5" }}>⚔️ Warz Slots</strong><br />Extra simultaneous challenge slots beyond the default 3.</>
+                }>
+                  <span className="px-3 py-1 rounded-full font-semibold cursor-default" style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#fca5a5" }}>
+                    ⚔️ {user.warzChallengeSlots} warz slots
+                  </span>
+                </Tooltip>
               )}
             </div>
           )}
@@ -517,7 +857,8 @@ function StorePageInner() {
               const owned = item.owned > 0;
               const equipped = user ? isEquipped(item, user) : false;
               const canAfford = (user?.totalPoints ?? 0) >= item.price;
-              const isCosmetic = ["theme", "frame", "skin", "flair", "banner"].includes(item.subcategory);
+              const isCosmetic = ["theme", "frame", "skin", "flair", "banner", "team_theme"].includes(item.subcategory);
+              const isTeamTheme = item.subcategory === "team_theme";
               const isBuying = purchasing === item.key;
               const isEquipping = equipping === item.key;
               const rarity = isCosmetic ? getRarity(item.price) : null;
@@ -603,6 +944,17 @@ function StorePageInner() {
                     </span>
 
                     <div className="flex gap-1.5">
+                      {/* Preview button for themes, frames, skins */}
+                      {["theme", "frame", "skin"].includes(item.subcategory) && (
+                        <button
+                          onClick={() => setPreviewItem(item)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                          style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#9ca3af", border: "1px solid rgba(255,255,255,0.1)" }}
+                        >
+                          👁 Preview
+                        </button>
+                      )}
+
                       {/* Buy button — always shown for consumables, only if not owned for non-consumable */}
                       {(item.isConsumable || !owned) && (
                         <button
@@ -615,8 +967,8 @@ function StorePageInner() {
                         </button>
                       )}
 
-                      {/* Equip/Unequip button for owned cosmetics */}
-                      {isCosmetic && owned && !item.isConsumable && (
+                      {/* Equip/Unequip button for owned cosmetics (not team themes — those equip on team page) */}
+                      {isCosmetic && !isTeamTheme && owned && !item.isConsumable && (
                         equipped ? (
                           <button
                             disabled={!!isEquipping}
@@ -652,6 +1004,13 @@ function StorePageInner() {
           </div>
         )}
       </div>
+
+      {/* Cosmetic preview modal */}
+      <AnimatePresence>
+        {previewItem && (
+          <CosmeticPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
+        )}
+      </AnimatePresence>
 
       {/* Toast */}
       <AnimatePresence>

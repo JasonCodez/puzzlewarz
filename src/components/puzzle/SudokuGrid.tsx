@@ -44,6 +44,7 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
   const [hasAttempted, setHasAttempted] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [locked, setLocked] = useState(false);
+  const [sudokuHintCount, setSudokuHintCount] = useState(0);
 
   useEffect(() => {
     setGrid(puzzle.map((row) => [...row]));
@@ -66,6 +67,21 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
     })();
     setGrid(next);
     if (typeof onChange === 'function') onChange(next.map((r) => [...r]));
+  };
+
+  const useSudokuHint = () => {
+    if (!solution || disabled) return;
+    const emptyCells: [number, number][] = [];
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const isGiven = typeof givens !== 'undefined' ? (givens[r]?.[c] ?? 0) !== 0 : (initialPuzzleRef.current[r]?.[c] ?? 0) !== 0;
+        if (!isGiven && grid[r][c] === 0) emptyCells.push([r, c]);
+      }
+    }
+    if (emptyCells.length === 0) return;
+    const [row, col] = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+    handleCellChange(row, col, String(solution[row][col]));
+    setSudokuHintCount((c) => c + 1);
   };
 
   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -310,6 +326,16 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
         >
           Submit Sudoku
         </button>
+        {solution && !disabled && (
+          <button
+            type="button"
+            onClick={useSudokuHint}
+            className="ml-3 px-4 py-2 rounded font-semibold transition-transform hover:scale-105 active:scale-95"
+            style={{ background: "rgba(56,145,166,0.2)", border: "1px solid rgba(56,145,166,0.5)", color: "#3891A6" }}
+          >
+            💡 Hint{sudokuHintCount > 0 ? ` (${sudokuHintCount})` : ""}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => {

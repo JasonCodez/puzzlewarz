@@ -100,10 +100,17 @@ export async function PUT(
 
     // 2. Replace hints
     await tx.puzzleHint.deleteMany({ where: { puzzleId } });
-    const filteredHints = Array.isArray(hints) ? hints.filter((h: string) => h?.trim()) : [];
+    const filteredHints = Array.isArray(hints) ? hints.filter((h: any) => {
+      const text = typeof h === 'string' ? h : h?.text;
+      return text?.trim();
+    }) : [];
     if (filteredHints.length > 0) {
       await tx.puzzleHint.createMany({
-        data: filteredHints.map((text: string, order: number) => ({ puzzleId, text, order })),
+        data: filteredHints.map((h: any, order: number) => {
+          const text = typeof h === 'string' ? h : h.text;
+          const costPoints = typeof h === 'string' ? 10 : (h.costPoints ?? 10);
+          return { puzzleId, text, order, costPoints };
+        }),
       });
     }
 

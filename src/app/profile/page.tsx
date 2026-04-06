@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Rarity, rarityColors } from '@/lib/rarity';
 import { THEME_CONFIGS, FRAME_CONFIGS, type ThemeConfig } from '@/lib/profileThemes';
+import AvatarFrame from '@/components/AvatarFrame';
 import './profile-actions.css';
 
 interface UserProfile {
@@ -31,7 +32,7 @@ interface UserProfile {
 // ─── Cosmetics Drawer ─────────────────────────────────────────────────────────
 type DrawerItem = {
   key: string; name: string; subcategory: string; iconEmoji: string;
-  metadata: Record<string, unknown> | null; owned: number;
+  metadata: Record<string, unknown> | null; owned: number; isExclusive?: boolean;
 };
 
 function DrawerItemPreview({ item }: { item: DrawerItem }) {
@@ -62,8 +63,9 @@ function DrawerItemPreview({ item }: { item: DrawerItem }) {
     return (
       <div className="h-10 flex items-center gap-3 mb-3">
         <div className="relative w-8 h-8 shrink-0">
-          <div className="absolute inset-0 rounded-full" style={{ background: f.ring, padding: '2px', boxShadow: `0 0 10px ${f.glow}` }}>
-            <div className="w-full h-full rounded-full flex items-center justify-center text-xs" style={{ background: '#0d1117' }}>👤</div>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs"
+            style={{ border: `3px solid ${meta?.color ?? '#FDE74C'}`, boxShadow: `0 0 10px ${f.glow}`, background: '#0d1117' }}>
+            👤
           </div>
         </div>
         <span className="text-xs text-white font-semibold opacity-75">{item.name}</span>
@@ -130,7 +132,7 @@ export default function ProfilePage() {
   const [showCosmeticsDrawer, setShowCosmeticsDrawer] = useState(false);
   const [drawerItems, setDrawerItems] = useState<DrawerItem[]>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'theme' | 'frame' | 'skin' | 'flair'>('theme');
+  const [drawerTab, setDrawerTab] = useState<'theme' | 'frame' | 'skin' | 'flair' | 'exclusive'>('theme');
   const [drawerEquipping, setDrawerEquipping] = useState<string | null>(null);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
 
@@ -283,15 +285,18 @@ export default function ProfilePage() {
     setShowCosmeticsDrawer(true);
     setDrawerLoading(true);
     try {
-      const res = await fetch('/api/store', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        setDrawerItems(
-          (data.items ?? []).filter(
-            (i: DrawerItem) => ['theme', 'frame', 'skin', 'flair'].includes(i.subcategory) && i.owned > 0
-          )
-        );
-      }
+      const [storeRes, exclusiveRes] = await Promise.all([
+        fetch('/api/store', { cache: 'no-store' }),
+        fetch('/api/user/exclusive-cosmetics', { cache: 'no-store' }),
+      ]);
+      const storeData = storeRes.ok ? await storeRes.json() : { items: [] };
+      const exclusiveData = exclusiveRes.ok ? await exclusiveRes.json() : { items: [] };
+
+      const regularItems = (storeData.items ?? []).filter(
+        (i: DrawerItem) => ['theme', 'frame', 'skin', 'flair'].includes(i.subcategory) && i.owned > 0
+      );
+      const exclusiveItems = (exclusiveData.items ?? []).map((i: DrawerItem) => ({ ...i, isExclusive: true }));
+      setDrawerItems([...regularItems, ...exclusiveItems]);
     } finally {
       setDrawerLoading(false);
     }
@@ -338,7 +343,7 @@ export default function ProfilePage() {
   return (
     <main style={{ backgroundColor: t.pageBg, transition: 'background-color 0.4s ease' }} className="min-h-screen">
 
-      {/* Theme accent bar ΓÇö immediately visible color indicator at the very top */}
+      {/* Theme accent bar - immediately visible color indicator at the very top */}
       <div className="fixed top-0 left-0 right-0 h-[3px] z-50" style={{ background: t.btnPrimary.startsWith('linear') ? t.btnPrimary : `linear-gradient(90deg, ${t.primary}, ${t.secondary})`, boxShadow: `0 0 12px ${t.avatarGlow}` }} />
 
       {/* Animated header */}
@@ -353,21 +358,11 @@ export default function ProfilePage() {
             {/* Avatar with frame */}
             <div className="relative shrink-0">
               {frame.colorA ? (
-                <div
-                  className="w-20 h-20 avatar-frame-animated"
-                  style={{
-                    '--frame-color-a': frame.colorA,
-                    '--frame-color-b': frame.colorB,
-                    '--frame-inner-bg': t.pageBg,
-                    boxShadow: frame.glow,
-                  } as React.CSSProperties}
-                >
-                  <div className="avatar-frame-inner">
-                    {profile?.image
-                      ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: t.primaryMuted }}>👤</div>}
-                  </div>
-                </div>
+                <AvatarFrame frame={frame as { colorA: string; colorB: string; glow: string }} size={80} pageBg={t.pageBg}>
+                  {profile?.image
+                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: t.primaryMuted }}>👤</div>}
+                </AvatarFrame>
               ) : (
                 <div className="w-20 h-20 rounded-full overflow-hidden border-[3px]" style={{ borderColor: t.primary, boxShadow: `0 0 18px ${t.avatarGlow}, 0 0 40px ${t.avatarGlow}` }}>
                   {profile?.image
@@ -387,7 +382,7 @@ export default function ProfilePage() {
                     <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(171,159,157,0.2)', color: '#c9b9b7' }}>Admin</span>
                   )}
                 </div>
-                <p className="text-sm mt-1" style={{ color: t.subtleText }}>Member since {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' }) : 'ΓÇö'}</p>
+                <p className="text-sm mt-1" style={{ color: t.subtleText }}>Member since {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' }) : '...'}</p>
               </div>
               <button
                 onClick={openCosmeticsDrawer}
@@ -418,26 +413,16 @@ export default function ProfilePage() {
 
         <div className="grid md:grid-cols-3 gap-6 mb-12">
           {/* Avatar Card */}
-          <div className="border rounded-xl p-6" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+          <div className="border rounded-xl p-6" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: t.cardGlow }}>
             <h3 className="text-lg font-bold text-white mb-6">Avatar</h3>
             <div className="flex flex-col items-center space-y-4">
               {/* Current Avatar with active frame */}
               {frame.colorA ? (
-                <div
-                  className="w-24 h-24 avatar-frame-animated"
-                  style={{
-                    '--frame-color-a': frame.colorA,
-                    '--frame-color-b': frame.colorB,
-                    '--frame-inner-bg': t.pageBg,
-                    boxShadow: frame.glow,
-                  } as React.CSSProperties}
-                >
-                  <div className="avatar-frame-inner">
-                    {profile?.image
-                      ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center text-4xl" style={{ background: t.primaryMuted }}>👤</div>}
-                  </div>
-                </div>
+                <AvatarFrame frame={frame as { colorA: string; colorB: string; glow: string }} size={96} pageBg={t.pageBg}>
+                  {profile?.image
+                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-4xl" style={{ background: t.primaryMuted }}>👤</div>}
+                </AvatarFrame>
               ) : (
                 <div className="w-24 h-24 rounded-full overflow-hidden border-2 flex items-center justify-center" style={{ borderColor: t.avatarRing, boxShadow: `0 0 14px ${t.avatarGlow}` }}>
                   {profile?.image
@@ -479,7 +464,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Profile Card */}
-          <div className="md:col-span-2 md:row-span-2 border rounded-xl p-8" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+          <div className="md:col-span-2 md:row-span-2 border rounded-xl p-8" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: t.cardGlow }}>
             <div className="flex items-start justify-between mb-6">
               <h2 className="text-2xl font-bold text-white">Account Information</h2>
               <button
@@ -550,7 +535,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Stats Card */}
-          <div className="border rounded-xl p-6 space-y-5" style={{ backgroundColor: t.statCardBg, borderColor: t.statCardBorder }}>
+          <div className="border rounded-xl p-6 space-y-5" style={{ backgroundColor: t.statCardBg, borderColor: t.statCardBorder, boxShadow: t.cardGlow }}>
             <h3 className="text-lg font-bold text-white">Your Stats</h3>
 
             {/* Level badge */}
@@ -578,7 +563,7 @@ export default function ProfilePage() {
             {[
               { label: 'Puzzles Solved', value: profile?.totalPuzzlesSolved ?? 0 },
               { label: 'Total Points',   value: (profile?.totalPoints ?? 0).toLocaleString() },
-              { label: 'Global Rank',    value: profile?.rank ? `#${profile.rank}` : 'ΓÇö' },
+              { label: 'Global Rank',    value: profile?.rank ? `#${profile.rank}` : 'Unranked' },
             ].map(({ label, value }) => (
               <div key={label} style={{ borderTopColor: `${t.primaryBorder}33`, borderTopWidth: 1, paddingTop: 12 }}>
                 <p className="text-xs mb-0.5" style={{ color: t.subtleText }}>{label}</p>
@@ -590,7 +575,7 @@ export default function ProfilePage() {
 
         {/* My Puzzles */}
         <div className="mb-8">
-          <div className="border rounded-xl p-6" style={{ backgroundColor: t.statCardBg, borderColor: t.statCardBorder }}>
+          <div className="border rounded-xl p-6" style={{ backgroundColor: t.statCardBg, borderColor: t.statCardBorder, boxShadow: t.cardGlow }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-white">My Puzzles (Archive)</h3>
               <button
@@ -642,7 +627,7 @@ export default function ProfilePage() {
 
         {/* Unlocked Badges */}
         <div className="mb-8">
-          <div className="border rounded-xl p-6" style={{ backgroundColor: t.statCardBg, borderColor: t.secondary }}>
+          <div className="border rounded-xl p-6" style={{ backgroundColor: t.statCardBg, borderColor: t.secondary, boxShadow: t.cardGlow }}>
             <h3 className="text-lg font-bold text-white mb-4">🏅 Unlocked Badges</h3>
             {badgesLoading ? (
               <p className="text-sm" style={{ color: t.subtleText }}>Loading badges...</p>
@@ -670,7 +655,7 @@ export default function ProfilePage() {
           <Link
             href="/dashboard"
             className="border rounded-xl p-6 transition hover:scale-[1.02]"
-            style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}
+            style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: t.cardGlow }}
           >
             <h3 className="text-lg font-bold text-white mb-1">← Back to Dashboard</h3>
             <p style={{ color: t.subtleText }}>Return to your dashboard</p>
@@ -717,17 +702,19 @@ export default function ProfilePage() {
             )}
 
             {/* Tabs */}
-            <div className="flex gap-1 px-4 pt-3 pb-2 shrink-0">
-              {(['theme', 'frame', 'skin', 'flair'] as const).map((tab) => {
-                const icons: Record<string, string> = { theme: '🎨', frame: '🖼️', skin: '🎮', flair: '✨' };
-                const count = drawerItems.filter(i => i.subcategory === tab).length;
+            <div className="flex gap-1 px-4 pt-3 pb-2 shrink-0 flex-wrap">
+              {(['theme', 'frame', 'skin', 'flair', 'exclusive'] as const).map((tab) => {
+                const icons: Record<string, string> = { theme: '🎨', frame: '🖼️', skin: '🎮', flair: '✨', exclusive: '⭐' };
+                const count = tab === 'exclusive'
+                  ? drawerItems.filter(i => i.isExclusive).length
+                  : drawerItems.filter(i => i.subcategory === tab && !i.isExclusive).length;
                 return (
                   <button
                     key={tab}
                     onClick={() => setDrawerTab(tab)}
                     className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
                     style={drawerTab === tab
-                      ? { backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primaryBorder}` }
+                      ? { backgroundColor: tab === 'exclusive' ? 'rgba(253,231,76,0.12)' : t.primaryMuted, color: tab === 'exclusive' ? '#FDE74C' : t.primary, border: `1px solid ${tab === 'exclusive' ? 'rgba(253,231,76,0.4)' : t.primaryBorder}` }
                       : { color: t.subtleText, backgroundColor: 'transparent', border: '1px solid transparent' }}
                   >
                     {icons[tab]}{count > 0 && <span className="ml-0.5 opacity-60">({count})</span>}
@@ -741,13 +728,32 @@ export default function ProfilePage() {
               {drawerLoading && (
                 <div className="text-center py-10 text-sm" style={{ color: t.subtleText }}>Loading…</div>
               )}
-              {!drawerLoading && drawerItems.filter(i => i.subcategory === drawerTab).length === 0 && (
-                <div className="text-center py-10">
-                  <p className="text-sm" style={{ color: t.subtleText }}>No {drawerTab}s owned yet.</p>
-                  <a href="/store" className="text-xs mt-2 inline-block underline" style={{ color: t.primary }}>Browse the store →</a>
-                </div>
-              )}
-              {!drawerLoading && drawerItems.filter(i => i.subcategory === drawerTab).map(item => {
+              {!drawerLoading && (() => {
+                const filtered = drawerTab === 'exclusive'
+                  ? drawerItems.filter(i => i.isExclusive)
+                  : drawerItems.filter(i => i.subcategory === drawerTab && !i.isExclusive);
+                return filtered.length === 0 ? (
+                  <div className="text-center py-10">
+                    {drawerTab === 'exclusive' ? (
+                      <>
+                        <p className="text-2xl mb-2">⭐</p>
+                        <p className="text-sm font-semibold text-white/70">No exclusive items yet.</p>
+                        <p className="text-xs mt-1" style={{ color: t.subtleText }}>Earn them by completing Season Pass tiers.</p>
+                        <a href="/season-pass" className="text-xs mt-2 inline-block underline" style={{ color: '#FDE74C' }}>View Season Pass →</a>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm" style={{ color: t.subtleText }}>No {drawerTab}s owned yet.</p>
+                        <a href="/store" className="text-xs mt-2 inline-block underline" style={{ color: t.primary }}>Browse the store →</a>
+                      </>
+                    )}
+                  </div>
+                ) : null;
+              })()}
+              {!drawerLoading && (drawerTab === 'exclusive'
+                ? drawerItems.filter(i => i.isExclusive)
+                : drawerItems.filter(i => i.subcategory === drawerTab && !i.isExclusive)
+              ).map(item => {
                 const meta = item.metadata as Record<string, string> | null;
                 const equipped = (() => {
                   if (!profile) return false;

@@ -92,7 +92,7 @@ export default function TeamsPage() {
   }
 
   // determine filtered teams based on viewMode
-  const filteredTeams = teams.filter((team) => (viewMode === 'mine' ? team.members.some((m) => m.user?.email === session?.user?.email) : team.isPublic));
+  const filteredTeams = teams.filter((team) => (viewMode === 'mine' ? team.members.some((m) => m.user?.id === (session?.user as any)?.id) : team.isPublic));
 
   
 
@@ -155,7 +155,7 @@ export default function TeamsPage() {
             </div>
           )}
 
-          {teams.length === 0 ? (
+          {filteredTeams.length === 0 ? (
             // when filtered list is empty
             <div className="text-center py-16">
               <div className="text-6xl mb-4">👥</div>
@@ -172,8 +172,7 @@ export default function TeamsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {teams
-                .filter((team) => (viewMode === 'mine' ? team.members.some((m) => m.user?.email === session?.user?.email) : team.isPublic))
+              {filteredTeams
                 .map((team) => (
                 <Link key={team.id} href={`/teams/${team.id}`}>
                   <div className="h-full border rounded-lg p-6 hover:shadow-lg transition-all cursor-pointer group" style={{ backgroundColor: 'rgba(56, 145, 166, 0.1)', borderColor: '#3891A6' }}>

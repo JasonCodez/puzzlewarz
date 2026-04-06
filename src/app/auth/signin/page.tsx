@@ -41,10 +41,6 @@ function SignInForm() {
     setError("");
 
     try {
-      // First, make sure to clear any existing session by calling signout
-      await fetch("/api/auth/signout", { method: "POST" });
-      
-      // Now attempt sign in with new credentials
       const result = await signIn("credentials", {
         email,
         password,
@@ -167,6 +163,12 @@ function SignInForm() {
                 onFocus={(e) => e.currentTarget.style.borderColor = '#FDE74C'}
                 onBlur={(e) => e.currentTarget.style.borderColor = '#3891A6'}
               />
+            </div>
+
+            <div className="text-right">
+              <Link href="/auth/forgot-password" className="text-sm hover:opacity-80 transition-opacity" style={{ color: '#3891A6' }}>
+                Forgot password?
+              </Link>
             </div>
 
             <button

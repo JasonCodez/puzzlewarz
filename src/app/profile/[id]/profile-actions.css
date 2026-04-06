@@ -20,39 +20,3 @@
     text-align: center;
   }
 }
-
-/* ── Animated avatar frames ─────────────────────────────────────────── */
-@keyframes frame-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-@keyframes frame-counter-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(-360deg); }
-}
-
-/* Outer ring: spins the conic-gradient */
-.avatar-frame-animated {
-  flex-shrink: 0;
-  border-radius: 9999px;
-  padding: 4px;
-  background: conic-gradient(
-    var(--frame-color-a) 0deg,
-    var(--frame-color-b) 85deg,
-    rgba(255,255,255,0.85) 150deg,
-    var(--frame-color-b) 215deg,
-    var(--frame-color-a) 300deg,
-    var(--frame-color-b) 360deg
-  );
-  animation: frame-spin 3s linear infinite;
-  box-shadow: 0 0 0 0 transparent;
-}
-
-/* Inner div: counter-rotates so the image stays upright */
-.avatar-frame-animated .avatar-frame-inner {
-  width: 100%;
-  height: 100%;
-  border-radius: 9999px;
-  overflow: hidden;
-  animation: frame-counter-spin 3s linear infinite;
-}

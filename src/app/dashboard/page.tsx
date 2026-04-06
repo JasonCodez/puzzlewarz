@@ -1,10 +1,11 @@
 'use client';
 
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
+import WelcomeModal from '@/components/WelcomeModal';
 
 interface UserStats {
   totalPuzzlesSolved: number;
@@ -197,20 +198,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await fetch('/api/auth/signout', { method: 'POST' });
-    } catch (error) {
-      console.error('Failed to log sign-out:', error);
-    }
-    try {
-      await fetch("/api/auth/logout");
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
-    window.location.href = '/auth/signin?logout=true';
-  };
-
   /* ── Loading skeleton ─────────────────────────────────── */
   if (status === 'loading' || loading) {
     return (
@@ -252,7 +239,7 @@ export default function Dashboard() {
     { label: 'Puzzles Solved', value: stats?.totalPuzzlesSolved ?? 0, icon: '🧩', color: '#00D4FF', bgColor: 'rgba(0,212,255,0.12)', borderColor: 'rgba(0,212,255,0.35)', animate: true },
     { label: 'Total Points',   value: stats?.totalPoints ?? 0,        icon: '⚡', color: '#FFD700', bgColor: 'rgba(255,215,0,0.10)',  borderColor: 'rgba(255,215,0,0.32)',  animate: true },
     { label: 'Active Teams',   value: stats?.currentTeams ?? 0,       icon: '👥', color: '#A78BFA', bgColor: 'rgba(167,139,250,0.10)', borderColor: 'rgba(167,139,250,0.30)', animate: true },
-    { label: 'Global Rank',    value: stats?.rank ? `#${stats.rank}` : '—', icon: '🏆', color: '#F97316', bgColor: 'rgba(249,115,22,0.10)', borderColor: 'rgba(249,115,22,0.30)', animate: false },
+    { label: 'Global Rank',    value: stats?.rank ? `#${stats.rank}` : 'Unranked', icon: '🏆', color: '#F97316', bgColor: 'rgba(249,115,22,0.10)', borderColor: 'rgba(249,115,22,0.30)', animate: false },
   ];
 
   const coreCards = [
@@ -265,6 +252,7 @@ export default function Dashboard() {
     { href: '/profile',             icon: '👤', title: 'My Profile',          desc: 'View your stats, badges, and customise your profile.',       accent: 'teal'  as const },
     { href: '/dashboard/activity',  icon: '📋', title: 'Activity Feed',       desc: 'Review your recent actions and account history.',            accent: 'muted' as const },
     { href: '/daily',               icon: '📅', title: 'Daily Challenge',     desc: 'Tackle today\'s featured puzzle and keep your streak alive.', accent: 'gold'  as const },
+    { href: '/faq',                 icon: '❓', title: 'FAQ',                 desc: 'Answers to common questions about puzzles, teams, and more.', accent: 'muted' as const },
   ];
 
   const adminCards = [
@@ -331,19 +319,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <button
-              onClick={handleSignOut}
-              style={{
-                padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                color: '#9CA3AF', backgroundColor: 'transparent',
-                border: '1px solid rgba(255,255,255,0.1)',
-                cursor: 'pointer', transition: 'border-color 0.2s, color 0.2s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.25)'; (e.currentTarget as HTMLElement).style.color = '#fff'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.1)'; (e.currentTarget as HTMLElement).style.color = '#9CA3AF'; }}
-            >
-              Sign out
-            </button>
           </div>
 
           {/* ── Stat cards ──────────────────────────────────── */}
@@ -456,6 +431,11 @@ export default function Dashboard() {
 
         </div>
       </main>
+
+      <WelcomeModal
+        userName={session.user.name?.split(' ')[0] || 'Solver'}
+        userId={(session.user as { id?: string }).id || session.user.email || 'guest'}
+      />
     </>
   );
 }

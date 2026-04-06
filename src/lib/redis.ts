@@ -25,8 +25,11 @@ function getOrCreateRedisClient() {
     globalRedisState.__puzzlewarzRedisClient = createClient({
       url: redisUrl,
       socket: {
+        connectTimeout: 3000,
         reconnectStrategy(retries) {
-          return Math.min(retries * 100, 3000);
+          // Give up after 3 retries so .connect() rejects instead of hanging forever
+          if (retries >= 3) return false;
+          return Math.min(retries * 100, 1000);
         },
       },
     });
@@ -60,9 +63,22 @@ export async function getRedisClient() {
   }
 
   if (!globalRedisState.__puzzlewarzRedisConnectPromise) {
-    globalRedisState.__puzzlewarzRedisConnectPromise = client
-      .connect()
-      .then(() => client)
+    // Hard 5-second timeout so the app never hangs if Redis is unreachable
+    const connectWithTimeout = Promise.race([
+      client.connect().then(() => client),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Redis connect timeout (5s)")), 5000)
+      ),
+    ]);
+
+    globalRedisState.__puzzlewarzRedisConnectPromise = connectWithTimeout
+      .catch((err) => {
+        // Reset client so the next request tries a fresh connection
+        try { client.disconnect(); } catch { /* ignore */ }
+        globalRedisState.__puzzlewarzRedisClient = undefined;
+        globalRedisState.__puzzlewarzRedisErrorLoggerAttached = false;
+        throw err;
+      })
       .finally(() => {
         globalRedisState.__puzzlewarzRedisConnectPromise = null;
       });

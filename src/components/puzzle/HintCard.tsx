@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lock, Eye, EyeOff, Zap } from "lucide-react";
+import { Lock, Eye, EyeOff } from "lucide-react";
 
 interface HintWithStats {
   id: string;
@@ -31,6 +31,7 @@ interface HintCardProps {
   index: number;
   isRevealed: boolean;
   isLoading?: boolean;
+  hintTokens?: number;
   onReveal: (hintId: string) => Promise<void>;
   onRateHelpfulness?: (hintId: string, wasHelpful: boolean) => void;
 }
@@ -40,6 +41,7 @@ export default function HintCard({
   index,
   isRevealed,
   isLoading = false,
+  hintTokens = 0,
   onReveal,
   onRateHelpfulness,
 }: HintCardProps) {
@@ -127,10 +129,6 @@ export default function HintCard({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1" style={{ color: "#FDE74C" }}>
-            <Zap size={16} />
-            <span className="font-semibold">{hint.costPoints}</span>
-          </div>
         </div>
 
         {/* Main Content */}
@@ -188,22 +186,33 @@ export default function HintCard({
             )}
           </div>
         ) : (
-          <button
-            onClick={handleReveal}
-            disabled={isLoading}
-            className="w-full py-2 px-3 rounded-lg font-semibold transition-all duration-300 hover:opacity-90 disabled:opacity-50"
-            style={{
-              backgroundColor: "rgba(56, 145, 166, 0.2)",
-              color: "#3891A6",
-              borderColor: "#3891A6",
-              borderWidth: "1px",
-            }}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Lock size={16} />
-              <span>Reveal Hint</span>
-            </div>
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={handleReveal}
+              disabled={isLoading || hintTokens < 1}
+              className="w-full py-2 px-3 rounded-lg font-semibold transition-all duration-300 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: hintTokens < 1 ? "rgba(255, 107, 107, 0.1)" : "rgba(56, 145, 166, 0.2)",
+                color: hintTokens < 1 ? "#FF6B6B" : "#3891A6",
+                borderColor: hintTokens < 1 ? "#FF6B6B" : "#3891A6",
+                borderWidth: "1px",
+              }}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Lock size={16} />
+                <span>{hintTokens < 1 ? "No Hint Tokens" : "Reveal Hint (1 💡)"}</span>
+              </div>
+            </button>
+            {hintTokens < 1 && (
+              <a
+                href="/store"
+                className="block text-center text-xs py-1 rounded-lg transition-colors hover:opacity-80"
+                style={{ color: "#FDE74C" }}
+              >
+                Purchase hint tokens in the Store →
+              </a>
+            )}
+          </div>
         )}
 
         {/* Stats Button */}

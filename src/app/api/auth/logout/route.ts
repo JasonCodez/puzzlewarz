@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   // Create response that clears the session
   const response = NextResponse.json({ success: true });
 
-  // Clear NextAuth session cookies
+  // Clear NextAuth session cookies (dev names)
   response.cookies.set("next-auth.session-token", "", {
     maxAge: 0,
     path: "/",
@@ -29,6 +29,25 @@ export async function GET(request: NextRequest) {
   response.cookies.set("next-auth.callback-url", "", {
     maxAge: 0,
     path: "/",
+  });
+
+  // Clear NextAuth session cookies (production __Secure-/__Host- prefixed names)
+  response.cookies.set("__Secure-next-auth.session-token", "", {
+    maxAge: 0,
+    path: "/",
+    secure: true,
+  });
+
+  response.cookies.set("__Host-next-auth.csrf-token", "", {
+    maxAge: 0,
+    path: "/",
+    secure: true,
+  });
+
+  response.cookies.set("__Secure-next-auth.callback-url", "", {
+    maxAge: 0,
+    path: "/",
+    secure: true,
   });
 
   return response;

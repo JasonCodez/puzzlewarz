@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import Navbar from "@/components/Navbar";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -75,6 +76,8 @@ function getCountdown(): string {
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function DailyPage() {
+  const { data: session } = useSession();
+  const sessionUid = session?.user?.email ?? session?.user?.name ?? "";
   const [word, setWord]           = useState("");
   const [dayNum, setDayNum]       = useState(0);
   const [guesses, setGuesses]     = useState<string[]>([]);
@@ -84,6 +87,7 @@ export default function DailyPage() {
   const [msg, setMsg]             = useState("");
   const [shaking, setShaking]     = useState(false);
   const [revealing, setRevealing] = useState<number | null>(null); // row index being revealed
+  const [revealedCols, setRevealedCols] = useState(0); // how many tiles have finished mid-flip
   const [countdown, setCountdown] = useState(getCountdown());
   const [copied, setCopied]       = useState(false);
   const [loading, setLoading]     = useState(true);
@@ -91,12 +95,25 @@ export default function DailyPage() {
   const [skipTokens, setSkipTokens]   = useState(0);
   const [shieldNotice, setShieldNotice] = useState(false);
   const [skipping, setSkipping]       = useState(false);
+  const [streakDay, setStreakDay]     = useState(1);
+  const [nextReward, setNextReward]   = useState<{ points: number; xp: number } | null>(null);
+  const [earnedReward, setEarnedReward] = useState<{ points: number; xp: number; streakDay: number } | null>(null);
+  const [showRewardModal, setShowRewardModal] = useState(false);
 
   const dateKey  = new Date().toISOString().slice(0, 10);
-  const storeKey = `pw_daily_${dateKey}`;
+  const storeKey = sessionUid ? `pw_daily_${dateKey}_${sessionUid}` : `pw_daily_${dateKey}`;
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
+    // Reset state when user changes
+    setGuesses([]);
+    setCurr("");
+    setStatus("playing");
+    setKeyMap({});
+    setLoading(true);
+    setEarnedReward(null);
+    setShowRewardModal(false);
+
     fetch("/api/daily/word")
       .then(r => r.json())
       .then(d => {
@@ -121,11 +138,13 @@ export default function DailyPage() {
         if (d) {
           setDailyStreak(d.streak ?? 0);
           setSkipTokens(d.skipTokens ?? 0);
+          setStreakDay(d.streakDay ?? 1);
+          if (d.nextReward) setNextReward(d.nextReward);
         }
       })
       .catch(() => {/* ignore – not logged in */});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [storeKey]);
 
   // ── Countdown ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -148,11 +167,21 @@ export default function DailyPage() {
       .then(r => r.json())
       .then(d => {
         if (d.shieldUsed) setShieldNotice(true);
-        // Refresh streak
+        if (d.reward) {
+          setEarnedReward(d.reward);
+          setShowRewardModal(true);
+        }
+        // Refresh streak + next reward
         return fetch("/api/daily/complete");
       })
       .then(r => r && r.ok ? r.json() : null)
-      .then(d => { if (d) setDailyStreak(d.streak ?? 0); })
+      .then(d => {
+        if (d) {
+          setDailyStreak(d.streak ?? 0);
+          setStreakDay(d.streakDay ?? 1);
+          if (d.nextReward) setNextReward(d.nextReward);
+        }
+      })
       .catch(() => {/* ignore */});
   };
 
@@ -215,9 +244,17 @@ export default function DailyPage() {
     const rowIdx  = guesses.length;
 
     setGuesses(next);
-    setKeyMap(newKeys);
     setCurr("");
     setRevealing(rowIdx);
+    setRevealedCols(0);
+
+    // Stagger color reveals: each tile shows its result color at the mid-point of its flip
+    for (let c = 0; c < WORD_LEN; c++) {
+      setTimeout(() => setRevealedCols(c + 1), c * 120 + 60);
+    }
+
+    // Update key colors only after all tiles have flipped
+    setTimeout(() => setKeyMap(newKeys), WORD_LEN * 120 + 60);
 
     // Clear reveal class after animation (5 tiles × 120ms + 500ms)
     setTimeout(() => setRevealing(null), WORD_LEN * 120 + 520);
@@ -320,6 +357,21 @@ export default function DailyPage() {
         .pw-pop   { animation: pw-pop 0.12s ease; }
         .pw-fadein{ animation: pw-fadein 0.25s ease; }
         .pw-bounce{ animation: pw-bounce 0.7s ease; }
+        @keyframes pw-modal-in {
+          from{opacity:0;transform:scale(0.75) translateY(24px)}
+          to{opacity:1;transform:scale(1) translateY(0)}
+        }
+        @keyframes pw-counter {
+          from{opacity:0;transform:translateY(12px)}
+          to{opacity:1;transform:translateY(0)}
+        }
+        @keyframes pw-glow {
+          0%,100%{box-shadow:0 0 20px rgba(253,231,76,0.15)}
+          50%{box-shadow:0 0 40px rgba(253,231,76,0.35)}
+        }
+        .pw-modal-in{ animation: pw-modal-in 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+        .pw-counter{ animation: pw-counter 0.5s ease both; }
+        .pw-glow{ animation: pw-glow 2s ease-in-out infinite; }
       `}</style>
 
       <main className="pt-24 pb-16 flex flex-col items-center px-2">
@@ -340,6 +392,37 @@ export default function DailyPage() {
             <div className="flex justify-center mt-2">
               <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(56,145,166,0.15)', border: '1px solid rgba(56,145,166,0.3)', color: '#3891A6' }}>
                 🔥 {dailyStreak} day streak
+              </span>
+            </div>
+          )}
+
+          {/* ── Streak progress (7-day cycle) ── */}
+          {status === "playing" && nextReward && (
+            <div className="mt-3 flex flex-col items-center gap-1.5">
+              <div className="flex gap-1">
+                {Array.from({ length: 7 }, (_, i) => {
+                  const dayIdx = i + 1;
+                  const filled = dayIdx < streakDay;
+                  const current = dayIdx === streakDay;
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-center justify-center rounded-sm text-[9px] font-bold"
+                      style={{
+                        width: 28, height: 20,
+                        background: filled ? '#38D399' : current ? 'rgba(56,145,166,0.3)' : '#1A1A1A',
+                        border: current ? '1px solid #3891A6' : '1px solid #2A2A2A',
+                        color: filled ? '#020202' : current ? '#3891A6' : '#444',
+                      }}
+                    >
+                      {dayIdx}
+                    </div>
+                  );
+                })}
+              </div>
+              <span className="text-[10px]" style={{ color: '#666' }}>
+                Win today: <span style={{ color: '#38D399' }}>+{nextReward.points}pts</span>{' '}
+                <span style={{ color: '#3891A6' }}>+{nextReward.xp}xp</span>
               </span>
             </div>
           )}
@@ -396,7 +479,9 @@ export default function DailyPage() {
                     className={`flex gap-1.5${isShaking ? " pw-shake" : ""}`}
                   >
                     {row.map((tile, ci) => {
-                      const { bg, border, color } = tileColors(tile.st);
+                      // During reveal, keep tiles as 'tbd' until their flip midpoint
+                      const displaySt = (isRevealing && ci >= revealedCols) ? "tbd" : tile.st;
+                      const { bg, border, color } = tileColors(displaySt);
                       const isCurrTile = ri === guesses.length && ci === curr.length - 1 && status === "playing";
                       const revDelay   = isRevealing ? `${ci * 0.12}s` : undefined;
                       const bounceDelay = isWinRow ? `${ci * 0.07}s` : undefined;
@@ -521,6 +606,96 @@ export default function DailyPage() {
           </>
         )}
       </main>
+
+      {/* ── Reward Modal ── */}
+      {showRewardModal && earnedReward && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
+          onClick={() => setShowRewardModal(false)}
+        >
+          <div
+            className="w-full max-w-sm mx-4 rounded-2xl border-2 p-8 text-center pw-modal-in pw-glow"
+            style={{ backgroundColor: "rgba(2,2,2,0.97)", borderColor: "#FDE74C" }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div className="text-5xl mb-3 select-none">🏆</div>
+
+            {/* Title */}
+            <h2 className="text-2xl font-extrabold text-white mb-1">Daily Complete!</h2>
+            <p className="text-sm mb-5" style={{ color: "#DDDBF1" }}>
+              {WIN_MSGS[Math.min(guesses.length - 1, 5)]}
+            </p>
+
+            {/* Reward counters */}
+            <div className="flex justify-center gap-6 mb-5">
+              <div className="text-center pw-counter" style={{ animationDelay: "0.15s" }}>
+                <span className="text-4xl font-extrabold tabular-nums" style={{ color: "#38D399" }}>
+                  +{earnedReward.points}
+                </span>
+                <p className="text-xs font-bold mt-1" style={{ color: "#38D399" }}>POINTS</p>
+              </div>
+              <div className="text-center pw-counter" style={{ animationDelay: "0.35s" }}>
+                <span className="text-4xl font-extrabold tabular-nums" style={{ color: "#FDE74C" }}>
+                  +{earnedReward.xp}
+                </span>
+                <p className="text-xs font-bold mt-1" style={{ color: "#FFB86B" }}>XP</p>
+              </div>
+            </div>
+
+            {/* Streak progress */}
+            <div className="mb-5 pw-counter" style={{ animationDelay: "0.55s" }}>
+              <p className="text-xs font-bold mb-2" style={{ color: "#888" }}>STREAK PROGRESS</p>
+              <div className="flex justify-center gap-1.5">
+                {Array.from({ length: 7 }, (_, i) => {
+                  const dayIdx = i + 1;
+                  const filled = dayIdx <= earnedReward.streakDay;
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-center justify-center rounded text-[10px] font-bold transition-all"
+                      style={{
+                        width: 32, height: 28,
+                        background: filled ? (dayIdx === 7 ? 'linear-gradient(135deg, #FDE74C, #F97316)' : '#38D399') : '#1A1A1A',
+                        border: filled ? 'none' : '1px solid #2A2A2A',
+                        color: filled ? '#020202' : '#444',
+                      }}
+                    >
+                      {dayIdx === 7 ? '★' : dayIdx}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs mt-2" style={{ color: "#3891A6" }}>
+                🔥 Day {earnedReward.streakDay} of 7
+              </p>
+            </div>
+
+            {/* Come back message */}
+            <div className="pw-counter" style={{ animationDelay: "0.7s" }}>
+              {earnedReward.streakDay < 7 ? (
+                <p className="text-sm" style={{ color: "#AB9F9D" }}>
+                  Come back tomorrow to keep your streak alive!
+                </p>
+              ) : (
+                <p className="text-sm font-bold" style={{ color: "#FDE74C" }}>
+                  🎉 7-day streak complete! Bonus maxed out!
+                </p>
+              )}
+            </div>
+
+            {/* Dismiss */}
+            <button
+              onClick={() => setShowRewardModal(false)}
+              className="mt-6 px-6 py-2.5 rounded-xl font-bold text-sm hover:opacity-80 transition-opacity"
+              style={{ background: "#38D399", color: "#020202" }}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

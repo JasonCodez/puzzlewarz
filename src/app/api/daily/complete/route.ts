@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
+import { calcLevel } from "@/lib/levels";
+import { awardSeasonXp } from "@/lib/seasonXp";
 
 // Day 1 = 2026-03-31 (must match daily/word/route.ts)
 const START_DATE = Date.UTC(2026, 2, 31);
@@ -10,6 +12,16 @@ function getTodayDayNumber(): number {
   const now = new Date();
   const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return Math.floor((todayUtc - START_DATE) / 86_400_000) + 1;
+}
+
+/** Streak-based rewards: day 1 = 50pts/25xp, +25 each day, max 7 then reset */
+function streakReward(streakDay: number) {
+  const day = Math.max(1, Math.min(streakDay, 7));
+  return {
+    points: 50 + (day - 1) * 25,   // 50, 75, 100, 125, 150, 175, 200
+    xp:     25 + (day - 1) * 25,   // 25, 50, 75, 100, 125, 150, 175
+    streakDay: day,
+  };
 }
 
 /**
@@ -95,7 +107,65 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, shieldUsed });
+    // ── Award streak-based rewards (only for wins) ──────────────────────
+    let reward = null;
+    if (won) {
+      // Compute streak from records (including the one we just created)
+      const records = await prisma.dailyWordRecord.findMany({
+        where: { userId: currentUser.id },
+        orderBy: { dayNumber: "desc" },
+      });
+      let streak = 0;
+      let prevDay = dayNumber;
+      for (const rec of records) {
+        if (rec.dayNumber === prevDay) {
+          streak++;
+          prevDay--;
+        } else if (rec.dayNumber < prevDay) {
+          break;
+        }
+      }
+
+      // Streak wraps after 7 — use ((streak-1) % 7) + 1 so day 8 = day 1
+      const streakDay = ((streak - 1) % 7) + 1;
+      reward = streakReward(streakDay);
+
+      try {
+        // Award points
+        await prisma.user.update({
+          where: { id: currentUser.id },
+          data: { totalPoints: { increment: reward.points } },
+        });
+        const existingLb = await prisma.globalLeaderboard.findFirst({ where: { userId: currentUser.id } });
+        if (existingLb) {
+          await prisma.globalLeaderboard.update({
+            where: { id: existingLb.id },
+            data: { totalPoints: { increment: reward.points } },
+          });
+        } else {
+          await prisma.globalLeaderboard.create({ data: { userId: currentUser.id, totalPoints: reward.points } });
+        }
+
+        // Award XP + level recalculation
+        const freshUser = await prisma.user.findUnique({
+          where: { id: currentUser.id },
+          select: { xp: true },
+        });
+        const newXp = (freshUser?.xp ?? 0) + reward.xp;
+        const { level, title } = calcLevel(newXp);
+        await prisma.user.update({
+          where: { id: currentUser.id },
+          data: { xp: newXp, level, xpTitle: title },
+        });
+
+        // Season pass XP
+        await awardSeasonXp(currentUser.id, reward.xp);
+      } catch (err) {
+        console.error("[DAILY COMPLETE] Failed to award streak rewards:", err);
+      }
+    }
+
+    return NextResponse.json({ success: true, shieldUsed, reward });
   } catch (err) {
     console.error("[DAILY COMPLETE]", err);
     return NextResponse.json({ error: "Failed to record completion" }, { status: 500 });
@@ -162,10 +232,19 @@ export async function GET(request: NextRequest) {
       select: { streakShields: true, skipTokens: true },
     });
 
+    // Compute next reward: what the user earns if they win today (or what they earned)
+    // Streak wraps after 7
+    const nextStreakDay = todayRecord
+      ? ((streak - 1) % 7) + 1   // already completed — show what they earned
+      : ((streak) % 7) + 1;       // not yet — show what they'd earn
+    const nextReward = streakReward(nextStreakDay);
+
     return NextResponse.json({
       completedToday: !!todayRecord,
       todayRecord,
       streak,
+      streakDay: nextStreakDay,
+      nextReward,
       streakShields: user?.streakShields ?? 0,
       skipTokens: user?.skipTokens ?? 0,
     });

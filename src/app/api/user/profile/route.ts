@@ -30,6 +30,8 @@ export async function GET(request: NextRequest) {
         activeFrame: true,
         activeSkin: true,
         activeFlair: true,
+        totalPoints: true,
+        purchasedPoints: true,
       },
     });
 
@@ -37,22 +39,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Get user stats
-    const stats = await prisma.userPuzzleProgress.aggregate({
+    // Get puzzles solved count
+    const solvedCount = await prisma.userPuzzleProgress.count({
       where: { userId: user.id, solved: true },
-      _sum: { pointsEarned: true },
-      _count: true,
     });
 
-    // Get user's rank
-    const rank = await prisma.userPuzzleProgress.groupBy({
-      by: ["userId"],
-      where: { solved: true },
-      _sum: { pointsEarned: true },
-      orderBy: { _sum: { pointsEarned: "desc" } },
-    });
+    // Earned points = total - purchased (consistent with leaderboard)
+    const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
 
-    const userRank = rank.findIndex((r: { userId: string }) => r.userId === user.id) + 1;
+    // Get user's global rank (based on earned points, excluding purchased)
+    const allUsers = await prisma.user.findMany({
+      select: { id: true, totalPoints: true, purchasedPoints: true },
+    });
+    const sorted = allUsers
+      .map(u => ({ userId: u.id, earned: (u.totalPoints ?? 0) - (u.purchasedPoints ?? 0) }))
+      .sort((a, b) => b.earned - a.earned);
+    const userRank = sorted.findIndex(u => u.userId === user.id) + 1;
 
     let level = user.level ?? 1;
     let xpTitle = user.xpTitle ?? "Newcomer";
@@ -72,8 +74,8 @@ export async function GET(request: NextRequest) {
       ...user,
       level,
       xpTitle,
-      totalPuzzlesSolved: stats._count,
-      totalPoints: stats._sum.pointsEarned || 0,
+      totalPuzzlesSolved: solvedCount,
+      totalPoints: earnedPoints,
       rank: userRank > 0 ? userRank : null,
       xpProgress,
       xpToNextLevel,
@@ -139,27 +141,31 @@ export async function PUT(request: NextRequest) {
     });
 
     // Get updated stats
-    const stats = await prisma.userPuzzleProgress.aggregate({
-      where: { userId: user.id, solved: true },
-      _sum: { pointsEarned: true },
-      _count: true,
+    const freshUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { totalPoints: true, purchasedPoints: true },
     });
+    const solvedCount = await prisma.userPuzzleProgress.count({
+      where: { userId: user.id, solved: true },
+    });
+    const earnedPoints = ((freshUser?.totalPoints ?? 0) - (freshUser?.purchasedPoints ?? 0));
 
     // Get updated rank
-    const rank = await prisma.userPuzzleProgress.groupBy({
-      by: ["userId"],
-      where: { solved: true },
-      _sum: { pointsEarned: true },
-      orderBy: { _sum: { pointsEarned: "desc" } },
+    const allUsers = await prisma.user.findMany({
+      select: { id: true, totalPoints: true, purchasedPoints: true },
     });
-
-    const userRank = rank.findIndex((r: { userId: string }) => r.userId === user.id) + 1;
+    const sorted = allUsers
+      .map(u => ({ userId: u.id, earned: (u.totalPoints ?? 0) - (u.purchasedPoints ?? 0) }))
+      .sort((a, b) => b.earned - a.earned);
+    const userRank = sorted.findIndex(u => u.userId === user.id) + 1;
 
     return NextResponse.json({
       ...user,
-      totalPuzzlesSolved: stats._count,
-      totalPoints: stats._sum.pointsEarned || 0,
-      rank: userRank > 0 ? userRank : null,      xpProgress: calcLevel(user.xp ?? 0),    });
+      totalPuzzlesSolved: solvedCount,
+      totalPoints: earnedPoints,
+      rank: userRank > 0 ? userRank : null,
+      xpProgress: calcLevel(user.xp ?? 0),
+    });
   } catch (error) {
     console.error("Profile PUT error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

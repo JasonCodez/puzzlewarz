@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { getDetectiveCaseData, isDetectiveCaseAnswerCorrect } from '@/lib/detectiveCase';
 import { validateSameOrigin } from '@/lib/requestSecurity';
+import { calcLevel } from '@/lib/levels';
+import { awardSeasonXp } from '@/lib/seasonXp';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -141,6 +143,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         } else {
           await prisma.globalLeaderboard.create({ data: { userId: user.id, totalPoints: awardPoints } });
         }
+
+        // Award XP and season pass XP
+        const xpGain = puzzleRecord?.xpReward ?? 50;
+        const freshUser = await prisma.user.findUnique({ where: { id: user.id }, select: { xp: true } });
+        const newXp = (freshUser?.xp ?? 0) + xpGain;
+        const { level, title } = calcLevel(newXp);
+        await prisma.user.update({ where: { id: user.id }, data: { xp: newXp, level, xpTitle: title } });
+        await awardSeasonXp(user.id, xpGain);
       } catch (err) {
         console.error('[detective/submit] Failed to award points:', err);
       }

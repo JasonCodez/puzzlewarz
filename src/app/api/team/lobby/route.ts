@@ -719,7 +719,7 @@ export async function POST(req: NextRequest) {
 
             try {
               const pref = await prisma.notificationPreference.findUnique({ where: { userId: inviteeId } });
-              if (pref?.emailNotificationsEnabled) {
+              if (false && pref?.emailNotificationsEnabled) { // Disabled: conserve Resend quota
                 const inviteeUser = await prisma.user.findUnique({ where: { id: inviteeId }, select: { name: true, email: true } });
                 if (inviteeUser?.email) {
                   const inviterUser = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });

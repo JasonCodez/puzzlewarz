@@ -158,6 +158,10 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
   const [popCol, setPopCol] = useState<{ row: number; col: number } | null>(null);
   const [confetti, setConfetti] = useState<Particle[]>([]);
   const [bounceWin, setBounceWin] = useState(false);
+  // Hint system: 0 = unused, 1 = clue shown, 2 = letter revealed
+  const [hintLevel, setHintLevel] = useState(0);
+  const [hintReveal, setHintReveal] = useState<{ position: number; letter: string } | null>(null);
+  const [hintLoading, setHintLoading] = useState(false);
 
   const isPlaying = gameStatus === "playing" && !showInstructions;
   const onSolvedFired = useRef(false);
@@ -319,6 +323,41 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
     }
   }, [isPlaying, submitting, currentInput, wordLength, submitGuess, triggerPop]);
 
+  // Derived: positions already guessed correctly
+  const revealedPositions = Array.from(
+    new Set(
+      guesses.flatMap((guess) =>
+        guess.map((g, i) => (g.status === "correct" ? i : -1)).filter((i) => i >= 0)
+      )
+    )
+  );
+
+  // Hint handler
+  const useHint = useCallback(async () => {
+    if (hintLevel === 0) {
+      setHintLevel(1);
+    } else if (hintLevel === 1) {
+      setHintLoading(true);
+      try {
+        const resp = await fetch(`/api/puzzles/${puzzleId}/word_crack/hint`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ revealedPositions }),
+          credentials: "same-origin",
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          setHintReveal({ position: data.position, letter: data.letter });
+          setHintLevel(2);
+        }
+      } catch {
+        // silently ignore
+      } finally {
+        setHintLoading(false);
+      }
+    }
+  }, [hintLevel, puzzleId, revealedPositions]);
+
   // â”€â”€ Build grid rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const rows = Array.from({ length: maxGuesses }, (_, r) => {
     if (r < guesses.length) {
@@ -455,7 +494,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
           >
             ?
           </button>
-          {hint && (
+          {hint && hintLevel >= 1 && (
             <p className="text-sm mt-1" style={{ color: "#cbd5e1", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
               💡 <span className="italic">{hint}</span>
             </p>
@@ -607,7 +646,30 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
             ))}
           </div>
         )}
-      </div>      </div>
+        {gameStatus === "playing" && (
+          <div className="mt-3 flex flex-col items-center gap-2">
+            {hintLevel < 2 && (
+              <button
+                onClick={useHint}
+                disabled={hintLoading}
+                className="px-4 py-1.5 rounded-full text-sm font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                style={{ background: "rgba(56,145,166,0.2)", border: "1px solid rgba(56,145,166,0.5)", color: "#3891A6" }}
+              >
+                {hintLoading ? "..." : hintLevel === 0 ? "💡 Hint" : "🔤 Reveal a letter"}
+              </button>
+            )}
+            {hintLevel === 2 && hintReveal && (
+              <p className="text-sm" style={{ color: "#94a3b8" }}>
+                Letter at position{" "}
+                <span className="font-bold" style={{ color: "#3891A6" }}>{hintReveal.position + 1}</span>{" "}is{" "}
+                <span className="font-bold text-lg" style={{ color: "#ffffff" }}>{hintReveal.letter}</span>
+              </p>
+            )}
+            {hintLevel >= 2 && (
+              <p className="text-xs mt-1" style={{ color: "#64748b" }}>No more hints available</p>
+            )}
+          </div>
+        )}      </div>      </div>
       {/* â”€â”€ All animations â”€â”€ */}
       <style>{`
         /* Tile 3D structure */

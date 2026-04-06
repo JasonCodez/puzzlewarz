@@ -33,6 +33,38 @@ export async function POST(request: NextRequest) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
+    const metaType = session.metadata?.type;
+
+    // ── Season pass premium upgrade ──────────────────────────
+    if (metaType === "season_pass") {
+      const userId = session.metadata?.userId;
+      const seasonId = session.metadata?.seasonId;
+
+      if (!userId || !seasonId) {
+        console.error("[STRIPE WEBHOOK] season_pass missing metadata:", session.id);
+        return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
+      }
+
+      // Idempotency — skip if already handled
+      const alreadyPremium = await prisma.userSeasonPass.findUnique({
+        where: { userId_seasonId: { userId, seasonId } },
+        select: { isPremium: true, purchasedAt: true },
+      });
+      if (alreadyPremium?.isPremium && alreadyPremium.purchasedAt) {
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+
+      await prisma.userSeasonPass.upsert({
+        where: { userId_seasonId: { userId, seasonId } },
+        create: { userId, seasonId, isPremium: true, purchasedAt: new Date() },
+        update: { isPremium: true, purchasedAt: new Date() },
+      });
+
+      console.log(`[STRIPE WEBHOOK] Season pass premium granted to user ${userId} (season ${seasonId})`);
+      return NextResponse.json({ received: true });
+    }
+
+    // ── Point bundle purchase ────────────────────────────────
     const userId = session.metadata?.userId;
     const bundleKey = session.metadata?.bundleKey;
     const pointsToGrant = parseInt(session.metadata?.pointsToGrant ?? "0", 10);

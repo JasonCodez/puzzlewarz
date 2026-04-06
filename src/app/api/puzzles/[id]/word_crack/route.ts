@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 import { calcLevel } from "@/lib/levels";
+import { awardSeasonXp } from "@/lib/seasonXp";
 
 export async function POST(
   request: NextRequest,
@@ -163,6 +164,8 @@ export async function POST(
             where: { id: currentUser.id },
             data: { xp: newXp, level, xpTitle: title },
           });
+          // Season pass XP
+          await awardSeasonXp(currentUser.id, xpGain);
         }
       }
     } catch (persistErr) {

@@ -9,6 +9,7 @@ import Link from "next/link";
 import ConfirmModal from '@/components/ConfirmModal';
 import { Rarity, rarityColors } from '@/lib/rarity';
 import { THEME_CONFIGS, FRAME_CONFIGS, getThemeConfig, getTopBarGradient } from '@/lib/profileThemes';
+import AvatarFrame from '@/components/AvatarFrame';
 import {
   UserPlus,
   UserMinus,
@@ -356,23 +357,18 @@ export default function PublicProfilePage() {
 
   // Render avatar (shared helper)
   const renderAvatar = (sizeClass: string) => {
+    const sizePx = sizeClass.includes('w-24') ? 96 : 80;
     if (frame.colorA) {
       return (
-        <div
-          className={`${sizeClass} avatar-frame-animated flex-shrink-0`}
-          style={{
-            '--frame-color-a': frame.colorA,
-            '--frame-color-b': frame.colorB,
-            '--frame-inner-bg': t.pageBg,
-            boxShadow: frame.glow,
-          } as React.CSSProperties}
+        <AvatarFrame
+          frame={frame as { colorA: string; colorB: string; glow: string }}
+          size={sizePx}
+          pageBg={t.pageBg}
         >
-          <div className="avatar-frame-inner">
-            {profile.image
-              ? <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: t.primaryMuted }}>👤</div>}
-          </div>
-        </div>
+          {profile.image
+            ? <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
+            : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: t.primaryMuted }}>👤</div>}
+        </AvatarFrame>
       );
     }
     return (
@@ -467,22 +463,22 @@ export default function PublicProfilePage() {
 
         {/* Stats Grid */}
         <div className="grid justify-items-center grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}`, boxShadow: t.cardGlow }}>
             <Trophy className="w-8 h-8 mx-auto" style={{ color: t.primary }} />
             <p style={{ color: t.subtleText }} className="text-sm mb-1">Puzzles Solved</p>
             <p className="text-4xl font-extrabold" style={{ color: t.primary }}>{profile.stats.puzzlesSolved}</p>
           </div>
-          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}`, boxShadow: t.cardGlow }}>
             <Share2 className="w-8 h-8 mx-auto" style={{ color: t.primary }} />
             <p style={{ color: t.subtleText }} className="text-sm mb-1">Total Points</p>
             <p className="text-4xl font-extrabold" style={{ color: t.primary }}>{profile.stats.totalPoints}</p>
           </div>
-          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}`, boxShadow: t.cardGlow }}>
             <Trophy className="w-8 h-8 mx-auto" style={{ color: t.primary }} />
             <p style={{ color: t.subtleText }} className="text-sm mb-1">Achievements</p>
             <p className="text-4xl font-extrabold" style={{ color: t.primary }}>{profile.stats.achievementsCount}</p>
           </div>
-          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}` }}>
+          <div className="rounded-lg p-4 flex flex-col items-center text-center gap-2 w-full" style={{ backgroundColor: t.statCardBg, border: `1px solid ${t.statCardBorder}`, boxShadow: t.cardGlow }}>
             <Users className="w-8 h-8 mx-auto" style={{ color: t.primary }} />
             <p style={{ color: t.subtleText }} className="text-sm mb-1">Teams</p>
             <p className="text-4xl font-extrabold" style={{ color: t.primary }}>{profile.stats.teamsCount}</p>
@@ -491,7 +487,7 @@ export default function PublicProfilePage() {
 
         {/* Social Stats */}
         <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="border rounded-lg p-4" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+          <div className="border rounded-lg p-4" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: t.cardGlow }}>
             <div className="flex items-center justify-between">
               <div>
                 <p style={{ color: t.subtleText }} className="text-sm mb-1">Followers</p>
@@ -500,7 +496,7 @@ export default function PublicProfilePage() {
               <Heart className="w-8 h-8" style={{ color: '#EF4444' }} />
             </div>
           </div>
-          <div className="border rounded-lg p-4" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+          <div className="border rounded-lg p-4" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: t.cardGlow }}>
             <div className="flex items-center justify-between">
               <div>
                 <p style={{ color: t.subtleText }} className="text-sm mb-1">Following</p>
@@ -514,7 +510,7 @@ export default function PublicProfilePage() {
         {/* My Puzzles Archive (own profile only) */}
         {isOwnProfile && (
           <div className="mb-8">
-            <div className="border rounded-lg p-6" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+            <div className="border rounded-lg p-6" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: t.cardGlow }}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-white">My Puzzles (Archive)</h3>
                 <button
@@ -576,7 +572,7 @@ export default function PublicProfilePage() {
 
         {/* Teams Section */}
         {profile.teams.length > 0 && (
-          <div className="border rounded-lg p-6 mb-8" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+          <div className="border rounded-lg p-6 mb-8" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: t.cardGlow }}>
             <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
               <Users className="w-6 h-6" style={{ color: t.primary }} />
               Teams ({profile.teams.length})

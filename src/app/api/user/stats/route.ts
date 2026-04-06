@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true },
+      select: { id: true, totalPoints: true, purchasedPoints: true },
     });
 
     if (!user) {
@@ -31,30 +31,26 @@ export async function GET(request: NextRequest) {
       where: { userId: user.id, solved: true },
     });
 
-    // Get total points earned
-    const pointsData = await prisma.userPuzzleProgress.aggregate({
-      where: { userId: user.id, solved: true },
-      _sum: { pointsEarned: true },
-    });
+    // Get total points earned (from user record — includes puzzle + daily + other rewards)
+    const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
 
     // Get number of teams the user is in
     const teamCount = await prisma.teamMember.count({
       where: { userId: user.id },
     });
 
-    // Get user's global rank
-    const allUsers = await prisma.userPuzzleProgress.groupBy({
-      by: ["userId"],
-      where: { solved: true },
-      _sum: { pointsEarned: true },
-      orderBy: { _sum: { pointsEarned: "desc" } },
+    // Get user's global rank (based on earned points, excluding purchased)
+    const allUsers = await prisma.user.findMany({
+      select: { id: true, totalPoints: true, purchasedPoints: true },
     });
-
-    const userRank = allUsers.findIndex((u: { userId: string }) => u.userId === user.id) + 1;
+    const sorted = allUsers
+      .map(u => ({ userId: u.id, earned: (u.totalPoints ?? 0) - (u.purchasedPoints ?? 0) }))
+      .sort((a, b) => b.earned - a.earned);
+    const userRank = sorted.findIndex(u => u.userId === user.id) + 1;
 
     return NextResponse.json({
       totalPuzzlesSolved: solvedCount,
-      totalPoints: pointsData._sum.pointsEarned || 0,
+      totalPoints: earnedPoints,
       currentTeams: teamCount,
       rank: userRank > 0 ? userRank : null,
     });

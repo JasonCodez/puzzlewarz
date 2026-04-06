@@ -20,6 +20,7 @@ export interface ThemeConfig {
   xpBarGradient: string;
   avatarRing: string;
   avatarGlow: string;
+  cardGlow: string;
 }
 
 export const THEME_CONFIGS: Record<string, ThemeConfig> = {
@@ -43,8 +44,9 @@ export const THEME_CONFIGS: Record<string, ThemeConfig> = {
     btnPrimary: '#3891A6',
     btnPrimaryText: '#fff',
     xpBarGradient: 'linear-gradient(90deg, #3891A6, #38D399)',
-    avatarRing: '#FDE74C',
-    avatarGlow: 'rgba(253,231,76,0)',
+    avatarRing: '#3891A6',
+    avatarGlow: 'rgba(56,145,166,0)',
+    cardGlow: 'none',
   },
   gold: {
     pageBg: '#0d0900',
@@ -68,10 +70,11 @@ export const THEME_CONFIGS: Record<string, ThemeConfig> = {
     xpBarGradient: 'linear-gradient(90deg, #FDE74C, #FFB86B)',
     avatarRing: '#FDE74C',
     avatarGlow: 'rgba(253,231,76,0.8)',
+    cardGlow: 'none',
   },
   neon: {
     pageBg: '#04000e',
-    headerGradient: 'linear-gradient(135deg, #0a0020 0%, #04000e 50%, #000a12 100%)',
+    headerGradient: 'linear-gradient(135deg, #0a0020 0%, #00FFFF12 25%, #04000e 50%, #CC00FF10 75%, #000a12 100%)',
     headerParticle1: 'rgba(0,255,255,0.35)',
     headerParticle2: 'rgba(204,0,255,0.30)',
     primary: '#00FFFF',
@@ -91,6 +94,7 @@ export const THEME_CONFIGS: Record<string, ThemeConfig> = {
     xpBarGradient: 'linear-gradient(90deg, #00FFFF, #CC00FF)',
     avatarRing: '#00FFFF',
     avatarGlow: 'rgba(0,255,255,0.9)',
+    cardGlow: '0 0 15px rgba(0,255,255,0.4), 0 0 30px rgba(0,255,255,0.15), 0 0 5px rgba(204,0,255,0.3)',
   },
   crimson: {
     pageBg: '#0e0000',
@@ -114,6 +118,56 @@ export const THEME_CONFIGS: Record<string, ThemeConfig> = {
     xpBarGradient: 'linear-gradient(90deg, #DC2626, #F97316)',
     avatarRing: '#DC2626',
     avatarGlow: 'rgba(220,38,38,0.85)',
+    cardGlow: 'none',
+  },
+  // ── Season 1: Ignition exclusive themes ──
+  ignition_ember: {
+    pageBg: '#0a0400',
+    headerGradient: 'linear-gradient(135deg, #3b1200 0%, #1a0800 50%, #0a0400 100%)',
+    headerParticle1: 'rgba(251,146,60,0.40)',
+    headerParticle2: 'rgba(234,88,12,0.30)',
+    primary: '#FB923C',
+    primaryMuted: 'rgba(251,146,60,0.18)',
+    primaryBorder: '#FB923C',
+    secondary: '#EA580C',
+    cardBg: 'rgba(251,146,60,0.10)',
+    cardBorder: '#FB923C',
+    statCardBg: 'rgba(234,88,12,0.08)',
+    statCardBorder: '#EA580C',
+    accentText: '#FB923C',
+    subtleText: '#c48a5c',
+    inputBg: 'rgba(20,8,0,0.75)',
+    inputBorder: '#FB923C',
+    btnPrimary: 'linear-gradient(135deg, #FB923C, #EA580C)',
+    btnPrimaryText: '#1a0800',
+    xpBarGradient: 'linear-gradient(90deg, #FB923C, #EA580C)',
+    avatarRing: '#FB923C',
+    avatarGlow: 'rgba(251,146,60,0.85)',
+    cardGlow: 'none',
+  },
+  ignition_inferno: {
+    pageBg: '#0c0004',
+    headerGradient: 'linear-gradient(135deg, #3b0010 0%, #1c0008 50%, #0c0004 100%)',
+    headerParticle1: 'rgba(255,50,50,0.45)',
+    headerParticle2: 'rgba(255,170,0,0.35)',
+    primary: '#FF3232',
+    primaryMuted: 'rgba(255,50,50,0.20)',
+    primaryBorder: '#FF3232',
+    secondary: '#FFAA00',
+    cardBg: 'rgba(255,50,50,0.10)',
+    cardBorder: '#FF3232',
+    statCardBg: 'rgba(255,170,0,0.08)',
+    statCardBorder: '#FFAA00',
+    accentText: '#FFAA00',
+    subtleText: '#c97050',
+    inputBg: 'rgba(25,0,5,0.80)',
+    inputBorder: '#FF3232',
+    btnPrimary: 'linear-gradient(135deg, #FF3232, #FFAA00)',
+    btnPrimaryText: '#1c0008',
+    xpBarGradient: 'linear-gradient(90deg, #FF3232, #FFAA00)',
+    avatarRing: '#FF3232',
+    avatarGlow: 'rgba(255,50,50,0.9)',
+    cardGlow: 'none',
   },
 };
 
@@ -122,6 +176,11 @@ export const FRAME_CONFIGS: Record<string, { ring: string; glow: string; colorA?
   gold:  { ring: 'linear-gradient(135deg, #FDE74C, #FFB86B, #FDE74C)', glow: '0 0 20px rgba(253,231,76,0.7), 0 0 40px rgba(253,231,76,0.3)', colorA: '#FDE74C', colorB: '#FFB86B' },
   neon:  { ring: 'linear-gradient(135deg, #00FFFF, #CC00FF, #00FFFF)',  glow: '0 0 20px rgba(0,255,255,0.7), 0 0 40px rgba(204,0,255,0.4)', colorA: '#00FFFF', colorB: '#CC00FF' },
   flame: { ring: 'linear-gradient(135deg, #FF4500, #FDE74C, #FF4500)',  glow: '0 0 20px rgba(255,69,0,0.8), 0 0 40px rgba(253,231,76,0.4)', colorA: '#FF4500', colorB: '#FDE74C' },
+  // ── Season 1: Ignition exclusive frames ──
+  ignition_bronze:    { ring: 'linear-gradient(135deg, #CD7F32, #E8A862, #CD7F32)', glow: '0 0 18px rgba(205,127,50,0.7), 0 0 36px rgba(205,127,50,0.3)', colorA: '#CD7F32', colorB: '#E8A862' },
+  ignition_silver:    { ring: 'linear-gradient(135deg, #C0C0C0, #E8E8E8, #C0C0C0)', glow: '0 0 18px rgba(192,192,192,0.7), 0 0 36px rgba(192,192,192,0.3)', colorA: '#C0C0C0', colorB: '#E8E8E8' },
+  ignition_gold:      { ring: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700)', glow: '0 0 22px rgba(255,215,0,0.8), 0 0 44px rgba(255,165,0,0.4)', colorA: '#FFD700', colorB: '#FFA500' },
+  ignition_legendary: { ring: 'linear-gradient(135deg, #FF3232, #FFAA00, #FF3232)', glow: '0 0 25px rgba(255,50,50,0.9), 0 0 50px rgba(255,170,0,0.5)', colorA: '#FF3232', colorB: '#FFAA00' },
 };
 
 /** Resolve theme key — handles both "gold" and "theme_gold" stored formats */
