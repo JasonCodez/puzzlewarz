@@ -986,7 +986,7 @@ export default function TeamLobbyPage() {
               Shut Down Lobby
             </button>
           )}
-          {!!currentUserId && participantIds.includes(currentUserId) && (
+          {!!currentUserId && participantIds.includes(currentUserId!) && (
             <button onClick={onLeaveClick} className="w-full sm:w-auto text-sm px-3 py-2 bg-red-600 text-white rounded">Leave Lobby</button>
           )}
         </div>

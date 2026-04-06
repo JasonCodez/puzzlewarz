@@ -723,15 +723,15 @@ export async function POST(req: NextRequest) {
                 const inviteeUser = await prisma.user.findUnique({ where: { id: inviteeId }, select: { name: true, email: true } });
                 if (inviteeUser?.email) {
                   const inviterUser = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
-                  const joinUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}`;
+                  const joinUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId ?? '')}`;
                   const html = generateTeamLobbyInviteEmail(
-                    inviteeUser.name || inviteeUser.email || 'teammate',
+                    inviteeUser!.name || inviteeUser!.email || 'teammate',
                     inviterUser?.name || inviterUser?.email || 'A teammate',
                     (await prisma.team.findUnique({ where: { id: teamId }, select: { name: true } }))?.name || 'your team',
                     (await prisma.puzzle.findUnique({ where: { id: puzzleId }, select: { title: true } }))?.title || 'a puzzle',
                     joinUrl
                   );
-                  const sent = await sendEmail({ to: inviteeUser.email, subject: inviteTitle, html });
+                  const sent = await sendEmail({ to: inviteeUser!.email!, subject: inviteTitle, html });
                   emailSent = !!sent;
                   if (sent && notificationId) {
                     await prisma.notification.update({ where: { id: notificationId }, data: { emailSent: true, emailSentAt: new Date() } });
