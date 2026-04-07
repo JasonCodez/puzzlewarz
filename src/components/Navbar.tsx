@@ -51,6 +51,7 @@ const NAV_LINKS = [
 ];
 
 const MORE_LINKS = [
+  { href: "/frequency",    label: "Frequency 📡" },
   { href: "/teams",        label: "Teams" },
   { href: "/achievements", label: "Achievements" },
   { href: "/learn",        label: "Learn" },

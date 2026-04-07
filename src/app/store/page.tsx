@@ -94,7 +94,7 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
   theme: "Profile Theme",
   team_theme: "Team Page Theme",
   frame: "Avatar Frame",
-  skin: "Puzzle Skin",
+  skin: "Puzzle Style",
   flair: "Name Flair",
   banner: "Team Banner",
 };
@@ -120,7 +120,7 @@ function isEquipped(item: StoreItem, user: StoreUser): boolean {
 
 function AnimatedBalance({ value }: { value: number }) {
   const display = useAnimatedCounter(value);
-  return <span>{display > 0 ? display.toLocaleString() : "—"}</span>;
+  return <span>{display.toLocaleString()}</span>;
 }
 
 function getRarity(price: number): { label: string; color: string; glow: string } | null {
@@ -506,10 +506,10 @@ function CosmeticPreviewModal({ item, onClose }: { item: StoreItem; onClose: () 
     title = `${item.name}`;
     content = <ThemePreviewContent themeKey={value || "default"} />;
   } else if (sub === "frame") {
-    title = `${item.name} Frame`;
+    title = item.name;
     content = <FramePreviewContent frameKey={value || "gold"} />;
   } else if (sub === "skin") {
-    title = `${item.name} Skin`;
+    title = item.name;
     content = <SkinPreviewContent skinKey={value || "default"} />;
   }
 

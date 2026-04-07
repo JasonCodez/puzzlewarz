@@ -1182,32 +1182,7 @@ export default function PuzzleDetailPage() {
           </div>
         </div>
       )}
-      {/* Header with Logo */}
-      <nav
-        className="backdrop-blur-md"
-        style={{
-          borderBottomColor: "rgba(56, 145, 166, 0.3)",
-          borderBottomWidth: "1px",
-          backgroundColor: "rgba(2, 4, 8, 0.85)",
-          boxShadow: "0 1px 0 rgba(56,145,166,0.12)",
-        }}
-      >
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/puzzles" className="flex items-center gap-3 hover:opacity-80 transition">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-14 w-auto" />
-            <div className="text-2xl font-bold" style={{ color: "#FDE74C" }}>
-              Puzzle Warz
-            </div>
-          </Link>
-          <button
-            onClick={() => router.back()}
-            className="px-4 py-2 rounded-lg text-white transition-all hover:opacity-90"
-            style={{ backgroundColor: "#3891A6", borderWidth: "1px", borderColor: "#3891A6" }}
-          >
-            ← Back
-          </button>
-        </div>
-      </nav>
+
 
       <div className="flex-1 w-full px-2 py-4 sm:p-8">
         <div className="w-full">

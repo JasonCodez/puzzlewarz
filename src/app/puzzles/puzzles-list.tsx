@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import FilterBar from "@/components/puzzle/FilterBar";
 import { StarRating } from "@/components/puzzle/StarRating";
-import Navbar from "@/components/Navbar";
 import { detectWebGLSupport } from "@/lib/webglSupport";
 
 interface Puzzle {
@@ -228,7 +227,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
   async function fetchData() {
     try {
       const [puzzlesRes, categoriesRes, usersRes] = await Promise.all([
-        fetch(`/api/puzzles?limit=100`),
+        fetch(`/api/puzzles?limit=500`),
         fetch("/api/puzzle-categories"),
         fetch("/api/users/count"),
       ]);
@@ -482,9 +481,6 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
 
   return (
     <div style={{ backgroundColor: '#020202' }} className="min-h-screen">
-      {/* Navigation */}
-      <Navbar />
-
       {/* Header */}
       <div className="hero-bg pt-24 pb-8 md:pb-16 px-4" style={{ backgroundImage: 'linear-gradient(160deg, rgba(56,145,166,0.12) 0%, rgba(2,2,2,0) 60%, rgba(253,231,76,0.04) 100%)' }}>
         <div className="max-w-7xl mx-auto">

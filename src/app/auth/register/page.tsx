@@ -4,7 +4,6 @@ import { useState, useEffect, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
 
 const TOS_SECTIONS = [
   { title: "1. Acceptance of Terms", body: `By creating an account or using PuzzleWarz (the "Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not access or use the Service. These Terms apply to all visitors, users, and others who access the Service.` },
@@ -112,206 +111,146 @@ function RegisterForm() {
 
   return (
     <>
-      <Navbar />
-      <main className="min-h-screen flex items-center justify-center px-4 pt-16" style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }}>
-      <div className="w-full max-w-md">
-        <div className="border rounded-lg p-8" style={{ backgroundColor: 'rgba(76, 91, 92, 0.6)', borderColor: '#3891A6' }}>
-          <div className="flex justify-center mb-2">
-            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-48 w-auto max-w-md" />
+      <style>{`
+        @keyframes rg-orb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(50px,-35px) scale(1.08)} }
+        @keyframes rg-orb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-45px,40px) scale(0.94)} }
+        @keyframes rg-fade { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+        .rg-card { animation: rg-fade 0.6s ease forwards; }
+        .rg-input { background: rgba(255,255,255,0.05); border: 1px solid rgba(56,145,166,0.3); border-radius: 10px; color: #fff; padding: 12px 16px; width: 100%; font-size: 14px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box; }
+        .rg-input::placeholder { color: rgba(255,255,255,0.25); }
+        .rg-input:focus { border-color: #3891A6; box-shadow: 0 0 0 3px rgba(56,145,166,0.15); }
+        .rg-btn { position:relative; overflow:hidden; }
+        .rg-btn::after { content:''; position:absolute; top:-50%; left:-60%; width:40%; height:200%; background:rgba(255,255,255,0.12); transform:skewX(-20deg); transition:left 0.5s ease; }
+        .rg-btn:hover::after { left:130%; }
+      `}</style>
+
+      <main style={{ minHeight: "100vh", backgroundColor: "#020202", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 16px", position: "relative", overflow: "hidden" }}>
+        {/* Background orbs */}
+        <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <div style={{ position: "absolute", top: "10%", right: "12%", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(56,145,166,0.18) 0%, transparent 70%)", animation: "rg-orb1 18s ease-in-out infinite" }} />
+          <div style={{ position: "absolute", bottom: "8%", left: "6%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(56,145,166,0.1) 0%, transparent 70%)", animation: "rg-orb2 22s ease-in-out infinite" }} />
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(56,145,166,0.35) 1px, transparent 1px)", backgroundSize: "36px 36px", opacity: 0.04 }} />
+        </div>
+
+        <div className="rg-card" style={{ width: "100%", maxWidth: 460, position: "relative" }}>
+          {/* Logo */}
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz" style={{ height: 72, width: "auto", display: "inline-block" }} />
           </div>
-          <p style={{ color: '#3891A6' }} className="text-center mb-8">Create your account</p>
 
-          {error && (
-            <div className="mb-6 p-4 rounded-lg text-sm border" style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.4)', color: '#fca5a5' }}>
-              {error}
-            </div>
-          )}
+          {/* Card */}
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(56,145,166,0.25)", borderRadius: 20, padding: "36px 32px", backdropFilter: "blur(12px)" }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 6, letterSpacing: "-0.02em" }}>Create your account</h1>
+            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>Free to join. Start solving in seconds.</p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Honeypot — visually hidden, real users never see or fill this */}
-            <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", width: 1, height: 1, overflow: "hidden" }}>
-              <label htmlFor="website">Website</label>
-              <input
-                id="website"
-                name="website"
-                type="text"
-                value={honeypot}
-                onChange={(e) => setHoneypot(e.target.value)}
-                tabIndex={-1}
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: '#3891A6' }}>
-                Display Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full px-4 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none transition"
-                placeholder="Display name"
-                style={{ backgroundColor: '#2a3a3b', borderWidth: '2px', borderColor: '#3891A6' }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#FDE74C'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#3891A6'}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: '#3891A6' }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none transition"
-                placeholder="you@example.com"
-                style={{ backgroundColor: '#2a3a3b', borderWidth: '2px', borderColor: '#3891A6' }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#FDE74C'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#3891A6'}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: '#3891A6' }}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none transition"
-                placeholder="••••••••"
-                style={{ backgroundColor: '#2a3a3b', borderWidth: '2px', borderColor: '#3891A6' }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#FDE74C'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#3891A6'}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: '#3891A6' }}>
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="w-full px-4 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none transition"
-                placeholder="••••••••"
-                style={{ backgroundColor: '#2a3a3b', borderWidth: '2px', borderColor: '#3891A6' }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#FDE74C'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#3891A6'}
-              />
-            </div>
-
-            {/* Terms of Service */}
-            <div className="flex items-start gap-3 pt-1">
-              <input
-                id="tos"
-                type="checkbox"
-                checked={tosAccepted}
-                onChange={(e) => setTosAccepted(e.target.checked)}
-                className="mt-0.5 shrink-0 h-4 w-4 rounded cursor-pointer accent-[#3891A6]"
-              />
-              <label htmlFor="tos" className="text-sm leading-snug cursor-pointer" style={{ color: '#888' }}>
-                I have read and agree to the{" "}
-                <button type="button" onClick={() => setShowTos(true)} className="font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity" style={{ color: '#3891A6' }}>
-                  Terms of Service
-                </button>
-              </label>
-            </div>
-
-            {/* Email opt-in */}
-            <div className="flex items-start gap-3">
-              <input
-                id="emailOptIn"
-                type="checkbox"
-                checked={emailOptIn}
-                onChange={(e) => setEmailOptIn(e.target.checked)}
-                className="mt-0.5 shrink-0 h-4 w-4 rounded cursor-pointer accent-[#3891A6]"
-              />
-              <label htmlFor="emailOptIn" className="text-sm leading-snug cursor-pointer" style={{ color: '#888' }}>
-                Send me emails about promotions, updates, and new features
-              </label>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || !tosAccepted}
-              className="w-full py-2 rounded-lg font-semibold transition disabled:opacity-40 hover:opacity-90"
-              style={{ backgroundColor: '#3891A6', color: '#020202' }}
-            >
-              {loading ? "Creating account..." : "Create Account"}
-            </button>
-          </form>
-
-          {/* TOS Modal */}
-          {showTos && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.8)' }} onClick={() => setShowTos(false)}>
-              <div
-                className="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-lg border"
-                style={{ backgroundColor: '#1a2a2b', borderColor: '#3891A6' }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: '1px solid rgba(56,145,166,0.3)' }}>
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Terms of Service</h2>
-                    <p className="text-xs mt-0.5" style={{ color: '#555' }}>Last updated: April 1, 2026</p>
-                  </div>
-                  <button type="button" onClick={() => setShowTos(false)} className="text-2xl leading-none hover:opacity-70 transition-opacity" style={{ color: '#888' }}>×</button>
-                </div>
-
-                {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-                  {TOS_SECTIONS.map((s) => (
-                    <section key={s.title}>
-                      <h3 className="text-sm font-bold mb-1.5" style={{ color: '#3891A6' }}>{s.title}</h3>
-                      <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: '#aaa' }}>{s.body}</p>
-                    </section>
-                  ))}
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-end gap-3 px-6 py-4 shrink-0" style={{ borderTop: '1px solid rgba(56,145,166,0.3)' }}>
-                  <button type="button" onClick={() => setShowTos(false)} className="px-4 py-2 rounded-lg text-sm font-medium transition hover:opacity-80" style={{ color: '#888' }}>
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setTosAccepted(true); setShowTos(false); }}
-                    className="px-6 py-2 rounded-lg text-sm font-semibold transition hover:opacity-90"
-                    style={{ backgroundColor: '#3891A6', color: '#020202' }}
-                  >
-                    I Agree
-                  </button>
-                </div>
+            {error && (
+              <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", fontSize: 14 }}>
+                {error}
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="mt-6 text-center">
-            <p style={{ color: '#3891A6' }}>
-              Already have an account?{" "}
-              <Link href="/auth/signin" className="font-semibold" style={{ color: '#FDE74C' }}>
-                Sign in here
-              </Link>
-            </p>
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Honeypot */}
+              <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", width: 1, height: 1, overflow: "hidden" }}>
+                <label htmlFor="website">Website</label>
+                <input id="website" name="website" type="text" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} tabIndex={-1} autoComplete="off" />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Display Name</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Your name" className="rg-input" autoComplete="name" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" className="rg-input" autoComplete="email" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Password</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Min. 8 characters" className="rg-input" autoComplete="new-password" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Confirm Password</label>
+                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="••••••••" className="rg-input" autoComplete="new-password" />
+              </div>
+
+              {/* ToS */}
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                <input type="checkbox" checked={tosAccepted} onChange={(e) => setTosAccepted(e.target.checked)}
+                  style={{ marginTop: 2, accentColor: "#3891A6", flexShrink: 0, width: 15, height: 15 }} />
+                <span style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>
+                  I agree to the{" "}
+                  <button type="button" onClick={() => setShowTos(true)}
+                    style={{ color: "#3891A6", fontWeight: 600, background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline", fontSize: 13 }}>
+                    Terms of Service
+                  </button>
+                </span>
+              </label>
+
+              {/* Email opt-in */}
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                <input type="checkbox" checked={emailOptIn} onChange={(e) => setEmailOptIn(e.target.checked)}
+                  style={{ marginTop: 2, accentColor: "#3891A6", flexShrink: 0, width: 15, height: 15 }} />
+                <span style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>
+                  Send me emails about updates and new features
+                </span>
+              </label>
+
+              <button type="submit" disabled={loading || !tosAccepted} className="rg-btn"
+                style={{ marginTop: 6, padding: "13px", borderRadius: 10, fontWeight: 700, fontSize: 15, color: "#fff", backgroundColor: "#3891A6", border: "none", cursor: loading || !tosAccepted ? "not-allowed" : "pointer", opacity: loading || !tosAccepted ? 0.5 : 1, boxShadow: "0 0 28px rgba(56,145,166,0.4)", transition: "transform 0.2s, box-shadow 0.2s" }}
+                onMouseEnter={e => { if (!loading && tosAccepted) { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px rgba(56,145,166,0.6)"; }}}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 28px rgba(56,145,166,0.4)"; }}>
+                {loading ? "Creating account…" : "Create Account →"}
+              </button>
+            </form>
+
+            <div style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
+              <p style={{ fontSize: 14, color: "#6B7280" }}>
+                Already have an account?{" "}
+                <Link href="/auth/signin" style={{ color: "#FDE74C", fontWeight: 700, textDecoration: "none" }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
+                  Sign in
+                </Link>
+              </p>
+            </div>
           </div>
 
-          <div className="mt-6 pt-6 text-center" style={{ borderTopColor: '#3891A6', borderTopWidth: '1px' }}>
-            <Link href="/" style={{ color: '#3891A6' }} className="text-sm hover:opacity-80">
+          <div style={{ textAlign: "center", marginTop: 20 }}>
+            <Link href="/" style={{ fontSize: 13, color: "#374151", textDecoration: "none" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#6B7280")}
+              onMouseLeave={e => (e.currentTarget.style.color = "#374151")}>
               ← Back to home
             </Link>
           </div>
         </div>
-      </div>
-    </main>
+
+        {/* TOS Modal */}
+        {showTos && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "rgba(0,0,0,0.85)" }} onClick={() => setShowTos(false)}>
+            <div style={{ width: "100%", maxWidth: 640, maxHeight: "82vh", display: "flex", flexDirection: "column", borderRadius: 20, border: "1px solid rgba(56,145,166,0.3)", background: "#0d1a1b", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(56,145,166,0.15)", flexShrink: 0 }}>
+                <div>
+                  <h2 style={{ color: "#fff", fontWeight: 700, fontSize: 17, margin: 0 }}>Terms of Service</h2>
+                  <p style={{ color: "#4B5563", fontSize: 12, margin: 0 }}>Last updated: April 1, 2026</p>
+                </div>
+                <button type="button" onClick={() => setShowTos(false)} style={{ color: "#6B7280", background: "none", border: "none", fontSize: 24, cursor: "pointer", lineHeight: 1 }}>×</button>
+              </div>
+              <div style={{ flexGrow: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
+                {TOS_SECTIONS.map(s => (
+                  <section key={s.title}>
+                    <h3 style={{ color: "#3891A6", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{s.title}</h3>
+                    <p style={{ color: "#9CA3AF", fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-line" }}>{s.body}</p>
+                  </section>
+                ))}
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "16px 24px", borderTop: "1px solid rgba(56,145,166,0.15)", flexShrink: 0 }}>
+                <button type="button" onClick={() => setShowTos(false)} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#6B7280", background: "none", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer" }}>Close</button>
+                <button type="button" onClick={() => { setTosAccepted(true); setShowTos(false); }} style={{ padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "#3891A6", border: "none", cursor: "pointer", boxShadow: "0 0 16px rgba(56,145,166,0.35)" }}>I Agree</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
     </>
   );
 }

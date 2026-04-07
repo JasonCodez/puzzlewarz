@@ -451,6 +451,13 @@ const STORE_ITEMS = [
   { key: "team_banner_gold", name: "Gold Team Banner", description: "Unlock a gold banner color for your team on the leaderboard.", category: "social", subcategory: "banner", price: 600, isConsumable: false, iconEmoji: "🏆", metadata: { value: "gold", color: "#FDE74C" } },
   { key: "team_banner_crimson", name: "Crimson Team Banner", description: "Unlock a deep crimson banner for your team.", category: "social", subcategory: "banner", price: 400, isConsumable: false, iconEmoji: "🚩", metadata: { value: "crimson", color: "#DC2626" } },
   { key: "team_banner_neon", name: "Neon Team Banner", description: "Unlock a glowing neon cyan banner for your team.", category: "social", subcategory: "banner", price: 400, isConsumable: false, iconEmoji: "💠", metadata: { value: "neon", color: "#00FFFF" } },
+  // ── Season 1 — Ignition exclusives (hidden from store, granted via season pass) ──
+  { key: "frame_ignition_bronze", name: "Ignition Bronze Frame", description: "Season 1 exclusive. A molten bronze avatar frame earned on the Ignition Pass.", category: "cosmetic", subcategory: "frame", price: 0, isConsumable: false, isExclusive: true, iconEmoji: "🟫", metadata: { value: "ignition_bronze", season: 1 } },
+  { key: "frame_ignition_silver", name: "Ignition Silver Frame", description: "Season 1 exclusive. A shimmering silver avatar frame earned on the Ignition Pass.", category: "cosmetic", subcategory: "frame", price: 0, isConsumable: false, isExclusive: true, iconEmoji: "⬜", metadata: { value: "ignition_silver", season: 1 } },
+  { key: "frame_ignition_gold", name: "Ignition Gold Frame", description: "Season 1 exclusive. A blazing gold avatar frame earned on the Ignition Pass.", category: "cosmetic", subcategory: "frame", price: 0, isConsumable: false, isExclusive: true, iconEmoji: "🟡", metadata: { value: "ignition_gold", season: 1 } },
+  { key: "frame_ignition_legendary", name: "Ignition Legendary Frame", description: "Season 1 exclusive. The rarest frame — forged in flame for those who conquered the Ignition Pass.", category: "cosmetic", subcategory: "frame", price: 0, isConsumable: false, isExclusive: true, iconEmoji: "🔶", metadata: { value: "ignition_legendary", season: 1 } },
+  { key: "theme_ignition_ember", name: "Ember Theme", description: "Season 1 exclusive. A smouldering ember profile theme — deep charcoal with glowing orange accents.", category: "cosmetic", subcategory: "theme", price: 0, isConsumable: false, isExclusive: true, iconEmoji: "🔥", metadata: { value: "ignition_ember", primaryColor: "#f97316", accentColor: "#dc2626", season: 1 } },
+  { key: "theme_ignition_inferno", name: "Inferno Theme", description: "Season 1 exclusive. The ultimate Ignition theme — volcanic black with molten lava veins.", category: "cosmetic", subcategory: "theme", price: 0, isConsumable: false, isExclusive: true, iconEmoji: "🌋", metadata: { value: "ignition_inferno", primaryColor: "#ef4444", accentColor: "#fbbf24", season: 1 } },
 ];
 
 async function seedStoreItems() {
@@ -474,6 +481,7 @@ async function main() {
     await seedStoreItems();
     await seedEscapeRoomExample();
     await seedDetectiveCaseNoirExample();
+    await seedSeason1();
     console.log('🎉 All seeds completed successfully.');
   } catch (e) {
     console.error('❌ Seed run failed:', e);
@@ -710,3 +718,78 @@ async function seedDetectiveCaseNoirExample() {
 
 // Run the escape room seed after the achievements
 // (seedEscapeRoomExample is invoked from `main`)
+
+// ── Season 1 — Ignition ────────────────────────────────────────────────────
+async function seedSeason1() {
+  console.log("🌱 Seeding Season 1 — Ignition...");
+
+  const existing = await prisma.season.findFirst({ where: { name: "Season 1 — Ignition" } });
+  if (existing) {
+    console.log("↪ Season 1 already seeded.");
+    return;
+  }
+
+  // Season dates: April 7 2026 → July 6 2026 (3 months)
+  const season = await prisma.season.create({
+    data: {
+      name: "Season 1 — Ignition",
+      description: "The first PuzzleWarz season. Prove your worth and forge your legacy.",
+      startDate: new Date(Date.UTC(2026, 3, 7)),   // 2026-04-07
+      endDate:   new Date(Date.UTC(2026, 6, 6)),   // 2026-07-06
+      isActive: true,
+      premiumPrice: 500,
+    },
+  });
+
+  // 30 tiers — XP values are cumulative totals
+  // Milestones at 5, 10, 15, 20, 25, 30
+  // Free track: tokens + points; Premium track: cosmetics at milestones + better tokens
+  const tiers: {
+    tierNumber: number;
+    xpRequired: number;
+    freeRewardType: string | null;
+    freeRewardKey: string | null;
+    freeRewardQty: number;
+    premRewardType: string | null;
+    premRewardKey: string | null;
+    premRewardQty: number;
+  }[] = [
+    { tierNumber:  1, xpRequired:   300, freeRewardType: "hint_tokens",    freeRewardKey: null,                      freeRewardQty: 2, premRewardType: "hint_tokens",    premRewardKey: null,                      premRewardQty: 3 },
+    { tierNumber:  2, xpRequired:   650, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 100, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 200 },
+    { tierNumber:  3, xpRequired:  1050, freeRewardType: "skip_tokens",    freeRewardKey: null,                      freeRewardQty: 1, premRewardType: "skip_tokens",    premRewardKey: null,                      premRewardQty: 2 },
+    { tierNumber:  4, xpRequired:  1500, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 100, premRewardType: "streak_shields", premRewardKey: null,                      premRewardQty: 1 },
+    { tierNumber:  5, xpRequired:  2000, freeRewardType: "streak_shields", freeRewardKey: null,                      freeRewardQty: 2, premRewardType: "cosmetic",       premRewardKey: "frame_ignition_bronze",   premRewardQty: 1 },
+    { tierNumber:  6, xpRequired:  2650, freeRewardType: "hint_tokens",    freeRewardKey: null,                      freeRewardQty: 2, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 200 },
+    { tierNumber:  7, xpRequired:  3400, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 150, premRewardType: "hint_tokens",    premRewardKey: null,                      premRewardQty: 3 },
+    { tierNumber:  8, xpRequired:  4250, freeRewardType: "skip_tokens",    freeRewardKey: null,                      freeRewardQty: 1, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 250 },
+    { tierNumber:  9, xpRequired:  5200, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 150, premRewardType: "skip_tokens",    premRewardKey: null,                      premRewardQty: 2 },
+    { tierNumber: 10, xpRequired:  6250, freeRewardType: "hint_tokens",    freeRewardKey: null,                      freeRewardQty: 3, premRewardType: "cosmetic",       premRewardKey: "theme_ignition_ember",    premRewardQty: 1 },
+    { tierNumber: 11, xpRequired:  7500, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 200, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 400 },
+    { tierNumber: 12, xpRequired:  8850, freeRewardType: "streak_shields", freeRewardKey: null,                      freeRewardQty: 2, premRewardType: "hint_tokens",    premRewardKey: null,                      premRewardQty: 4 },
+    { tierNumber: 13, xpRequired: 10300, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 200, premRewardType: "skip_tokens",    premRewardKey: null,                      premRewardQty: 3 },
+    { tierNumber: 14, xpRequired: 11850, freeRewardType: "hint_tokens",    freeRewardKey: null,                      freeRewardQty: 3, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 500 },
+    { tierNumber: 15, xpRequired: 13500, freeRewardType: "skip_tokens",    freeRewardKey: null,                      freeRewardQty: 2, premRewardType: "cosmetic",       premRewardKey: "frame_ignition_silver",   premRewardQty: 1 },
+    { tierNumber: 16, xpRequired: 15350, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 250, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 600 },
+    { tierNumber: 17, xpRequired: 17300, freeRewardType: "hint_tokens",    freeRewardKey: null,                      freeRewardQty: 4, premRewardType: "streak_shields", premRewardKey: null,                      premRewardQty: 3 },
+    { tierNumber: 18, xpRequired: 19350, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 250, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 700 },
+    { tierNumber: 19, xpRequired: 21500, freeRewardType: "streak_shields", freeRewardKey: null,                      freeRewardQty: 3, premRewardType: "skip_tokens",    premRewardKey: null,                      premRewardQty: 4 },
+    { tierNumber: 20, xpRequired: 23750, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 300, premRewardType: "cosmetic",       premRewardKey: "frame_ignition_gold",     premRewardQty: 1 },
+    { tierNumber: 21, xpRequired: 26250, freeRewardType: "hint_tokens",    freeRewardKey: null,                      freeRewardQty: 5, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 800 },
+    { tierNumber: 22, xpRequired: 28950, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 300, premRewardType: "hint_tokens",    premRewardKey: null,                      premRewardQty: 5 },
+    { tierNumber: 23, xpRequired: 31850, freeRewardType: "skip_tokens",    freeRewardKey: null,                      freeRewardQty: 3, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 900 },
+    { tierNumber: 24, xpRequired: 34950, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 300, premRewardType: "streak_shields", premRewardKey: null,                      premRewardQty: 4 },
+    { tierNumber: 25, xpRequired: 38250, freeRewardType: "hint_tokens",    freeRewardKey: null,                      freeRewardQty: 4, premRewardType: "cosmetic",       premRewardKey: "theme_ignition_inferno",  premRewardQty: 1 },
+    { tierNumber: 26, xpRequired: 41950, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 400, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 1000 },
+    { tierNumber: 27, xpRequired: 46050, freeRewardType: "skip_tokens",    freeRewardKey: null,                      freeRewardQty: 4, premRewardType: "hint_tokens",    premRewardKey: null,                      premRewardQty: 6 },
+    { tierNumber: 28, xpRequired: 50550, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 400, premRewardType: "points",         premRewardKey: null,                      premRewardQty: 1200 },
+    { tierNumber: 29, xpRequired: 55450, freeRewardType: "streak_shields", freeRewardKey: null,                      freeRewardQty: 5, premRewardType: "skip_tokens",    premRewardKey: null,                      premRewardQty: 5 },
+    { tierNumber: 30, xpRequired: 60750, freeRewardType: "points",         freeRewardKey: null,                      freeRewardQty: 500, premRewardType: "cosmetic",       premRewardKey: "frame_ignition_legendary", premRewardQty: 1 },
+  ];
+
+  for (const tier of tiers) {
+    await prisma.seasonTier.create({ data: { seasonId: season.id, ...tier } });
+    console.log(`  ✓ Tier ${tier.tierNumber} (${tier.xpRequired.toLocaleString()} XP)`);
+  }
+
+  console.log(`✅ Season 1 seeded with ${tiers.length} tiers.`);
+}

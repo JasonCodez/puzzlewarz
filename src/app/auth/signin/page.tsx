@@ -4,7 +4,6 @@ import { useState, useEffect, Suspense } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
 
 function SignInForm() {
   const router = useRouter();
@@ -89,115 +88,106 @@ function SignInForm() {
 
   return (
     <>
-      <Navbar />
-      <main className="min-h-screen flex items-center justify-center px-4 pt-16" style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }}>
-      <div className="w-full max-w-md">
-        <div className="border rounded-lg p-8" style={{ backgroundColor: 'rgba(76, 91, 92, 0.6)', borderColor: '#3891A6' }}>
-            <div className="flex justify-center mb-2">
-              <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz Logo" className="h-48 w-auto max-w-md" />
-                    </div>
-          <p style={{ color: '#3891A6' }} className="text-center mb-8">Sign in to your account</p>
+      <style>{`
+        @keyframes si-orb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,-30px) scale(1.08)} }
+        @keyframes si-orb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-50px,40px) scale(0.94)} }
+        @keyframes si-fade { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+        .si-card { animation: si-fade 0.6s ease forwards; }
+        .si-input { background: rgba(255,255,255,0.05); border: 1px solid rgba(56,145,166,0.3); border-radius: 10px; color: #fff; padding: 12px 16px; width: 100%; font-size: 14px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+        .si-input::placeholder { color: rgba(255,255,255,0.25); }
+        .si-input:focus { border-color: #3891A6; box-shadow: 0 0 0 3px rgba(56,145,166,0.15); }
+        .si-btn { position:relative; overflow:hidden; }
+        .si-btn::after { content:''; position:absolute; top:-50%; left:-60%; width:40%; height:200%; background:rgba(255,255,255,0.12); transform:skewX(-20deg); transition:left 0.5s ease; }
+        .si-btn:hover::after { left:130%; }
+      `}</style>
 
-          {error && (
-            <div className="mb-6 p-4 rounded-lg text-white border" style={{ backgroundColor: 'rgba(171, 159, 157, 0.2)', borderColor: '#AB9F9D' }}>
-              {error}
-              {error.toLowerCase().includes('email not verified') && (
-                <div className="mt-3 flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleResendVerification}
-                    disabled={resendStatus === 'sending'}
-                    className="px-3 py-2 rounded text-sm font-semibold transition disabled:opacity-50 hover:opacity-90"
-                    style={{ backgroundColor: '#3891A6', color: '#020202' }}
-                  >
-                    {resendStatus === 'sending'
-                      ? 'Sending...'
-                      : resendStatus === 'sent'
-                        ? 'Sent ✓'
-                        : 'Resend verification'}
-                  </button>
-                  {resendStatus === 'failed' && (
-                    <span className="text-xs" style={{ color: '#DDDBF1' }}>Could not send. Try again later.</span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+      <main style={{ minHeight: "100vh", backgroundColor: "#020202", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px", position: "relative", overflow: "hidden" }}>
+        {/* Background orbs */}
+        <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <div style={{ position: "absolute", top: "15%", left: "10%", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(56,145,166,0.2) 0%, transparent 70%)", animation: "si-orb1 16s ease-in-out infinite" }} />
+          <div style={{ position: "absolute", bottom: "10%", right: "8%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(56,145,166,0.12) 0%, transparent 70%)", animation: "si-orb2 20s ease-in-out infinite" }} />
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(56,145,166,0.35) 1px, transparent 1px)", backgroundSize: "36px 36px", opacity: 0.04 }} />
+        </div>
 
-          {session?.user && (
-            <div className="mb-6 p-4 rounded-lg text-white border" style={{ backgroundColor: 'rgba(56, 145, 166, 0.2)', borderColor: '#3891A6' }}>
-              Currently signed in as <strong>{session.user.email}</strong>. Enter different credentials to switch accounts.
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: '#3891A6' }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none transition"
-                placeholder="you@example.com"
-                style={{ backgroundColor: '#2a3a3b', borderWidth: '2px', borderColor: '#3891A6' }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#FDE74C'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#3891A6'}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: '#3891A6' }}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none transition"
-                placeholder="••••••••"
-                style={{ backgroundColor: '#2a3a3b', borderWidth: '2px', borderColor: '#3891A6' }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#FDE74C'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#3891A6'}
-              />
-            </div>
-
-            <div className="text-right">
-              <Link href="/auth/forgot-password" className="text-sm hover:opacity-80 transition-opacity" style={{ color: '#3891A6' }}>
-                Forgot password?
-              </Link>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2 rounded-lg text-white font-semibold transition disabled:opacity-50 hover:opacity-90"
-              style={{ backgroundColor: '#3891A6' }}
-            >
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p style={{ color: '#3891A6' }}>
-              Don't have an account?{" "}
-              <Link href="/auth/register" className="font-semibold" style={{ color: '#FDE74C' }}>
-                Register here
-              </Link>
-            </p>
+        <div className="si-card" style={{ width: "100%", maxWidth: 440, position: "relative" }}>
+          {/* Logo */}
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <img src="/images/puzzle_warz_logo.png" alt="Puzzle Warz" style={{ height: 72, width: "auto", display: "inline-block" }} />
           </div>
 
-          <div className="mt-6 pt-6 text-center" style={{ borderTopColor: '#3891A6', borderTopWidth: '1px' }}>
-            <Link href="/" style={{ color: '#3891A6' }} className="text-sm hover:opacity-80">
+          {/* Card */}
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(56,145,166,0.25)", borderRadius: 20, padding: "36px 32px", backdropFilter: "blur(12px)" }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 6, letterSpacing: "-0.02em" }}>Welcome back</h1>
+            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>Sign in to continue your puzzle journey</p>
+
+            {error && (
+              <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", fontSize: 14 }}>
+                {error}
+                {error.toLowerCase().includes("email not verified") && (
+                  <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10 }}>
+                    <button type="button" onClick={handleResendVerification} disabled={resendStatus === "sending"}
+                      style={{ padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, backgroundColor: "#3891A6", color: "#fff", border: "none", cursor: "pointer", opacity: resendStatus === "sending" ? 0.5 : 1 }}>
+                      {resendStatus === "sending" ? "Sending…" : resendStatus === "sent" ? "Sent ✓" : "Resend verification"}
+                    </button>
+                    {resendStatus === "failed" && <span style={{ fontSize: 12, color: "#9CA3AF" }}>Could not send. Try again later.</span>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {session?.user && (
+              <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "rgba(56,145,166,0.1)", border: "1px solid rgba(56,145,166,0.3)", color: "#9BD1D6", fontSize: 13 }}>
+                Signed in as <strong>{session.user.email}</strong>. Enter different credentials to switch.
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" className="si-input" autoComplete="email" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Password</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" className="si-input" autoComplete="current-password" />
+              </div>
+
+              <div style={{ textAlign: "right", marginTop: -8 }}>
+                <Link href="/auth/forgot-password" style={{ fontSize: 13, color: "#3891A6", textDecoration: "none" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "#9BD1D6")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "#3891A6")}>
+                  Forgot password?
+                </Link>
+              </div>
+
+              <button type="submit" disabled={loading} className="si-btn"
+                style={{ marginTop: 4, padding: "13px", borderRadius: 10, fontWeight: 700, fontSize: 15, color: "#fff", backgroundColor: "#3891A6", border: "none", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, boxShadow: "0 0 28px rgba(56,145,166,0.4)", transition: "transform 0.2s, box-shadow 0.2s" }}
+                onMouseEnter={e => { if (!loading) { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px rgba(56,145,166,0.6)"; }}}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 28px rgba(56,145,166,0.4)"; }}>
+                {loading ? "Signing in…" : "Sign In →"}
+              </button>
+            </form>
+
+            <div style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
+              <p style={{ fontSize: 14, color: "#6B7280" }}>
+                Don&apos;t have an account?{" "}
+                <Link href="/auth/register" style={{ color: "#FDE74C", fontWeight: 700, textDecoration: "none" }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
+                  Sign up free
+                </Link>
+              </p>
+            </div>
+          </div>
+
+          <div style={{ textAlign: "center", marginTop: 20 }}>
+            <Link href="/" style={{ fontSize: 13, color: "#374151", textDecoration: "none" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#6B7280")}
+              onMouseLeave={e => (e.currentTarget.style.color = "#374151")}>
               ← Back to home
             </Link>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
     </>
   );
 }

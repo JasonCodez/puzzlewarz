@@ -1,16 +1,18 @@
 import { create } from 'zustand';
 
 interface AchievementModalState {
-  notificationAchievement: any | null;
-  setNotificationAchievement: (achievement: any | null) => void;
+  achievementQueue: any[];
+  enqueueAchievement: (achievement: any) => void;
+  dequeueAchievement: () => void;
   shownAchievements: Set<string>;
   addShownAchievement: (id: string) => void;
   setShownAchievements: (ids: Iterable<string>) => void;
 }
 
 export const useAchievementModalStore = create<AchievementModalState>((set, get) => ({
-  notificationAchievement: null,
-  setNotificationAchievement: (achievement) => set({ notificationAchievement: achievement }),
+  achievementQueue: [],
+  enqueueAchievement: (achievement) => set({ achievementQueue: [...get().achievementQueue, achievement] }),
+  dequeueAchievement: () => set({ achievementQueue: get().achievementQueue.slice(1) }),
   shownAchievements: new Set(),
   addShownAchievement: (id) => {
     const prev = get().shownAchievements;

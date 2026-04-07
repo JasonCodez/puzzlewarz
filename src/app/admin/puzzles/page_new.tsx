@@ -121,6 +121,10 @@ export default function AdminPuzzlesPage() {
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Manage Puzzles filters
+  const [filterTitle, setFilterTitle] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [filterDifficulty, setFilterDifficulty] = useState("all");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -952,135 +956,6 @@ export default function AdminPuzzlesPage() {
           <h1 className="text-4xl font-bold text-white mb-2">🧩 Universal Puzzle Maker</h1>
           <p className="text-[#9BD1D6] mb-8">Create any type of puzzle with advanced tools and testing capabilities</p>
 
-          {/* ── Existing Puzzles ─────────────────────────────── */}
-          <div className="mb-12">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-white">Manage Puzzles</h2>
-              <button
-                type="button"
-                onClick={fetchPuzzles}
-                disabled={fetchingPuzzles}
-                className="px-3 py-1.5 rounded text-sm bg-slate-700 text-gray-300 hover:bg-slate-600 border border-slate-600 disabled:opacity-50"
-              >
-                {fetchingPuzzles ? "Loading…" : "↻ Refresh"}
-              </button>
-            </div>
-
-            {deleteError && (
-              <div className="mb-3 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center justify-between">
-                <span>⚠ {deleteError}</span>
-                <button type="button" onClick={() => setDeleteError(null)} className="ml-4 text-red-400 hover:text-white">✕</button>
-              </div>
-            )}
-
-            {fetchingPuzzles ? (
-              <p className="text-gray-400 text-sm">Loading puzzles…</p>
-            ) : allPuzzles.length === 0 ? (
-              <p className="text-gray-500 text-sm">No puzzles yet. Create one below.</p>
-            ) : (
-              <div className="overflow-auto rounded-lg border border-slate-700">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-800 text-gray-400 uppercase text-xs tracking-wider">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold">Title</th>
-                      <th className="px-4 py-3 font-semibold">Type</th>
-                      <th className="px-4 py-3 font-semibold">Difficulty</th>
-                      <th className="px-4 py-3 font-semibold">Category</th>
-                      <th className="px-4 py-3 font-semibold">Destination</th>
-                      <th className="px-4 py-3 font-semibold">Created</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3 font-semibold text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700/60">
-                    {allPuzzles.map((p) => (
-                      <tr key={p.id} className="bg-slate-800/40 hover:bg-slate-800/70 transition-colors">
-                        <td className="px-4 py-3 text-white font-medium max-w-[220px] truncate" title={p.title}>{(() => {
-                            const escapeTitle = p.escapeRoom?.roomTitle?.trim() || '';
-                            const t = p.title?.trim() || '';
-                            const display = (p.puzzleType === 'escape_room' && escapeTitle)
-                              ? escapeTitle
-                              : (!t || t === 'Untitled Puzzle') && escapeTitle
-                              ? escapeTitle
-                              : t || escapeTitle || '';
-                            return display ? display : <span className="text-gray-500 italic">Untitled</span>;
-                          })()}</td>
-                        <td className="px-4 py-3 text-gray-300 capitalize">{p.puzzleType.replace(/_/g, ' ')}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
-                            p.difficulty === 'easy' ? 'bg-green-500/20 text-green-300' :
-                            p.difficulty === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
-                            p.difficulty === 'hard' ? 'bg-red-500/20 text-red-300' :
-                            'bg-purple-500/20 text-purple-300'
-                          }`}>{p.difficulty}</span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-400">{p.category?.name || '—'}</td>
-                        <td className="px-4 py-3">
-                          {p.isWarzExclusive ? (
-                            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-500/20 text-yellow-300">⚔️ Warz</span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/20 text-blue-300">🧩 Regular</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{new Date(p.createdAt).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded text-xs font-semibold ${p.isActive ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>
-                            {p.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          {deleteConfirmId === p.id ? (
-                            <span className="inline-flex items-center gap-2">
-                              <span className="text-red-300 text-xs">Confirm delete?</span>
-                              <button
-                                type="button"
-                                disabled={deletingId === p.id}
-                                onClick={() => handleDeletePuzzle(p.id)}
-                                className="px-2 py-1 rounded text-xs bg-red-600 hover:bg-red-700 text-white disabled:opacity-60"
-                              >
-                                {deletingId === p.id ? "Deleting…" : "Yes, delete"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteConfirmId(null)}
-                                className="px-2 py-1 rounded text-xs bg-slate-600 hover:bg-slate-500 text-gray-300"
-                              >
-                                Cancel
-                              </button>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-2">
-                              <button
-                                type="button"
-                                disabled={loadingEdit}
-                                onClick={() => loadPuzzleForEdit(p.id)}
-                                className={`px-3 py-1 rounded text-xs border transition-colors ${
-                                  editingId === p.id
-                                    ? 'bg-blue-600/40 text-blue-200 border-blue-500/60'
-                                    : 'bg-blue-900/30 hover:bg-blue-700/50 text-blue-300 hover:text-white border-blue-700/40'
-                                }`}
-                              >
-                                {loadingEdit && editingId === null ? '…' : editingId === p.id ? '✏️ Editing' : '✏️ Edit'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { setDeleteConfirmId(p.id); setDeleteError(null); }}
-                                className="px-3 py-1 rounded text-xs bg-red-900/40 hover:bg-red-700/60 text-red-300 hover:text-white border border-red-700/40 transition-colors"
-                              >
-                                🗑 Delete
-                              </button>
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-          {/* ── End Manage Puzzles ──────────────────────────── */}
-
           <div className="grid md:grid-cols-3 gap-8 mb-12">
             {/* Form */}
             <div className="md:col-span-3">
@@ -1546,6 +1421,191 @@ export default function AdminPuzzlesPage() {
 
             {/* Media Manager removed per request */}
           </div> {/* End grid */}
+
+          {/* ── Manage Puzzles ─────────────────────────────── */}
+          <div className="mt-16 mb-12">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-white">Manage Puzzles</h2>
+              <button
+                type="button"
+                onClick={fetchPuzzles}
+                disabled={fetchingPuzzles}
+                className="px-3 py-1.5 rounded text-sm bg-slate-700 text-gray-300 hover:bg-slate-600 border border-slate-600 disabled:opacity-50"
+              >
+                {fetchingPuzzles ? "Loading…" : "↻ Refresh"}
+              </button>
+            </div>
+
+            {/* Filter bar */}
+            <div className="flex flex-wrap gap-3 mb-4">
+              <input
+                type="text"
+                value={filterTitle}
+                onChange={(e) => setFilterTitle(e.target.value)}
+                placeholder="Search by title…"
+                className="flex-1 min-w-[180px] px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-gray-500 text-sm"
+              />
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-gray-300 text-sm"
+              >
+                <option value="all">All Types</option>
+                {PUZZLE_TYPES.map((pt) => (
+                  <option key={pt.value} value={pt.value}>{pt.label}</option>
+                ))}
+              </select>
+              <select
+                value={filterDifficulty}
+                onChange={(e) => setFilterDifficulty(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-gray-300 text-sm"
+              >
+                <option value="all">All Difficulties</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+                <option value="extreme">Extreme</option>
+              </select>
+              {(filterTitle || filterType !== 'all' || filterDifficulty !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => { setFilterTitle(''); setFilterType('all'); setFilterDifficulty('all'); }}
+                  className="px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-gray-400 hover:text-white text-sm"
+                >
+                  ✕ Clear
+                </button>
+              )}
+            </div>
+
+            {deleteError && (
+              <div className="mb-3 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center justify-between">
+                <span>⚠ {deleteError}</span>
+                <button type="button" onClick={() => setDeleteError(null)} className="ml-4 text-red-400 hover:text-white">✕</button>
+              </div>
+            )}
+
+            {fetchingPuzzles ? (
+              <p className="text-gray-400 text-sm">Loading puzzles…</p>
+            ) : allPuzzles.length === 0 ? (
+              <p className="text-gray-500 text-sm">No puzzles yet. Create one above.</p>
+            ) : (() => {
+              const filteredPuzzles = allPuzzles.filter((p) => {
+                const titleMatch = !filterTitle ||
+                  (p.escapeRoom?.roomTitle || p.title || '').toLowerCase().includes(filterTitle.toLowerCase());
+                const typeMatch = filterType === 'all' || p.puzzleType === filterType;
+                const diffMatch = filterDifficulty === 'all' || p.difficulty === filterDifficulty;
+                return titleMatch && typeMatch && diffMatch;
+              });
+              return filteredPuzzles.length === 0 ? (
+                <p className="text-gray-500 text-sm">No puzzles match your filters.</p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-500 mb-2">{filteredPuzzles.length} of {allPuzzles.length} puzzles</p>
+                  <div className="overflow-auto rounded-lg border border-slate-700">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-slate-800 text-gray-400 uppercase text-xs tracking-wider">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold">Title</th>
+                          <th className="px-4 py-3 font-semibold">Type</th>
+                          <th className="px-4 py-3 font-semibold">Difficulty</th>
+                          <th className="px-4 py-3 font-semibold">Category</th>
+                          <th className="px-4 py-3 font-semibold">Destination</th>
+                          <th className="px-4 py-3 font-semibold">Created</th>
+                          <th className="px-4 py-3 font-semibold">Status</th>
+                          <th className="px-4 py-3 font-semibold text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/60">
+                        {filteredPuzzles.map((p) => (
+                          <tr key={p.id} className="bg-slate-800/40 hover:bg-slate-800/70 transition-colors">
+                            <td className="px-4 py-3 text-white font-medium max-w-[220px] truncate" title={p.title}>{(() => {
+                                const escapeTitle = p.escapeRoom?.roomTitle?.trim() || '';
+                                const t = p.title?.trim() || '';
+                                const display = (p.puzzleType === 'escape_room' && escapeTitle)
+                                  ? escapeTitle
+                                  : (!t || t === 'Untitled Puzzle') && escapeTitle
+                                  ? escapeTitle
+                                  : t || escapeTitle || '';
+                                return display ? display : <span className="text-gray-500 italic">Untitled</span>;
+                              })()}</td>
+                            <td className="px-4 py-3 text-gray-300 capitalize">{p.puzzleType.replace(/_/g, ' ')}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                                p.difficulty === 'easy' ? 'bg-green-500/20 text-green-300' :
+                                p.difficulty === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
+                                p.difficulty === 'hard' ? 'bg-red-500/20 text-red-300' :
+                                'bg-purple-500/20 text-purple-300'
+                              }`}>{p.difficulty}</span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-400">{p.category?.name || '—'}</td>
+                            <td className="px-4 py-3">
+                              {p.isWarzExclusive ? (
+                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-500/20 text-yellow-300">⚔️ Warz</span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/20 text-blue-300">🧩 Regular</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{new Date(p.createdAt).toLocaleDateString()}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${p.isActive ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                                {p.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                              {deleteConfirmId === p.id ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="text-red-300 text-xs">Confirm delete?</span>
+                                  <button
+                                    type="button"
+                                    disabled={deletingId === p.id}
+                                    onClick={() => handleDeletePuzzle(p.id)}
+                                    className="px-2 py-1 rounded text-xs bg-red-600 hover:bg-red-700 text-white disabled:opacity-60"
+                                  >
+                                    {deletingId === p.id ? "Deleting…" : "Yes, delete"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirmId(null)}
+                                    className="px-2 py-1 rounded text-xs bg-slate-600 hover:bg-slate-500 text-gray-300"
+                                  >
+                                    Cancel
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={loadingEdit}
+                                    onClick={() => loadPuzzleForEdit(p.id)}
+                                    className={`px-3 py-1 rounded text-xs border transition-colors ${
+                                      editingId === p.id
+                                        ? 'bg-blue-600/40 text-blue-200 border-blue-500/60'
+                                        : 'bg-blue-900/30 hover:bg-blue-700/50 text-blue-300 hover:text-white border-blue-700/40'
+                                    }`}
+                                  >
+                                    {loadingEdit && editingId === null ? '…' : editingId === p.id ? '✏️ Editing' : '✏️ Edit'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setDeleteConfirmId(p.id); setDeleteError(null); }}
+                                    className="px-3 py-1 rounded text-xs bg-red-900/40 hover:bg-red-700/60 text-red-300 hover:text-white border border-red-700/40 transition-colors"
+                                  >
+                                    🗑 Delete
+                                  </button>
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+          {/* ── End Manage Puzzles ──────────────────────────── */}
+
         </div>
       </div>
 

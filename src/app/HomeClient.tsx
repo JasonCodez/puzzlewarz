@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 /* ── Intersection observer hook ───────────────────────────── */
@@ -265,23 +265,34 @@ function ComingSoonCard({ icon, title, desc, accent, delay, visible }: ComingSoo
 /* ── Main component ───────────────────────────────────────── */
 export default function HomeClient() {
   const [heroVisible, setHeroVisible] = useState(false);
-  const featuresReveal = useReveal();
-  const stepsReveal = useReveal();
+  const [todayQuestion, setTodayQuestion] = useState<string | null>(null);
+  const instantReveal   = useReveal();
+  const stepsReveal     = useReveal();
+  const escapeReveal    = useReveal();
+  const competReveal    = useReveal();
+  const dailyReveal     = useReveal();
   const comingSoonReveal = useReveal();
   const testimonialsReveal = useReveal();
-  const ctaReveal = useReveal();
+  const finalReveal     = useReveal();
 
   useEffect(() => {
     const t = setTimeout(() => setHeroVisible(true), 80);
     return () => clearTimeout(t);
   }, []);
 
+  useEffect(() => {
+    fetch("/api/frequency/today")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.question?.question) setTodayQuestion(data.question.question); })
+      .catch(() => {});
+  }, []);
+
   const features = [
-    { icon: "🧩", title: "Progressive Puzzles", desc: "Unlock challenges in stages with smart dependencies. Each solved clue opens a new layer of the mystery.", accent: "teal" as const, comingSoon: true },
+    { icon: "🧩", title: "Progressive Puzzles", desc: "Unlock challenges in stages with smart dependencies. Each solved clue opens a new layer of the mystery.", accent: "teal" as const },
     { icon: "🎯", title: "Solo or Team", desc: "Play solo at your own pace or team up with friends for collaborative puzzle solving.", accent: "gold" as const, comingSoon: true, comingSoonLabel: "Team Puzzles Coming Soon" },
     { icon: "🏆", title: "Live Leaderboards", desc: "Track your global position in real-time and compete against hundreds of other solvers.", accent: "teal" as const },
     { icon: "⚔️", title: "Warz Battles", desc: "Challenge opponents head-to-head. Wager points on who can crack the same puzzle faster.", accent: "gold" as const },
-    { icon: "⚡", title: "Strategic Hints", desc: "Use hints wisely—each one trims your score multiplier. Big brain plays beat the grind.", accent: "teal" as const },
+    { icon: "⚡", title: "Strategic Hints", desc: "Use hints wisely — each one trims your score multiplier. Big brain plays beat the grind.", accent: "teal" as const },
     { icon: "🎖️", title: "Achievements", desc: "Unlock badges, milestones, and streak rewards as you conquer the puzzle universe.", accent: "gold" as const },
   ];
 
@@ -293,6 +304,12 @@ export default function HomeClient() {
     { quote: "These aren't your typical word searches. They make you think sideways. I've genuinely changed how I analyze information.", name: "Marcus P.", initials: "MP", accent: "teal" as const },
     { quote: "Free to play, genuinely hard, and the forum community is helpful without spoilers. Already got three friends hooked.", name: "Riley L.", initials: "RL", accent: "gold" as const },
   ];
+
+  const fade = (visible: boolean, delay = 0, y = 24) => ({
+    opacity: visible ? 1 : 0,
+    transform: visible ? "translateY(0)" : `translateY(${y}px)`,
+    transition: `opacity 0.7s ease ${delay}s, transform 0.7s ease ${delay}s`,
+  });
 
   return (
     <>
@@ -311,10 +328,6 @@ export default function HomeClient() {
           0%, 100% { transform: translate(0, 0) scale(1); }
           50%       { transform: translate(50px, 40px) scale(1.1); }
         }
-        @keyframes pw-float {
-          0%, 100% { transform: translateY(0px); }
-          50%       { transform: translateY(-12px); }
-        }
         @keyframes pw-badge-pulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(253,231,76,0.35); }
           50%       { box-shadow: 0 0 0 8px rgba(253,231,76,0); }
@@ -323,20 +336,11 @@ export default function HomeClient() {
           0%   { background-position: -200% center; }
           100% { background-position: 200% center; }
         }
-        @keyframes pw-border-glow {
-          0%, 100% { opacity: 0.5; }
-          50%       { opacity: 1; }
-        }
         @keyframes pw-grid-fade {
           from { opacity: 0; }
           to   { opacity: 0.035; }
         }
-        .pw-badge-pulse {
-          animation: pw-badge-pulse 2.5s ease-in-out infinite;
-        }
-        .pw-float {
-          animation: pw-float 5s ease-in-out infinite;
-        }
+        .pw-badge-pulse { animation: pw-badge-pulse 2.5s ease-in-out infinite; }
         .pw-shimmer-text {
           background: linear-gradient(90deg, #3891A6 0%, #9BD1D6 40%, #3891A6 60%, #3891A6 100%);
           background-size: 200% auto;
@@ -345,411 +349,234 @@ export default function HomeClient() {
           background-clip: text;
           animation: pw-shimmer 4s linear infinite;
         }
-        .pw-cta-btn {
-          position: relative;
-          overflow: hidden;
-        }
+        .pw-cta-btn { position: relative; overflow: hidden; }
         .pw-cta-btn::after {
           content: '';
           position: absolute;
-          top: -50%;
-          left: -60%;
-          width: 40%;
-          height: 200%;
+          top: -50%; left: -60%; width: 40%; height: 200%;
           background: rgba(255,255,255,0.12);
           transform: skewX(-20deg);
           transition: left 0.5s ease;
         }
-        .pw-cta-btn:hover::after {
-          left: 130%;
-        }
-        .pw-step-line::after {
-          content: '';
-          position: absolute;
-          top: 28px;
-          left: calc(50% + 56px);
-          width: calc(100% - 112px);
-          height: 1px;
-          background: linear-gradient(90deg, rgba(56,145,166,0.5), rgba(56,145,166,0.1));
-        }
-        @media (max-width: 767px) {
-          .pw-step-line::after { display: none; }
-        }
+        .pw-cta-btn:hover::after { left: 130%; }
       `}</style>
 
       <main style={{ backgroundColor: "#020202", minHeight: "100vh", overflowX: "hidden" }}>
 
-        {/* ── Hero ──────────────────────────────────────────── */}
-        <section style={{ position: "relative", padding: "120px 16px 100px", overflow: "hidden" }}>
-          {/* Background orbs */}
+        {/* ── HERO ──────────────────────────────────────────── */}
+        <section style={{ position: "relative", padding: "130px 16px 110px", overflow: "hidden", textAlign: "center" }}>
           <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <div style={{ position: "absolute", top: "10%", left: "15%", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(56,145,166,0.18) 0%, transparent 70%)", animation: "pw-orb-1 18s ease-in-out infinite", filter: "blur(1px)" }} />
             <div style={{ position: "absolute", top: "30%", right: "10%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(56,145,166,0.1) 0%, transparent 70%)", animation: "pw-orb-2 22s ease-in-out infinite" }} />
             <div style={{ position: "absolute", bottom: "5%", left: "45%", width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(253,231,76,0.07) 0%, transparent 70%)", animation: "pw-orb-3 15s ease-in-out infinite" }} />
-            {/* Dot grid */}
             <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(56,145,166,0.4) 1px, transparent 1px)", backgroundSize: "36px 36px", animation: "pw-grid-fade 1.5s ease forwards" }} />
           </div>
 
-          <div style={{ maxWidth: 1000, margin: "0 auto", position: "relative" }}>
-            {/* Badge */}
-            <div
-              style={{
-                display: "inline-block", marginBottom: 24,
-                opacity: heroVisible ? 1 : 0,
-                transform: heroVisible ? "translateY(0)" : "translateY(-16px)",
-                transition: "opacity 0.6s ease, transform 0.6s ease",
-              }}
-            >
-              <span
-                className="pw-badge-pulse"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 8,
-                  fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase",
-                  padding: "6px 14px", borderRadius: 999,
-                  color: "#FDE74C",
-                  backgroundColor: "rgba(253,231,76,0.07)",
-                  border: "1px solid rgba(253,231,76,0.28)",
-                }}
-              >
+          <div style={{ maxWidth: 740, margin: "0 auto", position: "relative" }}>
+            <div style={{ display: "inline-block", marginBottom: 24, ...fade(heroVisible, 0, -16) }}>
+              <span className="pw-badge-pulse" style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", padding: "6px 14px", borderRadius: 999, color: "#FDE74C", backgroundColor: "rgba(253,231,76,0.07)", border: "1px solid rgba(253,231,76,0.28)" }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#FDE74C", flexShrink: 0, boxShadow: "0 0 8px #FDE74C" }} />
-                Head-To-Head Puzzle Warz
+                Live Now — Daily Puzzle Open
               </span>
             </div>
 
-            {/* Headline */}
-            <h1
-              style={{
-                fontSize: "clamp(44px, 7vw, 80px)",
-                fontWeight: 800,
-                lineHeight: 1.08,
-                letterSpacing: "-0.02em",
-                color: "#fff",
-                margin: "0 0 24px",
-                opacity: heroVisible ? 1 : 0,
-                transform: heroVisible ? "translateY(0)" : "translateY(24px)",
-                transition: "opacity 0.7s ease 0.1s, transform 0.7s ease 0.1s",
-              }}
-            >
-              Crack Puzzles.<br />
-              <span className="pw-shimmer-text">Dominate the Warz.</span>
+            <h1 style={{ fontSize: "clamp(48px, 8vw, 88px)", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-0.03em", color: "#fff", margin: "0 0 20px", ...fade(heroVisible, 0.1) }}>
+              Can You Pass<br /><span className="pw-shimmer-text">The Test?</span>
             </h1>
 
-            {/* Subtext */}
-            <p
-              style={{
-                fontSize: 18, lineHeight: 1.7, color: "#9CA3AF", maxWidth: 560, margin: "0 0 40px",
-                opacity: heroVisible ? 1 : 0,
-                transform: heroVisible ? "translateY(0)" : "translateY(24px)",
-                transition: "opacity 0.7s ease 0.22s, transform 0.7s ease 0.22s",
-              }}
-            >
-              Puzzle challenges for solo solvers and competitive rivals.
-              Earn points, wage head-to-head battles, and climb the leaderboard.
+            <p style={{ fontSize: 20, lineHeight: 1.65, color: "#9CA3AF", maxWidth: 520, margin: "0 auto 12px", ...fade(heroVisible, 0.22) }}>
+              Most players fail.
+            </p>
+            <p style={{ fontSize: 16, lineHeight: 1.7, color: "#6B7280", maxWidth: 480, margin: "0 auto 44px", ...fade(heroVisible, 0.28) }}>
+              Solve puzzles, climb the ranks, and unlock what&apos;s coming next.
+              Escape rooms unlock soon — for those who qualify.
             </p>
 
-            {/* CTAs */}
-            <div
-              style={{
-                display: "flex", gap: 12, flexWrap: "wrap",
-                opacity: heroVisible ? 1 : 0,
-                transform: heroVisible ? "translateY(0)" : "translateY(24px)",
-                transition: "opacity 0.7s ease 0.34s, transform 0.7s ease 0.34s",
-              }}
-            >
-              <Link
-                href="/auth/register"
-                className="pw-cta-btn"
-                style={{
-                  padding: "14px 32px",
-                  borderRadius: 10,
-                  fontWeight: 700,
-                  fontSize: 14,
-                  letterSpacing: "0.06em",
-                  color: "#fff",
-                  backgroundColor: "#3891A6",
-                  boxShadow: "0 0 36px rgba(56,145,166,0.5)",
-                  textDecoration: "none",
-                  transition: "transform 0.2s, brightness 0.2s, box-shadow 0.2s",
-                  display: "inline-block",
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px) scale(1.02)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 52px rgba(56,145,166,0.7)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 36px rgba(56,145,166,0.5)"; }}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", ...fade(heroVisible, 0.38) }}>
+              <Link href="/frequency" className="pw-cta-btn" style={{ padding: "16px 36px", borderRadius: 10, fontWeight: 800, fontSize: 15, letterSpacing: "0.04em", color: "#fff", backgroundColor: "#3891A6", boxShadow: "0 0 40px rgba(56,145,166,0.55)", textDecoration: "none", display: "inline-block", transition: "transform 0.2s, box-shadow 0.2s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px) scale(1.02)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 56px rgba(56,145,166,0.75)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px rgba(56,145,166,0.55)"; }}
               >
-                Start Solving Free →
+                ▶ Play Now — No Account Needed
               </Link>
-              <Link
-                href="/auth/signin"
-                style={{
-                  padding: "14px 32px",
-                  borderRadius: 10,
-                  fontWeight: 600,
-                  fontSize: 14,
-                  color: "#9BD1D6",
-                  backgroundColor: "transparent",
-                  border: "1px solid rgba(56,145,166,0.4)",
-                  textDecoration: "none",
-                  transition: "border-color 0.2s, background-color 0.2s",
-                  display: "inline-block",
-                }}
+              <Link href="/auth/register" style={{ padding: "16px 32px", borderRadius: 10, fontWeight: 600, fontSize: 15, color: "#9BD1D6", backgroundColor: "transparent", border: "1px solid rgba(56,145,166,0.4)", textDecoration: "none", display: "inline-block", transition: "border-color 0.2s, background-color 0.2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(56,145,166,0.1)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(56,145,166,0.7)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(56,145,166,0.4)"; }}
               >
-                Sign In
+                🔒 Unlock Full Access
               </Link>
             </div>
           </div>
         </section>
 
-        {/* ── Features ──────────────────────────────────────── */}
-        <section style={{ padding: "100px 16px", borderTop: "1px solid rgba(56,145,166,0.1)" }}>
-          <div ref={featuresReveal.ref} style={{ maxWidth: 1100, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 64 }}>
-              <p
-                style={{
-                  fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase",
-                  color: "#3891A6", marginBottom: 12,
-                  opacity: featuresReveal.visible ? 1 : 0,
-                  transition: "opacity 0.6s ease",
-                }}
-              >
-                Feature Set
-              </p>
-              <h2
-                style={{
-                  fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: 14,
-                  opacity: featuresReveal.visible ? 1 : 0,
-                  transform: featuresReveal.visible ? "translateY(0)" : "translateY(20px)",
-                  transition: "opacity 0.6s ease 0.08s, transform 0.6s ease 0.08s",
-                }}
-              >
-                Why Puzzle Warz?
-              </h2>
-              <p
-                style={{
-                  color: "#6B7280", fontSize: 16, maxWidth: 480, margin: "0 auto",
-                  opacity: featuresReveal.visible ? 1 : 0,
-                  transition: "opacity 0.6s ease 0.16s",
-                }}
-              >
-                Solo challenge, team collaboration, or head-to-head puzzle challenges — one platform, your rules.
-              </p>
-            </div>
+        {/* ── INSTANT PLAY ──────────────────────────────────── */}
+        <section style={{ padding: "80px 16px", borderTop: "1px solid rgba(56,145,166,0.1)" }}>
+          <div ref={instantReveal.ref} style={{ maxWidth: 640, margin: "0 auto", textAlign: "center" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#3891A6", marginBottom: 12, ...fade(instantReveal.visible, 0) }}>Your First Test</p>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: 16, ...fade(instantReveal.visible, 0.08) }}>
+              Think Like the Crowd
+            </h2>
+            <p style={{ color: "#6B7280", fontSize: 16, marginBottom: 36, ...fade(instantReveal.visible, 0.16) }}>
+              Solve this to begin your progression.
+            </p>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 }}>
-              {features.map((f, i) => (
-                <FeatureCard key={i} {...f} delay={0.05 + i * 0.09} visible={featuresReveal.visible} />
-              ))}
+            <div style={{ borderRadius: 20, border: "1px solid rgba(56,145,166,0.3)", background: "rgba(56,145,166,0.06)", padding: "36px 32px", ...fade(instantReveal.visible, 0.22) }}>
+              <div style={{ fontSize: 36, marginBottom: 16 }}>📡</div>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#3891A6", marginBottom: 14 }}>Today&apos;s Question</p>
+              {todayQuestion ? (
+                <p style={{ fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1.4, marginBottom: 28 }}>&ldquo;{todayQuestion}&rdquo;</p>
+              ) : (
+                <p style={{ fontSize: 18, color: "#6B7280", lineHeight: 1.5, marginBottom: 28 }}>A new question drops every day.<br />Can you match the crowd?</p>
+              )}
+              <Link href="/frequency" className="pw-cta-btn" style={{ padding: "14px 32px", borderRadius: 10, fontWeight: 700, fontSize: 14, color: "#fff", backgroundColor: "#3891A6", boxShadow: "0 0 28px rgba(56,145,166,0.4)", textDecoration: "none", display: "inline-block", transition: "transform 0.2s, box-shadow 0.2s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; }}
+              >
+                Submit Your Answer →
+              </Link>
+              <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 24, flexWrap: "wrap" }}>
+                {["✔ No signup required", "✔ Instant feedback", "✔ Your results matter"].map(t => (
+                  <span key={t} style={{ fontSize: 12, color: "#4B9AAA", fontWeight: 500 }}>{t}</span>
+                ))}
+              </div>
             </div>
           </div>
         </section>
 
-        {/* ── How it works ──────────────────────────────────── */}
+        {/* ── HOW IT WORKS ──────────────────────────────────── */}
         <section style={{ padding: "100px 16px", borderTop: "1px solid rgba(56,145,166,0.1)" }}>
           <div ref={stepsReveal.ref} style={{ maxWidth: 900, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 64 }}>
-              <p
-                style={{
-                  fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase",
-                  color: "#3891A6", marginBottom: 12,
-                  opacity: stepsReveal.visible ? 1 : 0,
-                  transition: "opacity 0.6s ease",
-                }}
-              >
-                Getting Started
-              </p>
-              <h2
-                style={{
-                  fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em",
-                  opacity: stepsReveal.visible ? 1 : 0,
-                  transform: stepsReveal.visible ? "translateY(0)" : "translateY(20px)",
-                  transition: "opacity 0.6s ease 0.08s, transform 0.6s ease 0.08s",
-                }}
-              >
-                In Three Moves
-              </h2>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#3891A6", marginBottom: 12, ...fade(stepsReveal.visible, 0) }}>How It Works</p>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", ...fade(stepsReveal.visible, 0.08) }}>Three Steps to Prove Yourself</h2>
             </div>
-
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, position: "relative" }}>
-              {/* Connector lines between step circles (hidden on mobile where grid stacks) */}
               {[0, 1].map(i => (
-                <div
-                  key={i}
-                  aria-hidden
-                  className="hidden md:block"
-                  style={{
-                    position: "absolute",
-                    top: 28,
-                    left: `calc(${(2 * i + 1) * 16.666}% + 44px)`,
-                    width: `calc(33.33% - 56px)`,
-                    height: 1,
-                    background: "linear-gradient(90deg, rgba(56,145,166,0.6), rgba(56,145,166,0.15))",
-                    opacity: stepsReveal.visible ? 1 : 0,
-                    transition: `opacity 0.8s ease ${0.4 + i * 0.2}s`,
-                    pointerEvents: "none",
-                  }}
-                />
+                <div key={i} aria-hidden style={{ position: "absolute", top: 28, left: `calc(${(2 * i + 1) * 16.666}% + 44px)`, width: `calc(33.33% - 56px)`, height: 1, background: "linear-gradient(90deg, rgba(56,145,166,0.6), rgba(56,145,166,0.15))", opacity: stepsReveal.visible ? 1 : 0, transition: `opacity 0.8s ease ${0.4 + i * 0.2}s`, pointerEvents: "none" }} />
               ))}
-              <StepCard num="01" title="Create Your Account" desc="Sign up free in seconds. No credit card, no catch." delay={0.1} visible={stepsReveal.visible} />
-              <StepCard num="02" title="Pick a Puzzle" desc="Choose from 500+ challenges or let the daily pick surprise you." delay={0.25} visible={stepsReveal.visible} />
-              <StepCard num="03" title="Compete & Rise" desc="Earn points, challenge rivals in Warz, and climb the global board." delay={0.4} visible={stepsReveal.visible} />
+              <StepCard num="01" title="Solve Puzzles" desc="Start with quick challenges and sharpen your thinking. No account needed." delay={0.1} visible={stepsReveal.visible} />
+              <StepCard num="02" title="Climb the Rankings" desc="Earn your place on the leaderboard. Every point counts toward your rank." delay={0.25} visible={stepsReveal.visible} />
+              <StepCard num="03" title="Unlock Access" desc="Only top solvers gain entry to upcoming escape rooms. Prove you're ready." delay={0.4} visible={stepsReveal.visible} />
             </div>
           </div>
         </section>
 
-        {/* ── Warz callout strip ─────────────────────────────── */}
+        {/* ── ESCAPE ROOM TEASE ─────────────────────────────── */}
         <section style={{ padding: "0 16px 100px" }}>
-          <div
-            style={{
-              maxWidth: 1100,
-              margin: "0 auto",
-              borderRadius: 20,
-              padding: "48px 48px",
-              background: "linear-gradient(135deg, rgba(56,145,166,0.14) 0%, rgba(253,231,76,0.05) 100%)",
-              border: "1px solid rgba(56,145,166,0.3)",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 32,
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ maxWidth: 520 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <span style={{ fontSize: 28 }}>⚔️</span>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#FDE74C" }}>Warz Mode</span>
+          <div ref={escapeReveal.ref} style={{ maxWidth: 1100, margin: "0 auto", borderRadius: 24, padding: "64px 48px", background: "linear-gradient(135deg, rgba(124,58,237,0.14) 0%, rgba(56,145,166,0.06) 100%)", border: "1px solid rgba(124,58,237,0.3)", textAlign: "center", position: "relative", overflow: "hidden" }}>
+            <div aria-hidden style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundImage: "radial-gradient(circle, rgba(124,58,237,0.3) 1px, transparent 1px)", backgroundSize: "32px 32px", opacity: 0.04, pointerEvents: "none" }} />
+            <div style={{ position: "relative" }}>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#a78bfa", marginBottom: 16, ...fade(escapeReveal.visible, 0) }}>Coming Soon</p>
+              <h2 style={{ fontSize: "clamp(30px, 5vw, 52px)", fontWeight: 900, color: "#fff", letterSpacing: "-0.02em", marginBottom: 20, lineHeight: 1.1, ...fade(escapeReveal.visible, 0.1) }}>
+                Escape Rooms Are Coming
+              </h2>
+              <p style={{ color: "#9CA3AF", fontSize: 17, lineHeight: 1.8, maxWidth: 560, margin: "0 auto 12px", ...fade(escapeReveal.visible, 0.2) }}>
+                This isn&apos;t just a puzzle site.
+              </p>
+              <p style={{ color: "#9CA3AF", fontSize: 17, lineHeight: 1.8, maxWidth: 560, margin: "0 auto 36px", ...fade(escapeReveal.visible, 0.26) }}>
+                It&apos;s a system. Those who prove themselves will gain access to immersive escape rooms — where every decision matters and only the best get in.
+              </p>
+              <div style={fade(escapeReveal.visible, 0.34)}>
+                <Link href="/auth/register" className="pw-cta-btn" style={{ padding: "14px 36px", borderRadius: 10, fontWeight: 700, fontSize: 15, color: "#fff", backgroundColor: "#7C3AED", boxShadow: "0 0 36px rgba(124,58,237,0.45)", textDecoration: "none", display: "inline-block", transition: "transform 0.2s, box-shadow 0.2s" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 52px rgba(124,58,237,0.65)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 36px rgba(124,58,237,0.45)"; }}
+                >
+                  Join Early Access
+                </Link>
               </div>
-              <h3 style={{ color: "#fff", fontWeight: 700, fontSize: 26, lineHeight: 1.3, marginBottom: 12 }}>
-                Race a Rival. Win Their Points.
+            </div>
+          </div>
+        </section>
+
+        {/* ── COMPETITIVE HOOK ──────────────────────────────── */}
+        <section style={{ padding: "100px 16px", borderTop: "1px solid rgba(56,145,166,0.1)" }}>
+          <div ref={competReveal.ref} style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 48, justifyContent: "space-between" }}>
+            <div style={{ flex: "1 1 320px", ...fade(competReveal.visible, 0) }}>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#FDE74C", marginBottom: 16 }}>Compete</p>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: 20, lineHeight: 1.2 }}>
+                Can You Beat<br />Everyone Else?
+              </h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
+                {["Compete against players worldwide", "Track your rank in real-time", "Challenge rivals head-to-head in Warz", "Prove your skill — no luck involved"].map(item => (
+                  <div key={item} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ color: "#3891A6", fontWeight: 700, fontSize: 16 }}>→</span>
+                    <span style={{ color: "#9CA3AF", fontSize: 15 }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+              <Link href="/auth/register" className="pw-cta-btn" style={{ padding: "13px 28px", borderRadius: 10, fontWeight: 700, fontSize: 14, color: "#020202", backgroundColor: "#FDE74C", boxShadow: "0 0 24px rgba(253,231,76,0.3)", textDecoration: "none", display: "inline-block", transition: "transform 0.2s, box-shadow 0.2s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px rgba(253,231,76,0.5)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 24px rgba(253,231,76,0.3)"; }}
+              >
+                View Leaderboard →
+              </Link>
+            </div>
+            <div style={{ flex: "1 1 280px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, ...fade(competReveal.visible, 0.18) }}>
+              {[
+                { label: "Puzzles Solved", value: "12,400+", color: "#3891A6" },
+                { label: "Active Players", value: "3,200+", color: "#FDE74C" },
+                { label: "Daily Challenges", value: "365/yr", color: "#a78bfa" },
+                { label: "Escape Rooms", value: "Coming", color: "#EF4444" },
+              ].map(stat => (
+                <div key={stat.label} style={{ borderRadius: 16, border: `1px solid ${stat.color}28`, backgroundColor: `${stat.color}08`, padding: "24px 20px", textAlign: "center" }}>
+                  <p style={{ fontSize: 26, fontWeight: 800, color: stat.color, marginBottom: 6 }}>{stat.value}</p>
+                  <p style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{stat.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── DAILY HOOK ────────────────────────────────────── */}
+        <section style={{ padding: "0 16px 100px" }}>
+          <div ref={dailyReveal.ref} style={{ maxWidth: 1100, margin: "0 auto", borderRadius: 20, padding: "48px 48px", background: "linear-gradient(135deg, rgba(56,145,166,0.14) 0%, rgba(253,231,76,0.05) 100%)", border: "1px solid rgba(56,145,166,0.3)", display: "flex", flexWrap: "wrap", gap: 32, alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ maxWidth: 500, ...fade(dailyReveal.visible, 0) }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 28 }}>📅</span>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#3891A6" }}>Daily Challenge</span>
+              </div>
+              <h3 style={{ color: "#fff", fontWeight: 800, fontSize: 28, lineHeight: 1.25, marginBottom: 12 }}>
+                A New Test Every Day.
               </h3>
-              <p style={{ color: "#9CA3AF", fontSize: 15, lineHeight: 1.7 }}>
-                Challenge any player to solve the same puzzle head-to-head. Wager a stake — the faster solver takes the pot.
-                Pure skill. Pure stakes.
+              <p style={{ color: "#9CA3AF", fontSize: 16, lineHeight: 1.7 }}>
+                Miss it — and you fall behind. A fresh puzzle drops every 24 hours. Streaks are built daily.
               </p>
             </div>
-            <Link
-              href="/auth/register"
-              className="pw-cta-btn"
-              style={{
-                padding: "14px 32px",
-                borderRadius: 10,
-                fontWeight: 700,
-                fontSize: 14,
-                letterSpacing: "0.06em",
-                color: "#020202",
-                backgroundColor: "#FDE74C",
-                boxShadow: "0 0 32px rgba(253,231,76,0.35)",
-                textDecoration: "none",
-                whiteSpace: "nowrap",
-                transition: "transform 0.2s, box-shadow 0.2s",
-                display: "inline-block",
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 48px rgba(253,231,76,0.55)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 32px rgba(253,231,76,0.35)"; }}
-            >
-              Enter the Warz →
-            </Link>
+            <div style={fade(dailyReveal.visible, 0.18)}>
+              <Link href="/frequency" className="pw-cta-btn" style={{ padding: "14px 32px", borderRadius: 10, fontWeight: 700, fontSize: 14, letterSpacing: "0.06em", color: "#fff", backgroundColor: "#3891A6", boxShadow: "0 0 32px rgba(56,145,166,0.4)", textDecoration: "none", whiteSpace: "nowrap", display: "inline-block", transition: "transform 0.2s, box-shadow 0.2s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 48px rgba(56,145,166,0.6)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 32px rgba(56,145,166,0.4)"; }}
+              >
+                Play Today&apos;s Puzzle →
+              </Link>
+            </div>
           </div>
         </section>
 
-        {/* ── Coming Soon ───────────────────────────────────── */}
+        {/* ── FEATURES ──────────────────────────────────────── */}
         <section style={{ padding: "100px 16px", borderTop: "1px solid rgba(56,145,166,0.1)" }}>
           <div ref={comingSoonReveal.ref} style={{ maxWidth: 1100, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 64 }}>
-              <p
-                style={{
-                  fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase",
-                  color: "#FDE74C", marginBottom: 12,
-                  opacity: comingSoonReveal.visible ? 1 : 0,
-                  transition: "opacity 0.6s ease",
-                }}
-              >
-                On the Horizon
-              </p>
-              <h2
-                style={{
-                  fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: 14,
-                  opacity: comingSoonReveal.visible ? 1 : 0,
-                  transform: comingSoonReveal.visible ? "translateY(0)" : "translateY(20px)",
-                  transition: "opacity 0.6s ease 0.08s, transform 0.6s ease 0.08s",
-                }}
-              >
-                What&apos;s Coming Next
-              </h2>
-              <p
-                style={{
-                  color: "#6B7280", fontSize: 16, maxWidth: 520, margin: "0 auto",
-                  opacity: comingSoonReveal.visible ? 1 : 0,
-                  transition: "opacity 0.6s ease 0.16s",
-                }}
-              >
-                We&apos;re building immersive new puzzle experiences. Here&apos;s a sneak peek at what&apos;s dropping soon.
-              </p>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#3891A6", marginBottom: 12, ...fade(comingSoonReveal.visible, 0) }}>Everything You Need</p>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: 14, ...fade(comingSoonReveal.visible, 0.08) }}>Built for Serious Solvers</h2>
+              <p style={{ color: "#6B7280", fontSize: 16, maxWidth: 480, margin: "0 auto", ...fade(comingSoonReveal.visible, 0.16) }}>Solo challenge, team play, or head-to-head battles — one platform, your rules.</p>
             </div>
-
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 }}>
-              <ComingSoonCard
-                icon="🚪"
-                title="Escape Rooms"
-                desc="Multi-stage collaborative rooms with inventory systems, hidden clues, and timed challenges. Solve as a team or go solo."
-                accent="#7C3AED"
-                delay={0.05}
-                visible={comingSoonReveal.visible}
-              />
-              <ComingSoonCard
-                icon="🕵️"
-                title="Detective Cases"
-                desc="Noir-style mystery investigations with one-strike lockout. Gather evidence, follow leads, and make your accusation count."
-                accent="#EF4444"
-                delay={0.14}
-                visible={comingSoonReveal.visible}
-              />
-              <ComingSoonCard
-                icon="🌐"
-                title="ARG Puzzles"
-                desc="Alternate Reality Games that blur the line between game and reality. Decode ciphers, analyse images, and follow trails across the web."
-                accent="#3891A6"
-                delay={0.23}
-                visible={comingSoonReveal.visible}
-              />
+              {features.map((f, i) => (
+                <FeatureCard key={i} {...f} delay={0.05 + i * 0.09} visible={comingSoonReveal.visible} />
+              ))}
             </div>
           </div>
         </section>
 
-        {/* ── Testimonials ──────────────────────────────────── */}
+        {/* ── TESTIMONIALS ──────────────────────────────────── */}
         <section style={{ padding: "100px 16px", borderTop: "1px solid rgba(56,145,166,0.1)" }}>
           <div ref={testimonialsReveal.ref} style={{ maxWidth: 1100, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 64 }}>
-              <p
-                style={{
-                  fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase",
-                  color: "#3891A6", marginBottom: 12,
-                  opacity: testimonialsReveal.visible ? 1 : 0,
-                  transition: "opacity 0.6s ease",
-                }}
-              >
-                Player Reviews
-              </p>
-              <h2
-                style={{
-                  fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: 14,
-                  opacity: testimonialsReveal.visible ? 1 : 0,
-                  transform: testimonialsReveal.visible ? "translateY(0)" : "translateY(20px)",
-                  transition: "opacity 0.6s ease 0.08s, transform 0.6s ease 0.08s",
-                }}
-              >
-                What Players Say
-              </h2>
-              <p
-                style={{
-                  color: "#6B7280", fontSize: 16,
-                  opacity: testimonialsReveal.visible ? 1 : 0,
-                  transition: "opacity 0.6s ease 0.16s",
-                }}
-              >
-                Thousands of puzzle solvers can&apos;t be wrong
-              </p>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#3891A6", marginBottom: 12, ...fade(testimonialsReveal.visible, 0) }}>Player Reviews</p>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: 14, ...fade(testimonialsReveal.visible, 0.08) }}>What Players Say</h2>
+              <p style={{ color: "#6B7280", fontSize: 16, ...fade(testimonialsReveal.visible, 0.16) }}>Thousands of puzzle solvers can&apos;t be wrong</p>
             </div>
-
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 }}>
               {testimonials.map((t, i) => (
                 <TestimonialCard key={i} {...t} delay={0.05 + i * 0.09} visible={testimonialsReveal.visible} />
@@ -758,83 +585,28 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* ── CTA ───────────────────────────────────────────── */}
-        <section
-          ref={ctaReveal.ref}
-          style={{
-            padding: "120px 16px",
-            borderTop: "1px solid rgba(56,145,166,0.15)",
-            borderBottom: "1px solid rgba(56,145,166,0.15)",
-            background: "radial-gradient(ellipse 80% 60% at 50% 50%, rgba(56,145,166,0.14) 0%, transparent 70%)",
-            textAlign: "center",
-          }}
-        >
-          <div style={{ maxWidth: 640, margin: "0 auto" }}>
-            <h2
-              style={{
-                fontSize: "clamp(32px, 5vw, 56px)",
-                fontWeight: 800,
-                color: "#fff",
-                letterSpacing: "-0.02em",
-                marginBottom: 18,
-                lineHeight: 1.1,
-                opacity: ctaReveal.visible ? 1 : 0,
-                transform: ctaReveal.visible ? "translateY(0)" : "translateY(24px)",
-                transition: "opacity 0.7s ease, transform 0.7s ease",
-              }}
-            >
-              Your Puzzle Journey<br />
-              <span className="pw-shimmer-text">Starts Now</span>
+        {/* ── FINAL PUSH ────────────────────────────────────── */}
+        <section ref={finalReveal.ref} style={{ padding: "140px 16px", borderTop: "1px solid rgba(56,145,166,0.15)", borderBottom: "1px solid rgba(56,145,166,0.15)", background: "radial-gradient(ellipse 80% 60% at 50% 50%, rgba(56,145,166,0.12) 0%, transparent 70%)", textAlign: "center" }}>
+          <div style={{ maxWidth: 600, margin: "0 auto" }}>
+            <h2 style={{ fontSize: "clamp(32px, 5vw, 60px)", fontWeight: 900, color: "#fff", letterSpacing: "-0.02em", marginBottom: 24, lineHeight: 1.1, ...fade(finalReveal.visible, 0) }}>
+              Most People<br /><span style={{ color: "#6B7280" }}>Quit Early.</span>
             </h2>
-            <p
-              style={{
-                color: "#9CA3AF",
-                fontSize: 17,
-                lineHeight: 1.7,
-                marginBottom: 40,
-                opacity: ctaReveal.visible ? 1 : 0,
-                transition: "opacity 0.7s ease 0.15s",
-              }}
-            >
-              Free to play. No ads. Just puzzles, competition, and the thrill of cracking something no one else can.
-            </p>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                gap: 12,
-                flexWrap: "wrap",
-                opacity: ctaReveal.visible ? 1 : 0,
-                transform: ctaReveal.visible ? "translateY(0)" : "translateY(20px)",
-                transition: "opacity 0.7s ease 0.28s, transform 0.7s ease 0.28s",
-              }}
-            >
-              <Link
-                href="/auth/register"
-                className="pw-cta-btn"
-                style={{
-                  padding: "16px 40px",
-                  borderRadius: 10,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  letterSpacing: "0.06em",
-                  color: "#fff",
-                  backgroundColor: "#3891A6",
-                  boxShadow: "0 0 48px rgba(56,145,166,0.55)",
-                  textDecoration: "none",
-                  transition: "transform 0.2s, box-shadow 0.2s",
-                  display: "inline-block",
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-3px) scale(1.02)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 64px rgba(56,145,166,0.75)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 48px rgba(56,145,166,0.55)"; }}
+            <p style={{ color: "#4B5563", fontSize: 18, lineHeight: 1.9, marginBottom: 8, ...fade(finalReveal.visible, 0.12) }}>They get stuck.</p>
+            <p style={{ color: "#4B5563", fontSize: 18, lineHeight: 1.9, marginBottom: 8, ...fade(finalReveal.visible, 0.18) }}>They lose focus.</p>
+            <p style={{ color: "#4B5563", fontSize: 18, lineHeight: 1.9, marginBottom: 48, ...fade(finalReveal.visible, 0.24) }}>They give up.</p>
+            <h3 style={{ fontSize: "clamp(24px, 3vw, 36px)", fontWeight: 800, color: "#fff", marginBottom: 36, ...fade(finalReveal.visible, 0.32) }}>Do You?</h3>
+            <div style={{ display: "flex", justifyContent: "center", ...fade(finalReveal.visible, 0.4) }}>
+              <Link href="/frequency" className="pw-cta-btn" style={{ padding: "18px 48px", borderRadius: 10, fontWeight: 800, fontSize: 16, letterSpacing: "0.06em", color: "#fff", backgroundColor: "#3891A6", boxShadow: "0 0 56px rgba(56,145,166,0.6)", textDecoration: "none", display: "inline-block", transition: "transform 0.2s, box-shadow 0.2s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-3px) scale(1.03)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 72px rgba(56,145,166,0.8)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 56px rgba(56,145,166,0.6)"; }}
               >
-                Create Free Account →
+                Start Now →
               </Link>
             </div>
           </div>
         </section>
 
-        {/* ── Footer ────────────────────────────────────────── */}
+        {/* ── FOOTER ────────────────────────────────────────── */}
         <footer style={{ padding: "64px 16px", borderTop: "1px solid rgba(56,145,166,0.12)" }}>
           <div style={{ maxWidth: 1100, margin: "0 auto" }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", gap: 40, marginBottom: 40 }}>
@@ -848,17 +620,17 @@ export default function HomeClient() {
               <div style={{ display: "flex", gap: 48, fontSize: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#3891A6" }}>Play</p>
-                  {["Puzzles", "Daily Challenge", "Teams"].map(l => (
-                    <Link key={l} href="/auth/register" style={{ color: "#4B5563", textDecoration: "none", transition: "color 0.2s" }}
+                  {[["Daily Puzzle", "/frequency"], ["All Puzzles", "/auth/register"], ["Leaderboard", "/auth/register"]].map(([l, h]) => (
+                    <Link key={l} href={h} style={{ color: "#4B5563", textDecoration: "none", transition: "color 0.2s" }}
                       onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
                       onMouseLeave={e => (e.currentTarget.style.color = "#4B5563")}
                     >{l}</Link>
                   ))}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#3891A6" }}>Compete</p>
-                  {["Leaderboards", "Achievements", "Learn"].map(l => (
-                    <Link key={l} href="/auth/register" style={{ color: "#4B5563", textDecoration: "none", transition: "color 0.2s" }}
+                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#3891A6" }}>Account</p>
+                  {[["Sign Up Free", "/auth/register"], ["Sign In", "/auth/signin"], ["Achievements", "/auth/register"]].map(([l, h]) => (
+                    <Link key={l} href={h} style={{ color: "#4B5563", textDecoration: "none", transition: "color 0.2s" }}
                       onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
                       onMouseLeave={e => (e.currentTarget.style.color = "#4B5563")}
                     >{l}</Link>
@@ -868,7 +640,7 @@ export default function HomeClient() {
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, paddingTop: 24, borderTop: "1px solid rgba(56,145,166,0.08)" }}>
               <p style={{ color: "#1F2937", fontSize: 12 }}>&copy; 2026 Puzzle Warz &middot; All rights reserved</p>
-              <p style={{ color: "#1F2937", fontSize: 12 }}>Collaborative Puzzle Platform</p>
+              <p style={{ color: "#1F2937", fontSize: 12 }}>Train your mind. Earn your rank.</p>
             </div>
           </div>
         </footer>

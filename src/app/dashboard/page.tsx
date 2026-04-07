@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
+import { AnimatePresence } from 'framer-motion';
 import WelcomeModal from '@/components/WelcomeModal';
+import OnboardingModal from '@/components/OnboardingModal';
 
 interface UserStats {
   totalPuzzlesSolved: number;
@@ -158,6 +160,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -252,12 +255,14 @@ export default function Dashboard() {
     { href: '/profile',             icon: '👤', title: 'My Profile',          desc: 'View your stats, badges, and customise your profile.',       accent: 'teal'  as const },
     { href: '/dashboard/activity',  icon: '📋', title: 'Activity Feed',       desc: 'Review your recent actions and account history.',            accent: 'muted' as const },
     { href: '/daily',               icon: '📅', title: 'Daily Challenge',     desc: 'Tackle today\'s featured puzzle and keep your streak alive.', accent: 'gold'  as const },
+    { href: '/frequency',           icon: '📡', title: 'Frequency',           desc: 'Think like the crowd. Score = how many people agreed with you.', accent: 'teal' as const, badge: 'New' },
     { href: '/faq',                 icon: '❓', title: 'FAQ',                 desc: 'Answers to common questions about puzzles, teams, and more.', accent: 'muted' as const },
   ];
 
   const adminCards = [
-    { href: '/admin/analytics', icon: '📊', title: 'Analytics',      desc: 'View platform statistics and puzzle analytics.',         accent: 'teal' as const },
-    { href: '/admin/puzzles',   icon: '➕', title: 'Create Puzzle',  desc: 'Add new puzzles to the platform.',                       accent: 'muted' as const },
+    { href: '/admin/analytics',  icon: '📊', title: 'Analytics',         desc: 'View platform statistics and puzzle analytics.',         accent: 'teal' as const },
+    { href: '/admin/puzzles',    icon: '➕', title: 'Create Puzzle',     desc: 'Add new puzzles to the platform.',                       accent: 'muted' as const },
+    { href: '/admin/frequency',  icon: '📡', title: 'Frequency Admin',   desc: 'Schedule questions, reveal results, merge answers.',     accent: 'teal' as const },
   ];
 
   return (
@@ -435,7 +440,14 @@ export default function Dashboard() {
       <WelcomeModal
         userName={session.user.name?.split(' ')[0] || 'Solver'}
         userId={(session.user as { id?: string }).id || session.user.email || 'guest'}
+        onTakeTour={() => setShowOnboarding(true)}
       />
+
+      <AnimatePresence>
+        {showOnboarding && (
+          <OnboardingModal onComplete={() => setShowOnboarding(false)} />
+        )}
+      </AnimatePresence>
     </>
   );
 }

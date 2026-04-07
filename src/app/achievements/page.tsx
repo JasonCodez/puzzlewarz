@@ -3,8 +3,9 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { motion } from "framer-motion";
 import AchievementNotification from "@/components/AchievementNotification";
+import { Rarity, rarityColors } from "@/lib/rarity";
 
 interface Achievement {
   id: string;
@@ -43,8 +44,25 @@ interface AchievementsData {
   };
 }
 
-import { Rarity, rarityColors } from "@/lib/rarity";
+const CATEGORY_META: Record<string, { label: string; icon: string }> = {
+  milestone:     { label: "Milestone",     icon: "🏆" },
+  speed:         { label: "Speed",         icon: "⚡" },
+  mastery:       { label: "Mastery",       icon: "🎓" },
+  exploration:   { label: "Exploration",   icon: "🗺️" },
+  collaboration: { label: "Collaboration", icon: "🤝" },
+  special:       { label: "Special",       icon: "✨" },
+};
 
+const AUTO_UNLOCK_TYPES = ["puzzles_solved", "submission_accuracy", "points_earned", "streak", "custom"];
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.045, duration: 0.35, ease: "easeOut" },
+  }),
+};
 
 export default function AchievementsPage() {
   const { data: session, status } = useSession();
@@ -53,8 +71,10 @@ export default function AchievementsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [collecting, setCollecting] = useState<string | null>(null);
-  const [notificationAchievement, setNotificationAchievement] = useState<any>(null);
+  const [achievementQueue, setAchievementQueue] = useState<any[]>([]);
   const [shownAchievements, setShownAchievements] = useState<Set<string>>(new Set());
+
+  const notificationAchievement = achievementQueue[0] ?? null;
 
   const shownStorageKey = session?.user?.email ? `achievements-page-shown:${session.user.email}` : null;
 
@@ -63,43 +83,28 @@ export default function AchievementsPage() {
       if (!shownStorageKey) return;
       const ids = Array.from((next || shownAchievements).values());
       localStorage.setItem(shownStorageKey, JSON.stringify(ids));
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   };
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    }
+    if (status === "unauthenticated") router.push("/auth/signin");
   }, [status, router]);
 
   useEffect(() => {
-    if (session?.user?.email) {
-      // Hydrate from localStorage so refresh doesn't re-show already handled achievements.
-      try {
-        if (shownStorageKey) {
-          const raw = localStorage.getItem(shownStorageKey);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              setShownAchievements(new Set(parsed.filter((x) => typeof x === 'string')));
-            }
-          }
+    if (!session?.user?.email) return;
+    try {
+      if (shownStorageKey) {
+        const raw = localStorage.getItem(shownStorageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) setShownAchievements(new Set(parsed.filter((x) => typeof x === "string")));
         }
-      } catch {
-        // ignore
       }
+    } catch { /* ignore */ }
 
-      fetchAchievements();
-      
-      // Poll for achievement updates every 5 seconds
-      const interval = setInterval(() => {
-        fetchAchievements();
-      }, 5000);
-
-      return () => clearInterval(interval);
-    }
+    fetchAchievements();
+    const interval = setInterval(fetchAchievements, 5000);
+    return () => clearInterval(interval);
   }, [session?.user?.email]);
 
   const fetchAchievements = async () => {
@@ -108,23 +113,16 @@ export default function AchievementsPage() {
       if (response.ok) {
         const result = await response.json();
         setData(result);
-
-        // Check for newly unlocked achievements (reached 100% progress)
         result.achievements.forEach((achievement: Achievement) => {
-          const autoUnlockTypes = ["puzzles_solved", "submission_accuracy", "points_earned", "streak", "custom"];
-          const canAutoCollect = autoUnlockTypes.includes(achievement.conditionType || "");
+          const canAutoCollect = AUTO_UNLOCK_TYPES.includes(achievement.conditionType || "");
           const isReady = !achievement.unlocked && achievement.progressPercentage === 100 && canAutoCollect;
-
-          // Show modal if achievement just became ready and we haven't shown it yet
           if (isReady && !shownAchievements.has(achievement.id)) {
-            setNotificationAchievement(achievement);
+            setAchievementQueue((prev) => [...prev, achievement]);
             setShownAchievements((prev) => {
               const next = new Set(prev).add(achievement.id);
               persistShown(next);
               return next;
             });
-            
-            // Send notification to notification center
             fetch("/api/user/achievements/notify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -134,20 +132,17 @@ export default function AchievementsPage() {
                 achievementDescription: achievement.description,
                 achievementIcon: achievement.icon,
               }),
-            }).catch((err) => console.error("Failed to send notification:", err));
+            }).catch(() => {});
           }
         });
       }
-    } catch (error) {
-      console.error("Failed to fetch achievements:", error);
-    } finally {
+    } catch { /* ignore */ } finally {
       setLoading(false);
     }
   };
 
   const collectAchievement = async (achievementId: string) => {
-    // Close immediately so the modal doesn't linger during slow requests.
-    setNotificationAchievement(null);
+    setAchievementQueue((prev) => prev.slice(1));
     setShownAchievements((prev) => {
       const next = new Set(prev).add(achievementId);
       persistShown(next);
@@ -160,16 +155,8 @@ export default function AchievementsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ achievementId }),
       });
-
-      if (response.ok) {
-        // Refresh achievements after successful collection
-        await fetchAchievements();
-      } else {
-        console.error("Failed to collect achievement");
-      }
-    } catch (error) {
-      console.error("Error collecting achievement:", error);
-    } finally {
+      if (response.ok) await fetchAchievements();
+    } catch { /* ignore */ } finally {
       setCollecting(null);
     }
   };
@@ -177,245 +164,347 @@ export default function AchievementsPage() {
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#020202" }}>
-        <div className="text-white text-xl">Loading...</div>
+        <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }}>
+          <p className="text-lg font-semibold" style={{ color: "#3891A6" }}>Loading achievements…</p>
+        </motion.div>
       </div>
     );
   }
 
-  if (!session?.user || !data) {
-    return null;
-  }
+  if (!session?.user || !data) return null;
 
-  const categories = ["milestone", "speed", "mastery", "exploration", "collaboration", "special"];
+  const categories = Object.keys(CATEGORY_META);
   const filteredAchievements = selectedCategory
     ? data.achievements.filter((a) => a.category === selectedCategory)
     : data.achievements;
 
+  const overallPct = data.totalAvailable > 0 ? (data.totalUnlocked / data.totalAvailable) * 100 : 0;
+  const readyToCollect = data.achievements.filter(
+    (a) => !a.unlocked && a.progressPercentage === 100 && AUTO_UNLOCK_TYPES.includes(a.conditionType || "")
+  ).length;
+
   return (
-    <main style={{ backgroundColor: "#020202" }} className="min-h-screen">
-      {/* Achievement Notification Modal */}
+    <main className="min-h-screen" style={{ backgroundColor: "#020202" }}>
       {notificationAchievement && (
         <AchievementNotification
+          key={notificationAchievement.id}
           achievement={notificationAchievement}
           rarityColors={rarityColors}
           isCollecting={collecting === notificationAchievement.id}
-          onClose={() => setNotificationAchievement(null)}
+          onClose={() => setAchievementQueue((prev) => prev.slice(1))}
           onCollect={() => collectAchievement(notificationAchievement.id)}
         />
       )}
-      {/* Header */}
-      <div className="pt-24 pb-16 px-4" style={{ backgroundImage: "linear-gradient(135deg, rgba(56, 145, 166, 0.1) 0%, rgba(253, 231, 76, 0.05) 100%)" }}>
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-5xl font-bold text-white mb-4">Achievements</h1>
-          <p style={{ color: "#DDDBF1" }}>Unlock badges and earn your place among the puzzle elite</p>
+
+      {/* ── Hero ─────────────────────────────────────────────────── */}
+      <div
+        className="pt-28 pb-16 px-4 relative overflow-hidden"
+        style={{
+          background: "linear-gradient(160deg, rgba(56,145,166,0.12) 0%, rgba(253,231,76,0.04) 50%, #020202 100%)",
+          borderBottom: "1px solid rgba(56,145,166,0.15)",
+        }}
+      >
+        {/* background grid dots */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-20"
+          style={{
+            backgroundImage: "radial-gradient(rgba(56,145,166,0.35) 1px, transparent 1px)",
+            backgroundSize: "36px 36px",
+          }}
+        />
+        <div className="max-w-7xl mx-auto relative">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+            <p className="text-xs font-black tracking-[0.3em] uppercase mb-3" style={{ color: "#3891A6" }}>
+              ✦ Your Collection
+            </p>
+            <h1
+              className="text-5xl sm:text-6xl font-black mb-4 leading-tight"
+              style={{ background: "linear-gradient(90deg, #fff 0%, #3891A6 60%, #FDE74C 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
+            >
+              Achievements
+            </h1>
+            <p className="text-base max-w-lg" style={{ color: "#9ca3af" }}>
+              Unlock badges, hit milestones, and cement your place among the puzzle elite.
+            </p>
+          </motion.div>
+
+          {/* Stat pills */}
+          <motion.div
+            className="flex flex-wrap gap-3 mt-8"
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15, duration: 0.45 }}
+          >
+            {[
+              { label: "Unlocked",       value: data.totalUnlocked,  color: "#3891A6" },
+              { label: "Total",          value: data.totalAvailable, color: "#6b7280" },
+              { label: "Ready to Claim", value: readyToCollect,      color: "#FDE74C" },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold"
+                style={{ backgroundColor: "rgba(255,255,255,0.04)", border: `1px solid ${s.color}30` }}
+              >
+                <span className="text-lg font-black" style={{ color: s.color }}>{s.value}</span>
+                <span style={{ color: "#6b7280" }}>{s.label}</span>
+              </div>
+            ))}
+          </motion.div>
         </div>
       </div>
 
-      {/* Stats Section */}
-      <div className="px-4 py-12 max-w-7xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
-          {/* Progress Card */}
-          <div className="border rounded-lg p-8" style={{ backgroundColor: "rgba(56, 145, 166, 0.08)", borderColor: "#3891A6" }}>
-            <h3 className="text-2xl font-bold text-white mb-6">Your Progress</h3>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span style={{ color: "#DDDBF1" }}>Overall Completion</span>
-                  <span className="text-xl font-bold text-white">
-                    {data.totalUnlocked} / {data.totalAvailable}
-                  </span>
-                </div>
-                <div className="w-full bg-black rounded-full h-3 overflow-hidden">
-                  <div
-                    className="h-full transition-all duration-300"
-                    style={{
-                      backgroundColor: "#3891A6",
-                      width: `${(data.totalUnlocked / data.totalAvailable) * 100}%`,
-                    }}
-                  />
-                </div>
-                <p style={{ color: "#AB9F9D" }} className="text-sm mt-2">
-                  {Math.round((data.totalUnlocked / data.totalAvailable) * 100)}% Complete
-                </p>
-              </div>
+      <div className="max-w-7xl mx-auto px-4 py-12">
+        {/* ── Progress + Rarity grid ──────────────────────────────── */}
+        <div className="grid md:grid-cols-2 gap-6 mb-14">
+          {/* Overall progress card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="rounded-2xl p-7"
+            style={{
+              background: "linear-gradient(135deg, rgba(56,145,166,0.1) 0%, rgba(56,145,166,0.04) 100%)",
+              border: "1px solid rgba(56,145,166,0.2)",
+            }}
+          >
+            <h3 className="text-xs font-black tracking-widest uppercase mb-5" style={{ color: "#3891A6" }}>Overall Progress</h3>
+            <div className="flex items-end justify-between mb-3">
+              <span className="text-5xl font-black text-white">{Math.round(overallPct)}<span className="text-2xl text-gray-500">%</span></span>
+              <span className="text-sm" style={{ color: "#6b7280" }}>{data.totalUnlocked} of {data.totalAvailable}</span>
             </div>
-          </div>
+            <div className="w-full rounded-full overflow-hidden" style={{ height: "8px", backgroundColor: "rgba(255,255,255,0.06)" }}>
+              <motion.div
+                className="h-full rounded-full"
+                style={{ background: "linear-gradient(90deg, #3891A6, #FDE74C)" }}
+                initial={{ width: 0 }}
+                animate={{ width: `${overallPct}%` }}
+                transition={{ duration: 1.1, delay: 0.3, ease: "easeOut" }}
+              />
+            </div>
+          </motion.div>
 
-          {/* Rarity Breakdown */}
-          <div className="border rounded-lg p-8 space-y-3">
-            <h3 className="text-2xl font-bold text-white mb-6">Rarity Breakdown</h3>
-            {Object.entries(data.rarityCount).map(([rarity, count]) => {
-              const rarityKey = rarity as Rarity;
-              const colors = rarityColors[rarityKey] || rarityColors["common"];
-              const rarityClass = `rarity-text-${rarity}`;
+          {/* Rarity breakdown */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18 }}
+            className="rounded-2xl p-7"
+            style={{
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
+            <h3 className="text-xs font-black tracking-widest uppercase mb-5" style={{ color: "#6b7280" }}>Rarity Breakdown</h3>
+            <div className="space-y-2">
+              {(Object.entries(data.rarityCount) as [Rarity, number][]).map(([rarity, total]) => {
+                const c = rarityColors[rarity] ?? rarityColors["common"];
+                const unlocked = data.rarityUnlockedCount?.[rarity] || 0;
+                const pct = total > 0 ? (unlocked / total) * 100 : 0;
+                return (
+                  <div key={rarity} className="flex items-center gap-3">
+                    <span className="w-20 text-xs font-bold capitalize shrink-0" style={{ color: c.text }}>{rarity}</span>
+                    <div className="flex-1 rounded-full overflow-hidden" style={{ height: "6px", backgroundColor: "rgba(255,255,255,0.06)" }}>
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{ backgroundColor: c.border }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.9, delay: 0.35, ease: "easeOut" }}
+                      />
+                    </div>
+                    <span className="text-xs font-semibold shrink-0" style={{ color: "#6b7280" }}>{unlocked}/{total}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        </div>
+
+        {/* ── Category filter ─────────────────────────────────────── */}
+        <div className="mb-10">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className="px-4 py-2 rounded-full text-sm font-bold transition-all"
+              style={{
+                backgroundColor: selectedCategory === null ? "#3891A6" : "rgba(56,145,166,0.08)",
+                color: selectedCategory === null ? "#fff" : "#3891A6",
+                border: `1px solid ${selectedCategory === null ? "#3891A6" : "rgba(56,145,166,0.2)"}`,
+              }}
+            >
+              🏅 All
+            </button>
+            {categories.map((cat) => {
+              const meta = CATEGORY_META[cat];
+              const active = selectedCategory === cat;
               return (
-                <div
-                  key={rarity}
-                  className="flex items-center justify-between px-4 py-3 rounded-lg border"
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className="px-4 py-2 rounded-full text-sm font-bold transition-all capitalize"
                   style={{
-                    backgroundColor: `${colors.bg}15`,
-                    borderColor: colors.border,
+                    backgroundColor: active ? "#FDE74C" : "rgba(253,231,76,0.06)",
+                    color: active ? "#020202" : "#FDE74C",
+                    border: `1px solid ${active ? "#FDE74C" : "rgba(253,231,76,0.18)"}`,
                   }}
                 >
-                  <span 
-                    className={`capitalize font-semibold text-base ${rarityClass}`}
-                  >
-                    {rarity}
-                  </span>
-                  <span className="text-lg font-bold text-white">
-                    {data?.rarityUnlockedCount?.[rarityKey] || 0}/{count}
-                  </span>
-                </div>
+                  {meta.icon} {meta.label}
+                </button>
               );
             })}
           </div>
         </div>
 
-        {/* Category Filter */}
-        <div className="mb-8">
-          <h3 className="text-lg font-bold text-white mb-4">Filter by Category</h3>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className="px-6 py-2 rounded-lg font-semibold transition"
-              style={{
-                backgroundColor: selectedCategory === null ? "#3891A6" : "rgba(56, 145, 166, 0.2)",
-                color: "white",
-              }}
-            >
-              All
-            </button>
-            {categories.map((category) => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className="px-6 py-2 rounded-lg font-semibold transition capitalize"
-                style={{
-                  backgroundColor:
-                    selectedCategory === category ? "#FDE74C" : "rgba(253, 231, 76, 0.2)",
-                  color: selectedCategory === category ? "#020202" : "#FDE74C",
-                }}
-              >
-                {category}
-              </button>
-            ))}
+        {/* ── Achievement grid ────────────────────────────────────── */}
+        {filteredAchievements.length === 0 ? (
+          <div className="text-center py-24 rounded-2xl" style={{ border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+            <p className="text-4xl mb-4">🔒</p>
+            <p className="font-semibold" style={{ color: "#6b7280" }}>No achievements in this category yet.</p>
           </div>
-        </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredAchievements.map((achievement, i) => {
+              const c = rarityColors[achievement.rarity as Rarity] ?? rarityColors["common"];
+              const canAutoCollect = AUTO_UNLOCK_TYPES.includes(achievement.conditionType || "");
+              const isReady = !achievement.unlocked && achievement.progressPercentage === 100 && canAutoCollect;
+              const pct = achievement.progressPercentage ?? 0;
 
-        {/* Achievements Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAchievements.map((achievement) => {
-            const rarityKey = achievement.rarity as Rarity;
-            const color = rarityColors[rarityKey] || rarityColors["common"];
-            const autoUnlockTypes = ["puzzles_solved", "submission_accuracy", "points_earned", "streak", "custom"];
-            const canAutoCollect = autoUnlockTypes.includes(achievement.conditionType || "");
-            const isReadyToCollect = !achievement.unlocked && achievement.progressPercentage === 100 && canAutoCollect;
-            return (
-              <div
-                id={`achievement-${achievement.id}`}
-                key={achievement.id}
-                className="border rounded-lg p-6 transition transform hover:scale-105"
-                style={{
-                  backgroundColor: achievement.unlocked ? color.bg : "rgba(0, 0, 0, 0.3)",
-                  borderColor: achievement.unlocked ? color.border : isReadyToCollect ? color.border : "#444444",
-                  opacity: achievement.unlocked ? 1 : 0.7,
-                  borderWidth: isReadyToCollect ? "2px" : "1px",
-                }}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <span className="text-5xl">{achievement.icon}</span>
+              return (
+                <motion.div
+                  id={`achievement-${achievement.id}`}
+                  key={achievement.id}
+                  custom={i}
+                  variants={cardVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="rounded-2xl p-5 flex flex-col relative overflow-hidden transition-transform hover:-translate-y-0.5"
+                  style={{
+                    backgroundColor: achievement.unlocked
+                      ? `${c.bg}`
+                      : isReady
+                      ? "rgba(255,255,255,0.03)"
+                      : "rgba(255,255,255,0.02)",
+                    border: `1px solid ${achievement.unlocked ? c.border : isReady ? c.border : "rgba(255,255,255,0.07)"}`,
+                    boxShadow: achievement.unlocked
+                      ? `0 0 28px ${c.border}28`
+                      : isReady
+                      ? `0 0 20px ${c.border}20`
+                      : "none",
+                    opacity: !achievement.unlocked && !isReady && pct === 0 ? 0.55 : 1,
+                  }}
+                >
+                  {/* Locked overlay tint */}
+                  {!achievement.unlocked && !isReady && (
+                    <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{ backgroundColor: "rgba(0,0,0,0.25)" }} />
+                  )}
+
+                  {/* Rarity shimmer for unlocked */}
                   {achievement.unlocked && (
-                    <span style={{ color: color.text }} className="text-xs font-bold">
-                      ✓ UNLOCKED
-                    </span>
+                    <div
+                      className="absolute inset-0 rounded-2xl pointer-events-none"
+                      style={{ background: `linear-gradient(135deg, ${c.border}10 0%, transparent 60%)` }}
+                    />
                   )}
-                  {isReadyToCollect && (
-                    <span style={{ color: color.text, backgroundColor: color.bg }} className="text-xs font-bold px-2 py-1 rounded animate-pulse">
-                      ⭐ READY!
-                    </span>
-                  )}
-                </div>
 
-                <h4 className="text-lg font-bold text-white mb-2">{achievement.title}</h4>
-                <div className="mb-3 flex items-center gap-2">
-                  <span className={`text-xs font-semibold px-2 py-1 rounded capitalize rarity-badge rarity-${achievement.rarity}`} style={{ 
-                    /* Inline fallback; CSS will enforce final look */
-                    backgroundColor: color.bg,
-                    color: color.text,
-                    borderWidth: '1px',
-                    borderColor: color.border
-                  }}>
-                    {achievement.rarity}
-                  </span>
-                </div>
-                <p style={{ color: "#DDDBF1" }} className="text-sm mb-4">
-                  {achievement.description}
-                </p>
-
-                <div className="pt-4 border-t" style={{ borderTopColor: "rgba(255, 255, 255, 0.1)" }}>
-                  <p style={{ color: color.text }} className="text-xs font-semibold mb-2">
-                    HOW TO UNLOCK
-                  </p>
-                  <p style={{ color: "#AB9F9D" }} className="text-xs">
-                    {achievement.requirement}
-                  </p>
-                </div>
-
-                {!achievement.unlocked && achievement.progressPercentage !== undefined && (
-                  <div className="mt-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span style={{ color: "#DDDBF1" }} className="text-xs">
-                        Progress
-                      </span>
-                      <span style={{ color: color.text }} className="text-xs font-semibold">
-                        {Math.round(achievement.progressPercentage)}%
-                      </span>
+                  {/* Top row */}
+                  <div className="flex items-start justify-between mb-4 relative z-10">
+                    <div
+                      className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl shrink-0"
+                      style={{
+                        backgroundColor: achievement.unlocked ? `${c.border}20` : "rgba(255,255,255,0.04)",
+                        border: `1px solid ${achievement.unlocked ? c.border + "40" : "rgba(255,255,255,0.07)"}`,
+                        filter: achievement.unlocked ? `drop-shadow(0 0 10px ${c.text}60)` : "grayscale(0.7) opacity(0.7)",
+                      }}
+                    >
+                      {achievement.icon}
                     </div>
-                    <div className="w-full bg-black rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-full transition-all duration-300"
-                        style={{
-                          backgroundColor: color.text,
-                          width: `${achievement.progressPercentage}%`,
-                        }}
-                      />
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span
+                        className="text-xs font-black px-2.5 py-1 rounded-full capitalize tracking-wide"
+                        style={{ backgroundColor: `${c.border}18`, color: c.text, border: `1px solid ${c.border}40` }}
+                      >
+                        {achievement.rarity}
+                      </span>
+                      {achievement.unlocked && (
+                        <span className="text-xs font-bold" style={{ color: "#34d399" }}>✓ Unlocked</span>
+                      )}
+                      {isReady && (
+                        <motion.span
+                          animate={{ opacity: [1, 0.5, 1] }}
+                          transition={{ duration: 1.2, repeat: Infinity }}
+                          className="text-xs font-black px-2.5 py-1 rounded-full"
+                          style={{ backgroundColor: `${c.border}25`, color: c.text }}
+                        >
+                          ⭐ Ready!
+                        </motion.span>
+                      )}
                     </div>
                   </div>
-                )}
 
-                {isReadyToCollect && (
-                  <button
-                    onClick={() => collectAchievement(achievement.id)}
-                    disabled={collecting === achievement.id}
-                    className="w-full mt-4 px-4 py-2 rounded-lg font-semibold transition"
-                    style={{
-                      backgroundColor: color.bg,
-                      color: color.text,
-                      borderWidth: "1px",
-                      borderColor: color.border,
-                      opacity: collecting === achievement.id ? 0.6 : 1,
-                      cursor: collecting === achievement.id ? "not-allowed" : "pointer",
-                    }}
+                  {/* Title + description */}
+                  <div className="relative z-10 flex-1">
+                    <h4 className="font-black text-white mb-1.5 leading-snug">{achievement.title}</h4>
+                    <p className="text-xs leading-relaxed mb-4" style={{ color: "#9ca3af" }}>
+                      {achievement.description}
+                    </p>
+                  </div>
+
+                  {/* How to unlock */}
+                  <div
+                    className="rounded-xl px-3 py-2.5 mb-4 relative z-10"
+                    style={{ backgroundColor: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.06)" }}
                   >
-                    {collecting === achievement.id ? "Collecting..." : "COLLECT"}
-                  </button>
-                )}
+                    <p className="text-xs font-black uppercase tracking-wider mb-1" style={{ color: c.text }}>How to unlock</p>
+                    <p className="text-xs" style={{ color: "#6b7280" }}>{achievement.requirement}</p>
+                  </div>
 
-                {achievement.unlocked && achievement.unlockedAt && (
-                  <p style={{ color: color.text }} className="text-xs mt-3 italic">
-                    Unlocked {new Date(achievement.unlockedAt).toLocaleDateString()}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  {/* Progress bar (locked only) */}
+                  {!achievement.unlocked && pct !== undefined && (
+                    <div className="relative z-10 mb-4">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-xs font-semibold" style={{ color: "#6b7280" }}>Progress</span>
+                        <span className="text-xs font-black" style={{ color: c.text }}>{Math.round(pct)}%</span>
+                      </div>
+                      <div className="w-full rounded-full overflow-hidden" style={{ height: "5px", backgroundColor: "rgba(255,255,255,0.06)" }}>
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{ backgroundColor: c.border }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.8, ease: "easeOut" }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
-        {filteredAchievements.length === 0 && (
-          <div className="text-center py-20">
-            <p style={{ color: "#DDDBF1" }} className="text-lg">
-              No achievements in this category yet!
-            </p>
+                  {/* Collect button */}
+                  {isReady && (
+                    <motion.button
+                      onClick={() => collectAchievement(achievement.id)}
+                      disabled={collecting === achievement.id}
+                      className="w-full rounded-xl py-2.5 font-black text-sm relative z-10 overflow-hidden"
+                      style={{
+                        backgroundColor: c.border,
+                        color: "#020202",
+                        opacity: collecting === achievement.id ? 0.6 : 1,
+                        cursor: collecting === achievement.id ? "not-allowed" : "pointer",
+                      }}
+                      animate={collecting !== achievement.id ? { boxShadow: [`0 0 10px ${c.border}40`, `0 0 22px ${c.border}70`, `0 0 10px ${c.border}40`] } : {}}
+                      transition={{ duration: 1.6, repeat: Infinity }}
+                    >
+                      {collecting === achievement.id ? "⏳ Collecting…" : "🎉 Collect!"}
+                    </motion.button>
+                  )}
+
+                  {/* Unlocked date */}
+                  {achievement.unlocked && achievement.unlockedAt && (
+                    <p className="text-xs mt-2 relative z-10" style={{ color: c.text }}>
+                      Unlocked {new Date(achievement.unlockedAt).toLocaleDateString()}
+                    </p>
+                  )}
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </div>

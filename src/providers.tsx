@@ -15,12 +15,15 @@ let globalSocket: any = null;
 
 function GlobalAchievementModal() {
   const { data: session } = useSession();
-  const notificationAchievement = useAchievementModalStore((s) => s.notificationAchievement);
-  const setNotificationAchievement = useAchievementModalStore((s) => s.setNotificationAchievement);
+  const achievementQueue = useAchievementModalStore((s) => s.achievementQueue);
+  const enqueueAchievement = useAchievementModalStore((s) => s.enqueueAchievement);
+  const dequeueAchievement = useAchievementModalStore((s) => s.dequeueAchievement);
   const shownAchievements = useAchievementModalStore((s) => s.shownAchievements);
   const addShownAchievement = useAchievementModalStore((s) => s.addShownAchievement);
   const setShownAchievements = useAchievementModalStore((s) => s.setShownAchievements);
   const [collecting, setCollecting] = useState<string | null>(null);
+
+  const currentAchievement = achievementQueue[0] ?? null;
 
   const shownStorageKey = session?.user?.email ? `achievement-modal-shown:${session.user.email}` : null;
 
@@ -65,7 +68,7 @@ function GlobalAchievementModal() {
             const isReady = !achievement.unlocked && achievement.progressPercentage === 100 && canAutoCollect;
             const shown = useAchievementModalStore.getState().shownAchievements;
             if (isReady && !shown.has(achievement.id) && mounted) {
-              setNotificationAchievement(achievement);
+              enqueueAchievement(achievement);
               addShownAchievement(achievement.id);
               persistShown();
             }
@@ -81,14 +84,12 @@ function GlobalAchievementModal() {
       mounted = false;
       clearInterval(interval);
     };
-  }, [session?.user?.email, shownStorageKey, setNotificationAchievement, addShownAchievement, setShownAchievements]);
+  }, [session?.user?.email, shownStorageKey, enqueueAchievement, addShownAchievement, setShownAchievements]);
 
   const collectAchievement = async (achievementId: string) => {
-    // Dismiss immediately so slow network doesn't leave the modal hanging around.
-    // The collect request continues in the background.
-    setNotificationAchievement(null);
-    addShownAchievement(achievementId);
-    persistShown();
+    // Dequeue immediately so slow network doesn't leave the modal hanging around.
+    // The next achievement in the queue (if any) will show automatically.
+    dequeueAchievement();
     setCollecting(achievementId);
     try {
       const response = await fetch("/api/user/achievements/collect", {
@@ -105,14 +106,15 @@ function GlobalAchievementModal() {
     }
   };
 
-  if (!notificationAchievement) return null;
+  if (!currentAchievement) return null;
   return (
     <AchievementNotification
-      achievement={notificationAchievement}
+      key={currentAchievement.id}
+      achievement={currentAchievement}
       rarityColors={rarityColors}
-      isCollecting={collecting === notificationAchievement.id}
-      onClose={() => setNotificationAchievement(null)}
-      onCollect={() => collectAchievement(notificationAchievement.id)}
+      isCollecting={collecting === currentAchievement.id}
+      onClose={() => dequeueAchievement()}
+      onCollect={() => collectAchievement(currentAchievement.id)}
     />
   );
 }

@@ -93,6 +93,7 @@ model User {
 
   // Season Pass
   seasonPasses           UserSeasonPass[]
+  frequencySubmissions   FrequencySubmission[]
 
   // Marketing email opt-in
   marketingOptIn         Boolean                    @default(false)
@@ -1653,4 +1654,50 @@ model UserSeasonPass {
   @@index([userId])
   @@index([seasonId])
   @@map("user_season_passes")
+}
+
+// ── FREQUENCY ──────────────────────────────────────────────────────────────
+
+model FrequencyQuestion {
+  id           String                @id @default(cuid())
+  question     String
+  scheduledFor DateTime              @db.Date
+  status       String                @default("pending") // pending | revealed
+  createdAt    DateTime              @default(now())
+  answers      FrequencyAnswer[]
+  submissions  FrequencySubmission[]
+
+  @@unique([scheduledFor])
+  @@index([status])
+  @@map("frequency_questions")
+}
+
+model FrequencyAnswer {
+  id          String            @id @default(cuid())
+  questionId  String
+  text        String            // normalized answer text
+  displayText String            // original / admin-set display label
+  count       Int               @default(0)
+  question    FrequencyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, text])
+  @@index([questionId])
+  @@map("frequency_answers")
+}
+
+model FrequencySubmission {
+  id         String            @id @default(cuid())
+  questionId String
+  userId     String?           // null = guest
+  sessionId  String?           // for guests
+  answers    Json              // string[] — raw answers submitted
+  score      Int               @default(0)
+  createdAt  DateTime          @default(now())
+  question   FrequencyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user       User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([questionId, userId])
+  @@index([questionId])
+  @@index([userId])
+  @@map("frequency_submissions")
 }

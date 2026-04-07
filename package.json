@@ -10,6 +10,7 @@
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
     "seed:store": "tsx scripts/seed-store.ts",
+    "seed:puzzles": "tsx scripts/seed-puzzles.ts",
     "validate:escape-room": "tsx scripts/validate-escape-room-wiring.ts",
     "test:e2e": "playwright test",
     "socket-server": "node scripts/socket-server.js",

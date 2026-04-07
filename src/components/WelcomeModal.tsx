@@ -132,9 +132,10 @@ const FEATURES = [
 interface WelcomeModalProps {
   userName: string;
   userId: string;
+  onTakeTour?: () => void;
 }
 
-export default function WelcomeModal({ userName, userId }: WelcomeModalProps) {
+export default function WelcomeModal({ userName, userId, onTakeTour }: WelcomeModalProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -149,6 +150,11 @@ export default function WelcomeModal({ userName, userId }: WelcomeModalProps) {
   function dismiss() {
     localStorage.setItem(`pw_welcomed_${userId}`, "1");
     setVisible(false);
+  }
+
+  function handleTakeTour() {
+    dismiss();
+    onTakeTour?.();
   }
 
   return (
@@ -286,9 +292,8 @@ export default function WelcomeModal({ userName, userId }: WelcomeModalProps) {
                 transition={{ delay: 0.9 }}
                 className="flex flex-col gap-3"
               >
-                <Link
-                  href="/puzzles"
-                  onClick={dismiss}
+                <button
+                  onClick={handleTakeTour}
                   className="w-full flex items-center justify-center gap-2 rounded-xl py-3 px-6 text-sm font-bold transition-all duration-200"
                   style={{
                     background: "linear-gradient(90deg, #3891A6 0%, #2d7a8e 100%)",
@@ -296,16 +301,18 @@ export default function WelcomeModal({ userName, userId }: WelcomeModalProps) {
                     boxShadow: "0 4px 20px rgba(56,145,166,0.35)",
                     letterSpacing: "0.04em",
                     textTransform: "uppercase",
+                    border: "none",
+                    cursor: "pointer",
                   }}
                 >
-                  Start Solving <span>→</span>
-                </Link>
+                  Take the Tour 🗺️
+                </button>
                 <button
                   onClick={dismiss}
                   className="text-xs transition-opacity duration-150 hover:opacity-100"
-                  style={{ color: "#374151", opacity: 0.7 }}
+                  style={{ color: "#374151", opacity: 0.7, background: "none", border: "none", cursor: "pointer" }}
                 >
-                  Browse the dashboard first
+                  Skip tour — go to dashboard
                 </button>
               </motion.div>
             </div>
