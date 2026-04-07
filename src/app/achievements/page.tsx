@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import AchievementNotification from "@/components/AchievementNotification";
 import { Rarity, rarityColors } from "@/lib/rarity";
 
@@ -55,12 +55,12 @@ const CATEGORY_META: Record<string, { label: string; icon: string }> = {
 
 const AUTO_UNLOCK_TYPES = ["puzzles_solved", "submission_accuracy", "points_earned", "streak", "custom"];
 
-const cardVariants = {
+const cardVariants: Variants = {
   hidden: { opacity: 0, y: 24 },
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.045, duration: 0.35, ease: "easeOut" },
+    transition: { delay: i * 0.045, duration: 0.35, ease: "easeOut" as const },
   }),
 };
 

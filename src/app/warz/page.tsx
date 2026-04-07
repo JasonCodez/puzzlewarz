@@ -56,6 +56,13 @@ const TYPE_LABELS: Record<string, string> = {
   word_crack: "Word Crack",
   word_search: "Word Search",
   jigsaw: "Jigsaw",
+  anagram_blitz: "Anagram Blitz",
+  crack_safe: "Crack the Safe",
+  escape_room: "Escape Room",
+  code_master: "Code Master",
+  detective_case: "Detective Case",
+  arg: "ARG",
+  general: "General",
 };
 
 function timeLeft(expiresAt: string) {

@@ -7,6 +7,7 @@ import AchievementNotification from "@/components/AchievementNotification";
 import { rarityColors } from "@/lib/rarity";
 import { useSession } from "next-auth/react";
 import { useAchievementModalStore } from "@/lib/achievement-modal-store";
+import { useModalQueueStore } from "@/lib/modal-queue-store";
 import TeamLobbyInviteModalProvider from "@/components/teams/TeamLobbyInviteModalProvider";
 
 const Navbar = dynamic(() => import("@/components/Navbar"), { ssr: false });
@@ -106,7 +107,9 @@ function GlobalAchievementModal() {
     }
   };
 
-  if (!currentAchievement) return null;
+  const openModals = useModalQueueStore((s) => s.openModals);
+
+  if (!currentAchievement || openModals.size > 0) return null;
   return (
     <AchievementNotification
       key={currentAchievement.id}

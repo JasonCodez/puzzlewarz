@@ -16,6 +16,8 @@ interface Props {
   onSolved?: () => void;
   alreadySolved?: boolean;
   warzMode?: boolean;
+  hintTokens?: number;
+  onHintUsed?: () => Promise<boolean>;
 }
 
 type CellCoord = { row: number; col: number };
@@ -82,6 +84,8 @@ export default function WordSearchPuzzle({
   onSolved,
   alreadySolved,
   warzMode,
+  hintTokens = 0,
+  onHintUsed,
 }: Props) {
   const grid = (wordSearchData.grid ?? []) as string[][];
   const words = ((wordSearchData.words ?? []) as string[]).map((w) =>
@@ -144,9 +148,14 @@ export default function WordSearchPuzzle({
 
   const selectedSet = new Set(selectedCells.map(serializeCoord));
 
-  // Hint: reveal a random unfound word
-  const useWordSearchHint = () => {
-    if (wsHintCount >= 2 || gameStatus !== "playing") return;
+  // Hint: reveal a random unfound word (costs 1 hint token)
+  const useWordSearchHint = async () => {
+    if (gameStatus !== "playing") return;
+    if (hintTokens < 1) return; // button is disabled; guard anyway
+    if (onHintUsed) {
+      const ok = await onHintUsed();
+      if (!ok) return;
+    }
     const unfound = words.filter((w) => !foundWords.includes(w));
     if (unfound.length === 0) return;
     const word = unfound[Math.floor(Math.random() * unfound.length)];
@@ -400,14 +409,31 @@ export default function WordSearchPuzzle({
                 </div>
               );
             })}
-            {gameStatus === "playing" && wsHintCount < 2 && (
-              <button
-                onClick={useWordSearchHint}
-                className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:scale-105 active:scale-95"
-                style={{ background: "rgba(56,145,166,0.15)", border: "1px solid rgba(56,145,166,0.4)", color: "#3891A6" }}
-              >
-                💡 Hint ({2 - wsHintCount} left)
-              </button>
+            {gameStatus === "playing" && (
+              <>
+                <button
+                  onClick={useWordSearchHint}
+                  disabled={hintTokens < 1}
+                  className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: hintTokens < 1 ? "rgba(255,107,107,0.1)" : "rgba(56,145,166,0.15)",
+                    border: `1px solid ${hintTokens < 1 ? "rgba(255,107,107,0.5)" : "rgba(56,145,166,0.4)"}`,
+                    color: hintTokens < 1 ? "#FF6B6B" : "#3891A6",
+                  }}
+                  title={hintTokens < 1 ? "No hint tokens — purchase from the Store" : `Use 1 hint token (${hintTokens} remaining)`}
+                >
+                  💡 {hintTokens < 1 ? "No Tokens" : `Hint (${hintTokens} 💡)`}{wsHintCount > 0 ? ` · used ${wsHintCount}` : ""}
+                </button>
+                {hintTokens < 1 && (
+                  <a
+                    href="/store"
+                    className="block text-center text-xs font-semibold underline transition-opacity hover:opacity-80"
+                    style={{ color: "#FDE74C" }}
+                  >
+                    Buy tokens →
+                  </a>
+                )}
+              </>
             )}
           </div>
         </div>

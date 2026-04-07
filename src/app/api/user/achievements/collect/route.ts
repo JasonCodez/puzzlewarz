@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
     try {
       await notifyAchievementUnlock(user.id, {
         achievementId: userAchievement.achievement.id,
-        achievementName: userAchievement.achievement.name,
+        achievementName: userAchievement.achievement.title,
         achievementDescription: userAchievement.achievement.description || "",
         badgeUrl: userAchievement.achievement.icon || undefined,
       });

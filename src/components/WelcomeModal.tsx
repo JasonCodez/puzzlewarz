@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { useRegisterModal } from "@/hooks/useRegisterModal";
 
 /* ── Fireworks canvas ───────────────────────────────────────────────── */
 function WelcomeFireworks() {
@@ -137,6 +138,7 @@ interface WelcomeModalProps {
 
 export default function WelcomeModal({ userName, userId, onTakeTour }: WelcomeModalProps) {
   const [visible, setVisible] = useState(false);
+  useRegisterModal('welcome-modal', visible);
 
   useEffect(() => {
     const key = `pw_welcomed_${userId}`;

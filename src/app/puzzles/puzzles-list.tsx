@@ -74,7 +74,23 @@ const RARITY_COLORS: Record<string, { bg: string; text: string; border: string }
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
+  // Seeded categories
+  escape: "🚪",
+  mystery: "🕵️‍♂️",
+  // Admin-form categories
+  general: "🎯",
   sudoku: "🔢",
+  arg: "🌐",
+  jigsaw: "🧩",
+  puzzle: "🎲",
+  challenge: "🏆",
+  word_crack: "💬",
+  word_search: "🔍",
+  anagram_blitz: "🔀",
+  code_master: "💻",
+  crack_safe: "🔒",
+  detective_case: "🕵️",
+  // Generic fallbacks
   logic: "🧠",
   crypto: "🔐",
   word: "🔤",
@@ -82,9 +98,8 @@ const CATEGORY_ICONS: Record<string, string> = {
   math: "➗",
   spatial: "📐",
   pattern: "🔁",
-  memory: "🧩",
+  memory: "💭",
   adventure: "🗺️",
-  mystery: "🕵️‍♂️",
   stealth: "🕶️",
 };
 
@@ -301,7 +316,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
         const categoriesData = await categoriesRes.json();
         const filteredCategories = (categoriesData || []).filter((c: any) => {
           const name = (c && c.name) ? String(c.name).toLowerCase().trim() : "";
-          return name !== "team test";
+          return name !== "team test" && (c.puzzleCount ?? 0) > 0;
         });
         setCategories(filteredCategories);
       }

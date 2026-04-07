@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
+import { useRegisterModal } from "@/hooks/useRegisterModal";
 
 export interface PuzzleXpModalProps {
   xpGained: number;
@@ -319,8 +320,7 @@ function LevelUpModal({
 }
 
 // ─── Public component ──────────────────────────────────────────────────────────
-export default function PuzzleXpModal(props: PuzzleXpModalProps) {
-  if (props.newLevel > props.oldLevel) {
+export default function PuzzleXpModal(props: PuzzleXpModalProps) {  useRegisterModal('puzzle-xp-modal');  if (props.newLevel > props.oldLevel) {
     return <LevelUpModal {...props} />;
   }
   return <NormalModal {...props} />;

@@ -27,9 +27,11 @@ interface SudokuGridProps {
   onNotify?: (message: string, type?: 'info' | 'success' | 'error') => void;
   onGiveUp?: () => void;
   onRequestGiveUp?: () => void;
+  hintTokens?: number;
+  onHintUsed?: () => Promise<boolean>;
 }
 
-export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disabled = false, solution, validateOnChange = false, onValidatedSuccess, onNotify, maxAttempts = 5, usedAttempts, onAttempt, onGiveUp, onRequestGiveUp }: SudokuGridProps) {
+export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disabled = false, solution, validateOnChange = false, onValidatedSuccess, onNotify, maxAttempts = 5, usedAttempts, onAttempt, onGiveUp, onRequestGiveUp, hintTokens = 0, onHintUsed }: SudokuGridProps) {
   const skin = usePuzzleSkin();
   const [grid, setGrid] = useState<number[][]>(() => puzzle.map((row) => [...row]));
   const initialPuzzleRef = ((): { current: number[][] } => {
@@ -69,8 +71,20 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
     if (typeof onChange === 'function') onChange(next.map((r) => [...r]));
   };
 
-  const useSudokuHint = () => {
+  const useSudokuHint = async () => {
     if (!solution || disabled) return;
+    if (hintTokens < 1) {
+      setSubmitMessage({ message: 'You need a hint token. Purchase them in the Store!', type: 'error' });
+      return;
+    }
+    // Deduct token server-side first; abort if it fails
+    if (onHintUsed) {
+      const ok = await onHintUsed();
+      if (!ok) {
+        setSubmitMessage({ message: 'Failed to use hint token. Please try again.', type: 'error' });
+        return;
+      }
+    }
     const emptyCells: [number, number][] = [];
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
@@ -327,14 +341,31 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
           Submit Sudoku
         </button>
         {solution && !disabled && (
-          <button
-            type="button"
-            onClick={useSudokuHint}
-            className="ml-3 px-4 py-2 rounded font-semibold transition-transform hover:scale-105 active:scale-95"
-            style={{ background: "rgba(56,145,166,0.2)", border: "1px solid rgba(56,145,166,0.5)", color: "#3891A6" }}
-          >
-            💡 Hint{sudokuHintCount > 0 ? ` (${sudokuHintCount})` : ""}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={useSudokuHint}
+              disabled={hintTokens < 1}
+              className="ml-3 px-4 py-2 rounded font-semibold transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: hintTokens < 1 ? "rgba(255,107,107,0.1)" : "rgba(56,145,166,0.2)",
+                border: `1px solid ${hintTokens < 1 ? "rgba(255,107,107,0.5)" : "rgba(56,145,166,0.5)"}`,
+                color: hintTokens < 1 ? "#FF6B6B" : "#3891A6",
+              }}
+              title={hintTokens < 1 ? "No hint tokens — purchase from the Store" : `Use 1 hint token (${hintTokens} remaining)`}
+            >
+              💡 {hintTokens < 1 ? "No Tokens" : `Hint (${hintTokens} 💡)`}{sudokuHintCount > 0 ? ` · used ${sudokuHintCount}` : ""}
+            </button>
+            {hintTokens < 1 && (
+              <a
+                href="/store"
+                className="ml-2 text-xs font-semibold underline transition-opacity hover:opacity-80"
+                style={{ color: "#FDE74C" }}
+              >
+                Buy tokens →
+              </a>
+            )}
+          </>
         )}
         <button
           type="button"

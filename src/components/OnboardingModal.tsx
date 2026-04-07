@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { useRegisterModal } from "@/hooks/useRegisterModal";
 
 /* ── Step definitions ──────────────────────────────────────────────── */
 const STEPS = [
@@ -174,6 +175,7 @@ interface OnboardingModalProps {
 }
 
 export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
+  useRegisterModal('onboarding-modal');
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
 

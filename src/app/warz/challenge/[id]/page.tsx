@@ -298,7 +298,7 @@ export default function WarzChallengePage() {
             </span>
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
               style={{ backgroundColor: "rgba(255,184,107,0.15)", color: "#FFB86B" }}>
-              {challenge.puzzle.puzzleType.replace("_", " ").toUpperCase()}
+              {challenge.puzzle.puzzleType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
             </span>
           </div>
         </div>

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { RatingInput } from "./RatingInput";
+import { useRegisterModal } from "@/hooks/useRegisterModal";
 
 interface PuzzleCompletionRatingModalProps {
   puzzleId: string;
@@ -21,6 +22,7 @@ export default function PuzzleCompletionRatingModal({
   initialAwardedPoints = null,
   completionSeconds = null,
 }: PuzzleCompletionRatingModalProps) {
+  useRegisterModal('puzzle-rating-modal');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [awardedPoints, setAwardedPoints] = useState<number | null>(initialAwardedPoints ?? null);
 

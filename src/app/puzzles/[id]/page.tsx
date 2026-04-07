@@ -223,7 +223,7 @@ export default function PuzzleDetailPage() {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [justAwardedPoints, setJustAwardedPoints] = useState<number | null>(null);
   const [toasts, setToasts] = useState<Array<{id:string; message:string; type?: 'info'|'success'|'error'}>>([]);
-  const [sudokuCompletionSeconds, setSudokuCompletionSeconds] = useState<number | null>(null);
+  const [completionSeconds, setCompletionSeconds] = useState<number | null>(null);
   const [timeLimitExceeded, setTimeLimitExceeded] = useState(false);
   const [maxAttemptsExceeded, setMaxAttemptsExceeded] = useState(false);
   const [sudokuAttemptsUsed, setSudokuAttemptsUsed] = useState<number>(0);
@@ -497,11 +497,9 @@ export default function PuzzleDetailPage() {
     })();
   }, [puzzle?.puzzleType, timeLimitExceeded, progress?.solved, puzzleId]);
 
-  // Fetch hints separately to get stats and history
+  // Fetch hints separately to get stats and history (also fetches token balance for sudoku)
   useEffect(() => {
     if (!puzzleId) return;
-    // Sudoku doesn't use hints; avoid fetching and rendering them.
-    if (puzzle?.puzzleType === 'sudoku') return;
 
     const fetchHints = async () => {
       try {
@@ -509,7 +507,8 @@ export default function PuzzleDetailPage() {
         if (!response.ok) throw new Error("Failed to fetch hints");
         const data = await response.json();
         const hintsArr: HintWithStats[] = Array.isArray(data) ? data : (data.hints ?? []);
-        setHints(hintsArr);
+        // Only set hints for non-sudoku puzzles; always set token balance
+        if (puzzle?.puzzleType !== 'sudoku') setHints(hintsArr);
         if (data.hintTokens != null) setHintTokens(data.hintTokens);
 
         // Auto-reveal hints the user has already used (they paid the token previously)
@@ -794,6 +793,22 @@ export default function PuzzleDetailPage() {
     console.log(`Hint ${hintId} rated as ${wasHelpful ? "helpful" : "not helpful"}`);
   };
 
+  // Consumes one hint token server-side for sudoku hints; returns true on success.
+  const handleSudokuHintUsed = async (): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/user/consume-hint-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (data.remainingTokens != null) setHintTokens(data.remainingTokens);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const handlePuzzleSolved = (xpOverride?: number) => {
     const xp = xpOverride ?? (puzzle?.xpReward ?? 50);
     const before = calcLevel(userTotalXp);
@@ -816,6 +831,25 @@ export default function PuzzleDetailPage() {
     }, dismissDelay);
   };
 
+  // Used by non-sudoku puzzle types: computes elapsed, fetches updated points, then shows modals.
+  const recordCompletionAndShowModal = async (elapsedOverride?: number) => {
+    const prevPoints = progress?.pointsEarned || 0;
+    const elapsed = elapsedOverride ?? (sessionStartRef.current ? Math.round((Date.now() - sessionStartRef.current.getTime()) / 1000) : null);
+    setCompletionSeconds(elapsed);
+    try {
+      const progressResponse = await fetch(`/api/puzzles/${puzzleId}/progress`);
+      if (progressResponse.ok) {
+        const updatedProgress = await progressResponse.json();
+        setProgress(updatedProgress);
+        const newPoints = updatedProgress?.pointsEarned ?? prevPoints;
+        setJustAwardedPoints(Math.max(0, newPoints - prevPoints));
+      }
+    } catch (err) {
+      console.error("Failed to refresh progress for completion modal:", err);
+    }
+    handlePuzzleSolved();
+  };
+
   const handleSudokuSubmit = async (submittedGrid: number[][]) => {
     const prevPoints = progress?.pointsEarned || 0;
     setSuccess(true);
@@ -826,7 +860,7 @@ export default function PuzzleDetailPage() {
     // Record success and get updated progress (single request) including elapsed time
     const elapsedSeconds = sudokuStartRef.current ? Math.round((Date.now() - sudokuStartRef.current) / 1000) : 0;
     // keep a stable copy for UI (modal/puzzles list)
-    setSudokuCompletionSeconds(elapsedSeconds);
+    setCompletionSeconds(elapsedSeconds);
     try {
       const resp = await fetch(`/api/puzzles/${puzzleId}/progress`, {
         method: 'POST',
@@ -974,11 +1008,18 @@ export default function PuzzleDetailPage() {
           const progressResponse = await fetch(`/api/puzzles/${puzzleId}/progress`);
           if (progressResponse.ok) {
             const updatedProgress = await progressResponse.json();
+            const prevPoints = progress?.pointsEarned || 0;
+            const newPoints = updatedProgress?.pointsEarned ?? prevPoints;
+            setJustAwardedPoints(Math.max(0, newPoints - prevPoints));
             setProgress(updatedProgress);
           }
         } catch (err) {
           console.error("Failed to refresh progress:", err);
         }
+
+        // Track elapsed time from session start
+        const elapsed = sessionStartRef.current ? Math.round((Date.now() - sessionStartRef.current.getTime()) / 1000) : null;
+        setCompletionSeconds(elapsed);
 
         // Show XP modal then rating modal
         handlePuzzleSolved();
@@ -1387,7 +1428,7 @@ export default function PuzzleDetailPage() {
                     router.push("/puzzles");
                   }}
                   initialAwardedPoints={justAwardedPoints}
-                  completionSeconds={sudokuCompletionSeconds}
+                  completionSeconds={completionSeconds}
               />
             )}
 
@@ -1474,6 +1515,8 @@ export default function PuzzleDetailPage() {
                                 setSuccess(true);
                                 const newPoints = updated?.pointsEarned ?? prevPoints;
                                 const pointsAwarded = Math.max(0, newPoints - prevPoints);
+                                setJustAwardedPoints(pointsAwarded);
+                                setCompletionSeconds(timeSpentSeconds ?? null);
                                 return pointsAwarded;
                               }
                             } catch (err) {
@@ -1509,7 +1552,7 @@ export default function PuzzleDetailPage() {
                           teamId={teamIdParam}
                           onComplete={() => {
                             setSuccess(true);
-                            handlePuzzleSolved();
+                            recordCompletionAndShowModal();
                           }}
                         />
                       )}
@@ -1548,7 +1591,7 @@ export default function PuzzleDetailPage() {
                       safeData={(puzzle.data ?? {}) as Record<string, unknown>}
                       onSolved={() => {
                         setSuccess(true);
-                        handlePuzzleSolved();
+                        recordCompletionAndShowModal();
                       }}
                     />
                   </div>
@@ -1570,7 +1613,7 @@ export default function PuzzleDetailPage() {
                       alreadySolved={progress?.solved ?? false}
                       onSolved={() => {
                         setSuccess(true);
-                        handlePuzzleSolved();
+                        recordCompletionAndShowModal();
                       }}
                     />
                   </div>
@@ -1590,9 +1633,11 @@ export default function PuzzleDetailPage() {
                       puzzleId={puzzleId}
                       wordSearchData={(puzzle.data ?? {}) as Record<string, unknown>}
                       alreadySolved={progress?.solved ?? false}
+                      hintTokens={hintTokens}
+                      onHintUsed={handleSudokuHintUsed}
                       onSolved={() => {
                         setSuccess(true);
-                        handlePuzzleSolved();
+                        recordCompletionAndShowModal();
                       }}
                     />
                   </div>
@@ -1614,7 +1659,7 @@ export default function PuzzleDetailPage() {
                       alreadySolved={progress?.solved ?? false}
                       onSolved={() => {
                         setSuccess(true);
-                        handlePuzzleSolved();
+                        recordCompletionAndShowModal();
                       }}
                     />
                   </div>
@@ -1636,7 +1681,7 @@ export default function PuzzleDetailPage() {
                       alreadySolved={progress?.solved ?? false}
                       onSolved={() => {
                         setSuccess(true);
-                        handlePuzzleSolved();
+                        recordCompletionAndShowModal();
                       }}
                     />
                   </div>
@@ -1813,6 +1858,8 @@ export default function PuzzleDetailPage() {
                             }}
                             disabled={timeLimitExceeded || maxAttemptsExceeded || Boolean(progress?.solved)}
                             maxAttempts={puzzle?.sudoku?.maxAttempts ?? 5}
+                            hintTokens={hintTokens}
+                            onHintUsed={handleSudokuHintUsed}
                             onAttempt={(attemptNumber, locked) => {
                               setSudokuAttemptsUsed(attemptNumber);
                               if (!locked) return;
