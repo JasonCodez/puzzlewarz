@@ -704,7 +704,7 @@ function StorePageInner() {
 
         {/* Balance bar */}
         <motion.div
-          className="flex items-center justify-between rounded-xl px-6 py-4 mb-8"
+          className="flex flex-wrap items-center gap-4 rounded-xl px-4 sm:px-6 py-4 mb-8"
           style={{ backgroundColor: "rgba(15,18,25,0.95)", border: "1px solid rgba(253,231,76,0.25)" }}
           animate={showGlow ? {
             boxShadow: ["0 0 0px rgba(253,231,76,0)", "0 0 40px rgba(253,231,76,0.5)", "0 0 16px rgba(253,231,76,0.15)"],
@@ -1019,8 +1019,9 @@ function StorePageInner() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl text-sm font-semibold shadow-xl z-50"
+            className="fixed left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl text-sm font-semibold shadow-xl z-50"
             style={{
+              bottom: "max(2rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem))",
               backgroundColor: toast.type === "success" ? "rgba(15,18,25,0.98)" : "rgba(60,0,0,0.95)",
               border: `1px solid ${toast.type === "success" ? "rgba(253,231,76,0.4)" : "rgba(239,68,68,0.4)"}`,
               color: toast.type === "success" ? "#FDE74C" : "#fca5a5",

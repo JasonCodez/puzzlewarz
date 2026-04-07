@@ -114,7 +114,7 @@ export default function SettingsPage() {
               borderColor: "#3891A6",
             }}
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">📣</span>
                 <div>
@@ -127,7 +127,7 @@ export default function SettingsPage() {
               <button
                 onClick={toggleMarketing}
                 disabled={marketingLoading || marketingSaving}
-                className="px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50"
+                className="shrink-0 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50"
                 style={{
                   backgroundColor: marketingOptIn ? "#38D399" : "#AB9F9D",
                   color: "#020202",

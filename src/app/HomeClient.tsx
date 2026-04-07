@@ -359,6 +359,14 @@ export default function HomeClient() {
           transition: left 0.5s ease;
         }
         .pw-cta-btn:hover::after { left: 130%; }
+        @media (max-width: 640px) {
+          .pw-steps-grid { grid-template-columns: 1fr !important; gap: 1.5rem !important; }
+          .pw-steps-connector { display: none !important; }
+          .pw-escape-box { padding: 32px 18px !important; }
+          .pw-daily-box { padding: 32px 18px !important; flex-direction: column !important; }
+          .pw-instant-box { padding: 24px 16px !important; }
+          .pw-footer-links { gap: 24px !important; flex-wrap: wrap !important; }
+        }
       `}</style>
 
       <main style={{ backgroundColor: "#020202", minHeight: "100vh", overflowX: "hidden" }}>
@@ -420,7 +428,7 @@ export default function HomeClient() {
               Solve this to begin your progression.
             </p>
 
-            <div style={{ borderRadius: 20, border: "1px solid rgba(56,145,166,0.3)", background: "rgba(56,145,166,0.06)", padding: "36px 32px", ...fade(instantReveal.visible, 0.22) }}>
+            <div className="pw-instant-box" style={{ borderRadius: 20, border: "1px solid rgba(56,145,166,0.3)", background: "rgba(56,145,166,0.06)", padding: "36px 32px", ...fade(instantReveal.visible, 0.22) }}>
               <div style={{ fontSize: 36, marginBottom: 16 }}>📡</div>
               <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#3891A6", marginBottom: 14 }}>Today&apos;s Question</p>
               {todayQuestion ? (
@@ -450,9 +458,9 @@ export default function HomeClient() {
               <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#3891A6", marginBottom: 12, ...fade(stepsReveal.visible, 0) }}>How It Works</p>
               <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", ...fade(stepsReveal.visible, 0.08) }}>Three Steps to Prove Yourself</h2>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, position: "relative" }}>
+            <div className="pw-steps-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, position: "relative" }}>
               {[0, 1].map(i => (
-                <div key={i} aria-hidden style={{ position: "absolute", top: 28, left: `calc(${(2 * i + 1) * 16.666}% + 44px)`, width: `calc(33.33% - 56px)`, height: 1, background: "linear-gradient(90deg, rgba(56,145,166,0.6), rgba(56,145,166,0.15))", opacity: stepsReveal.visible ? 1 : 0, transition: `opacity 0.8s ease ${0.4 + i * 0.2}s`, pointerEvents: "none" }} />
+                <div key={i} aria-hidden className="pw-steps-connector" style={{ position: "absolute", top: 28, left: `calc(${(2 * i + 1) * 16.666}% + 44px)`, width: `calc(33.33% - 56px)`, height: 1, background: "linear-gradient(90deg, rgba(56,145,166,0.6), rgba(56,145,166,0.15))", opacity: stepsReveal.visible ? 1 : 0, transition: `opacity 0.8s ease ${0.4 + i * 0.2}s`, pointerEvents: "none" }} />
               ))}
               <StepCard num="01" title="Solve Puzzles" desc="Start with quick challenges and sharpen your thinking. No account needed." delay={0.1} visible={stepsReveal.visible} />
               <StepCard num="02" title="Climb the Rankings" desc="Earn your place on the leaderboard. Every point counts toward your rank." delay={0.25} visible={stepsReveal.visible} />
@@ -463,7 +471,7 @@ export default function HomeClient() {
 
         {/* ── ESCAPE ROOM TEASE ─────────────────────────────── */}
         <section style={{ padding: "0 16px 100px" }}>
-          <div ref={escapeReveal.ref} style={{ maxWidth: 1100, margin: "0 auto", borderRadius: 24, padding: "64px 48px", background: "linear-gradient(135deg, rgba(124,58,237,0.14) 0%, rgba(56,145,166,0.06) 100%)", border: "1px solid rgba(124,58,237,0.3)", textAlign: "center", position: "relative", overflow: "hidden" }}>
+          <div ref={escapeReveal.ref} className="pw-escape-box" style={{ maxWidth: 1100, margin: "0 auto", borderRadius: 24, padding: "64px 48px", background: "linear-gradient(135deg, rgba(124,58,237,0.14) 0%, rgba(56,145,166,0.06) 100%)", border: "1px solid rgba(124,58,237,0.3)", textAlign: "center", position: "relative", overflow: "hidden" }}>
             <div aria-hidden style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundImage: "radial-gradient(circle, rgba(124,58,237,0.3) 1px, transparent 1px)", backgroundSize: "32px 32px", opacity: 0.04, pointerEvents: "none" }} />
             <div style={{ position: "relative" }}>
               <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#a78bfa", marginBottom: 16, ...fade(escapeReveal.visible, 0) }}>Coming Soon</p>
@@ -529,7 +537,7 @@ export default function HomeClient() {
 
         {/* ── DAILY HOOK ────────────────────────────────────── */}
         <section style={{ padding: "0 16px 100px" }}>
-          <div ref={dailyReveal.ref} style={{ maxWidth: 1100, margin: "0 auto", borderRadius: 20, padding: "48px 48px", background: "linear-gradient(135deg, rgba(56,145,166,0.14) 0%, rgba(253,231,76,0.05) 100%)", border: "1px solid rgba(56,145,166,0.3)", display: "flex", flexWrap: "wrap", gap: 32, alignItems: "center", justifyContent: "space-between" }}>
+          <div ref={dailyReveal.ref} className="pw-daily-box" style={{ maxWidth: 1100, margin: "0 auto", borderRadius: 20, padding: "48px 48px", background: "linear-gradient(135deg, rgba(56,145,166,0.14) 0%, rgba(253,231,76,0.05) 100%)", border: "1px solid rgba(56,145,166,0.3)", display: "flex", flexWrap: "wrap", gap: 32, alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ maxWidth: 500, ...fade(dailyReveal.visible, 0) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                 <span style={{ fontSize: 28 }}>📅</span>
@@ -617,7 +625,7 @@ export default function HomeClient() {
                 </div>
                 <p style={{ color: "#374151", fontSize: 12 }}>The ultimate multiplayer puzzle platform</p>
               </div>
-              <div style={{ display: "flex", gap: 48, fontSize: 14 }}>
+              <div className="pw-footer-links" style={{ display: "flex", gap: 48, fontSize: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#3891A6" }}>Play</p>
                   {[["Daily Puzzle", "/frequency"], ["All Puzzles", "/auth/register"], ["Leaderboard", "/auth/register"]].map(([l, h]) => (

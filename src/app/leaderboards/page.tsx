@@ -76,7 +76,7 @@ export default function LeaderboardsPage() {
 
   return (
     <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen">
-      <div className="p-8 pt-28">
+      <div className="px-4 sm:px-8 pt-28 pb-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -113,8 +113,8 @@ export default function LeaderboardsPage() {
 
         {/* Your Rank Card */}
         {userRank && (
-          <div className="mb-8 rounded-lg p-6 border" style={{ backgroundColor: 'rgba(56, 145, 166, 0.15)', borderColor: '#3891A6' }}>
-            <div className="flex items-center justify-between">
+          <div className="mb-8 rounded-lg p-4 sm:p-6 border" style={{ backgroundColor: 'rgba(56, 145, 166, 0.15)', borderColor: '#3891A6' }}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm" style={{ color: '#DDDBF1' }}>YOUR RANK</p>
                 <p className="text-3xl font-bold text-white">
@@ -139,16 +139,16 @@ export default function LeaderboardsPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-900/50 border-b" style={{ borderColor: '#3891A6' }}>
-                  <th className="px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
+                  <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
                     RANK
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
+                  <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
                     PLAYER
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
+                  <th className="hidden sm:table-cell px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
                     PUZZLES
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold" style={{ color: '#3891A6' }}>
+                  <th className="px-3 sm:px-6 py-4 text-right text-xs font-semibold" style={{ color: '#3891A6' }}>
                     POINTS
                   </th>
                 </tr>
@@ -163,12 +163,12 @@ export default function LeaderboardsPage() {
                       backgroundColor: entry.userId === (session?.user as any)?.id ? 'rgba(56, 145, 166, 0.15)' : 'transparent'
                     }}
                   >
-                    <td className={`px-6 py-4 font-bold ${getRankColor(entry.rank)}`}>
+                    <td className={`px-3 sm:px-6 py-3 font-bold ${getRankColor(entry.rank)}`}>
                       <span className="text-lg">
                         {getMedalEmoji(entry.rank)}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 sm:px-6 py-3">
                       <div className="flex items-center gap-3">
                         <img
                           src={entry.userImage || '/images/default-avatar.svg'}
@@ -188,10 +188,10 @@ export default function LeaderboardsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-slate-300">
+                    <td className="hidden sm:table-cell px-6 py-3 text-slate-300">
                       {entry.puzzlesSolved}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-3 sm:px-6 py-3 text-right">
                       <span className="text-lg font-bold" style={{ color: '#FDE74C' }}>
                         {entry.totalPoints}
                       </span>
