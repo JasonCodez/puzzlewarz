@@ -80,7 +80,7 @@ function GlobalAchievementModal() {
       }
     };
     fetchAchievements();
-    interval = setInterval(fetchAchievements, 5000);
+    interval = setInterval(fetchAchievements, 30000);
     return () => {
       mounted = false;
       clearInterval(interval);

@@ -360,13 +360,13 @@ export default function ProfilePage() {
               {frame.colorA ? (
                 <AvatarFrame frame={frame as { colorA: string; colorB: string; glow: string }} size={80} pageBg={t.pageBg}>
                   {profile?.image
-                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" />
+                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
                     : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: t.primaryMuted }}>👤</div>}
                 </AvatarFrame>
               ) : (
                 <div className="w-20 h-20 rounded-full overflow-hidden border-[3px]" style={{ borderColor: t.primary, boxShadow: `0 0 18px ${t.avatarGlow}, 0 0 40px ${t.avatarGlow}` }}>
                   {profile?.image
-                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" />
+                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
                     : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: t.primaryMuted }}>👤</div>}
                 </div>
               )}
@@ -420,13 +420,13 @@ export default function ProfilePage() {
               {frame.colorA ? (
                 <AvatarFrame frame={frame as { colorA: string; colorB: string; glow: string }} size={96} pageBg={t.pageBg}>
                   {profile?.image
-                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" />
+                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
                     : <div className="w-full h-full flex items-center justify-center text-4xl" style={{ background: t.primaryMuted }}>👤</div>}
                 </AvatarFrame>
               ) : (
                 <div className="w-24 h-24 rounded-full overflow-hidden border-2 flex items-center justify-center" style={{ borderColor: t.avatarRing, boxShadow: `0 0 14px ${t.avatarGlow}` }}>
                   {profile?.image
-                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" />
+                    ? <img src={profile.image} alt="Avatar" className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
                     : <span className="text-4xl">👤</span>}
                 </div>
               )}

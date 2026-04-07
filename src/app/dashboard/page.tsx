@@ -289,7 +289,7 @@ export default function Dashboard() {
               {/* Avatar */}
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 {session.user.image ? (
-                  <img src={session.user.image} alt="avatar" style={{ width: 60, height: 60, borderRadius: '50%', border: '2px solid rgba(56,145,166,0.5)', objectFit: 'cover' }} />
+                  <img src={session.user.image} alt="avatar" style={{ width: 60, height: 60, borderRadius: '50%', border: '2px solid rgba(56,145,166,0.5)', objectFit: 'cover' }} onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
                 ) : (
                   <div style={{
                     width: 60, height: 60, borderRadius: '50%',

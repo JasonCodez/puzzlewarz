@@ -58,7 +58,7 @@ export default function MessagesPage() {
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gray-600 overflow-hidden">
-                    {t.userImage ? <img src={t.userImage} alt={t.userName || 'User'} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-white">👤</div>}
+                    {t.userImage ? <img src={t.userImage} alt={t.userName || 'User'} className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} /> : <div className="w-full h-full flex items-center justify-center text-white">👤</div>}
                   </div>
                   <div className="text-left">
                     <div className="text-white font-semibold">{t.userName || t.userId}</div>

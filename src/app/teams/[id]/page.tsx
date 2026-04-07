@@ -641,7 +641,7 @@ export default function TeamDetailPage() {
               {stats.recentActivity.map((a: any, i: number) => (
                 <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-slate-900/30 border border-slate-700/30">
                   {a.userImage ? (
-                    <img src={a.userImage} alt="" className="w-7 h-7 rounded-full flex-shrink-0" />
+                    <img src={a.userImage} alt="" className="w-7 h-7 rounded-full flex-shrink-0" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
                   ) : (
                     <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs" style={{ backgroundColor: t.primaryMuted, color: t.primary }}>
                       👤
@@ -701,7 +701,7 @@ export default function TeamDetailPage() {
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {m.image ? (
-                      <img src={m.image} alt="" className="w-10 h-10 rounded-full flex-shrink-0" />
+                      <img src={m.image} alt="" className="w-10 h-10 rounded-full flex-shrink-0" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
                     ) : (
                       <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: t.primaryMuted, color: t.primary }}>
                         👤
@@ -765,7 +765,7 @@ export default function TeamDetailPage() {
                   <div key={app.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-lg bg-slate-900/30 border border-slate-700/30">
                     <div className="flex items-center gap-3">
                       {app.user?.image ? (
-                        <img src={app.user.image} alt="" className="w-10 h-10 rounded-full" />
+                        <img src={app.user.image} alt="" className="w-10 h-10 rounded-full" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center text-teal-300">👤</div>
                       )}

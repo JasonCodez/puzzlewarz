@@ -440,6 +440,7 @@ export default function AdminAnalyticsPage() {
                         src={solver.userImage}
                         alt={solver.userName}
                         className="w-6 h-6 rounded-full"
+                        onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
                       />
                     )}
                     <div className="flex-1">
