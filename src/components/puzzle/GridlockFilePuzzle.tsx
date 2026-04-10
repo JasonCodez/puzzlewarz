@@ -24,6 +24,7 @@ import GridlockStreakNudge from '@/components/puzzle/GridlockStreakNudge';
 import GridlockArcComplete from '@/components/puzzle/GridlockArcComplete';
 import GridlockStandings from '@/components/puzzle/GridlockStandings';
 import GuestRewardModal from '@/components/puzzle/GuestRewardModal';
+import { useAchievementModalStore } from '@/lib/achievement-modal-store';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 interface GridlockFilePuzzleProps {
@@ -45,6 +46,9 @@ interface ServerState {
   rank: GridlockRank;
   ruleExplanation: string | null;
   retentionUnlock: string | null;
+  streakShields: number;
+  currentStreak: number;
+  hintTokens: number;
 }
 
 interface SubmitResult {
@@ -62,6 +66,10 @@ interface SubmitResult {
   arcXpBonus?: number;
   xpReward?: number;
   pointsReward?: number;
+  streakBonusPoints?: number;
+  streakBonusXp?: number;
+  shieldConsumed?: boolean;
+  arcAchievement?: { id: string; title: string; description: string; icon: string; rarity: string } | null;
 }
 
 // ── Law Declaration options ────────────────────────────────────────────────────
@@ -193,7 +201,7 @@ function GridDisplay({
                     width: cellSize,
                     height: cellSize,
                     textAlign: 'center',
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                    fontFamily: 'var(--font-geist-mono, ui-monospace, monospace)',
                     fontWeight: 900,
                     fontSize,
                     letterSpacing: '0.02em',
@@ -201,20 +209,20 @@ function GridDisplay({
                     outline: 'none',
                     transition: 'all 0.2s',
                     background: solved
-                      ? 'linear-gradient(135deg, rgba(125,249,170,0.22), rgba(125,249,170,0.1))'
+                      ? 'linear-gradient(135deg, rgba(125,249,170,0.32), rgba(125,249,170,0.16))'
                       : answered
-                      ? 'linear-gradient(135deg, rgba(125,249,170,0.14), rgba(125,249,170,0.05))'
-                      : 'linear-gradient(135deg, rgba(255,208,0,0.12), rgba(255,208,0,0.04))',
+                      ? 'linear-gradient(135deg, rgba(125,249,170,0.22), rgba(125,249,170,0.1))'
+                      : 'linear-gradient(135deg, rgba(255,208,0,0.2), rgba(255,208,0,0.08))',
                     border: solved
                       ? '2px solid #7DF9AA'
                       : answered
-                      ? '2px solid rgba(125,249,170,0.75)'
-                      : '2px solid rgba(255,208,0,0.9)',
+                      ? '2px solid #7DF9AA'
+                      : '2px solid #FFD700',
                     boxShadow: solved
-                      ? '0 0 18px rgba(125,249,170,0.4), inset 0 1px 0 rgba(125,249,170,0.2)'
+                      ? '0 0 22px rgba(125,249,170,0.55), inset 0 1px 0 rgba(125,249,170,0.3)'
                       : answered
-                      ? '0 0 10px rgba(125,249,170,0.2), inset 0 1px 0 rgba(125,249,170,0.1)'
-                      : '0 0 12px rgba(255,208,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
+                      ? '0 0 14px rgba(125,249,170,0.35), inset 0 1px 0 rgba(125,249,170,0.15)'
+                      : '0 0 16px rgba(255,208,0,0.35), inset 0 1px 0 rgba(255,255,255,0.1)',
                     color: solved ? '#7DF9AA' : '#FFD700',
                     caretColor: '#FFD700',
                   }}
@@ -236,14 +244,14 @@ function GridDisplay({
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 10,
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                fontFamily: 'var(--font-geist-mono, ui-monospace, monospace)',
                 fontWeight: 700,
                 fontSize,
                 letterSpacing: '0.02em',
-                background: 'linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.04))',
-                border: '2px solid rgba(255,255,255,0.18)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 6px rgba(0,0,0,0.4)',
-                color: '#f1f5f9',
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.18), rgba(255,255,255,0.09))',
+                border: '2px solid rgba(255,255,255,0.42)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 8px rgba(0,0,0,0.5)',
+                color: '#ffffff',
                 userSelect: 'none',
               }}
             >
@@ -277,7 +285,7 @@ function LawDeclarationPanel({
   const confirmed = lawResult === 'confirmed' || lawResult === 'alternate';
 
   return (
-    <div style={{ borderRadius: 10, overflow: 'hidden', border: `1px solid ${hasResult ? (confirmed ? 'rgba(125,249,170,0.3)' : 'rgba(255,150,100,0.25)') : 'rgba(255,255,255,0.09)'}`, background: 'rgba(255,255,255,0.02)' }}>
+    <div style={{ borderRadius: 10, overflow: 'hidden', border: `1px solid ${hasResult ? (confirmed ? 'rgba(125,249,170,0.5)' : 'rgba(255,150,100,0.45)') : 'rgba(255,255,255,0.18)'}`, background: 'rgba(255,255,255,0.04)' }}>
       <button
         onClick={() => setOpen(v => !v)}
         style={{
@@ -289,17 +297,17 @@ function LawDeclarationPanel({
           background: 'none',
           border: 'none',
           cursor: 'pointer',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: 11,
-          letterSpacing: '0.1em',
-          color: '#9ca3af',
+          fontFamily: 'inherit',
+          fontSize: 12,
+          letterSpacing: '0.06em',
+          color: '#d1d5db',
           transition: 'color 0.15s',
         }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 9, opacity: 0.6 }}>{open ? '▼' : '▶'}</span>
           <span style={{ color: '#e5e7eb', fontWeight: 700 }}>DECLARE A LAW</span>
-          <span style={{ color: '#4b5563' }}>— optional bonus</span>
+          <span style={{ color: '#9ca3af' }}>— optional bonus</span>
         </span>
         {hasResult && (
           <span style={{ fontSize: 12, color: LAW_RESULT_COLOR[lawResult], fontWeight: 800 }}>
@@ -317,17 +325,17 @@ function LawDeclarationPanel({
             style={{ overflow: 'hidden' }}
           >
             <div style={{ padding: '4px 16px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <p style={{ fontSize: 11, color: '#6b7280', marginBottom: 12, lineHeight: 1.6, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+              <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 12, lineHeight: 1.6, fontFamily: 'inherit' }}>
                 Identify the hidden rule. Correct declarations boost your rank — wrong ones never penalise.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <div style={{ fontSize: 10, color: '#6b7280', letterSpacing: '0.1em', marginBottom: 5, fontFamily: 'monospace' }}>RULE FAMILY</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '0.06em', marginBottom: 5, fontFamily: 'inherit' }}>RULE FAMILY</div>
                   <select
                     value={declaredFamily}
                     onChange={e => onFamily(e.target.value as RuleFamily)}
                     disabled={disabled}
-                    style={{ width: '100%', padding: '7px 10px', borderRadius: 7, fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e5e7eb', outline: 'none' }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e5e7eb', outline: 'none' }}
                   >
                     <option value="" style={{ background: '#1a1a1a', color: '#e5e7eb' }}>— select —</option>
                     {RULE_FAMILIES.map(f => (
@@ -336,12 +344,12 @@ function LawDeclarationPanel({
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: '#6b7280', letterSpacing: '0.1em', marginBottom: 5, fontFamily: 'monospace' }}>AXIS</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '0.06em', marginBottom: 5, fontFamily: 'inherit' }}>AXIS</div>
                   <select
                     value={declaredAxis}
                     onChange={e => onAxis(e.target.value as RuleAxis)}
                     disabled={disabled}
-                    style={{ width: '100%', padding: '7px 10px', borderRadius: 7, fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e5e7eb', outline: 'none' }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e5e7eb', outline: 'none' }}
                   >
                     <option value="" style={{ background: '#1a1a1a', color: '#e5e7eb' }}>— select —</option>
                     {RULE_AXES.map(a => (
@@ -351,7 +359,7 @@ function LawDeclarationPanel({
                 </div>
               </div>
               {hasResult && (
-                <p style={{ marginTop: 10, fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: LAW_RESULT_COLOR[lawResult] }}>
+                <p style={{ marginTop: 10, fontSize: 13, fontFamily: 'inherit', color: LAW_RESULT_COLOR[lawResult] }}>
                   {LAW_RESULT_TEXT[lawResult]}
                 </p>
               )}
@@ -369,19 +377,38 @@ function HintPanel({
   usedHintIds,
   onUse,
   disabled,
+  hintTokens,
 }: {
   hints: GridlockFileClientData['hints'];
   usedHintIds: Set<string>;
   onUse: (id: string) => void;
   disabled: boolean;
+  hintTokens?: number; // undefined = guest mode (don't show token count)
 }) {
   if (!hints || hints.length === 0) return null;
   const usedCount = [...usedHintIds].filter(id => hints.some(h => h.id === id)).length;
+  const hasLockedHints = hints.some(h => !usedHintIds.has(h.id));
+  const showAddMore = hintTokens !== undefined && hintTokens === 0 && hasLockedHints && !disabled;
   return (
-    <div style={{ borderRadius: 10, border: '1px solid rgba(255,208,0,0.15)', background: 'rgba(255,208,0,0.02)', overflow: 'hidden' }}>
+    <div style={{ borderRadius: 10, border: '1px solid rgba(255,208,0,0.35)', background: 'rgba(255,208,0,0.05)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px 8px', borderBottom: '1px solid rgba(255,208,0,0.1)' }}>
-        <span style={{ fontSize: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#92400e', letterSpacing: '0.14em', fontWeight: 700 }}>📡 SIGNALS</span>
-        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#6b7280' }}>{usedCount}/{hints.length} used</span>
+        <span style={{ fontSize: 10, fontFamily: 'inherit', color: '#fbbf24', letterSpacing: '0.14em', fontWeight: 700 }}>📡 SIGNALS</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {hintTokens !== undefined && (
+            <span style={{ fontSize: 10, fontFamily: 'inherit', color: hintTokens === 0 ? '#6b7280' : '#fcd34d' }}>
+              🎫 {hintTokens} token{hintTokens !== 1 ? 's' : ''}
+            </span>
+          )}
+          {showAddMore && (
+            <a
+              href="/store"
+              style={{ fontSize: 10, fontFamily: 'inherit', color: '#6b7280', textDecoration: 'underline', textUnderlineOffset: 2 }}
+            >
+              Add more →
+            </a>
+          )}
+          <span style={{ fontSize: 10, fontFamily: 'inherit', color: '#6b7280' }}>{usedCount}/{hints.length} used</span>
+        </div>
       </div>
       <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {hints.map((h, i) => {
@@ -399,23 +426,23 @@ function HintPanel({
                 gap: 12,
                 padding: '9px 12px',
                 borderRadius: 8,
-                background: used ? 'rgba(255,213,128,0.06)' : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${used ? 'rgba(255,213,128,0.2)' : 'rgba(255,255,255,0.07)'}`,
+                background: used ? 'rgba(255,213,128,0.12)' : 'rgba(255,255,255,0.06)',
+                border: `1px solid ${used ? 'rgba(255,213,128,0.4)' : 'rgba(255,255,255,0.15)'}`,
               }}
             >
               {used ? (
-                <p style={{ fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#fcd34d', lineHeight: 1.5, margin: 0 }}>{h.text}</p>
+                <p style={{ fontSize: 13, fontFamily: 'inherit', color: '#fcd34d', lineHeight: 1.6, margin: 0 }}>{h.text}</p>
               ) : (
                 <>
-                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#6b7280' }}>Signal {i + 1} · {h.cost} token{h.cost !== 1 ? 's' : ''}</span>
+                  <span style={{ fontSize: 12, fontFamily: 'inherit', color: '#d1d5db' }}>Signal {i + 1} · {h.cost} token{h.cost !== 1 ? 's' : ''}</span>
                   <button
                     onClick={() => onUse(h.id)}
                     disabled={disabled}
                     style={{
                       fontSize: 10,
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                      fontFamily: 'inherit',
                       fontWeight: 700,
-                      letterSpacing: '0.1em',
+                      letterSpacing: '0.06em',
                       padding: '4px 10px',
                       borderRadius: 6,
                       cursor: 'pointer',
@@ -518,7 +545,7 @@ function SolvedScreen({
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)',
               background: 'rgba(255,255,255,0.06)', color: '#e5e7eb',
-              fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace, monospace',
+              fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
               cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.12)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.4)'; }}
@@ -536,7 +563,7 @@ function SolvedScreen({
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(24,119,242,0.4)',
               background: 'rgba(24,119,242,0.1)', color: '#5b9cf6',
-              fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace, monospace',
+              fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
               cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(24,119,242,0.22)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(24,119,242,0.7)'; }}
@@ -606,6 +633,7 @@ function generateShareText(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = false, hideHeader = false }: GridlockFilePuzzleProps) {
+  const enqueueAchievement = useAchievementModalStore((s) => s.enqueueAchievement);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -622,6 +650,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
   const [illuminated, setIlluminated] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [shieldConsumed, setShieldConsumed] = useState(false);
 
   // ── Guest-mode tracking ─────────────────────────────────────────────────────────
   const [guestSubmissionCount, setGuestSubmissionCount] = useState(0);
@@ -753,6 +782,12 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
         stopTimer();
         setIlluminated(true);
 
+        if (data.shieldConsumed) setShieldConsumed(true);
+
+        if (!guestMode && data.arcAchievement) {
+          enqueueAchievement(data.arcAchievement);
+        }
+
         if (guestMode) {
           // Persist solve to localStorage
           setAnonSolved(puzzleId, {
@@ -787,6 +822,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
           rank: data.rank,
           ruleExplanation: data.ruleExplanation ?? null,
           retentionUnlock: data.retentionUnlock ?? null,
+          ...(data.shieldConsumed ? { streakShields: Math.max(0, (prev.streakShields ?? 1) - 1) } : {}),
         } : prev);
         onSolved();
       } else {
@@ -846,7 +882,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
   const streakAlive = streak ? isStreakAlive(streak.lastSolvedDate) : false;
 
   return (
-    <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} className="space-y-6">
+    <div style={{ fontFamily: 'var(--font-geist-sans, system-ui, sans-serif)' }} className="space-y-6">
       {/* Arc complete overlay */}
       <AnimatePresence>
         {arcCompleteVisible && streak && (
@@ -874,19 +910,43 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
 
       {/* Header */}
       {!hideHeader && (
-      <div className="flex flex-wrap items-start justify-between gap-3 pb-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+      <div className="flex flex-wrap items-start justify-between gap-3 pb-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.22)' }}>
         <div>
-          <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+          <div style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
             GRIDLOCK FILE #{String(puzzle.fileNumber ?? '?').padStart(3, '0')}
           </div>
-          <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#f9fafb', marginTop: 4, lineHeight: 1.2 }}>
+          <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#ffffff', marginTop: 4, lineHeight: 1.2 }}>
             {puzzle.fileTitle}
           </div>
-          <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 6, fontStyle: 'italic', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: '#d1d5db', marginTop: 6, fontStyle: 'italic', lineHeight: 1.5 }}>
             {puzzle.flavorText}
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Streak shield count — authenticated users only */}
+          {!guestMode && (
+            <div
+              className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold"
+              title="Streak shields protect your daily streak if you miss a day"
+              style={{
+                background: (serverState.streakShields ?? 0) > 0 ? 'rgba(96,165,250,0.1)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${(serverState.streakShields ?? 0) > 0 ? 'rgba(96,165,250,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                color: (serverState.streakShields ?? 0) > 0 ? '#93c5fd' : '#6b7280',
+              }}
+            >
+              <span>🛡️</span>
+              <span>{serverState.streakShields ?? 0}</span>
+              {(serverState.streakShields ?? 0) === 0 && !solved && (
+                <a
+                  href="/store"
+                  className="ml-1 underline underline-offset-2 hover:text-blue-300 transition-colors"
+                  style={{ fontSize: 10, color: '#6b7280' }}
+                >
+                  Add more →
+                </a>
+              )}
+            </div>
+          )}
           {streak && streak.count > 0 && (
             <div
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
@@ -916,7 +976,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
         // ── Solved view ────────────────────────────────────────────────────────
         <div className="space-y-5">
           {/* Grid (read-only, illuminated) */}
-          <div className="flex justify-center py-4" style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex justify-center py-4" style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)' }}>
             <GridDisplay
               grid={puzzle.grid}
               answers={answers}
@@ -926,6 +986,26 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
               illuminated={illuminated}
             />
           </div>
+
+          {/* Shield-saved banner — shown after a solve consumed a streaks shield */}
+          <AnimatePresence>
+            {shieldConsumed && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-mono font-bold"
+                style={{
+                  background: 'rgba(96,165,250,0.1)',
+                  border: '1px solid rgba(96,165,250,0.35)',
+                  color: '#93c5fd',
+                }}
+              >
+                <span>🛡️</span>
+                <span>A streak shield protected your streak — 1 shield consumed.</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <SolvedScreen
             puzzleId={puzzleId}
@@ -964,7 +1044,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
         // ── Active play view ───────────────────────────────────────────────────
         <div className="space-y-5">
           {/* Grid */}
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 20px', background: 'radial-gradient(ellipse at center, rgba(255,208,0,0.05) 0%, rgba(0,0,0,0) 70%), rgba(255,255,255,0.025)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.09)' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 20px', background: 'radial-gradient(ellipse at center, rgba(255,208,0,0.12) 0%, rgba(0,0,0,0) 70%), rgba(255,255,255,0.06)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.2)' }}>
             <GridDisplay
               grid={puzzle.grid}
               answers={answers}
@@ -1006,6 +1086,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
             usedHintIds={usedHintIds}
             onUse={id => setUsedHintIds(prev => new Set([...prev, id]))}
             disabled={solved}
+            hintTokens={guestMode ? undefined : (serverState.hintTokens ?? 0)}
           />
 
           {/* Law Declaration (optional) */}
@@ -1026,9 +1107,9 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
               width: '100%',
               padding: '14px 0',
               borderRadius: 10,
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontFamily: 'inherit',
               fontWeight: 900,
-              fontSize: 13,
+              fontSize: 14,
               letterSpacing: '0.14em',
               textTransform: 'uppercase',
               cursor: 'pointer',
@@ -1045,7 +1126,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
             {submitting ? '▶ ANALYSING…' : `▶ SUBMIT ANSWER${answers.filter(a => a.trim()).length > 1 ? 'S' : ''}`}
           </button>
 
-          <div style={{ fontSize: 11, textAlign: 'center', color: '#374151', fontFamily: 'monospace', letterSpacing: '0.06em' }}>
+          <div style={{ fontSize: 12, textAlign: 'center', color: '#9ca3af', fontFamily: 'inherit', letterSpacing: '0.04em' }}>
             {serverState.submissionCount > 0 ? `${serverState.submissionCount} attempt${serverState.submissionCount !== 1 ? 's' : ''} · ${serverState.hintsUsed} signal${serverState.hintsUsed !== 1 ? 's' : ''} used` : 'No attempts yet'}
           </div>
 

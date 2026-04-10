@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
       timeLimitSeconds,
       puzzleData,
       isWarzExclusive,
+      gridlockReleaseAt,
     } = body;
 
     // Validate input - title is required for most puzzle types but optional for Sudoku, Escape Room, and Word Crack
@@ -501,6 +502,17 @@ export async function POST(request: NextRequest) {
       } catch (roomErr) {
         console.error('[PUZZLE CREATE] Failed to persist escape-room rooms/stages:', roomErr);
       }
+    }
+
+    // Send puzzle release notification if active
+    // Upsert PuzzleSchedule.releaseAt for gridlock_file puzzles
+    if (puzzle.puzzleType === 'gridlock_file') {
+      const releaseAt = gridlockReleaseAt ? new Date(gridlockReleaseAt) : new Date();
+      await prisma.puzzleSchedule.upsert({
+        where: { puzzleId: puzzle.id },
+        create: { puzzleId: puzzle.id, releaseAt, schedulingType: 'scheduled' },
+        update: { releaseAt },
+      });
     }
 
     // Send puzzle release notification if active

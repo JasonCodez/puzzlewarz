@@ -4,14 +4,37 @@ import { getGridlockFileData, sanitizeGridlockForClient } from '@/lib/gridlockFi
 
 // GET /api/gridlock/daily
 // Public — no auth required.
-// Returns today's active gridlock_file puzzle (most recently created active one).
+// Returns today's active gridlock_file puzzle.
+// Selection logic:
+//   1. Prefer any puzzle with a PuzzleSchedule.releaseAt <= now, picking the most recent one.
+//   2. Fall back to the most recently created active puzzle (for puzzles with no schedule set).
 export async function GET() {
   try {
-    const puzzle = await prisma.puzzle.findFirst({
-      where: { puzzleType: 'gridlock_file', isActive: true },
+    const now = new Date();
+
+    // Look for a scheduled puzzle whose go-live date has passed
+    let puzzle = await prisma.puzzle.findFirst({
+      where: {
+        puzzleType: 'gridlock_file',
+        isActive: true,
+        schedule: { releaseAt: { lte: now } },
+      },
       select: { id: true, data: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { schedule: { releaseAt: 'desc' } },
     });
+
+    // Fall back: puzzle with no schedule record at all
+    if (!puzzle) {
+      puzzle = await prisma.puzzle.findFirst({
+        where: {
+          puzzleType: 'gridlock_file',
+          isActive: true,
+          schedule: null,
+        },
+        select: { id: true, data: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
 
     if (!puzzle) {
       return NextResponse.json({ puzzle: null });

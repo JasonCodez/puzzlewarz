@@ -18,7 +18,7 @@ export async function GET(
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true },
+      select: { id: true, streakShields: true, hintTokens: true, streak: { select: { currentStreak: true } } },
     });
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -84,6 +84,9 @@ export async function GET(
       rank,
       ruleExplanation: solvedSubmission ? fileData.ruleExplanation : null,
       retentionUnlock: solvedSubmission ? (fileData.retentionUnlock ?? null) : null,
+      streakShields: user?.streakShields ?? 0,
+      currentStreak: user?.streak?.currentStreak ?? 0,
+      hintTokens: user?.hintTokens ?? 0,
     });
   } catch (e) {
     console.error('[gridlock/state] Failed:', e);

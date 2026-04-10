@@ -102,28 +102,52 @@ export async function POST(
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const yesterday = new Date(today.getTime() - 86_400_000);
+      const twoDaysAgo = new Date(today.getTime() - 2 * 86_400_000);
 
-      const existingStreak = await prisma.userStreak.findUnique({
-        where: { userId: user.id },
-        select: { currentStreak: true, longestStreak: true, lastSolveDate: true },
-      });
+      const [existingStreak, userProtection] = await Promise.all([
+        prisma.userStreak.findUnique({
+          where: { userId: user.id },
+          select: { currentStreak: true, longestStreak: true, lastSolveDate: true },
+        }),
+        prisma.user.findUnique({
+          where: { id: user.id },
+          select: { streakShields: true },
+        }),
+      ]);
 
+      let shieldConsumed = false;
       let newStreakCount = 1;
+
       if (existingStreak?.lastSolveDate) {
         const last = new Date(existingStreak.lastSolveDate);
         last.setHours(0, 0, 0, 0);
         if (last.getTime() === yesterday.getTime()) {
+          // Consecutive day — normal increment
           newStreakCount = (existingStreak.currentStreak ?? 0) + 1;
         } else if (last.getTime() === today.getTime()) {
-          newStreakCount = existingStreak.currentStreak ?? 1; // already counted
+          // Already solved today — no change
+          newStreakCount = existingStreak.currentStreak ?? 1;
+        } else if (last.getTime() === twoDaysAgo.getTime()) {
+          // Missed exactly 1 day — shield protects the streak
+          if ((userProtection?.streakShields ?? 0) > 0) {
+            shieldConsumed = true;
+            newStreakCount = (existingStreak.currentStreak ?? 0) + 1;
+          }
+          // else: no shield → resets to 1
         }
+        // Missed 2+ days → resets to 1 (no protection covers multi-day gaps)
       }
       const newLongest = Math.max(newStreakCount, existingStreak?.longestStreak ?? 0);
 
       // Arc completion bonus XP (Day 7 = full arc done)
       const arcXpBonus = fileData.arcDay === 7 ? 240 : 0;
       const baseXp = typeof puzzle.xpReward === 'number' ? puzzle.xpReward : 100;
-      const totalXp = baseXp + arcXpBonus;
+
+      // Consecutive daily solve streak bonus: day N = N*50 pts, N*25 XP
+      const streakBonusPoints = newStreakCount * 50;
+      const streakBonusXp = newStreakCount * 25;
+
+      const totalXp = baseXp + arcXpBonus + streakBonusXp;
 
       await prisma.$transaction(async (tx) => {
         await tx.puzzleSubmission.create({
@@ -160,7 +184,11 @@ export async function POST(
 
         await tx.user.update({
           where: { id: user.id },
-          data: { xp: { increment: totalXp }, totalPoints: { increment: 100 } },
+          data: {
+            xp: { increment: totalXp },
+            totalPoints: { increment: 100 + streakBonusPoints },
+            ...(shieldConsumed ? { streakShields: { decrement: 1 } } : {}),
+          },
         });
 
         await tx.userStreak.upsert({
@@ -190,6 +218,26 @@ export async function POST(
         });
       });
 
+      // Award arc completion achievement when Day 7 is solved (idempotent)
+      let arcAchievement: { id: string; title: string; description: string; icon: string; rarity: string } | null = null;
+      if (fileData.arcDay === 7) {
+        const achievement = await prisma.achievement.findUnique({
+          where: { name: 'gridlock_arc_complete' },
+          select: { id: true, title: true, description: true, icon: true, rarity: true },
+        });
+        if (achievement) {
+          const hasIt = await prisma.userAchievement.findUnique({
+            where: { userId_achievementId: { userId: user.id, achievementId: achievement.id } },
+          });
+          if (!hasIt) {
+            await prisma.userAchievement.create({
+              data: { userId: user.id, achievementId: achievement.id },
+            });
+            arcAchievement = achievement;
+          }
+        }
+      }
+
       return NextResponse.json({
         correct: true,
         answerResult,
@@ -197,11 +245,15 @@ export async function POST(
         submissionCount,
         rank,
         streak: newStreakCount,
+        streakBonusPoints,
+        streakBonusXp,
         arcXpBonus,
+        shieldConsumed,
         ruleExplanation: fileData.ruleExplanation,
         retentionUnlock: fileData.retentionUnlock ?? null,
         arcDay: fileData.arcDay,
         arcNumber: fileData.arcNumber,
+        arcAchievement,
       });
     } else {
       await prisma.$transaction(async (tx) => {

@@ -28,6 +28,7 @@ interface PuzzleFormData {
   parts: PuzzlePart[];
   puzzleData: Record<string, unknown>;
   isWarzExclusive: boolean;
+  gridlockReleaseAt: string; // ISO date string YYYY-MM-DD, gridlock_file only
 }
 
 interface PuzzlePart {
@@ -121,6 +122,7 @@ export default function AdminPuzzlesPage() {
     ],
     puzzleData: {},
     isWarzExclusive: false,
+    gridlockReleaseAt: "",
   });
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
@@ -214,6 +216,9 @@ export default function AdminPuzzlesPage() {
         ],
         puzzleData: (p.data as Record<string, unknown>) || {},
         isWarzExclusive: (p as any).isWarzExclusive === true,
+        gridlockReleaseAt: (p as any).schedule?.releaseAt
+          ? new Date((p as any).schedule.releaseAt).toISOString().slice(0, 10)
+          : "",
       };
 
       // Merge jigsaw config into puzzleData
@@ -266,6 +271,7 @@ export default function AdminPuzzlesPage() {
       ],
       puzzleData: {},
       isWarzExclusive: false,
+      gridlockReleaseAt: "",
     });
     setJigsawImageUrl("");
     setJigsawImagePreview("");
@@ -647,6 +653,10 @@ export default function AdminPuzzlesPage() {
       if (formData.puzzleType === 'gridlock_file') {
         // Answers are stored in puzzleData.gridlockFile.correctAnswers
         delete submitBody.correctAnswer;
+        // Include releaseAt for scheduling
+        if (formData.gridlockReleaseAt) {
+          submitBody.gridlockReleaseAt = formData.gridlockReleaseAt;
+        }
       }
       if (formData.puzzleType === 'parasite_code') {
         delete submitBody.correctAnswer;
@@ -912,6 +922,7 @@ export default function AdminPuzzlesPage() {
           ],
           puzzleData: {},
           isWarzExclusive: false,
+          gridlockReleaseAt: "",
         });
         setMediaFiles([]);
         setJigsawImagePreview("");
@@ -1020,6 +1031,20 @@ export default function AdminPuzzlesPage() {
                       ))}
                     </select>
                   </div>
+
+                  {/* Gridlock File: release date scheduler */}
+                  {formData.puzzleType === 'gridlock_file' && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-300 mb-2">📅 Go-Live Date (UTC)</label>
+                      <input
+                        type="date"
+                        value={formData.gridlockReleaseAt}
+                        onChange={e => setFormData(prev => ({ ...prev, gridlockReleaseAt: e.target.value }))}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Leave blank to make it live immediately. Set this to queue puzzles for future days.</p>
+                    </div>
+                  )}
 
                   {/* Destination */}
                   <div>

@@ -367,6 +367,19 @@ const achievements = [
     conditionType: "custom",
     conditionValue: 5,
   },
+
+  // === GRIDLOCK BADGES ===
+  {
+    name: "gridlock_arc_complete",
+    title: "Arc Complete",
+    description: "Solved all 7 days of a Gridlock arc",
+    icon: "🗂️",
+    category: "special",
+    rarity: "exclusive",
+    requirement: "Complete a full 7-day Gridlock arc",
+    conditionType: "custom",
+    conditionValue: null,
+  },
 ];
 
 async function seedAchievements() {

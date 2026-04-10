@@ -29,6 +29,7 @@ export async function GET(
       solutions: { take: 1 },
       jigsaw: true,
       sudoku: true,
+      schedule: true,
     },
   });
 
@@ -65,6 +66,7 @@ export async function PUT(
     sudokuDifficulty,
     timeLimitSeconds,
     isWarzExclusive,
+    gridlockReleaseAt,
   } = body;
 
   // Get or create category
@@ -176,6 +178,16 @@ export async function PUT(
       });
     }
   });
+
+  // Upsert PuzzleSchedule.releaseAt for gridlock_file puzzles
+  if (puzzleType === 'gridlock_file') {
+    const releaseAt = gridlockReleaseAt ? new Date(gridlockReleaseAt) : new Date();
+    await prisma.puzzleSchedule.upsert({
+      where: { puzzleId },
+      create: { puzzleId, releaseAt, schedulingType: 'scheduled' },
+      update: { releaseAt },
+    });
+  }
 
   const updated = await prisma.puzzle.findUnique({
     where: { id: puzzleId },
