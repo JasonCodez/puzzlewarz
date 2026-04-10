@@ -78,7 +78,7 @@ export async function PUT(
   const validDifficulties = ["easy", "medium", "hard", "extreme"];
   const safeDifficulty = difficulty && validDifficulties.includes(difficulty) ? difficulty : "medium";
 
-  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg"].includes(puzzleType);
+  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg", "gridlock_file", "parasite_code"].includes(puzzleType);
 
   await prisma.$transaction(async (tx) => {
     // 1. Update core puzzle fields

@@ -644,6 +644,13 @@ export default function AdminPuzzlesPage() {
         // Code is stored in puzzleData.safecode — no separate correctAnswer needed
         delete submitBody.correctAnswer;
       }
+      if (formData.puzzleType === 'gridlock_file') {
+        // Answers are stored in puzzleData.gridlockFile.correctAnswers
+        delete submitBody.correctAnswer;
+      }
+      if (formData.puzzleType === 'parasite_code') {
+        delete submitBody.correctAnswer;
+      }
 
       // ── EDIT mode: PUT to existing puzzle ─────────────────────────────
       if (editingId) {
