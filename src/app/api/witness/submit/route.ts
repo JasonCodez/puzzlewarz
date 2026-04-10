@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import prisma from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
 import { getTodaysScenario, getTodaysQuestionIndices } from "@/lib/witness-content";
 
 // POST /api/witness/submit — record a witness attempt and return results
@@ -28,8 +30,47 @@ export async function POST(req: NextRequest) {
       return { correct, correctIndex: correctAnswers[i] };
     });
 
-    // Persist (anonymous, no PII)
-    await prisma.witnessResult.create({ data: { scenarioId, score } });
+    const pointsAwarded = score * 20;
+    const xpAwarded = score * 10;
+
+    // Optional auth: anonymous users can play, logged-in users can earn rewards once per scenario.
+    const session = await getServerSession(authOptions);
+    let userId: string | null = null;
+    if (session?.user?.email) {
+      const user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { id: true },
+      });
+      userId = user?.id ?? null;
+    }
+
+    let rewardsGranted = false;
+    if (userId) {
+      const alreadyRewarded = await prisma.witnessResult.findFirst({
+        where: { scenarioId, userId },
+        select: { id: true },
+      });
+
+      if (!alreadyRewarded) {
+        await prisma.$transaction([
+          prisma.witnessResult.create({ data: { scenarioId, score, userId } }),
+          prisma.user.update({
+            where: { id: userId },
+            data: {
+              totalPoints: { increment: pointsAwarded },
+              xp: { increment: xpAwarded },
+            },
+          }),
+        ]);
+        rewardsGranted = true;
+      } else {
+        // Still record the attempt for analytics, but do not re-award points/xp.
+        await prisma.witnessResult.create({ data: { scenarioId, score, userId } });
+      }
+    } else {
+      // Persist anonymous attempt.
+      await prisma.witnessResult.create({ data: { scenarioId, score } });
+    }
 
     // Re-query aggregate after recording
     const results = await prisma.witnessResult.groupBy({
@@ -47,7 +88,18 @@ export async function POST(req: NextRequest) {
       ? Math.round((beatCount / (totalPlays - 1)) * 100)
       : 100;
 
-    return NextResponse.json({ score, breakdown, scoreDist, totalPlays, percentile });
+    return NextResponse.json({
+      score,
+      breakdown,
+      scoreDist,
+      totalPlays,
+      percentile,
+      rewards: {
+        points: pointsAwarded,
+        xp: xpAwarded,
+        granted: rewardsGranted,
+      },
+    });
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

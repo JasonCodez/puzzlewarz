@@ -711,6 +711,9 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
           rank: (record?.rank as GridlockRank) ?? 'F',
           ruleExplanation: null,
           retentionUnlock: null,
+          streakShields: 0,
+          currentStreak: anonStreak.count,
+          hintTokens: 0,
         });
 
         if (record) {

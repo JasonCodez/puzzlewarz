@@ -1810,9 +1810,11 @@ model WitnessResult {
   id         String   @id @default(cuid())
   scenarioId String
   score      Int      // 0–5
+  userId     String?
   createdAt  DateTime @default(now())
 
   @@index([scenarioId])
+  @@index([userId, scenarioId])
   @@map("witness_results")
 }
 

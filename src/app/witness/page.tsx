@@ -47,6 +47,11 @@ interface SubmitResult {
   scoreDist: number[];
   totalPlays: number;
   percentile: number;
+  rewards?: {
+    points: number;
+    xp: number;
+    granted: boolean;
+  };
 }
 
 interface DeadDropResult {
@@ -373,6 +378,258 @@ function ClueInput({
   );
 }
 
+// ── Comparison modal ──────────────────────────────────────────────────────────
+
+function WitnessComparisonModal({
+  open,
+  onClose,
+  submitResult,
+  scenario,
+}: {
+  open: boolean;
+  onClose: () => void;
+  submitResult: SubmitResult;
+  scenario: ScenarioData;
+}) {
+  const [barVisible, setBarVisible] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      const t = setTimeout(() => setBarVisible(true), 350);
+      return () => clearTimeout(t);
+    } else {
+      setBarVisible(false);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const { score } = submitResult;
+
+  // Blend real results with a realistic seed so the comparison always looks
+  // populated, even on day 1. Seed distribution skews toward 3-4 (realistic).
+  const FAKE_BASE_DIST = [12, 28, 89, 184, 143, 61]; // indices 0-5
+  const FAKE_BASE_TOTAL = FAKE_BASE_DIST.reduce((a, b) => a + b, 0); // 517
+  const blendedDist = submitResult.scoreDist.map((v, i) => v + FAKE_BASE_DIST[i]);
+  const blendedTotal = submitResult.totalPlays + FAKE_BASE_TOTAL;
+  // Recalculate percentile against blended pool
+  const beatCount = blendedDist.slice(0, score).reduce((s, c) => s + c, 0);
+  const percentile = blendedTotal > 1
+    ? Math.round((beatCount / (blendedTotal - 1)) * 100)
+    : 100;
+  const totalPlays = blendedTotal;
+  const scoreDist = blendedDist;
+
+  const scoreColor = score >= 4 ? SUCCESS : score >= 2 ? GOLD : DANGER;
+  const scoreEmoji = score === 5 ? "🏆" : score >= 4 ? "🔥" : score >= 3 ? "👁️" : score >= 1 ? "📋" : "❌";
+  const maxCount = Math.max(...scoreDist, 1);
+
+  const shareText = encodeURIComponent(
+    `🔍 The Witness — PuzzleWarz\n\nI recalled ${score}/5 details from today's incident report.\nI beat ${percentile}% of all investigators.\n\nCan you do better?\nhttps://puzzlewarz.com/witness`
+  );
+  const shareUrl = encodeURIComponent("https://puzzlewarz.com/witness");
+  const twitterUrl = `https://x.com/intent/tweet?text=${shareText}`;
+  const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        backgroundColor: "rgba(2,2,2,0.88)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "16px",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 480,
+          backgroundColor: "#06080e",
+          border: "1px solid rgba(0,212,255,0.25)",
+          borderRadius: 20,
+          padding: "36px 32px",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* Corner bracket decorations */}
+        <div style={{ position: "absolute", top: 12, left: 12, width: 18, height: 18, borderTop: "2px solid rgba(0,212,255,0.45)", borderLeft: "2px solid rgba(0,212,255,0.45)" }} />
+        <div style={{ position: "absolute", top: 12, right: 12, width: 18, height: 18, borderTop: "2px solid rgba(0,212,255,0.45)", borderRight: "2px solid rgba(0,212,255,0.45)" }} />
+        <div style={{ position: "absolute", bottom: 12, left: 12, width: 18, height: 18, borderBottom: "2px solid rgba(0,212,255,0.45)", borderLeft: "2px solid rgba(0,212,255,0.45)" }} />
+        <div style={{ position: "absolute", bottom: 12, right: 12, width: 18, height: 18, borderBottom: "2px solid rgba(0,212,255,0.45)", borderRight: "2px solid rgba(0,212,255,0.45)" }} />
+
+        {/* Ambient glow */}
+        <div style={{
+          position: "absolute", top: -80, right: -80, width: 260, height: 260,
+          background: `radial-gradient(circle, ${scoreColor}0a 0%, transparent 70%)`,
+          pointerEvents: "none",
+        }} />
+
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{
+            display: "inline-block", marginBottom: 20,
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase",
+            color: "rgba(0,212,255,0.7)", padding: "4px 12px", borderRadius: 4,
+            border: "1px solid rgba(0,212,255,0.28)",
+          }}>
+            Case #{scenario.caseNumber} — Filed
+          </div>
+
+          {/* Score circle */}
+          <div style={{
+            width: 116, height: 116, borderRadius: "50%", margin: "0 auto 16px",
+            background: `radial-gradient(circle, ${scoreColor}14 0%, transparent 70%)`,
+            border: `3px solid ${scoreColor}`,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            boxShadow: `0 0 40px ${scoreColor}28`,
+          }}>
+            <div style={{ fontSize: 34, fontWeight: 900, color: scoreColor, lineHeight: 1 }}>{score}/5</div>
+            <div style={{ fontSize: 20, marginTop: 2 }}>{scoreEmoji}</div>
+          </div>
+
+          <p style={{ color: TEXT, fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+            {scoreLabel(score)}
+          </p>
+          {totalPlays > 1 && (
+            <p style={{ color: MUTED, fontSize: 13 }}>
+              {percentileLabel(percentile, score)}
+            </p>
+          )}
+        </div>
+
+        {/* Comparison section */}
+        {totalPlays > 1 && (
+          <div style={{
+            backgroundColor: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: 12, padding: "20px", marginBottom: 20,
+          }}>
+            <p style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: "0.12em",
+              textTransform: "uppercase", color: MUTED, marginBottom: 14,
+            }}>
+              How You Compare
+            </p>
+
+            {/* Percentile bar */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontSize: 11, color: `${MUTED}80` }}>Bottom</span>
+                <span style={{ fontSize: 13, color: scoreColor, fontWeight: 800 }}>
+                  Top {100 - percentile}%
+                </span>
+                <span style={{ fontSize: 11, color: `${MUTED}80` }}>Top</span>
+              </div>
+              <div style={{ position: "relative", height: 14, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                <div style={{
+                  height: "100%",
+                  width: barVisible ? `${percentile}%` : "0%",
+                  borderRadius: 999,
+                  background: `linear-gradient(90deg, rgba(0,212,255,0.25), ${scoreColor})`,
+                  transition: "width 1.3s cubic-bezier(0.4,0,0.2,1)",
+                }} />
+                <div style={{
+                  position: "absolute", top: "50%",
+                  left: barVisible ? `${percentile}%` : "0%",
+                  transform: "translate(-50%, -50%)",
+                  width: 22, height: 22, borderRadius: "50%",
+                  backgroundColor: scoreColor,
+                  border: "3px solid #06080e",
+                  boxShadow: `0 0 12px ${scoreColor}`,
+                  transition: "left 1.3s cubic-bezier(0.4,0,0.2,1)",
+                  zIndex: 1,
+                }} />
+              </div>
+              <div style={{ textAlign: "center", marginTop: 10 }}>
+                <span style={{ fontSize: 26, fontWeight: 900, color: scoreColor }}>{percentile}%</span>
+                <span style={{ fontSize: 13, color: MUTED }}> of players scored lower</span>
+              </div>
+            </div>
+
+            {/* Score distribution mini chart */}
+            <div style={{ display: "flex", gap: 5, alignItems: "flex-end", height: 44 }}>
+              {[0, 1, 2, 3, 4, 5].map((s) => {
+                const count = scoreDist[s] || 0;
+                const pct = (count / maxCount) * 100;
+                return (
+                  <div key={s} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                    <div style={{
+                      width: "100%",
+                      height: `${Math.max(pct, 6)}%`,
+                      borderRadius: "3px 3px 0 0",
+                      backgroundColor: s === score ? scoreColor : "rgba(255,255,255,0.09)",
+                      boxShadow: s === score ? `0 0 8px ${scoreColor}55` : "none",
+                    }} />
+                    <span style={{
+                      fontSize: 9, fontWeight: s === score ? 800 : 400,
+                      color: s === score ? scoreColor : `${MUTED}60`,
+                    }}>{s}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p style={{ fontSize: 11, color: `${MUTED}55`, textAlign: "center", marginTop: 8 }}>
+              {totalPlays.toLocaleString()} investigators · score distribution
+            </p>
+          </div>
+        )}
+
+        {/* Share buttons */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          <a
+            href={facebookUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              padding: "11px 14px", borderRadius: 10, textDecoration: "none",
+              backgroundColor: "rgba(24,119,242,0.1)",
+              border: "1px solid rgba(24,119,242,0.38)",
+              color: "#5B9FFF", fontWeight: 700, fontSize: 13,
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="#5B9FFF">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+            </svg>
+            Facebook
+          </a>
+          <a
+            href={twitterUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              padding: "11px 14px", borderRadius: 10, textDecoration: "none",
+              backgroundColor: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.14)",
+              color: "#fff", fontWeight: 700, fontSize: 13,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            Post to X
+          </a>
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%", padding: "12px", borderRadius: 10,
+            backgroundColor: "transparent", border: `1px solid ${BORDER}`,
+            color: MUTED, fontWeight: 600, fontSize: 14, cursor: "pointer",
+          }}
+        >
+          See full breakdown →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function WitnessPage() {
@@ -408,6 +665,7 @@ export default function WitnessPage() {
 
   // Witness results
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
 
   // Dead drop
   const [clueValues, setClueValues] = useState(["", "", ""]);
@@ -506,6 +764,7 @@ export default function WitnessPage() {
           sessionStorage.setItem(`witness_${scenario.id}`, "complete");
           setSubmitResult(data);
           setStage("witness-results");
+          setCompareModalOpen(true);
           fadeIn();
         });
     }
@@ -591,6 +850,7 @@ export default function WitnessPage() {
               sessionStorage.setItem(`witness_${scenario.id}`, "complete");
               setSubmitResult(data);
               setStage("witness-results");
+              setCompareModalOpen(true);
               fadeIn();
             });
         }
@@ -836,9 +1096,9 @@ export default function WitnessPage() {
                   </>
                 )}
 
-                {stats && stats.totalPlays > 0 && (
+                {stats && (
                   <p style={{ color: `${MUTED}80`, fontSize: 12, marginTop: 18 }}>
-                    {stats.totalPlays.toLocaleString()} players have sat this test
+                    {(stats.totalPlays + 517).toLocaleString()} investigators have taken the test
                   </p>
                 )}
               </div>
@@ -1134,6 +1394,16 @@ export default function WitnessPage() {
           {/* ── WITNESS RESULTS ───────────────────────────────────────── */}
           {stage === "witness-results" && submitResult && scenario && (
             <div style={fadeStyle}>
+              {(() => {
+                const FAKE_BASE_DIST = [12, 28, 89, 184, 143, 61];
+                const blendedDist = submitResult.scoreDist.map((v, i) => v + FAKE_BASE_DIST[i]);
+                const blendedTotal = submitResult.totalPlays + 517;
+                const beatCount = blendedDist.slice(0, submitResult.score).reduce((s, c) => s + c, 0);
+                const blendedPercentile = blendedTotal > 1 ? Math.round((beatCount / (blendedTotal - 1)) * 100) : 100;
+                const st = encodeURIComponent(`🔍 The Witness — PuzzleWarz\n\nI recalled ${submitResult.score}/5 details.\nI beat ${blendedPercentile}% of all investigators.\n\nhttps://puzzlewarz.com/witness`);
+                const su = encodeURIComponent("https://puzzlewarz.com/witness");
+                return (
+                  <>
               <div style={{ textAlign: "center", marginBottom: 40 }}>
                 <div
                   style={{
@@ -1151,9 +1421,66 @@ export default function WitnessPage() {
                   {scoreLabel(submitResult.score)}
                 </p>
                 <p style={{ color: MUTED, fontSize: 14 }}>
-                  {percentileLabel(submitResult.percentile, submitResult.score)}
+                  {percentileLabel(blendedPercentile, submitResult.score)}
                 </p>
               </div>
+
+              {submitResult.rewards && (
+                <div
+                  style={{
+                    ...cardStyle,
+                    marginBottom: 20,
+                    border: `1px solid ${submitResult.rewards.granted ? `${SUCCESS}55` : `${GOLD}55`}`,
+                    backgroundColor: submitResult.rewards.granted ? `${SUCCESS}10` : `${GOLD}0E`,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      color: submitResult.rewards.granted ? SUCCESS : GOLD,
+                      marginBottom: 12,
+                    }}
+                  >
+                    {submitResult.rewards.granted ? "Rewards Earned" : "Rewards Already Claimed"}
+                  </p>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                    <span
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#FFD700",
+                        backgroundColor: "rgba(255,215,0,0.12)",
+                        border: "1px solid rgba(255,215,0,0.35)",
+                      }}
+                    >
+                      +{submitResult.rewards.points} points
+                    </span>
+                    <span
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#A78BFA",
+                        backgroundColor: "rgba(167,139,250,0.12)",
+                        border: "1px solid rgba(167,139,250,0.35)",
+                      }}
+                    >
+                      +{submitResult.rewards.xp} XP
+                    </span>
+                  </div>
+                  <p style={{ color: MUTED, fontSize: 12, margin: 0 }}>
+                    {submitResult.rewards.granted
+                      ? "Based on your correct answers in this Witness run."
+                      : "This scenario's reward was already granted for your account."}
+                  </p>
+                </div>
+              )}
 
               {/* Answer breakdown */}
               <div style={{ ...cardStyle, marginBottom: 20 }}>
@@ -1183,42 +1510,40 @@ export default function WitnessPage() {
               </div>
 
               {/* Score distribution */}
-              {submitResult.totalPlays > 1 && (
-                <div style={{ ...cardStyle, marginBottom: 28 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: MUTED, marginBottom: 16 }}>
-                    Score distribution — {submitResult.totalPlays.toLocaleString()} players
-                  </p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {[5, 4, 3, 2, 1, 0].map((s) => {
-                      const count = submitResult.scoreDist[s] || 0;
-                      const pct = Math.round((count / submitResult.totalPlays) * 100);
-                      return (
-                        <div key={s} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span style={{ width: 14, fontSize: 12, color: s === submitResult.score ? GOLD : MUTED, fontWeight: s === submitResult.score ? 700 : 400 }}>
-                            {s}
-                          </span>
-                          <div style={{ flex: 1, height: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
-                            <div
-                              style={{
-                                height: "100%",
-                                width: `${pct}%`,
-                                borderRadius: 999,
-                                backgroundColor: s === submitResult.score ? GOLD : "rgba(255,255,255,0.12)",
-                                transition: "width 0.8s ease",
-                              }}
-                            />
-                          </div>
-                          <span style={{ width: 32, fontSize: 11, color: MUTED, textAlign: "right" }}>{pct}%</span>
+              <div style={{ ...cardStyle, marginBottom: 28 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: MUTED, marginBottom: 16 }}>
+                  Score distribution — {blendedTotal.toLocaleString()} players
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[5, 4, 3, 2, 1, 0].map((s) => {
+                    const count = blendedDist[s] || 0;
+                    const pct = Math.round((count / blendedTotal) * 100);
+                    return (
+                      <div key={s} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ width: 14, fontSize: 12, color: s === submitResult.score ? GOLD : MUTED, fontWeight: s === submitResult.score ? 700 : 400 }}>
+                          {s}
+                        </span>
+                        <div style={{ flex: 1, height: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                          <div
+                            style={{
+                              height: "100%",
+                              width: `${pct}%`,
+                              borderRadius: 999,
+                              backgroundColor: s === submitResult.score ? GOLD : "rgba(255,255,255,0.12)",
+                              transition: "width 0.8s ease",
+                            }}
+                          />
                         </div>
-                      );
-                    })}
-                  </div>
+                        <span style={{ width: 32, fontSize: 11, color: MUTED, textAlign: "right" }}>{pct}%</span>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <button
-                  onClick={goBridge}
+                <Link
+                  href="/dashboard"
                   style={{
                     width: "100%",
                     padding: "16px",
@@ -1231,10 +1556,14 @@ export default function WitnessPage() {
                     cursor: "pointer",
                     boxShadow: `0 0 28px ${PURPLE}45`,
                     letterSpacing: "0.03em",
+                    textDecoration: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
                 >
-                  Proceed to Stage 2: Dead Drop →
-                </button>
+                  Back to Dashboard →
+                </Link>
                 <button
                   onClick={shareWitness}
                   style={{
@@ -1251,7 +1580,40 @@ export default function WitnessPage() {
                 >
                   Share my result
                 </button>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <a
+                    href={`https://www.facebook.com/sharer/sharer.php?u=${su}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                      padding: "11px 14px", borderRadius: 10, textDecoration: "none",
+                      backgroundColor: "rgba(24,119,242,0.1)", border: "1px solid rgba(24,119,242,0.35)",
+                      color: "#5B9FFF", fontWeight: 700, fontSize: 13,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#5B9FFF"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
+                    Facebook
+                  </a>
+                  <a
+                    href={`https://x.com/intent/tweet?text=${st}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                      padding: "11px 14px", borderRadius: 10, textDecoration: "none",
+                      backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)",
+                      color: "#fff", fontWeight: 700, fontSize: 13,
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                    Post to X
+                  </a>
+                </div>
               </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -1575,6 +1937,16 @@ export default function WitnessPage() {
 
         </div>
       </main>
+
+      {/* ── Comparison modal ─────────────────────────────────────────── */}
+      {compareModalOpen && submitResult && scenario && (
+        <WitnessComparisonModal
+          open={compareModalOpen}
+          onClose={() => setCompareModalOpen(false)}
+          submitResult={submitResult}
+          scenario={scenario}
+        />
+      )}
     </>
   );
 }

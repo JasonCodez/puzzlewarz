@@ -348,7 +348,7 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
             {isLast ? (
               <Link
-                href="/frequency"
+                href="/dashboard"
                 onClick={finish}
                 style={{
                   flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
