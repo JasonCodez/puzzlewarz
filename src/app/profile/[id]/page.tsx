@@ -18,6 +18,9 @@ import {
   Heart,
   Share2,
   MessageCircle,
+  MoreHorizontal,
+  Ban,
+  Flag,
 } from "lucide-react";
 
 interface UserProfile {
@@ -95,6 +98,10 @@ export default function PublicProfilePage() {
   const [showMyPuzzles, setShowMyPuzzles] = useState(false);
   const [myPuzzles, setMyPuzzles] = useState<Array<any>>([]);
   const [myPuzzlesLoading, setMyPuzzlesLoading] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   useEffect(() => {
     if (userId) {
@@ -120,6 +127,14 @@ export default function PublicProfilePage() {
 
     fetchCurrentUser();
   }, []);
+
+  useEffect(() => {
+    if (!userId || !session) return;
+    fetch(`/api/users/${userId}/block`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setIsBlocked(d.blocked); })
+      .catch(() => {});
+  }, [userId, session]);
 
   const fetchProfile = async () => {
     if (!userId) {
@@ -451,6 +466,45 @@ export default function PublicProfilePage() {
             >
               ⚔️ Challenge to Warz
             </Link>
+            {/* More ⋯ menu */}
+            {session && (
+              <div className="relative ml-auto" style={{ display: 'flex', alignItems: 'center' }}>
+                <button
+                  onClick={() => setShowMoreMenu(v => !v)}
+                  title="More options"
+                  className="flex items-center justify-center w-9 h-9 rounded-lg transition-colors"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#6B7280' }}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+                {showMoreMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
+                    <div
+                      className="absolute right-0 top-full mt-1 w-48 rounded-xl overflow-hidden z-50"
+                      style={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
+                    >
+                      <button
+                        onClick={() => { setShowMoreMenu(false); setShowBlockConfirm(true); }}
+                        className="flex items-center gap-2.5 w-full px-4 py-3 text-sm transition-colors hover:bg-white/5"
+                        style={{ color: isBlocked ? '#10B981' : '#EF4444' }}
+                      >
+                        <Ban className="w-4 h-4" />
+                        {isBlocked ? 'Unblock User' : 'Block User'}
+                      </button>
+                      <button
+                        onClick={() => { setShowMoreMenu(false); setShowReportModal(true); }}
+                        className="flex items-center gap-2.5 w-full px-4 py-3 text-sm transition-colors hover:bg-white/5"
+                        style={{ color: '#F59E0B' }}
+                      >
+                        <Flag className="w-4 h-4" />
+                        Report Abuse
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -768,6 +822,38 @@ export default function PublicProfilePage() {
         </div>
       )}
 
+      {/* Block confirm */}
+      <ConfirmModal
+        isOpen={showBlockConfirm}
+        title={isBlocked ? `Unblock ${profile.name}?` : `Block ${profile.name}?`}
+        message={
+          isBlocked
+            ? 'They will be able to see your profile and interact with you again.'
+            : "They won\u2019t be able to send you messages. Any existing follow will be removed."
+        }
+        confirmLabel={isBlocked ? 'Unblock' : 'Block'}
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          setShowBlockConfirm(false);
+          const res = await fetch(`/api/users/${userId}/block`, { method: 'POST' });
+          if (res.ok) {
+            const d = await res.json();
+            setIsBlocked(d.blocked);
+            if (d.blocked) setIsFollowing(false);
+          }
+        }}
+        onCancel={() => setShowBlockConfirm(false)}
+      />
+
+      {/* Report abuse modal */}
+      {showReportModal && (
+        <ReportModal
+          targetUserId={userId}
+          targetUserName={profile.name}
+          onClose={() => setShowReportModal(false)}
+        />
+      )}
+
       {/* One-time name-change confirmation modal */}
       <ConfirmModal
         isOpen={showNameChangeConfirm}
@@ -925,6 +1011,140 @@ function DirectMessageModal({
             </div>
           </form>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const REPORT_REASONS: Array<{ value: string; label: string }> = [
+  { value: "harassment",   label: "Harassment or bullying" },
+  { value: "hate_speech",  label: "Hate speech" },
+  { value: "spam",         label: "Spam or scam" },
+  { value: "impersonation",label: "Impersonation" },
+  { value: "cheating",     label: "Cheating / exploits" },
+  { value: "other",        label: "Other" },
+];
+
+function ReportModal({
+  targetUserId,
+  targetUserName,
+  onClose,
+}: {
+  targetUserId: string;
+  targetUserName: string;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [details, setDetails] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!reason) { setError("Please select a reason."); return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/users/${targetUserId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, details }),
+      });
+      if (res.ok) {
+        setSuccess(true);
+        setTimeout(onClose, 2000);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Failed to submit report.");
+      }
+    } catch {
+      setError("An error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }} onClick={onClose}>
+      <div
+        className="w-full max-w-sm mx-4 rounded-2xl overflow-hidden"
+        style={{ background: "#0d0d0d", border: "1px solid rgba(245,158,11,0.35)", boxShadow: "0 0 48px rgba(0,0,0,0.8)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "rgba(245,158,11,0.15)" }}>
+          <div className="flex items-center gap-2">
+            <Flag className="w-4 h-4" style={{ color: "#F59E0B" }} />
+            <h2 className="font-bold text-white text-base">Report {targetUserName}</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none transition-colors">✕</button>
+        </div>
+
+        {success ? (
+          <div className="px-6 py-8 text-center">
+            <div className="text-4xl mb-3">✅</div>
+            <p className="text-white font-semibold">Report submitted.</p>
+            <p className="text-sm mt-1" style={{ color: "#6B7280" }}>Our team will review it shortly.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+            <div>
+              <label className="block text-xs font-bold mb-2 tracking-widest uppercase" style={{ color: "#F59E0B" }}>
+                Reason
+              </label>
+              <div className="space-y-2">
+                {REPORT_REASONS.map(r => (
+                  <label key={r.value} className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="radio"
+                      name="reason"
+                      value={r.value}
+                      checked={reason === r.value}
+                      onChange={() => setReason(r.value)}
+                      className="accent-amber-400"
+                    />
+                    <span className="text-sm text-white">{r.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold mb-1.5 tracking-widest uppercase" style={{ color: "#6B7280" }}>
+                Additional details <span className="normal-case font-normal">(optional)</span>
+              </label>
+              <textarea
+                value={details}
+                onChange={e => setDetails(e.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Describe what happened..."
+                className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-gray-600 resize-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+              />
+              <p className="text-xs mt-0.5 text-right" style={{ color: "#374151" }}>{details.length}/500</p>
+            </div>
+
+            {error && (
+              <p className="text-xs text-red-400">{error}</p>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose} className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors" style={{ background: "rgba(255,255,255,0.06)" }}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !reason}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                style={{ background: "#F59E0B", color: "#000" }}
+              >
+                {loading ? "Submitting…" : "Submit Report"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

@@ -200,13 +200,7 @@ export async function enforceRateLimit(options: {
     const redisClient = await getRedisClient();
 
     if (!redisClient) {
-      if (process.env.NODE_ENV === "production") {
-        return NextResponse.json(
-          { error: "Rate limiting is temporarily unavailable. Please try again later." },
-          { status: 503 }
-        );
-      }
-
+      // No Redis configured — fall back to in-memory rate limiter in all environments
       return enforceLocalRateLimit(options);
     }
 
@@ -231,14 +225,7 @@ export async function enforceRateLimit(options: {
     return buildRateLimitResponse(options, count, resetAt);
   } catch (error) {
     console.error("Rate limit enforcement failed:", error);
-
-    if (process.env.NODE_ENV === "production") {
-      return NextResponse.json(
-        { error: "Rate limiting is temporarily unavailable. Please try again later." },
-        { status: 503 }
-      );
-    }
-
+    // Redis failed — fall back to in-memory rate limiter in all environments
     return enforceLocalRateLimit(options);
   }
 }

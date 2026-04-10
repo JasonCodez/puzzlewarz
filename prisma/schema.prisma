@@ -72,6 +72,10 @@ model User {
   warzWins               PuzzleWarzChallenge[]  @relation("WarzWinner")
   gridlockSolves         GridlockSolve[]
   leaderboardRewards     LeaderboardReward[]
+  blocksIssued           UserBlock[]         @relation("BlockIssuer")
+  blocksReceived         UserBlock[]         @relation("BlockTarget")
+  reportsIssued          UserReport[]        @relation("ReportIssuer")
+  reportsReceived        UserReport[]        @relation("ReportTarget")
 
   // Point Store — consumables
   streakShields          Int                        @default(0)
@@ -1826,4 +1830,39 @@ model DeadDropResult {
 
   @@index([challengeId])
   @@map("dead_drop_results")
+}
+
+// ── User Safety — Block & Report ─────────────────────────────────────────────
+
+model UserBlock {
+  id          String   @id @default(cuid())
+  issuerId    String
+  targetId    String
+  createdAt   DateTime @default(now())
+  issuer      User     @relation("BlockIssuer", fields: [issuerId], references: [id], onDelete: Cascade)
+  target      User     @relation("BlockTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([issuerId, targetId])
+  @@index([issuerId])
+  @@index([targetId])
+  @@map("user_blocks")
+}
+
+model UserReport {
+  id          String   @id @default(cuid())
+  issuerId    String
+  targetId    String
+  reason      String                       // e.g. "spam", "harassment", "hate_speech", "other"
+  details     String?
+  status      String   @default("pending") // "pending" | "reviewed" | "dismissed"
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  createdAt   DateTime @default(now())
+  issuer      User     @relation("ReportIssuer", fields: [issuerId], references: [id], onDelete: Cascade)
+  target      User     @relation("ReportTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([issuerId])
+  @@index([targetId])
+  @@index([status])
+  @@map("user_reports")
 }
