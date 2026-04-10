@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireEscapeRoomTeamContext } from "@/lib/escapeRoomTeamAuth";
+import { requireEscapeRoomTeamContext, progressWhereClause } from "@/lib/escapeRoomTeamAuth";
 
 export async function GET(
   request: NextRequest,
@@ -16,8 +16,8 @@ export async function GET(
     // Read current team inventory so collected items can be hidden from the scene.
     let collectedDesignerItemIds = new Set<string>();
     try {
-      const progress = await (prisma as any).teamEscapeProgress.findUnique({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+      const progress = await (prisma as any).teamEscapeProgress.findFirst({
+        where: progressWhereClause(ctx),
         select: { inventory: true },
       });
       const inventoryRaw: unknown = progress?.inventory;

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createNotification } from "@/lib/notification-service";
-import { requireEscapeRoomTeamContext } from "@/lib/escapeRoomTeamAuth";
+import { requireEscapeRoomTeamContext, progressWhereClause, getSessionMembers } from "@/lib/escapeRoomTeamAuth";
 import { applyEscapeStageProgress } from "@/lib/escape-room-progression";
 import {
-  isContributionGateSatisfied,
   parseContributionGate,
   recordStageContribution,
   summarizeStageContributions,
@@ -120,8 +119,7 @@ async function emitEscapeActivity(teamId: string, puzzleId: string, payload: any
  * Returns the applied penalty and the new expiry ISO string (or nulls if no-op).
  */
 async function applyTimePenalty(
-  teamId: string,
-  escapeRoomId: string,
+  progressId: string,
   penaltySecs: number,
   currentRunExpiresAt: Date | null
 ): Promise<{ penaltyApplied: number; newRunExpiresAt: string | null }> {
@@ -131,7 +129,7 @@ async function applyTimePenalty(
   const newExpiry = new Date(currentRunExpiresAt.getTime() - penaltySecs * 1000);
   try {
     await (prisma as any).teamEscapeProgress.update({
-      where: { teamId_escapeRoomId: { teamId, escapeRoomId } },
+      where: { id: progressId },
       data: { runExpiresAt: newExpiry },
     });
   } catch {
@@ -197,17 +195,17 @@ export async function POST(
     const puzzleId = resolved.id;
 
     const body = await request.json().catch(() => ({}));
-    const { action, hotspotId, teamId, itemKey } = body as { action?: string; hotspotId?: string; teamId?: string; itemKey?: string };
+    const { action, hotspotId, teamId, lobbyId, itemKey } = body as { action?: string; hotspotId?: string; teamId?: string; lobbyId?: string; itemKey?: string };
     if (!action || !hotspotId) return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
 
-    const ctx = await requireEscapeRoomTeamContext(request, puzzleId, { teamId });
+    const ctx = await requireEscapeRoomTeamContext(request, puzzleId, { teamId: lobbyId ? undefined : teamId, lobbyId });
     if (ctx instanceof NextResponse) return ctx;
 
     const user = await prisma.user.findUnique({ where: { id: ctx.userId }, select: { id: true, name: true, email: true } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const teamMemberRows = await prisma.teamMember.findMany({ where: { teamId: ctx.teamId }, select: { userId: true } });
-    const teamUserIds = teamMemberRows.map((m) => m.userId).filter(Boolean);
+    const sessionMemberRows = await getSessionMembers(ctx);
+    const teamUserIds = sessionMemberRows.map((m) => m.userId).filter(Boolean);
 
     // Resolve escapeRoom for this puzzle
     const escapeRoom = await prisma.escapeRoomPuzzle.findUnique({ where: { puzzleId } });
@@ -223,9 +221,10 @@ export async function POST(
     }
 
     // Block actions unless a run is actively started (prevents door opens/pickups during briefing).
-    const progress = await (prisma as any).teamEscapeProgress.findUnique({
-      where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: escapeRoom.id } },
+    const progress = await (prisma as any).teamEscapeProgress.findFirst({
+      where: progressWhereClause(ctx),
       select: {
+        id: true,
         inventory: true,
         sceneState: true,
         currentStageIndex: true,
@@ -317,7 +316,7 @@ export async function POST(
       });
 
       await (prisma as any).teamEscapeProgress.update({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: escapeRoom.id } },
+        where: { id: progress.id },
         data: {
           inventory: JSON.stringify(inventory),
           sceneState: JSON.stringify(pickupSceneState),
@@ -387,7 +386,7 @@ export async function POST(
       // Also notify team members and send a team-level socket event (non-blocking)
       (async () => {
         try {
-          const members = await prisma.teamMember.findMany({ where: { teamId: ctx.teamId } });
+          const members = await getSessionMembers(ctx);
           const memberUserIds = members.map(m => m.userId).filter(id => id !== user.id);
 
           for (const memberUserId of memberUserIds) {
@@ -480,14 +479,14 @@ export async function POST(
 
       // If hotspot specifies required items, enforce that the dragged item is one of them.
       if (requiredItemKey && requiredItemKey !== itemKey) {
-        const penalty = await applyTimePenalty(ctx.teamId, escapeRoom.id, usePenaltySecs, currentRunExpiresAt);
+        const penalty = await applyTimePenalty(progress.id, usePenaltySecs, currentRunExpiresAt);
         return NextResponse.json({
           error: `That item doesn't work here.`,
           ...(penalty.penaltyApplied > 0 ? { penaltyApplied: penalty.penaltyApplied, newRunExpiresAt: penalty.newRunExpiresAt } : {}),
         }, { status: 409 });
       }
       if (requiresItems.length > 0 && !requiresItems.includes(itemKey)) {
-        const penalty = await applyTimePenalty(ctx.teamId, escapeRoom.id, usePenaltySecs, currentRunExpiresAt);
+        const penalty = await applyTimePenalty(progress.id, usePenaltySecs, currentRunExpiresAt);
         return NextResponse.json({
           error: `That item doesn't work here.`,
           ...(penalty.penaltyApplied > 0 ? { penaltyApplied: penalty.penaltyApplied, newRunExpiresAt: penalty.newRunExpiresAt } : {}),
@@ -497,7 +496,7 @@ export async function POST(
       // If multiple items are required, ensure all are present.
       const missingRequiredForUse = requiresItems.filter((k) => !inventory.includes(k));
       if (requiresItems.length > 0 && missingRequiredForUse.length > 0) {
-        const penalty = await applyTimePenalty(ctx.teamId, escapeRoom.id, usePenaltySecs, currentRunExpiresAt);
+        const penalty = await applyTimePenalty(progress.id, usePenaltySecs, currentRunExpiresAt);
         return NextResponse.json({
           error: `Missing required item(s): ${missingRequiredForUse.join(', ')}`,
           ...(penalty.penaltyApplied > 0 ? { penaltyApplied: penalty.penaltyApplied, newRunExpiresAt: penalty.newRunExpiresAt } : {}),
@@ -739,7 +738,7 @@ export async function POST(
         };
 
         const updated = await (prisma as any).teamEscapeProgress.update({
-          where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: escapeRoom.id } },
+          where: { id: progress.id },
           data: {
             inventory: JSON.stringify(nextInventory),
             sceneState: JSON.stringify(nextSceneState),
@@ -868,25 +867,12 @@ export async function POST(
         stageIndex: cur,
         userId: ctx.userId,
       });
-      const contributionGate = parseContributionGate(meta, {
-        requiredDistinct: Math.max(1, teamUserIds.length),
-        minActionsPerPlayer: 1,
-      });
       const contributionSummary = summarizeStageContributions({
         sceneStateRaw: sceneStateForUseAdvance,
         stageIndex: cur,
         teamUserIds,
-        gate: contributionGate,
+        gate: parseContributionGate(meta, { requiredDistinct: 1, minActionsPerPlayer: 1 }),
       });
-      if (!isContributionGateSatisfied(contributionSummary)) {
-        return NextResponse.json(
-          {
-            error: `All teammates must contribute before advancing. Progress: ${contributionSummary.distinctContributors}/${contributionSummary.requiredDistinct} contributors with at least ${contributionSummary.minActionsPerPlayer} action(s).`,
-            contribution: contributionSummary,
-          },
-          { status: 409 }
-        );
-      }
       const nextFromMeta = typeof meta.nextStageIndex === 'number'
         ? meta.nextStageIndex
         : (typeof meta.nextStageOrder === 'number' ? meta.nextStageOrder : null);
@@ -913,8 +899,9 @@ export async function POST(
       // Consume the used item only on success.
       const nextInventory = inventory.filter((k) => k !== itemKey);
 
-      const updated = await (prisma as any).teamEscapeProgress.update({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: escapeRoom.id } },
+      // Optimistic concurrency: only advance if stage hasn't already moved.
+      const useUpdateResult = await (prisma as any).teamEscapeProgress.updateMany({
+        where: { id: progress.id, currentStageIndex: cur },
         data: {
           currentStageIndex: nextStageIndex,
           solvedStages: JSON.stringify(solvedStages),
@@ -922,10 +909,16 @@ export async function POST(
           inventory: JSON.stringify(nextInventory),
           sceneState: JSON.stringify(sceneStateForUseAdvance),
         },
+      });
+
+      const useAlreadyAdvanced = useUpdateResult.count === 0;
+      const updated = await (prisma as any).teamEscapeProgress.findUnique({
+        where: { id: progress.id },
         select: { currentStageIndex: true, solvedStages: true, completedAt: true, inventory: true, sceneState: true },
       });
 
-      const inventoryItems = await buildInventoryItems(escapeRoom.id, nextInventory);
+      const currentInventory: string[] = safeJsonParse<string[]>(updated?.inventory, []);
+      const inventoryItems = await buildInventoryItems(escapeRoom.id, currentInventory);
 
       await emitEscapeSession(ctx.teamId, puzzleId, {
         teamId: ctx.teamId,
@@ -933,31 +926,33 @@ export async function POST(
         currentStageIndex: updated.currentStageIndex,
         solvedStages: updated.solvedStages,
         completedAt: updated.completedAt,
-        inventory: nextInventory,
+        inventory: currentInventory,
         inventoryItems,
         sceneState: normalizeSceneState(safeJsonParse<Record<string, any>>(updated.sceneState, {})),
         contribution: contributionSummary,
       });
 
-      await emitEscapeActivity(ctx.teamId, puzzleId, {
-        teamId: ctx.teamId,
-        puzzleId,
-        entry: {
-          id: makeActivityId(),
-          ts: new Date().toISOString(),
-          type: 'use_item',
-          title: `Used item: ${itemKey}`,
-          actor: { id: user.id, name: user.name || user.email || 'Teammate' },
-          meta: { itemKey, hotspotId, nextStageIndex, completed: isComplete, ...(useSfx ? { sfx: useSfx } : {}) },
-        },
-      });
+      if (!useAlreadyAdvanced) {
+        await emitEscapeActivity(ctx.teamId, puzzleId, {
+          teamId: ctx.teamId,
+          puzzleId,
+          entry: {
+            id: makeActivityId(),
+            ts: new Date().toISOString(),
+            type: 'use_item',
+            title: `Used item: ${itemKey}`,
+            actor: { id: user.id, name: user.name || user.email || 'Teammate' },
+            meta: { itemKey, hotspotId, nextStageIndex, completed: isComplete, ...(useSfx ? { sfx: useSfx } : {}) },
+          },
+        });
+      }
 
       return NextResponse.json({
         success: true,
         currentStageIndex: updated.currentStageIndex,
         solvedStages: updated.solvedStages,
         completedAt: updated.completedAt,
-        inventory: nextInventory,
+        inventory: currentInventory,
         inventoryItems,
         sceneState: normalizeSceneState(safeJsonParse<Record<string, any>>(updated.sceneState, {})),
         contribution: contributionSummary,
@@ -991,7 +986,7 @@ export async function POST(
       if (requiresItems.length > 0) {
         const missing = requiresItems.filter((k) => !inventory.includes(k));
         if (missing.length > 0) {
-          const penalty = await applyTimePenalty(ctx.teamId, escapeRoom.id, triggerPenaltySecs, triggerRunExpiresAt);
+          const penalty = await applyTimePenalty(progress.id, triggerPenaltySecs, triggerRunExpiresAt);
           return NextResponse.json({
             error: `Missing required item(s): ${missing.join(', ')}`,
             ...(penalty.penaltyApplied > 0 ? { penaltyApplied: penalty.penaltyApplied, newRunExpiresAt: penalty.newRunExpiresAt } : {}),
@@ -1025,25 +1020,12 @@ export async function POST(
         stageIndex: cur,
         userId: ctx.userId,
       });
-      const contributionGate = parseContributionGate(meta, {
-        requiredDistinct: Math.max(1, teamUserIds.length),
-        minActionsPerPlayer: 1,
-      });
       const contributionSummary = summarizeStageContributions({
         sceneStateRaw: sceneStateForTriggerAdvance,
         stageIndex: cur,
         teamUserIds,
-        gate: contributionGate,
+        gate: parseContributionGate(meta, { requiredDistinct: 1, minActionsPerPlayer: 1 }),
       });
-      if (!isContributionGateSatisfied(contributionSummary)) {
-        return NextResponse.json(
-          {
-            error: `All teammates must contribute before advancing. Progress: ${contributionSummary.distinctContributors}/${contributionSummary.requiredDistinct} contributors with at least ${contributionSummary.minActionsPerPlayer} action(s).`,
-            contribution: contributionSummary,
-          },
-          { status: 409 }
-        );
-      }
       const nextFromMeta = typeof meta.nextStageIndex === 'number'
         ? meta.nextStageIndex
         : (typeof meta.nextStageOrder === 'number' ? meta.nextStageOrder : null);
@@ -1067,14 +1049,23 @@ export async function POST(
       });
       const { isComplete, nextStageIndex, solvedStages } = progression;
 
-      const updated = await (prisma as any).teamEscapeProgress.update({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: escapeRoom.id } },
+      // Optimistic concurrency: only advance if stage hasn't already moved.
+      // Two players clicking the same door at once would both read cur=N, but only
+      // the first writer matches WHERE currentStageIndex=N; the second gets count=0
+      // and fetches the already-advanced state rather than double-advancing.
+      const triggerUpdateResult = await (prisma as any).teamEscapeProgress.updateMany({
+        where: { id: progress.id, currentStageIndex: cur },
         data: {
           currentStageIndex: nextStageIndex,
           solvedStages: JSON.stringify(solvedStages),
           completedAt: isComplete ? new Date() : undefined,
           sceneState: JSON.stringify(sceneStateForTriggerAdvance),
         },
+      });
+
+      const alreadyAdvanced = triggerUpdateResult.count === 0;
+      const updated = await (prisma as any).teamEscapeProgress.findUnique({
+        where: { id: progress.id },
         select: { currentStageIndex: true, solvedStages: true, completedAt: true, sceneState: true },
       });
 
@@ -1088,31 +1079,33 @@ export async function POST(
         contribution: contributionSummary,
       });
 
-      const triggerLabel =
-        (typeof meta.label === 'string' && meta.label.trim())
-          ? meta.label.trim()
-          : (isComplete ? 'Escape Complete' : 'Door Opened');
+      if (!alreadyAdvanced) {
+        const triggerLabel =
+          (typeof meta.label === 'string' && meta.label.trim())
+            ? meta.label.trim()
+            : (isComplete ? 'Escape Complete' : 'Door Opened');
 
-      await emitEscapeActivity(ctx.teamId, puzzleId, {
-        teamId: ctx.teamId,
-        puzzleId,
-        entry: {
-          id: makeActivityId(),
-          ts: new Date().toISOString(),
-          type: isComplete ? 'complete' : 'trigger',
-          title: isComplete
-            ? 'Completed the escape room'
-            : `Advanced to stage ${nextStageIndex}`,
-          actor: { id: user.id, name: user.name || user.email || 'Teammate' },
-          meta: {
-            label: triggerLabel,
-            nextStageIndex,
-            completed: isComplete,
-            hotspotId,
-            ...(triggerSfx ? { sfx: triggerSfx } : {}),
+        await emitEscapeActivity(ctx.teamId, puzzleId, {
+          teamId: ctx.teamId,
+          puzzleId,
+          entry: {
+            id: makeActivityId(),
+            ts: new Date().toISOString(),
+            type: isComplete ? 'complete' : 'trigger',
+            title: isComplete
+              ? 'Completed the escape room'
+              : `Advanced to stage ${nextStageIndex}`,
+            actor: { id: user.id, name: user.name || user.email || 'Teammate' },
+            meta: {
+              label: triggerLabel,
+              nextStageIndex,
+              completed: isComplete,
+              hotspotId,
+              ...(triggerSfx ? { sfx: triggerSfx } : {}),
+            },
           },
-        },
-      });
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -1133,7 +1126,7 @@ export async function POST(
           ? Math.min(Math.floor(meta.miniPuzzle.config.timePenaltySeconds), 300)
           : 0;
       const runExpiry: Date | null = progress?.runExpiresAt ? new Date(progress.runExpiresAt) : null;
-      const penalty = await applyTimePenalty(ctx.teamId, escapeRoom.id, penaltySecs, runExpiry);
+      const penalty = await applyTimePenalty(progress.id, penaltySecs, runExpiry);
 
       // Broadcast updated expiry so all teammates' timers sync immediately
       if (penalty.penaltyApplied > 0 && penalty.newRunExpiresAt) {

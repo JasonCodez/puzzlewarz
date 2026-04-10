@@ -412,11 +412,14 @@ function WarzLobbyInner() {
       if (userRes.ok) {
         const u = await userRes.json();
         setCurrentUser({ id: u.id, username: u.username, totalPoints: u.totalPoints ?? 0, level: u.level ?? 1 });
+      } else if (userRes.status === 401) {
+        router.replace("/auth/register?reason=warz");
+        return;
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     fetchLobby();
@@ -447,7 +450,9 @@ function WarzLobbyInner() {
 
   const handleSelectPuzzle = (puzzle: EligiblePuzzle) => {
     setShowPicker(false);
-    router.push(`/warz/play/${puzzle.id}`);
+    const inviteParam = searchParams.get("invite");
+    const suffix = inviteParam ? `?invite=${encodeURIComponent(inviteParam)}` : "";
+    router.push(`/warz/play/${puzzle.id}${suffix}`);
   };
 
   // Filter challenges by tab
@@ -510,6 +515,11 @@ function WarzLobbyInner() {
         )}
 
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1, transition: { delay: 0.3 } }}>
+          {searchParams.get("invite") && (
+            <p className="text-sm mb-3 font-semibold" style={{ color: "#FDE74C" }}>
+              ⚔️ Targeting a rival — pick a puzzle to begin!
+            </p>
+          )}
           <button
             onClick={handleOpenPicker}
             className="px-8 py-4 rounded-2xl font-extrabold text-lg transition-all hover:scale-105 shadow-lg"

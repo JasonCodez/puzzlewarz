@@ -1,12 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Navbar from "@/components/Navbar";
 import NotificationsPanel from "@/components/notifications/NotificationsPanel";
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const { status } = useSession();
+
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/auth/signin');
+  }, [status, router]);
 
   return (
     <div style={{ backgroundColor: '#020202' }} className="min-h-screen">

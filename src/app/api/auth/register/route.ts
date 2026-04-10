@@ -6,12 +6,14 @@ import crypto from "crypto";
 import { sendEmail, generateEmailVerificationEmail } from "@/lib/mail";
 import { enforceRateLimit, getClientAddress } from "@/lib/requestSecurity";
 import { isAllowedDisplayName } from "@/lib/display-name-validator";
+import { calcLevel } from "@/lib/levels";
 
 const RegisterSchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email(),
   password: z.string().min(8).max(100),
-  referralCode: z.string().optional(), // Referral code from invite link
+  referralCode: z.string().optional(),
+  anonId: z.string().max(128).optional(),
 });
 
 type RegisterInput = z.infer<typeof RegisterSchema>;
@@ -39,7 +41,7 @@ export async function POST(request: NextRequest) {
     const parsed = RegisterSchema.parse(body);
     const name = parsed.name.trim();
     const email = parsed.email.trim().toLowerCase();
-    const { password, referralCode } = parsed;
+    const { password, referralCode, anonId } = parsed;
 
     // Validate display name against profanity + reserved words
     const nameCheck = isAllowedDisplayName(name);
@@ -138,6 +140,34 @@ export async function POST(request: NextRequest) {
           { error: 'Email verification is temporarily unavailable. Please try again later.' },
           { status: 503 }
         );
+      }
+    }
+
+    // Credit any XP/points earned as a guest — look up actual DB records by anonId
+    if (anonId) {
+      try {
+        const guestSolves = await prisma.gridlockSolve.findMany({
+          where: { anonId, userId: null },
+          include: { puzzle: { select: { xpReward: true } } },
+        });
+        if (guestSolves.length > 0) {
+          const totalXp = guestSolves.reduce((sum, s) => sum + (s.puzzle.xpReward ?? 100), 0);
+          const totalPoints = guestSolves.length * 100;
+          const { level, title } = calcLevel(totalXp);
+          await prisma.$transaction([
+            prisma.user.update({
+              where: { id: user.id },
+              data: { xp: totalXp, level, xpTitle: title, totalPoints },
+            }),
+            prisma.gridlockSolve.updateMany({
+              where: { anonId, userId: null },
+              data: { userId: user.id },
+            }),
+          ]);
+        }
+      } catch (err) {
+        console.error('[register] Failed to credit guest solves:', err);
+        // Non-fatal — don't fail registration
       }
     }
 

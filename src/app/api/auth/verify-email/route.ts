@@ -52,7 +52,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (!user.emailVerified) {
+    const wasAlreadyVerified = !!user.emailVerified;
+
+    if (!wasAlreadyVerified) {
       await prisma.user.update({
         where: { id: user.id },
         data: { emailVerified: new Date() },
@@ -60,6 +62,30 @@ export async function POST(request: NextRequest) {
     }
 
     await prisma.verificationToken.deleteMany({ where: { identifier: email } });
+
+    // Award 100 points to the referrer — only once, only after email is confirmed
+    if (!wasAlreadyVerified) {
+      try {
+        const referral = await prisma.userReferral.findFirst({
+          where: { refereeId: user.id, referralRewardedAt: null },
+        });
+        if (referral) {
+          await prisma.$transaction([
+            prisma.user.update({
+              where: { id: referral.referrerId },
+              data: { totalPoints: { increment: 100 } },
+            }),
+            prisma.userReferral.update({
+              where: { id: referral.id },
+              data: { referralRewardedAt: new Date() },
+            }),
+          ]);
+        }
+      } catch (err) {
+        // Non-fatal — don't block verification if reward fails
+        console.error("[verify-email] Failed to award referral points:", err);
+      }
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

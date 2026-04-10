@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { getAnonId, clearPendingRewards } from "@/lib/gridlockAnon";
 
 const TOS_SECTIONS = [
   { title: "1. Acceptance of Terms", body: `By creating an account or using PuzzleWarz (the "Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not access or use the Service. These Terms apply to all visitors, users, and others who access the Service.` },
@@ -74,7 +75,13 @@ function RegisterForm() {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, website: honeypot, referralCode: referralCode || undefined, marketingOptIn: emailOptIn }),
+        body: JSON.stringify({
+          name, email, password,
+          website: honeypot,
+          referralCode: referralCode || undefined,
+          marketingOptIn: emailOptIn,
+          anonId: getAnonId() || undefined,
+        }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -86,6 +93,7 @@ function RegisterForm() {
 
       // In production we require email verification; guide the user instead of auto-signing-in.
       if (data?.requireVerification) {
+        clearPendingRewards();
         router.push(`/auth/verify-sent?email=${encodeURIComponent(email)}`);
         return;
       }
@@ -100,6 +108,7 @@ function RegisterForm() {
       if (result?.error) {
         setError(result.error);
       } else {
+        clearPendingRewards();
         router.push("/dashboard");
       }
     } catch (err) {

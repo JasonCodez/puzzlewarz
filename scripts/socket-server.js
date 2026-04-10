@@ -297,6 +297,42 @@ async function callAppServerAbort({ teamId, puzzleId, reason }) {
   }
 }
 
+async function callAppPauseSoloRun({ puzzleId, lobbyId, userId }) {
+  try {
+    if (!process.env.SOCKET_SECRET) return;
+    const url = appBaseUrl() + '/api/escape-rooms/' + encodeURIComponent(puzzleId) + '/lobby/pause-run';
+    if (!global.fetch) return;
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-socket-secret': process.env.SOCKET_SECRET,
+      },
+      body: JSON.stringify({ lobbyId, userId }),
+    }).catch(() => null);
+  } catch (e) {
+    // ignore
+  }
+}
+
+async function callAppTransferHost({ puzzleId, lobbyId, newHostId }) {
+  try {
+    if (!process.env.SOCKET_SECRET) return;
+    const url = appBaseUrl() + '/api/escape-rooms/' + encodeURIComponent(puzzleId) + '/lobby/transfer-host';
+    if (!global.fetch) return;
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-socket-secret': process.env.SOCKET_SECRET,
+      },
+      body: JSON.stringify({ lobbyId, newHostId }),
+    }).catch(() => null);
+  } catch (e) {
+    // ignore
+  }
+}
+
 function clearAbortTimers(key) {
   const jw = joinWaitTimers.get(key);
   if (jw) {
@@ -379,7 +415,7 @@ io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
   // Escape-room room membership (separate from lobby rooms)
-  socket.on('joinEscapeRoom', ({ teamId, puzzleId, userId, requiredPlayers }) => {
+  socket.on('joinEscapeRoom', ({ teamId, puzzleId, userId, userName, isHost, isLobby, requiredPlayers }) => {
     try {
       if (!teamId || !puzzleId || !userId) return;
       const room = `escape:${teamId}::${puzzleId}`;
@@ -396,10 +432,15 @@ io.on('connection', (socket) => {
 
       // Track membership for abort logic.
       const list = socketEscapeMemberships.get(socket.id) || [];
-      const already = list.some((m) => m.teamId === teamId && m.puzzleId === puzzleId && m.userId === userId);
-      if (!already) {
+      const existingIdx = list.findIndex((m) => m.teamId === teamId && m.puzzleId === puzzleId && m.userId === userId);
+      if (existingIdx >= 0) {
+        // Update isHost / userName if the client re-joined (e.g. reconnect after host transfer).
+        list[existingIdx].isHost = !!isHost;
+        list[existingIdx].isLobby = !!isLobby;
+        if (typeof userName === 'string') list[existingIdx].userName = userName;
+      } else {
         addEscapeMember(teamId, puzzleId, userId);
-        list.push({ teamId, puzzleId, userId });
+        list.push({ teamId, puzzleId, userId, userName: typeof userName === 'string' ? userName : '', isHost: !!isHost, isLobby: !!isLobby });
         socketEscapeMemberships.set(socket.id, list);
       }
 
@@ -551,7 +592,51 @@ io.on('connection', (socket) => {
       const memberships = socketEscapeMemberships.get(socket.id) || [];
       for (const m of memberships) {
         try {
-          removeEscapeMember(m.teamId, m.puzzleId, m.userId);
+          const remaining = removeEscapeMember(m.teamId, m.puzzleId, m.userId);
+          const eKey = escapeKey(m.teamId, m.puzzleId);
+          // Notify remaining players that someone disconnected (informational only).
+          // This fires immediately on disconnect; the abort path (below) fires after
+          // the grace period only for team-mode runs where requiredPlayers > 1.
+          if (remaining > 0) {
+            io.to(`escape:${eKey}`).emit('escapePlayerLeft', {
+              teamId: m.teamId,
+              puzzleId: m.puzzleId,
+              userId: m.userId,
+              userName: m.userName || '',
+            });
+
+            // If the departing player was the lobby host, pick the next connected player
+            // and transfer leadership so the "Begin" button becomes available to someone.
+            if (m.isHost) {
+              const counts = escapeRoomCounts.get(eKey);
+              const newHostId = counts ? counts.keys().next().value : null;
+              if (newHostId) {
+                // Mark the new host in every active socket membership for this room.
+                for (const [, list] of socketEscapeMemberships) {
+                  for (const member of list) {
+                    if (member.teamId === m.teamId && member.puzzleId === m.puzzleId) {
+                      member.isHost = member.userId === newHostId;
+                    }
+                  }
+                }
+                io.to(`escape:${eKey}`).emit('escapeHostChanged', {
+                  teamId: m.teamId,
+                  puzzleId: m.puzzleId,
+                  newHostId,
+                });
+                // Persist to DB so state-fetches return the correct isLeader value.
+                callAppTransferHost({ puzzleId: m.puzzleId, lobbyId: m.teamId, newHostId }).catch(() => null);
+              }
+            }
+
+            // Save this player's progress so they can resume solo later (lobby runs only).
+            if (m.isLobby) {
+              callAppPauseSoloRun({ puzzleId: m.puzzleId, lobbyId: m.teamId, userId: m.userId }).catch(() => null);
+            }
+          } else if (m.isLobby) {
+            // Last player just left a lobby run — pause the shared record so they can resume later.
+            callAppPauseSoloRun({ puzzleId: m.puzzleId, lobbyId: m.teamId, userId: m.userId }).catch(() => null);
+          }
           scheduleDisconnectAbort(m.teamId, m.puzzleId);
         } catch (e) {
           // ignore

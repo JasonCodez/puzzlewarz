@@ -78,7 +78,7 @@ export async function PUT(
   const validDifficulties = ["easy", "medium", "hard", "extreme"];
   const safeDifficulty = difficulty && validDifficulties.includes(difficulty) ? difficulty : "medium";
 
-  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case"].includes(puzzleType);
+  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg"].includes(puzzleType);
 
   await prisma.$transaction(async (tx) => {
     // 1. Update core puzzle fields
@@ -92,7 +92,7 @@ export async function PUT(
         isWarzExclusive: isWarzExclusive === true,
         ...(categoryRecord ? { categoryId: categoryRecord.id } : {}),
         ...(!isSpecialType ? { riddleAnswer: correctAnswer } : {}),
-        ...(([ "escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg"].includes(puzzleType)) && puzzleData != null
+        ...(([ "escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg"].includes(puzzleType)) && puzzleData != null
           ? { data: puzzleData }
           : {}),
       },

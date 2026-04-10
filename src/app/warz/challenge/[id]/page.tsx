@@ -60,6 +60,7 @@ export default function WarzChallengePage() {
   // Result state
   const [result, setResult] = useState<{ won: boolean; myTime: number; challengerTime?: number | null; tie?: boolean } | null>(null);
   const [submittingResult, setSubmittingResult] = useState(false);
+  const [warzCopied, setWarzCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +71,7 @@ export default function WarzChallengePage() {
           fetch("/api/user/info"),
         ]);
         if (!chalRes.ok) throw new Error("Challenge not found");
-        if (!userRes.ok) throw new Error("Not authenticated");
+        if (!userRes.ok) { router.replace('/auth/register?reason=warz'); return; }
         const chalData = await chalRes.json();
         const userData = await userRes.json();
         if (!cancelled) {
@@ -139,6 +140,43 @@ export default function WarzChallengePage() {
       setSubmittingResult(false);
     }
   }, [id, currentUser?.id]);
+
+  const shareWarz = useCallback(() => {
+    if (!result || !challenge) return;
+    const pot = challenge.challengerWager * 2;
+    const myFormatted = formatTime(result.myTime);
+    const theirFormatted = result.challengerTime != null ? formatTime(result.challengerTime) : "DNF";
+    const opponent = challenge.challenger.username;
+    const puzzleLabels: Record<string, string> = {
+      sudoku: "Sudoku", jigsaw: "Jigsaw", word_crack: "Word Crack",
+      word_search: "Word Search", anagram_blitz: "Anagram Blitz",
+      crack_safe: "Crack the Safe", general: "Puzzle", riddle: "Riddle",
+    };
+    const puzzleLabel = puzzleLabels[challenge.puzzle.puzzleType] ?? challenge.puzzle.puzzleType.replace(/_/g, " ");
+
+    let text: string;
+    if (result.tie) {
+      text = `⚔️ PuzzleWarz WARZ\n\n🤝 Tied with @${opponent} on "${challenge.puzzle.title}" (${puzzleLabel})\n⏱ My time: ${myFormatted}  |  Theirs: ${theirFormatted}\nWagers refunded. Rematch time? 😤\n\nhttps://puzzlewarz.com/warz`;
+    } else if (result.won) {
+      text = `⚔️ PuzzleWarz WARZ\n\n🏆 Just CRUSHED @${opponent} on "${challenge.puzzle.title}" (${puzzleLabel})!\n⏱ My time: ${myFormatted}  |  Theirs: ${theirFormatted}\n💰 Won ${pot} pts\n\nThink you can do better? 👇\nhttps://puzzlewarz.com/warz`;
+    } else {
+      text = `⚔️ PuzzleWarz WARZ\n\n💀 @${opponent} beat me on "${challenge.puzzle.title}" (${puzzleLabel})\n⏱ My time: ${myFormatted}  |  Theirs: ${theirFormatted}\nI'll be back. 🔥\nhttps://puzzlewarz.com/warz`;
+    }
+
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share({ text }).catch(() => {
+        navigator.clipboard.writeText(text).then(() => {
+          setWarzCopied(true);
+          setTimeout(() => setWarzCopied(false), 2_000);
+        });
+      });
+    } else {
+      navigator.clipboard.writeText(text).then(() => {
+        setWarzCopied(true);
+        setTimeout(() => setWarzCopied(false), 2_000);
+      });
+    }
+  }, [result, challenge]);
 
   // ── Loading / error ──────────────────────────────────────────────────────
   if (loading) {
@@ -232,13 +270,22 @@ export default function WarzChallengePage() {
             </div>
           </div>
 
-          <button
-            onClick={() => router.push("/warz")}
-            className="w-full py-3 rounded-xl font-extrabold"
-            style={{ background: "linear-gradient(135deg, #FDE74C, #FFB86B)", color: "#1a1400" }}
-          >
-            Back to Warz Lobby
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={shareWarz}
+              className="w-full py-3 rounded-xl font-extrabold"
+              style={{ background: "linear-gradient(135deg, #FDE74C, #FFB86B)", color: "#1a1400" }}
+            >
+              {warzCopied ? "Copied! ✓" : "Share Result ⚔️"}
+            </button>
+            <button
+              onClick={() => router.push("/warz")}
+              className="w-full py-3 rounded-xl font-bold text-sm"
+              style={{ backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#9ca3af" }}
+            >
+              Back to Warz Lobby
+            </button>
+          </div>
         </motion.div>
       </div>
     );

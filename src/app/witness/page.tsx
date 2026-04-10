@@ -1,0 +1,1580 @@
+"use client";
+
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import Navbar from "@/components/Navbar";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Stage =
+  | "loading"
+  | "witness-intro"
+  | "witness-reading"
+  | "witness-questions"
+  | "witness-results"
+  | "bridge"
+  | "dead-drop"
+  | "dead-drop-results";
+
+interface ScenarioData {
+  id: string;
+  caseNumber: string;
+  classification: string;
+  dateTime: string;
+  report: string;
+  questions: { question: string; options: string[] }[];
+}
+
+interface DeadDropData {
+  id: string;
+  metaQuestion: string;
+  clues: { clue: string; hint: string }[];
+}
+
+interface Stats {
+  totalPlays: number;
+  scoreDist: number[];
+  ddTotal: number;
+  ddSolved: number;
+  ddSolveRate: number;
+}
+
+interface SubmitResult {
+  score: number;
+  breakdown: { correct: boolean; correctIndex: number }[];
+  scoreDist: number[];
+  totalPlays: number;
+  percentile: number;
+}
+
+interface DeadDropResult {
+  clueResults: { correct: boolean; displayAnswer: string }[];
+  finalAnswer: string | null;
+  solved: boolean;
+  solveRate: number;
+  total: number;
+}
+
+// ── Timers ───────────────────────────────────────────────────────────────────
+
+const READ_SECONDS = 35;
+const QUESTION_SECONDS = 18;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function scoreLabel(score: number): string {
+  if (score === 5) return "Perfect recall. You didn't miss a thing.";
+  if (score === 4) return "Sharp. One detail escaped you.";
+  if (score === 3) return "Solid. Most people stop at three.";
+  if (score === 2) return "The report had more than you caught.";
+  if (score === 1) return "You're going to need more practice.";
+  return "You weren't paying attention. Were you?";
+}
+
+function percentileLabel(p: number, score: number): string {
+  if (score === 5) return "You outperformed every player who has sat this test.";
+  if (p >= 90) return `You beat ${p}% of all players. That's rare.`;
+  if (p >= 70) return `You beat ${p}% of players.`;
+  if (p >= 50) return `You beat ${p}% of players. Above average.`;
+  if (p >= 25) return `You beat ${p}% of players. Room to grow.`;
+  return `${p}% of players scored lower. The rest got more right.`;
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const BG = "#020202";
+const SURFACE = "rgba(255,255,255,0.03)";
+const BORDER = "rgba(255,255,255,0.07)";
+const PURPLE = "#7C3AED";
+const PURPLE_LIGHT = "#a78bfa";
+const GOLD = "#FDE74C";
+const TEAL = "#3891A6";
+const DANGER = "#EF4444";
+const SUCCESS = "#38D399";
+const MUTED = "#6B7280";
+const TEXT = "#E5E7EB";
+
+const cardStyle: React.CSSProperties = {
+  backgroundColor: SURFACE,
+  border: `1px solid ${BORDER}`,
+  borderRadius: 16,
+  padding: "32px",
+};
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function Badge({ children, color = PURPLE_LIGHT }: { children: React.ReactNode; color?: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 12px",
+        borderRadius: 999,
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.14em",
+        textTransform: "uppercase" as const,
+        color,
+        backgroundColor: `${color}18`,
+        border: `1px solid ${color}35`,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function TimerBar({ secondsLeft, total }: { secondsLeft: number; total: number }) {
+  const pct = (secondsLeft / total) * 100;
+  const color = secondsLeft <= 8 ? DANGER : secondsLeft <= 15 ? GOLD : TEAL;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          Memorise the report
+        </span>
+        <span
+          style={{
+            fontSize: 22,
+            fontWeight: 900,
+            color,
+            minWidth: 36,
+            textAlign: "right",
+            transition: "color 0.3s",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {secondsLeft}
+        </span>
+      </div>
+      <div
+        style={{
+          height: 4,
+          borderRadius: 999,
+          backgroundColor: "rgba(255,255,255,0.06)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            backgroundColor: color,
+            borderRadius: 999,
+            transition: "width 1s linear, background-color 0.3s",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function OptionButton({
+  label,
+  state,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  state: "idle" | "correct" | "wrong" | "reveal";
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  const bg =
+    state === "correct"
+      ? `${SUCCESS}22`
+      : state === "wrong"
+      ? `${DANGER}22`
+      : state === "reveal"
+      ? `${GOLD}18`
+      : "rgba(255,255,255,0.04)";
+  const border =
+    state === "correct"
+      ? `${SUCCESS}70`
+      : state === "wrong"
+      ? `${DANGER}70`
+      : state === "reveal"
+      ? `${GOLD}55`
+      : "rgba(255,255,255,0.09)";
+  const color =
+    state === "correct" ? SUCCESS : state === "wrong" ? DANGER : state === "reveal" ? GOLD : TEXT;
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: "14px 18px",
+        borderRadius: 10,
+        border: `1px solid ${border}`,
+        backgroundColor: bg,
+        color,
+        fontSize: 15,
+        fontWeight: 500,
+        cursor: disabled ? "default" : "pointer",
+        transition: "background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.15s",
+        transform: state === "correct" ? "scale(1.01)" : "scale(1)",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+      }}
+    >
+      <span style={{ fontSize: 14 }}>
+        {state === "correct" ? "✓" : state === "wrong" ? "✗" : state === "reveal" ? "→" : "○"}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function ClueInput({
+  clue,
+  hint,
+  index,
+  value,
+  onChange,
+  state,
+  onSubmit,
+  showHint,
+}: {
+  clue: string;
+  hint: string;
+  index: number;
+  value: string;
+  onChange: (v: string) => void;
+  state: "idle" | "correct" | "wrong";
+  onSubmit: () => void;
+  showHint: boolean;
+}) {
+  const border =
+    state === "correct" ? `${SUCCESS}70` : state === "wrong" ? `${DANGER}70` : BORDER;
+  const ORDINALS = ["ONE", "TWO", "THREE"];
+
+  return (
+    <div
+      style={{
+        ...cardStyle,
+        padding: "24px",
+        borderColor: border,
+        transition: "border-color 0.3s",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <span
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 12,
+            fontWeight: 800,
+            flexShrink: 0,
+            backgroundColor: state === "correct" ? `${SUCCESS}25` : `${PURPLE}25`,
+            border: `1px solid ${state === "correct" ? `${SUCCESS}55` : `${PURPLE}55`}`,
+            color: state === "correct" ? SUCCESS : PURPLE_LIGHT,
+          }}
+        >
+          {state === "correct" ? "✓" : index + 1}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: MUTED,
+          }}
+        >
+          Word {ORDINALS[index]}
+        </span>
+      </div>
+      <p style={{ color: TEXT, fontSize: 15, lineHeight: 1.6, marginBottom: showHint ? 8 : 18 }}>
+        {clue}
+      </p>
+      {showHint && (
+        <p style={{ color: GOLD, fontSize: 13, fontStyle: "italic", marginBottom: 14 }}>
+          Hint: {hint}
+        </p>
+      )}
+      {state !== "correct" ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit();
+          }}
+          style={{ display: "flex", gap: 8 }}
+        >
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Single word…"
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(255,255,255,0.05)",
+              border: `1px solid ${state === "wrong" ? DANGER + "70" : BORDER}`,
+              borderRadius: 8,
+              color: TEXT,
+              fontSize: 15,
+              padding: "10px 14px",
+              outline: "none",
+              fontFamily: "inherit",
+            }}
+          />
+          <button
+            type="submit"
+            disabled={!value.trim()}
+            style={{
+              padding: "10px 18px",
+              borderRadius: 8,
+              fontWeight: 700,
+              fontSize: 13,
+              color: "#fff",
+              backgroundColor: PURPLE,
+              border: "none",
+              cursor: value.trim() ? "pointer" : "default",
+              opacity: value.trim() ? 1 : 0.4,
+            }}
+          >
+            Lock In
+          </button>
+        </form>
+      ) : (
+        <div
+          style={{
+            padding: "10px 16px",
+            borderRadius: 8,
+            backgroundColor: `${SUCCESS}15`,
+            border: `1px solid ${SUCCESS}40`,
+            color: SUCCESS,
+            fontWeight: 700,
+            fontSize: 15,
+            letterSpacing: "0.08em",
+          }}
+        >
+          ✓ Confirmed
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function WitnessPage() {
+  const { status } = useSession();
+  const router = useRouter();
+  const [stage, setStage] = useState<Stage>("loading");
+  const [scenario, setScenario] = useState<ScenarioData | null>(null);
+  const [deadDrop, setDeadDrop] = useState<DeadDropData | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  // Witness reading
+  const [secondsLeft, setSecondsLeft] = useState(READ_SECONDS);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Witness questions
+  const [currentQ, setCurrentQ] = useState(0);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [optionState, setOptionState] = useState<("idle" | "correct" | "wrong" | "reveal")[]>([]);
+  const [answerLocked, setAnswerLocked] = useState(false);
+  const [questionSecondsLeft, setQuestionSecondsLeft] = useState(QUESTION_SECONDS);
+  const questionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [tabWarning, setTabWarning] = useState(false);
+  const [alreadyRead, setAlreadyRead] = useState<"reading" | "complete" | null>(null);
+
+  // Refs so handleTimeout can read latest state without stale closure
+  const answersRef = useRef<number[]>([]);
+  const currentQRef = useRef(0);
+  const answerLockedRef = useRef(false);
+  answersRef.current = answers;
+  currentQRef.current = currentQ;
+  answerLockedRef.current = answerLocked;
+
+  // Witness results
+  const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
+
+  // Dead drop
+  const [clueValues, setClueValues] = useState(["", "", ""]);
+  const [clueStates, setClueStates] = useState<("idle" | "correct" | "wrong")[]>(["idle", "idle", "idle"]);
+  const [hintShown, setHintShown] = useState([false, false, false]);
+  const [ddResult, setDdResult] = useState<DeadDropResult | null>(null);
+  const [ddSubmitting, setDdSubmitting] = useState(false);
+
+  // Shared animation helper
+  const [visible, setVisible] = useState(false);
+
+  const fadeIn = useCallback(() => {
+    setVisible(false);
+    setTimeout(() => setVisible(true), 60);
+  }, []);
+
+  // ── Auth guard ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/auth/signin');
+  }, [status, router]);
+
+  // ── Load today's data ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetch("/api/witness/today")
+      .then((r) => r.json())
+      .then((data) => {
+        setScenario(data.scenario);
+        setDeadDrop(data.deadDrop);
+        setStats(data.stats);
+        // sessionStorage gate — prevent re-reading in the same browser session
+        const gate = sessionStorage.getItem(`witness_${data.scenario.id}`) as "reading" | "complete" | null;
+        if (gate) setAlreadyRead(gate);
+        setStage("witness-intro");
+        setVisible(true);
+      })
+      .catch(() => setStage("witness-intro")); // fail open
+  }, []);
+
+  // ── Reading timer ──────────────────────────────────────────────────────────
+
+  const startTimer = useCallback(() => {
+    setSecondsLeft(READ_SECONDS);
+    timerRef.current = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          clearInterval(timerRef.current!);
+          // auto-advance
+          setTimeout(() => {
+            setStage("witness-questions");
+            setCurrentQ(0);
+            setOptionState(Array(4).fill("idle"));
+            fadeIn();
+          }, 800);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  }, [fadeIn]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  // ── Question timeout ───────────────────────────────────────────────────────
+
+  /** Called when the 18-second question timer runs out. Reads state via refs
+   *  to avoid stale-closure problems inside setInterval callbacks. */
+  const handleTimeout = useCallback(() => {
+    if (answerLockedRef.current || !scenario) return;
+    if (questionTimerRef.current) clearInterval(questionTimerRef.current);
+    setAnswerLocked(true);
+    // Record -1 = timed out (always graded wrong server-side)
+    const newAnswers = [...answersRef.current, -1];
+    setAnswers(newAnswers);
+
+    if (currentQRef.current < scenario.questions.length - 1) {
+      setTimeout(() => {
+        setCurrentQ((q) => q + 1);
+        setSelectedOption(null);
+        setAnswerLocked(false);
+        setOptionState(Array(4).fill("idle"));
+        fadeIn();
+      }, 500);
+    } else {
+      fetch("/api/witness/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scenarioId: scenario.id, answers: newAnswers }),
+      })
+        .then((r) => r.json())
+        .then((data: SubmitResult) => {
+          sessionStorage.setItem(`witness_${scenario.id}`, "complete");
+          setSubmitResult(data);
+          setStage("witness-results");
+          fadeIn();
+        });
+    }
+  }, [scenario, fadeIn]); // reads answers/currentQ/answerLocked via refs
+
+  // ── Per-question countdown (resets on each new question) ──────────────────
+
+  useEffect(() => {
+    if (stage !== "witness-questions") return;
+    setQuestionSecondsLeft(QUESTION_SECONDS);
+    if (questionTimerRef.current) clearInterval(questionTimerRef.current);
+
+    questionTimerRef.current = setInterval(() => {
+      setQuestionSecondsLeft((s) => {
+        if (s <= 1) {
+          clearInterval(questionTimerRef.current!);
+          // Small defer so we don't call state-setters inside a state updater
+          setTimeout(() => handleTimeout(), 50);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (questionTimerRef.current) clearInterval(questionTimerRef.current);
+    };
+  }, [currentQ, stage, handleTimeout]);
+
+  // ── Tab-switch detection during questions ─────────────────────────────────
+
+  useEffect(() => {
+    if (stage !== "witness-questions") {
+      setTabWarning(false);
+      return;
+    }
+    const onVisibility = () =>
+      setTabWarning(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [stage]);
+
+  // ── Witness question handlers ──────────────────────────────────────────────
+
+  const handleOptionClick = useCallback(
+    (optionIdx: number) => {
+      if (answerLocked || !scenario) return;
+      // Stop the question countdown the moment they click
+      if (questionTimerRef.current) clearInterval(questionTimerRef.current);
+      setSelectedOption(optionIdx);
+      setAnswerLocked(true);
+
+      // Immediately show selection as pending — real answer revealed after submit
+      const newStates = scenario.questions[currentQ].options.map(
+        (_, i): "idle" | "correct" | "wrong" | "reveal" => {
+          if (i === optionIdx) return "reveal"; // "locked in" state
+          return "idle";
+        }
+      );
+      setOptionState(newStates);
+
+      setTimeout(() => {
+        // advance to next question or submit
+        const newAnswers = [...answers, optionIdx];
+        setAnswers(newAnswers);
+
+        if (currentQ < (scenario.questions.length - 1)) {
+          setCurrentQ((q) => q + 1);
+          setSelectedOption(null);
+          setAnswerLocked(false);
+          setOptionState(Array(4).fill("idle"));
+          fadeIn();
+        } else {
+          // All answered — submit
+          setStage("witness-questions"); // keep UI but disable
+          fetch("/api/witness/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scenarioId: scenario.id, answers: newAnswers }),
+          })
+            .then((r) => r.json())
+            .then((data: SubmitResult) => {
+              sessionStorage.setItem(`witness_${scenario.id}`, "complete");
+              setSubmitResult(data);
+              setStage("witness-results");
+              fadeIn();
+            });
+        }
+      }, 600);
+    },
+    [answerLocked, answers, currentQ, scenario, fadeIn]
+  );
+
+  // ── Dead-drop handlers ─────────────────────────────────────────────────
+
+  const handleClueSubmit = useCallback(
+    (index: number) => {
+      if (!deadDrop || clueStates[index] === "correct") return;
+      const val = clueValues[index].trim().toLowerCase();
+
+      // Validate server-side via the route (avoids leaking answers in GET response)
+      // For immediate UX we do client-side first then confirm server
+      fetch("/api/witness/dead-drop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          challengeId: deadDrop.id,
+          clueAnswers: clueValues.map((v, i) =>
+            i === index ? val : clueStates[i] === "correct" ? "__already_correct__" : ""
+          ),
+        }),
+      })
+        .then((r) => r.json())
+        .then((data: DeadDropResult) => {
+          const thisResult = data.clueResults[index];
+          const newStates = [...clueStates] as ("idle" | "correct" | "wrong")[];
+          newStates[index] = thisResult.correct ? "correct" : "wrong";
+          setClueStates(newStates);
+
+          if (!thisResult.correct) {
+            // Show hint after first wrong
+            const newHints = [...hintShown];
+            newHints[index] = true;
+            setHintShown(newHints);
+          }
+
+          // Check if all three correct
+          if (newStates.every((s) => s === "correct")) {
+            setDdResult(data);
+            setTimeout(() => {
+              setStage("dead-drop-results");
+              fadeIn();
+            }, 800);
+          }
+        });
+    },
+    [clueStates, clueValues, deadDrop, hintShown, fadeIn]
+  );
+
+  const handleRevealAll = useCallback(() => {
+    if (!deadDrop) return;
+    setDdSubmitting(true);
+    fetch("/api/witness/dead-drop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        challengeId: deadDrop.id,
+        clueAnswers: ["__give_up__", "__give_up__", "__give_up__"],
+      }),
+    })
+      .then((r) => r.json())
+      .then((data: DeadDropResult) => {
+        setDdResult(data);
+        setStage("dead-drop-results");
+        fadeIn();
+      })
+      .finally(() => setDdSubmitting(false));
+  }, [deadDrop, fadeIn]);
+
+  // ── Transitions ────────────────────────────────────────────────────────────
+
+  const goReading = useCallback(() => {
+    if (scenario) sessionStorage.setItem(`witness_${scenario.id}`, "reading");
+    setStage("witness-reading");
+    fadeIn();
+    setTimeout(startTimer, 400);
+  }, [fadeIn, startTimer, scenario]);
+
+  const goBridge = useCallback(() => {
+    setStage("bridge");
+    fadeIn();
+  }, [fadeIn]);
+
+  const goDeadDrop = useCallback(() => {
+    setStage("dead-drop");
+    setClueValues(["", "", ""]);
+    setClueStates(["idle", "idle", "idle"]);
+    setHintShown([false, false, false]);
+    setDdResult(null);
+    fadeIn();
+  }, [fadeIn]);
+
+  // ── Share ──────────────────────────────────────────────────────────────────
+
+  const shareWitness = useCallback(() => {
+    if (!submitResult) return;
+    const text = `🔍 PuzzleWarz — The Witness\n\nI recalled ${submitResult.score}/5 critical details.\nI beat ${submitResult.percentile}% of players.\n\nCan you do better?\nhttps://puzzlewarz.com/witness`;
+    if (navigator.share) navigator.share({ text }).catch(() => {});
+    else navigator.clipboard.writeText(text).catch(() => {});
+  }, [submitResult]);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const fadeStyle: React.CSSProperties = {
+    opacity: visible ? 1 : 0,
+    transform: visible ? "translateY(0)" : "translateY(20px)",
+    transition: "opacity 0.5s ease, transform 0.5s ease",
+  };
+
+  if (stage === "loading") {
+    return (
+      <>
+        <Navbar />
+        <main style={{ backgroundColor: BG, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ color: MUTED, fontSize: 14, letterSpacing: "0.1em" }}>DECRYPTING…</div>
+        </main>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <style>{`
+        @keyframes scan-line {
+          0%   { transform: translateY(-100%); }
+          100% { transform: translateY(400%); }
+        }
+        @keyframes flicker {
+          0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
+          20%, 24%, 55% { opacity: 0.4; }
+        }
+        @keyframes stamp-in {
+          0%   { transform: scale(2.5) rotate(-15deg); opacity: 0; }
+          60%  { transform: scale(0.95) rotate(3deg); opacity: 1; }
+          100% { transform: scale(1) rotate(-2deg); opacity: 1; }
+        }
+        @keyframes pulse-border {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(124,58,237,0.4); }
+          50%       { box-shadow: 0 0 0 8px rgba(124,58,237,0); }
+        }
+        @keyframes word-appear {
+          from { opacity: 0; transform: scale(0.8) translateY(8px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .clue-input:focus { outline: none; box-shadow: 0 0 0 2px ${PURPLE}60; }
+      `}</style>
+
+      <Navbar />
+
+      <main
+        style={{
+          backgroundColor: BG,
+          minHeight: "100vh",
+          paddingTop: 80,
+          paddingBottom: 80,
+        }}
+      >
+        <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px" }}>
+
+          {/* ── WITNESS INTRO ─────────────────────────────────────────── */}
+          {stage === "witness-intro" && (
+            <div style={fadeStyle}>
+              <div style={{ textAlign: "center", marginBottom: 48 }}>
+                <Badge color={PURPLE_LIGHT}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: PURPLE_LIGHT }} />
+                  Clearance Test — Stage 1 of 2
+                </Badge>
+                <h1
+                  style={{
+                    fontSize: "clamp(34px, 5vw, 54px)",
+                    fontWeight: 900,
+                    color: "#fff",
+                    letterSpacing: "-0.03em",
+                    marginTop: 20,
+                    marginBottom: 12,
+                    lineHeight: 1.08,
+                  }}
+                >
+                  The Witness
+                </h1>
+                <p style={{ color: MUTED, fontSize: 16, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 32px" }}>
+                  You have {READ_SECONDS} seconds to read an incident report.
+                  Then it disappears. Five questions follow.
+                  Every detail matters.
+                </p>
+              </div>
+
+              {/* File envelope visual */}
+              <div
+                style={{
+                  ...cardStyle,
+                  borderColor: "rgba(124,58,237,0.3)",
+                  textAlign: "center",
+                  position: "relative",
+                  overflow: "hidden",
+                  marginBottom: 32,
+                }}
+              >
+                {/* scan line */}
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "30%",
+                    background: "linear-gradient(to bottom, transparent, rgba(124,58,237,0.06), transparent)",
+                    animation: "scan-line 4s ease-in-out infinite",
+                    pointerEvents: "none",
+                  }}
+                />
+                <div style={{ fontSize: 52, marginBottom: 16 }}>📁</div>
+                {scenario && (
+                  <>
+                    <div
+                      style={{
+                        display: "inline-block",
+                        padding: "6px 14px",
+                        borderRadius: 4,
+                        backgroundColor: `${DANGER}15`,
+                        border: `1px solid ${DANGER}40`,
+                        color: DANGER,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        letterSpacing: "0.2em",
+                        textTransform: "uppercase",
+                        marginBottom: 14,
+                        animation: "flicker 6s infinite",
+                      }}
+                    >
+                      {scenario.classification}
+                    </div>
+                    <p style={{ color: MUTED, fontSize: 13, marginBottom: 4 }}>
+                      Incident Report #{scenario.caseNumber}
+                    </p>
+                    <p style={{ color: `${MUTED}88`, fontSize: 12 }}>{scenario.dateTime}</p>
+                  </>
+                )}
+
+                {stats && stats.totalPlays > 0 && (
+                  <p style={{ color: `${MUTED}80`, fontSize: 12, marginTop: 18 }}>
+                    {stats.totalPlays.toLocaleString()} players have sat this test
+                  </p>
+                )}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {alreadyRead ? (
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        padding: "16px",
+                        borderRadius: 10,
+                        border: `1px solid ${DANGER}40`,
+                        backgroundColor: `${DANGER}10`,
+                        marginBottom: 12,
+                      }}
+                    >
+                      <p style={{ color: DANGER, fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                        🔥 Document Destroyed
+                      </p>
+                      <p style={{ color: MUTED, fontSize: 13 }}>
+                        {alreadyRead === "complete"
+                          ? "You've already completed this test in this session. Come back tomorrow."
+                          : "You already opened this report. The reading window has closed — answer from memory."}
+                      </p>
+                    </div>
+                    {alreadyRead === "reading" && (
+                      <button
+                        onClick={() => {
+                          setCurrentQ(0);
+                          setOptionState(Array(4).fill("idle"));
+                          setStage("witness-questions");
+                          fadeIn();
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "14px",
+                          borderRadius: 10,
+                          fontWeight: 700,
+                          fontSize: 15,
+                          color: "#fff",
+                          backgroundColor: PURPLE,
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Answer from memory →
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={goReading}
+                      style={{
+                        width: "100%",
+                        padding: "16px",
+                        borderRadius: 10,
+                        fontWeight: 800,
+                        fontSize: 16,
+                        color: "#fff",
+                        backgroundColor: PURPLE,
+                        border: "none",
+                        cursor: "pointer",
+                        boxShadow: `0 0 32px ${PURPLE}55`,
+                        animation: "pulse-border 2.5s infinite",
+                        letterSpacing: "0.03em",
+                      }}
+                    >
+                      Open the File →
+                    </button>
+                    <p style={{ textAlign: "center", color: MUTED, fontSize: 12 }}>
+                      No account required. No tricks. Just your memory.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── WITNESS READING ───────────────────────────────────────── */}
+          {stage === "witness-reading" && scenario && (
+            <div style={fadeStyle}>
+              <TimerBar secondsLeft={secondsLeft} total={READ_SECONDS} />
+
+              <div
+                style={{
+                  ...cardStyle,
+                  borderColor: secondsLeft <= 8 ? `${DANGER}50` : BORDER,
+                  transition: "border-color 0.5s",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                {/* scan line animation over text */}
+                {secondsLeft > 0 && (
+                  <div
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: "15%",
+                      background: "linear-gradient(to bottom, transparent, rgba(56,145,166,0.04), transparent)",
+                      animation: "scan-line 3s ease-in-out infinite",
+                      pointerEvents: "none",
+                    }}
+                  />
+                )}
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+                  <div>
+                    <Badge color={DANGER}>
+                      <span style={{ animation: "flicker 3s infinite" }}>⬤</span>
+                      {scenario.classification}
+                    </Badge>
+                    <p style={{ color: MUTED, fontSize: 12, marginTop: 6 }}>
+                      Incident Report #{scenario.caseNumber} &nbsp;·&nbsp; {scenario.dateTime}
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    color: TEXT,
+                    fontSize: 15,
+                    lineHeight: 1.85,
+                    whiteSpace: "pre-line",
+                    fontFamily: "'Courier New', monospace",
+                    letterSpacing: "0.01em",
+                    opacity: secondsLeft === 0 ? 0 : 1,
+                    transition: "opacity 0.8s ease",
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                  }}
+                >
+                  {scenario.report.replace(/ /g, " \u200B")}
+                </div>
+
+                {secondsLeft === 0 && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: "rgba(2,2,2,0.92)",
+                      borderRadius: 16,
+                    }}
+                  >
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 48, marginBottom: 12 }}>🔥</div>
+                      <p style={{ color: DANGER, fontWeight: 800, fontSize: 18, letterSpacing: "0.1em" }}>
+                        DOCUMENT DESTROYED
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {secondsLeft > 5 && (
+                <button
+                  onClick={() => {
+                    if (timerRef.current) clearInterval(timerRef.current);
+                    setSecondsLeft(0);
+                    setTimeout(() => {
+                      setStage("witness-questions");
+                      setCurrentQ(0);
+                      setOptionState(Array(4).fill("idle"));
+                      fadeIn();
+                    }, 800);
+                  }}
+                  style={{
+                    marginTop: 16,
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: 10,
+                    color: MUTED,
+                    backgroundColor: "transparent",
+                    border: `1px solid ${BORDER}`,
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  I&apos;m ready — start questions
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── WITNESS QUESTIONS ─────────────────────────────────────── */}
+          {stage === "witness-questions" && scenario && (
+            <div style={fadeStyle}>
+              {/* Tab-switch warning overlay — timer keeps running while hidden */}
+              {tabWarning && (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    zIndex: 100,
+                    backgroundColor: "rgba(2,2,2,0.94)",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ fontSize: 48 }}>⚠️</div>
+                  <p style={{ color: DANGER, fontWeight: 800, fontSize: 18, letterSpacing: "0.05em" }}>
+                    TAB SWITCH DETECTED
+                  </p>
+                  <p style={{ color: MUTED, fontSize: 14 }}>Your timer is still running. Return to this tab.</p>
+                </div>
+              )}
+
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <Badge color={PURPLE_LIGHT}>Question {currentQ + 1} of {scenario.questions.length}</Badge>
+                  <span style={{ fontSize: 12, color: MUTED }}>
+                    {answers.length} answered
+                  </span>
+                </div>
+                <div style={{ height: 3, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${(currentQ / scenario.questions.length) * 100}%`,
+                      backgroundColor: PURPLE,
+                      borderRadius: 999,
+                      transition: "width 0.4s ease",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Per-question countdown */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    Time remaining
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 900,
+                      fontVariantNumeric: "tabular-nums",
+                      color: questionSecondsLeft <= 5 ? DANGER : questionSecondsLeft <= 10 ? GOLD : MUTED,
+                      transition: "color 0.3s",
+                    }}
+                  >
+                    {questionSecondsLeft}s
+                  </span>
+                </div>
+                <div style={{ height: 3, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${(questionSecondsLeft / QUESTION_SECONDS) * 100}%`,
+                      backgroundColor: questionSecondsLeft <= 5 ? DANGER : questionSecondsLeft <= 10 ? GOLD : PURPLE,
+                      borderRadius: 999,
+                      transition: "width 1s linear, background-color 0.3s",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ ...cardStyle, marginBottom: 20 }}>
+                <p style={{ color: TEXT, fontSize: 18, fontWeight: 700, lineHeight: 1.5, marginBottom: 24 }}>
+                  {scenario.questions[currentQ].question}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {scenario.questions[currentQ].options.map((opt, i) => (
+                    <OptionButton
+                      key={i}
+                      label={opt}
+                      state={optionState[i] || "idle"}
+                      onClick={() => handleOptionClick(i)}
+                      disabled={answerLocked}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <p style={{ textAlign: "center", color: `${MUTED}70`, fontSize: 12 }}>
+                The report is gone. Trust your memory.
+              </p>
+            </div>
+          )}
+
+          {/* ── WITNESS RESULTS ───────────────────────────────────────── */}
+          {stage === "witness-results" && submitResult && scenario && (
+            <div style={fadeStyle}>
+              <div style={{ textAlign: "center", marginBottom: 40 }}>
+                <div
+                  style={{
+                    fontSize: 72,
+                    fontWeight: 900,
+                    color: submitResult.score >= 4 ? SUCCESS : submitResult.score >= 2 ? GOLD : DANGER,
+                    lineHeight: 1,
+                    marginBottom: 8,
+                    transition: "color 0.5s",
+                  }}
+                >
+                  {submitResult.score}/5
+                </div>
+                <p style={{ color: TEXT, fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+                  {scoreLabel(submitResult.score)}
+                </p>
+                <p style={{ color: MUTED, fontSize: 14 }}>
+                  {percentileLabel(submitResult.percentile, submitResult.score)}
+                </p>
+              </div>
+
+              {/* Answer breakdown */}
+              <div style={{ ...cardStyle, marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: MUTED, marginBottom: 16 }}>
+                  Breakdown
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {scenario.questions.map((q, i) => {
+                    const res = submitResult.breakdown[i];
+                    return (
+                      <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                        <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>
+                          {res.correct ? "✅" : "❌"}
+                        </span>
+                        <div>
+                          <p style={{ color: TEXT, fontSize: 13, fontWeight: 500, lineHeight: 1.4 }}>{q.question}</p>
+                          {!res.correct && (
+                            <p style={{ color: GOLD, fontSize: 12, marginTop: 3 }}>
+                              Correct: {q.options[res.correctIndex]}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Score distribution */}
+              {submitResult.totalPlays > 1 && (
+                <div style={{ ...cardStyle, marginBottom: 28 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: MUTED, marginBottom: 16 }}>
+                    Score distribution — {submitResult.totalPlays.toLocaleString()} players
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {[5, 4, 3, 2, 1, 0].map((s) => {
+                      const count = submitResult.scoreDist[s] || 0;
+                      const pct = Math.round((count / submitResult.totalPlays) * 100);
+                      return (
+                        <div key={s} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ width: 14, fontSize: 12, color: s === submitResult.score ? GOLD : MUTED, fontWeight: s === submitResult.score ? 700 : 400 }}>
+                            {s}
+                          </span>
+                          <div style={{ flex: 1, height: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${pct}%`,
+                                borderRadius: 999,
+                                backgroundColor: s === submitResult.score ? GOLD : "rgba(255,255,255,0.12)",
+                                transition: "width 0.8s ease",
+                              }}
+                            />
+                          </div>
+                          <span style={{ width: 32, fontSize: 11, color: MUTED, textAlign: "right" }}>{pct}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button
+                  onClick={goBridge}
+                  style={{
+                    width: "100%",
+                    padding: "16px",
+                    borderRadius: 10,
+                    fontWeight: 800,
+                    fontSize: 15,
+                    color: "#fff",
+                    backgroundColor: PURPLE,
+                    border: "none",
+                    cursor: "pointer",
+                    boxShadow: `0 0 28px ${PURPLE}45`,
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  Proceed to Stage 2: Dead Drop →
+                </button>
+                <button
+                  onClick={shareWitness}
+                  style={{
+                    width: "100%",
+                    padding: "13px",
+                    borderRadius: 10,
+                    fontWeight: 600,
+                    fontSize: 14,
+                    color: PURPLE_LIGHT,
+                    backgroundColor: "transparent",
+                    border: `1px solid ${PURPLE}40`,
+                    cursor: "pointer",
+                  }}
+                >
+                  Share my result
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── BRIDGE ─────────────────────────────────────────────────── */}
+          {stage === "bridge" && (
+            <div style={{ ...fadeStyle, textAlign: "center" }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 16px",
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: TEAL,
+                  backgroundColor: `${TEAL}12`,
+                  border: `1px solid ${TEAL}35`,
+                  marginBottom: 32,
+                }}
+              >
+                <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: TEAL }} />
+                Stage 1 Complete
+              </div>
+
+              <h2 style={{ fontSize: "clamp(28px, 5vw, 48px)", fontWeight: 900, color: "#fff", marginBottom: 16, letterSpacing: "-0.02em", lineHeight: 1.1 }}>
+                Stage 2:<br />
+                <span style={{ color: GOLD }}>Dead Drop</span>
+              </h2>
+
+              <p style={{ color: MUTED, fontSize: 16, lineHeight: 1.7, maxWidth: 460, margin: "0 auto 16px" }}>
+                Three cryptic clues. Each resolves to a single word. When all three click — you&apos;ll know.
+              </p>
+              <p style={{ color: `${MUTED}70`, fontSize: 14, marginBottom: 40 }}>
+                Only {stats?.ddSolveRate ?? 31}% of players complete the drop.
+              </p>
+
+              {/* Morse-code style dots visual */}
+              <div style={{ display: "flex", justifyContent: "center", gap: 16, marginBottom: 48 }}>
+                {[1, 0, 1, 1, 0, 1].map((on, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      backgroundColor: on ? GOLD : "rgba(253,231,76,0.15)",
+                      boxShadow: on ? `0 0 8px ${GOLD}` : "none",
+                    }}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={goDeadDrop}
+                style={{
+                  padding: "16px 40px",
+                  borderRadius: 10,
+                  fontWeight: 800,
+                  fontSize: 16,
+                  color: "#1a1200",
+                  backgroundColor: GOLD,
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: `0 0 32px ${GOLD}45`,
+                  letterSpacing: "0.03em",
+                }}
+              >
+                Begin the Drop →
+              </button>
+            </div>
+          )}
+
+          {/* ── DEAD DROP ─────────────────────────────────────────────── */}
+          {stage === "dead-drop" && deadDrop && (
+            <div style={fadeStyle}>
+              <div style={{ textAlign: "center", marginBottom: 36 }}>
+                <Badge color={GOLD}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: GOLD }} />
+                  Stage 2 — Dead Drop
+                </Badge>
+                <h2 style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#fff", marginTop: 16, marginBottom: 12, letterSpacing: "-0.02em" }}>
+                  Decode the Message
+                </h2>
+                <p style={{ color: MUTED, fontSize: 14, lineHeight: 1.6, maxWidth: 440, margin: "0 auto" }}>
+                  {deadDrop.metaQuestion}
+                </p>
+              </div>
+
+              {/* Word assembly preview */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  justifyContent: "center",
+                  marginBottom: 32,
+                  flexWrap: "wrap",
+                }}
+              >
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      minWidth: 100,
+                      padding: "10px 18px",
+                      borderRadius: 8,
+                      border: `1px solid ${clueStates[i] === "correct" ? `${SUCCESS}60` : BORDER}`,
+                      backgroundColor:
+                        clueStates[i] === "correct" ? `${SUCCESS}12` : "rgba(255,255,255,0.03)",
+                      textAlign: "center",
+                      fontSize: 18,
+                      fontWeight: 800,
+                      letterSpacing: "0.12em",
+                      color: clueStates[i] === "correct" ? SUCCESS : `${MUTED}50`,
+                      fontFamily: "'Courier New', monospace",
+                      transition: "all 0.3s",
+                      animation:
+                        clueStates[i] === "correct" ? "word-appear 0.4s ease forwards" : "none",
+                    }}
+                  >
+                    {clueStates[i] === "correct"
+                      ? (clueValues[i] || "?").toUpperCase()
+                      : ["_ _ _ _", "_ _ _ _", "_ _ _ _"][i]}
+                  </div>
+                ))}
+              </div>
+
+              {/* Clue inputs */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
+                {deadDrop.clues.map((clue, i) => (
+                  <ClueInput
+                    key={i}
+                    clue={clue.clue}
+                    hint={clue.hint}
+                    index={i}
+                    value={clueValues[i]}
+                    onChange={(v) => {
+                      const newVals = [...clueValues];
+                      newVals[i] = v;
+                      setClueValues(newVals);
+                      // clear wrong state when they retype
+                      if (clueStates[i] === "wrong") {
+                        const newStates = [...clueStates] as typeof clueStates;
+                        newStates[i] = "idle";
+                        setClueStates(newStates);
+                      }
+                    }}
+                    state={clueStates[i]}
+                    onSubmit={() => handleClueSubmit(i)}
+                    showHint={hintShown[i]}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={handleRevealAll}
+                disabled={ddSubmitting}
+                style={{
+                  width: "100%",
+                  padding: "11px",
+                  borderRadius: 8,
+                  color: MUTED,
+                  backgroundColor: "transparent",
+                  border: `1px solid ${BORDER}`,
+                  cursor: ddSubmitting ? "default" : "pointer",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  opacity: ddSubmitting ? 0.5 : 1,
+                }}
+              >
+                Reveal the answer (give up)
+              </button>
+            </div>
+          )}
+
+          {/* ── DEAD DROP RESULTS ─────────────────────────────────────── */}
+          {stage === "dead-drop-results" && ddResult && (
+            <div style={{ ...fadeStyle, textAlign: "center" }}>
+              {/* Stamp */}
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "10px 24px",
+                  border: `3px solid ${ddResult.solved ? SUCCESS : DANGER}`,
+                  borderRadius: 6,
+                  color: ddResult.solved ? SUCCESS : DANGER,
+                  fontSize: 20,
+                  fontWeight: 900,
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  marginBottom: 32,
+                  animation: "stamp-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+                  boxShadow: `0 0 24px ${ddResult.solved ? SUCCESS : DANGER}40`,
+                }}
+              >
+                {ddResult.solved ? "CLEARED" : "COMPROMISED"}
+              </div>
+
+              {/* Final phrase reveal */}
+              <div style={{ marginBottom: 36 }}>
+                <p style={{ color: MUTED, fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 }}>
+                  The message was
+                </p>
+                <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                  {ddResult.clueResults.map((r, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: "12px 20px",
+                        borderRadius: 10,
+                        border: `1px solid ${r.correct ? `${SUCCESS}55` : `${DANGER}55`}`,
+                        backgroundColor: r.correct ? `${SUCCESS}10` : `${DANGER}10`,
+                        color: r.correct ? SUCCESS : DANGER,
+                        fontSize: 20,
+                        fontWeight: 900,
+                        letterSpacing: "0.14em",
+                        fontFamily: "'Courier New', monospace",
+                        animation: `word-appear 0.4s ease ${i * 0.15}s both`,
+                      }}
+                    >
+                      {r.displayAnswer}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {ddResult.solved ? (
+                <p style={{ color: TEXT, fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+                  You cracked the drop.
+                </p>
+              ) : (
+                <p style={{ color: MUTED, fontSize: 15, marginBottom: 8 }}>
+                  The message is above. Study it.
+                </p>
+              )}
+              <p style={{ color: MUTED, fontSize: 13, marginBottom: 48 }}>
+                {ddResult.solved
+                  ? `Only ${ddResult.solveRate}% of players reach this. You're one of them.`
+                  : `${ddResult.solveRate}% of players decode it. Come back tomorrow.`}
+              </p>
+
+              {/* Final CTA */}
+              <div
+                style={{
+                  ...cardStyle,
+                  borderColor: `${PURPLE}35`,
+                  marginBottom: 16,
+                  textAlign: "left",
+                }}
+              >
+                <p style={{ color: TEXT, fontWeight: 700, fontSize: 16, marginBottom: 8 }}>
+                  {ddResult.solved
+                    ? "You passed both stages."
+                    : "The test is over — for today."}
+                </p>
+                <p style={{ color: MUTED, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
+                  {ddResult.solved
+                    ? "Create a free account to save your score, track your streaks, and compete on the global leaderboard. New reports and drops every day."
+                    : "Create an account to get notified when tomorrow's drop goes live. New scenarios every day — sharper each time."}
+                </p>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <Link
+                    href="/auth/register"
+                    style={{
+                      flex: 1,
+                      padding: "14px 20px",
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      fontSize: 14,
+                      color: "#fff",
+                      backgroundColor: PURPLE,
+                      textDecoration: "none",
+                      textAlign: "center",
+                      boxShadow: `0 0 24px ${PURPLE}40`,
+                    }}
+                  >
+                    Create Free Account →
+                  </Link>
+                  <Link
+                    href="/daily"
+                    style={{
+                      flex: 1,
+                      padding: "14px 20px",
+                      borderRadius: 10,
+                      fontWeight: 600,
+                      fontSize: 14,
+                      color: TEAL,
+                      border: `1px solid ${TEAL}40`,
+                      textDecoration: "none",
+                      textAlign: "center",
+                    }}
+                  >
+                    Try Daily Word
+                  </Link>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setStage("witness-intro");
+                  setAnswers([]);
+                  setCurrentQ(0);
+                  setSubmitResult(null);
+                  fadeIn();
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: MUTED,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                Start again from Stage 1
+              </button>
+            </div>
+          )}
+
+        </div>
+      </main>
+    </>
+  );
+}

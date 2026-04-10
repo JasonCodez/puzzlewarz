@@ -59,6 +59,8 @@ model User {
   puzzlePartSubmissions  TeamPuzzlePartSubmission[] @relation("PuzzlePartSubmissions")
   achievements           UserAchievement[]
   escapeRoomProgress     UserEscapeProgress[]
+  escapeRoomLobbies      EscapeRoomLobby[]        @relation("LobbyHost")
+  escapeRoomLobbyMemberships EscapeRoomLobbyMember[] @relation("LobbyMember")
   userPreferences        UserPreferences?
   solvedPuzzles          UserPuzzleProgress[]
   referredBy             UserReferral[]             @relation("Referee")
@@ -68,6 +70,7 @@ model User {
   warzChallengesReceived PuzzleWarzChallenge[]  @relation("WarzInvited")
   warzChallengesOpposed  PuzzleWarzChallenge[]  @relation("WarzOpponent")
   warzWins               PuzzleWarzChallenge[]  @relation("WarzWinner")
+  gridlockSolves         GridlockSolve[]
 
   // Point Store — consumables
   streakShields          Int                        @default(0)
@@ -97,6 +100,9 @@ model User {
 
   // Marketing email opt-in
   marketingOptIn         Boolean                    @default(false)
+
+  // Ghost / seeded bot accounts for cold-start social proof
+  isBot                  Boolean                    @default(false)
 
   @@map("users")
 }
@@ -242,6 +248,7 @@ model Puzzle {
   riddleAnswer             String?
   customValidators         CustomValidator[]          @relation("CustomValidators")
   escapeRoom               EscapeRoomPuzzle?
+  escapeRoomLobbies        EscapeRoomLobby[]
   forumPosts               ForumPost[]
   hintTiers                HintTier[]                 @relation("HintTiers")
   hintUsageLogs            HintUsageLog[]             @relation("HintUsageLogs")
@@ -268,6 +275,7 @@ model Puzzle {
   partSubmissions          TeamPuzzlePartSubmission[] @relation("PuzzleSubmissions")
   userProgress             UserPuzzleProgress[]
   warzChallenges           PuzzleWarzChallenge[]  @relation("WarzChallenges")
+  gridlockSolves           GridlockSolve[]
 
   @@index([categoryId])
   @@index([order])
@@ -338,7 +346,9 @@ model RoleDefinition {
 
 model TeamEscapeProgress {
   id           String   @id @default(cuid())
-  teamId       String
+  // Either teamId (team-based) or lobbyId (ad-hoc 1-4 player lobby) must be set.
+  teamId       String?
+  lobbyId      String?
   escapeRoomId String
   currentStageIndex Int @default(0)
   solvedStages String  @default("[]")
@@ -358,9 +368,15 @@ model TeamEscapeProgress {
   failedAt     DateTime?
   failedReason String?
   completedAt  DateTime?
-  escapeRoom   EscapeRoomPuzzle @relation(fields: [escapeRoomId], references: [id], onDelete: Cascade)
-  team         Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  // Solo-pause: set when the last player leaves an active run so they can resume later.
+  pausedAt          DateTime?
+  pausedRemainingMs Int?      // ms left on the timer when paused; null = no time limit
+  soloUserId        String?   // userId of the last remaining player; used to find their save
+  escapeRoom   EscapeRoomPuzzle  @relation(fields: [escapeRoomId], references: [id], onDelete: Cascade)
+  team         Team?             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  lobby        EscapeRoomLobby?  @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
   @@unique([teamId, escapeRoomId])
+  @@index([lobbyId, escapeRoomId])
 }
 
 model EscapeStage {
@@ -403,6 +419,42 @@ model UserEscapeProgress {
   @@index([userId])
   @@index([escapeRoomId])
   @@map("user_escape_progress")
+}
+
+// ── Ad-hoc lobby for 1-4 player escape room runs (no permanent team needed) ──
+
+model EscapeRoomLobby {
+  id         String                  @id @default(cuid())
+  code       String                  @unique
+  puzzleId   String
+  hostId     String
+  maxPlayers Int                     @default(4)
+  // waiting | started | done | expired
+  status     String                  @default("waiting")
+  createdAt  DateTime                @default(now())
+  expiresAt  DateTime
+  startedAt  DateTime?
+  host       User                    @relation("LobbyHost", fields: [hostId], references: [id], onDelete: Cascade)
+  puzzle     Puzzle                  @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  members    EscapeRoomLobbyMember[]
+  progress   TeamEscapeProgress[]
+
+  @@index([puzzleId])
+  @@index([hostId])
+  @@map("escape_room_lobbies")
+}
+
+model EscapeRoomLobbyMember {
+  id       String          @id @default(cuid())
+  lobbyId  String
+  userId   String
+  joinedAt DateTime        @default(now())
+  lobby    EscapeRoomLobby @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  user     User            @relation("LobbyMember", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([lobbyId, userId])
+  @@index([userId])
+  @@map("escape_room_lobby_members")
 }
 
 model RoomLayout {
@@ -758,6 +810,24 @@ model PuzzleSubmission {
   @@map("puzzle_submissions")
 }
 
+model GridlockSolve {
+  id              String   @id @default(cuid())
+  puzzleId        String
+  userId          String?
+  anonId          String?  // localStorage identity for guest solves — used to credit on registration
+  rank            String
+  elapsedSeconds  Int
+  submissionCount Int      @default(1)
+  solvedAt        DateTime @default(now())
+  puzzle          Puzzle   @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([puzzleId])
+  @@index([puzzleId, rank])
+  @@index([anonId])
+  @@map("gridlock_solves")
+}
+
 model LeaderboardEntry {
   id        String   @id @default(cuid())
   puzzleId  String
@@ -870,6 +940,7 @@ model UserReferral {
   inviteEmail                String?
   refereeJoinedAt            DateTime?
   refereeFirstPuzzleSolvedAt DateTime?
+  referralRewardedAt         DateTime?
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
   referee                    User?     @relation("Referee", fields: [refereeId], references: [id])
@@ -1700,4 +1771,26 @@ model FrequencySubmission {
   @@index([questionId])
   @@index([userId])
   @@map("frequency_submissions")
+}
+
+// ── Witness + Dead Drop hook puzzle ───────────────────────────────────────────
+
+model WitnessResult {
+  id         String   @id @default(cuid())
+  scenarioId String
+  score      Int      // 0–5
+  createdAt  DateTime @default(now())
+
+  @@index([scenarioId])
+  @@map("witness_results")
+}
+
+model DeadDropResult {
+  id          String   @id @default(cuid())
+  challengeId String
+  solved      Boolean
+  createdAt   DateTime @default(now())
+
+  @@index([challengeId])
+  @@map("dead_drop_results")
 }

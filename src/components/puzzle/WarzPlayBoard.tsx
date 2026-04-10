@@ -6,6 +6,7 @@ import WordCrackPuzzle from "@/components/puzzle/WordCrackPuzzle";
 import WordSearchPuzzle from "@/components/puzzle/WordSearchPuzzle";
 import AnagramBlitz from "@/components/puzzle/AnagramBlitz";
 import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
+import BlackoutPuzzle from "@/components/puzzle/BlackoutPuzzle";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -221,6 +222,16 @@ export default function WarzPlayBoard({ puzzle, wager, onDone, submitError, onRe
           <ArgPuzzle
             puzzleId={puzzle.id}
             argData={puzzle.data ?? {}}
+            alreadySolved={false}
+            onSolved={() => handleSolved()}
+          />
+        );
+
+      case "blackout":
+        return (
+          <BlackoutPuzzle
+            puzzleId={puzzle.id}
+            blackoutData={puzzle.data ?? {}}
             alreadySolved={false}
             onSolved={() => handleSolved()}
           />

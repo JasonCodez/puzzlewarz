@@ -53,10 +53,14 @@ const PUZZLE_TYPES = [
   { value: 'jigsaw', label: 'Jigsaw Puzzle' },
   { value: 'code_master', label: 'Code Master' },
   { value: 'detective_case', label: 'Detective Case (Noir)' },
+  { value: 'crime_rpg', label: 'Crime Case RPG 🔎' },
+  { value: 'parasite_code', label: 'Parasite Code 🦠' },
+  { value: 'gridlock_file', label: 'Gridlock File 🔐' },
   { value: 'crack_safe', label: 'Crack the Safe 🔐' },
   { value: 'word_crack', label: 'Word Crack 🟩' },
   { value: 'word_search', label: 'Word Search 🔍' },
   { value: 'anagram_blitz', label: 'Anagram Blitz 🔀' },
+  { value: 'blackout', label: 'Blackout ⬛' },
   { value: 'arg', label: 'ARG' },
   { value: 'escape_room', label: 'Escape Room' },
 ];
@@ -631,6 +635,9 @@ export default function AdminPuzzlesPage() {
         delete submitBody.correctAnswer;
       }
       if (formData.puzzleType === 'detective_case') {
+        delete submitBody.correctAnswer;
+      }
+      if (formData.puzzleType === 'crime_rpg') {
         delete submitBody.correctAnswer;
       }
       if (formData.puzzleType === 'crack_safe') {
@@ -1249,8 +1256,8 @@ export default function AdminPuzzlesPage() {
                     </div>
                   )}
 
-                  {/* Show Difficulty/Category for non-escape_room types only */}
-                  {formData.puzzleType !== 'escape_room' && (
+                  {/* Show Difficulty/Category for non-escape_room, non-crime_rpg types only */}
+                  {formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && (
                     formData.puzzleType === 'sudoku' ? (
                       <div className="grid md:grid-cols-1 gap-4">
                         <div>
@@ -1272,6 +1279,7 @@ export default function AdminPuzzlesPage() {
                             <option value="word_crack">Word Crack</option>
                             <option value="word_search">Word Search</option>
                             <option value="anagram_blitz">Anagram Blitz</option>
+                            <option value="blackout">Blackout</option>
                           </select>
                         </div>
                       </div>
@@ -1296,6 +1304,7 @@ export default function AdminPuzzlesPage() {
                             <option value="word_crack">Word Crack</option>
                             <option value="word_search">Word Search</option>
                             <option value="anagram_blitz">Anagram Blitz</option>
+                            <option value="blackout">Blackout</option>
                           </select>
                         </div>
                         <div>
@@ -1319,7 +1328,7 @@ export default function AdminPuzzlesPage() {
                   )}
 
                   {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
-                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && (
+                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && formData.puzzleType !== 'anagram_blitz' && formData.puzzleType !== 'blackout' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">
                         Correct Answer *

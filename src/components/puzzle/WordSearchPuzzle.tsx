@@ -422,7 +422,7 @@ export default function WordSearchPuzzle({
                   }}
                   title={hintTokens < 1 ? "No hint tokens — purchase from the Store" : `Use 1 hint token (${hintTokens} remaining)`}
                 >
-                  💡 {hintTokens < 1 ? "No Tokens" : `Hint (${hintTokens} 💡)`}{wsHintCount > 0 ? ` · used ${wsHintCount}` : ""}
+                  💡 {hintTokens < 1 ? "No Hint Tokens" : `Hint (${hintTokens} hint token${hintTokens !== 1 ? "s" : ""})`}{wsHintCount > 0 ? ` · used ${wsHintCount}` : ""}
                 </button>
                 {hintTokens < 1 && (
                   <a

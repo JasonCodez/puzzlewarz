@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import ConfirmModal from '@/components/ConfirmModal';
 import ActionModal from '@/components/ActionModal';
 
@@ -15,9 +17,15 @@ type Thread = {
 };
 
 export default function MessagesPage() {
+  const { status } = useSession();
+  const router = useRouter();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeThread, setActiveThread] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/auth/signin');
+  }, [status, router]);
 
   const fetchThreads = async () => {
     setLoading(true);

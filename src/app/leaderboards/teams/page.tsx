@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 interface TeamLeaderboardEntry {
   teamId: string;
@@ -18,14 +18,15 @@ interface TeamLeaderboardEntry {
 
 export default function TeamLeaderboards() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [entries, setEntries] = useState<TeamLeaderboardEntry[]>([]);
   const [userTeamRank, setUserTeamRank] = useState<TeamLeaderboardEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  if (status === "unauthenticated") {
-    redirect("/auth/signin");
-  }
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/auth/signin');
+  }, [status, router]);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {

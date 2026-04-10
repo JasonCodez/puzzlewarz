@@ -354,7 +354,7 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
               }}
               title={hintTokens < 1 ? "No hint tokens — purchase from the Store" : `Use 1 hint token (${hintTokens} remaining)`}
             >
-              💡 {hintTokens < 1 ? "No Tokens" : `Hint (${hintTokens} 💡)`}{sudokuHintCount > 0 ? ` · used ${sudokuHintCount}` : ""}
+              💡 {hintTokens < 1 ? "No Hint Tokens" : `Hint (${hintTokens} hint token${hintTokens !== 1 ? "s" : ""})`}{sudokuHintCount > 0 ? ` · used ${sudokuHintCount}` : ""}
             </button>
             {hintTokens < 1 && (
               <a

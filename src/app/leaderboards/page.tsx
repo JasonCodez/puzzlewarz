@@ -9,20 +9,25 @@ interface LeaderboardEntry {
   userId: string;
   userName: string | null;
   userImage: string | null;
-  email: string;
+  email?: string;
   activeFlair: string;
   totalPoints: number;
   puzzlesSolved: number;
   rank: number;
+  isCurrentUser?: boolean;
 }
+
+type Tab = "global" | "following";
 
 export default function LeaderboardsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<Tab>("global");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [userRank, setUserRank] = useState<LeaderboardEntry | null>(null);
+  const [followingCount, setFollowingCount] = useState(0);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -33,17 +38,22 @@ export default function LeaderboardsPage() {
 
   useEffect(() => {
     if (session?.user?.email) {
-      fetchLeaderboard();
+      fetchLeaderboard(activeTab);
     }
-  }, [session?.user?.email]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.email, activeTab]);
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = async (tab: Tab) => {
+    setLoading(true);
+    setError("");
     try {
-      const response = await fetch("/api/leaderboards/global");
+      const url = tab === "following" ? "/api/leaderboards/following" : "/api/leaderboards/global";
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch leaderboard");
       const data = await response.json();
       setEntries(data.entries);
       setUserRank(data.userRank);
+      if (tab === "following") setFollowingCount(data.followingCount ?? 0);
     } catch (err) {
       setError("Failed to load leaderboard");
       console.error(err);
@@ -98,10 +108,28 @@ export default function LeaderboardsPage() {
           </div>
 
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">🏆 Global Leaderboard</h1>
+            <h1 className="text-4xl font-bold text-white mb-2">🏆 Leaderboard</h1>
             <p style={{ color: '#DDDBF1' }}>
               Top players solving puzzles and earning points
             </p>
+          </div>
+
+          {/* Tab switcher */}
+          <div className="flex gap-2 mt-4">
+            {(["global", "following"] as Tab[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className="px-5 py-2 rounded-lg font-semibold text-sm transition-all"
+                style={{
+                  backgroundColor: activeTab === tab ? '#3891A6' : 'rgba(56,145,166,0.12)',
+                  color: activeTab === tab ? '#fff' : '#3891A6',
+                  border: '1px solid rgba(56,145,166,0.4)',
+                }}
+              >
+                {tab === "global" ? "🌍 Global" : "👥 Following"}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -111,12 +139,28 @@ export default function LeaderboardsPage() {
           </div>
         )}
 
+        {/* Following empty state */}
+        {activeTab === "following" && !loading && followingCount === 0 && (
+          <div className="mb-6 rounded-lg p-6 text-center border" style={{ backgroundColor: 'rgba(56,145,166,0.08)', borderColor: 'rgba(56,145,166,0.3)' }}>
+            <p className="text-2xl mb-2">👥</p>
+            <p className="text-white font-semibold mb-1">You&apos;re not following anyone yet</p>
+            <p className="text-sm mb-4" style={{ color: '#9ca3af' }}>Follow players from the Global leaderboard or their profile pages to see them here.</p>
+            <button
+              onClick={() => setActiveTab("global")}
+              className="px-4 py-2 rounded-lg text-sm font-semibold"
+              style={{ backgroundColor: '#3891A6', color: '#fff' }}
+            >
+              Browse Global Leaderboard
+            </button>
+          </div>
+        )}
+
         {/* Your Rank Card */}
         {userRank && (
           <div className="mb-8 rounded-lg p-4 sm:p-6 border" style={{ backgroundColor: 'rgba(56, 145, 166, 0.15)', borderColor: '#3891A6' }}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm" style={{ color: '#DDDBF1' }}>YOUR RANK</p>
+                <p className="text-sm" style={{ color: '#DDDBF1' }}>{activeTab === "following" ? "YOUR RANK (AMONG FOLLOWING)" : "YOUR RANK"}</p>
                 <p className="text-3xl font-bold text-white">
                   #{userRank.rank}
                 </p>

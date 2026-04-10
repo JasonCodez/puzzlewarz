@@ -165,6 +165,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Rival notifications (fire-and-forget) ──────────────────────────
+    // Notify followers who have already completed today's puzzle and got a worse result
+    // so they feel the competitive sting and come back tomorrow.
+    if (won) {
+      (async () => {
+        try {
+          const { createNotification } = await import("@/lib/notification-service");
+          // Find users who follow this player
+          const myFollowers = await prisma.follow.findMany({
+            where: { followingId: currentUser.id },
+            select: { followerId: true },
+          });
+          for (const { followerId } of myFollowers) {
+            const followerRecord = await prisma.dailyWordRecord.findUnique({
+              where: { userId_dayNumber: { userId: followerId, dayNumber } },
+            });
+            // Only notify if they've already played today and got a worse (higher) guess count or lost
+            if (!followerRecord) continue;
+            const isBetter = !followerRecord.won || followerRecord.guesses > guesses;
+            if (!isBetter) continue;
+            const display = currentUser.name ?? "A player you follow";
+            const myScore = `${guesses}/6`;
+            const theirScore = followerRecord.won ? `${followerRecord.guesses}/6` : "X/6";
+            await createNotification({
+              userId: followerId,
+              type: "system",
+              title: "Your rival just beat your score! ⚔️",
+              message: `${display} solved today's Daily in ${myScore}. You got ${theirScore}. Time for revenge tomorrow!`,
+              icon: "🔥",
+              relatedId: currentUser.id,
+            });
+          }
+        } catch {
+          // non-fatal
+        }
+      })();
+    }
+
     return NextResponse.json({ success: true, shieldUsed, reward });
   } catch (err) {
     console.error("[DAILY COMPLETE]", err);

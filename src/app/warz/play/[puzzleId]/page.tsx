@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import WarzPlayBoard from "@/components/puzzle/WarzPlayBoard";
 
@@ -40,6 +40,7 @@ const WAGER_PRESETS = [10, 25, 50, 100, 250, 500];
 export default function WarzPlayPage() {
   const { puzzleId } = useParams<{ puzzleId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [puzzle, setPuzzle] = useState<WarzPuzzle | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -61,6 +62,24 @@ export default function WarzPlayPage() {
   const [submitted, setSubmitted] = useState(false);
   const [solveTime, setSolveTime] = useState<number | null>(null);
 
+  // Pre-populate invite from ?invite= query param (set when navigating from a player's profile)
+  useEffect(() => {
+    const inviteId = searchParams.get("invite");
+    if (!inviteId || selectedInvite) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/users/${inviteId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.id) {
+            setSelectedInvite({ id: data.id, username: data.name ?? data.username ?? "Player", avatarUrl: data.image ?? null });
+          }
+        }
+      } catch { /* ignore */ }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // Load puzzle + current user
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +91,7 @@ export default function WarzPlayPage() {
           fetch(`/api/warz/check-eligible?puzzleId=${encodeURIComponent(puzzleId)}`),
         ]);
         if (!puzzleRes.ok) throw new Error("Puzzle not found");
-        if (!userRes.ok) throw new Error("Not authenticated");
+        if (!userRes.ok) { router.replace('/auth/register?reason=warz'); return; }
         const puzzleData = await puzzleRes.json();
         const userData = await userRes.json();
         if (eligRes.ok) {

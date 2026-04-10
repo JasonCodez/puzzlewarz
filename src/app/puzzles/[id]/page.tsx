@@ -22,11 +22,15 @@ import type { JigsawPuzzle as JigsawPuzzleType } from "@/lib/puzzle-types";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import CodeMasterIDE from "@/components/puzzle/CodeMasterIDE";
 import DetectiveCasePuzzle from "@/components/puzzle/DetectiveCasePuzzle";
+import CrimeCasePuzzle from "@/components/puzzle/CrimeCasePuzzle";
+import ParasiteCodePuzzle from "@/components/puzzle/ParasiteCodePuzzle";
+import GridlockFilePuzzle from "@/components/puzzle/GridlockFilePuzzle";
 import CrackTheSafePuzzle from "@/components/puzzle/CrackTheSafePuzzle";
 import WordCrackPuzzle from "@/components/puzzle/WordCrackPuzzle";
 import WordSearchPuzzle from "@/components/puzzle/WordSearchPuzzle";
 import AnagramBlitz from "@/components/puzzle/AnagramBlitz";
 import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
+import BlackoutPuzzle from "@/components/puzzle/BlackoutPuzzle";
 import { getSkinTokens } from "@/lib/puzzleSkins";
 
 interface XpModalData {
@@ -184,6 +188,32 @@ const difficultyColors: Record<string, string> = {
   EXPERT: "bg-[#3891A6]/20 text-[#3891A6] border-[#3891A6]/30",
 };
 
+const DIFFICULTY_BADGE_STYLE: Record<string, React.CSSProperties> = {
+  EASY:   { backgroundColor: "rgba(16,185,129,0.12)", color: "#4ade80",  border: "1px solid rgba(16,185,129,0.35)" },
+  MEDIUM: { backgroundColor: "rgba(253,231,76,0.12)",  color: "#FDE74C", border: "1px solid rgba(253,231,76,0.35)" },
+  HARD:   { backgroundColor: "rgba(239,68,68,0.12)",   color: "#f87171", border: "1px solid rgba(239,68,68,0.35)" },
+  EXPERT: { backgroundColor: "rgba(56,145,166,0.15)",  color: "#3891A6", border: "1px solid rgba(56,145,166,0.45)" },
+};
+
+const PUZZLE_TYPE_LABELS: Record<string, string> = {
+  riddle:          "Riddle",
+  jigsaw:          "Jigsaw",
+  sudoku:          "Sudoku",
+  word_search:     "Word Search",
+  escape_room:     "Escape Room",
+  detective_case:  "Detective",
+  crime_rpg:       "Crime Case",
+  parasite_code:   "Parasite Code",
+  gridlock_file:    "Gridlock File",
+  crack_safe:      "Safe Crack",
+  word_crack:      "Word Crack",
+  anagram_blitz:   "Anagram",
+  arg:             "ARG",
+  blackout:        "Declassify",
+  code_master:     "Code",
+  math:            "Math",
+};
+
 export default function PuzzleDetailPage() {
   // Modal state for Sudoku start overlay
   const [showSudokuStartModal, setShowSudokuStartModal] = useState(false);
@@ -197,6 +227,7 @@ export default function PuzzleDetailPage() {
   const searchParams = useSearchParams();
   const puzzleId = params.id as string;
   const teamIdParam = searchParams.get('teamId') || undefined;
+  const lobbyIdParam = searchParams.get('lobbyId') || undefined;
   const sessionStartRef = useRef<Date | null>(null);
 
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
@@ -942,7 +973,7 @@ export default function PuzzleDetailPage() {
     e.preventDefault();
     
     // Skip if this is a Sudoku puzzle
-    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw' || puzzle?.puzzleType === 'detective_case' || puzzle?.puzzleType === 'crack_safe') {
+    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw' || puzzle?.puzzleType === 'detective_case' || puzzle?.puzzleType === 'crack_safe' || puzzle?.puzzleType === 'crime_rpg' || puzzle?.puzzleType === 'parasite_code' || puzzle?.puzzleType === 'gridlock_file') {
       return;
     }
 
@@ -1225,33 +1256,132 @@ export default function PuzzleDetailPage() {
       )}
 
 
-      <div className="flex-1 w-full px-2 py-4 sm:p-8">
-        <div className="w-full">
+      <div className="flex-1 w-full px-3 sm:px-8 py-6 sm:py-8">
+        <div className="w-full max-w-5xl mx-auto">
+
+          {/* ── Back navigation ─────────────────────────────────── */}
+          <div className="flex items-center gap-2 mb-5">
+            <Link
+              href="/puzzles"
+              className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-80"
+              style={{ color: "#AB9F9D" }}
+            >
+              <span style={{ fontSize: 16, lineHeight: 1 }}>←</span> Puzzles
+            </Link>
+            <span style={{ color: "#AB9F9D", opacity: 0.35 }}>/</span>
+            <span className="text-sm truncate max-w-[200px] sm:max-w-xs" style={{ color: "#DDDBF1" }}>
+              {(() => {
+                const escapeTitle = (puzzle?.escapeRoom?.roomTitle || '').toString().trim();
+                const puzzleTitle = (puzzle?.title || '').toString().trim();
+                if (puzzle?.puzzleType === 'escape_room' && escapeTitle) return escapeTitle;
+                if ((puzzleTitle === '' || puzzleTitle === 'Untitled Puzzle') && escapeTitle) return escapeTitle;
+                return puzzleTitle || escapeTitle || 'Untitled Puzzle';
+              })()}
+            </span>
+          </div>
+
+          {/* ── Main puzzle card ─────────────────────────────────── */}
           <div
-            className="border rounded-2xl p-4 sm:p-8 mb-6 sm:mb-8"
-            style={{ backgroundColor: "rgba(255,255,255,0.025)", borderColor: "rgba(56,145,166,0.22)", boxShadow: "0 0 0 1px rgba(56,145,166,0.08) inset" }}
+            className="rounded-2xl mb-6 sm:mb-8 overflow-hidden"
+            style={{
+              backgroundColor: "rgba(10,12,18,0.98)",
+              border: "1px solid rgba(56,145,166,0.28)",
+              boxShadow: "0 4px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(56,145,166,0.06) inset",
+            }}
           >
-            {/* Puzzle Title */}
-            <h1 className="text-2xl sm:text-4xl font-bold text-white mb-3 sm:mb-4">{(() => {
-              const escapeTitle = (puzzle?.escapeRoom?.roomTitle || '').toString().trim();
-              const puzzleTitle = (puzzle?.title || '').toString().trim();
-              if (puzzle?.puzzleType === 'escape_room' && escapeTitle) return escapeTitle;
-              if ((puzzleTitle === '' || puzzleTitle === 'Untitled Puzzle') && escapeTitle) return escapeTitle;
-              return puzzleTitle || escapeTitle || 'Untitled Puzzle';
-            })()}</h1>
-            <div className="flex items-center gap-4 mb-6">
-              <span className={`px-4 py-2 rounded-full text-sm font-semibold border whitespace-nowrap ${
-                difficultyColors[puzzle.difficulty] ||
-                "bg-slate-500/20 text-slate-300 border-slate-500/30"
-              }`}>
-                {puzzle.difficulty}
-              </span>
-              {puzzle.puzzleType !== 'riddle' && (
-                <span className="text-sm" style={{ color: "#3891A6" }}>
-                  Category: {puzzle.category.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+            {/* ── Card header ─────────────────────────────────────── */}
+            <div
+              style={{
+                padding: "24px 28px 20px",
+                background: "linear-gradient(180deg, rgba(56,145,166,0.1) 0%, transparent 100%)",
+                borderBottom: "1px solid rgba(56,145,166,0.18)",
+              }}
+            >
+              {/* Badge row */}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                {/* Difficulty */}
+                <span
+                  className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full whitespace-nowrap"
+                  style={{
+                    ...(DIFFICULTY_BADGE_STYLE[puzzle.difficulty] ?? {
+                      backgroundColor: "rgba(100,100,120,0.15)",
+                      color: "#DDDBF1",
+                      border: "1px solid rgba(100,100,120,0.35)",
+                    }),
+                  }}
+                >
+                  {puzzle.difficulty}
                 </span>
+                {/* Puzzle type */}
+                {puzzle.puzzleType && (
+                  <span
+                    className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap"
+                    style={{
+                      backgroundColor: "rgba(56,145,166,0.12)",
+                      color: "#3891A6",
+                      border: "1px solid rgba(56,145,166,0.35)",
+                    }}
+                  >
+                    {PUZZLE_TYPE_LABELS[puzzle.puzzleType] ?? puzzle.puzzleType}
+                  </span>
+                )}
+                {/* XP reward */}
+                {puzzle.xpReward != null && puzzle.xpReward > 0 && (
+                  <span
+                    className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap"
+                    style={{
+                      backgroundColor: "rgba(253,231,76,0.1)",
+                      color: "#FDE74C",
+                      border: "1px solid rgba(253,231,76,0.28)",
+                    }}
+                  >
+                    ✦ {puzzle.xpReward} XP
+                  </span>
+                )}
+                {/* Solved indicator */}
+                {progress?.solved && (
+                  <span
+                    className="text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap"
+                    style={{
+                      backgroundColor: "rgba(16,185,129,0.12)",
+                      color: "#4ade80",
+                      border: "1px solid rgba(16,185,129,0.35)",
+                    }}
+                  >
+                    ✓ Solved
+                  </span>
+                )}
+              </div>
+
+              {/* Title */}
+              <h1
+                className="font-extrabold leading-tight mb-2"
+                style={{
+                  color: "#fff",
+                  fontSize: "clamp(22px, 4vw, 34px)",
+                  letterSpacing: "-0.025em",
+                }}
+              >
+                {(() => {
+                  const escapeTitle = (puzzle?.escapeRoom?.roomTitle || '').toString().trim();
+                  const puzzleTitle = (puzzle?.title || '').toString().trim();
+                  if (puzzle?.puzzleType === 'escape_room' && escapeTitle) return escapeTitle;
+                  if ((puzzleTitle === '' || puzzleTitle === 'Untitled Puzzle') && escapeTitle) return escapeTitle;
+                  return puzzleTitle || escapeTitle || 'Untitled Puzzle';
+                })()}
+              </h1>
+
+              {/* Category */}
+              {puzzle.puzzleType !== 'riddle' && (
+                <div className="flex items-center gap-1.5 text-sm" style={{ color: "#3891A6" }}>
+                  <span>◈</span>
+                  <span>{puzzle.category.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+                </div>
               )}
             </div>
+
+            {/* ── Card body ───────────────────────────────────────── */}
+            <div className="p-4 sm:p-8">
 
             {/* Math Problem Configuration (if present) */}
             {puzzle.puzzleType === 'math' && puzzle.math && (
@@ -1287,21 +1417,7 @@ export default function PuzzleDetailPage() {
                 </div>
               </div>
             )}
-            {/* Main Puzzle Content */}
-            {puzzle.puzzleType !== 'sudoku' && puzzle.puzzleType !== 'code_master' && puzzle.puzzleType !== 'jigsaw' && puzzle.content?.trim() && (
-              <div className="prose prose-invert max-w-none mb-8">
-                <div
-                  className="whitespace-pre-wrap rounded-lg p-6 border"
-                  style={{
-                    color: "#DDDBF1",
-                    backgroundColor: "rgba(56, 145, 166, 0.1)",
-                    borderColor: "#3891A6",
-                  }}
-                >
-                  {puzzle.content}
-                </div>
-              </div>
-            )}
+
 
             {puzzle.puzzleType !== 'jigsaw' && puzzle.media && puzzle.media.length > 0 && (
               <div
@@ -1542,14 +1658,21 @@ export default function PuzzleDetailPage() {
                       </div>
                     )}
                     <div className="mb-4">
-                      {!teamIdParam ? (
-                        <div className="p-4 rounded-lg border" style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.4)", color: "#fca5a5" }}>
-                          This escape room is team-only. Start it from your team lobby so the URL includes <b>teamId</b>.
+                      {!teamIdParam && !lobbyIdParam ? (
+                        <div className="flex flex-col gap-3 p-4 rounded-lg border" style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.4)", color: "#fca5a5" }}>
+                          <span>This escape room requires a team or lobby. Start it from the escape room lobby page.</span>
+                          <Link
+                            href={`/escape-rooms/${puzzleId}/lobby`}
+                            className="inline-block px-4 py-2 rounded bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium w-fit"
+                          >
+                            Open Lobby
+                          </Link>
                         </div>
                       ) : (
                         <EscapeRoomPuzzle
                           puzzleId={puzzleId}
                           teamId={teamIdParam}
+                          lobbyId={lobbyIdParam}
                           onComplete={() => {
                             setSuccess(true);
                             recordCompletionAndShowModal();
@@ -1573,6 +1696,39 @@ export default function PuzzleDetailPage() {
                       </div>
                     )}
                     <DetectiveCasePuzzle puzzleId={puzzleId} />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'crime_rpg') {
+                return (
+                  <div className="mb-8">
+                    <CrimeCasePuzzle
+                      puzzleId={puzzleId}
+                      onSolved={() => recordCompletionAndShowModal()}
+                    />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'parasite_code') {
+                return (
+                  <div className="mb-8">
+                    <ParasiteCodePuzzle
+                      puzzleId={puzzleId}
+                      onSolved={() => recordCompletionAndShowModal()}
+                    />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'gridlock_file') {
+                return (
+                  <div className="mb-8">
+                    <GridlockFilePuzzle
+                      puzzleId={puzzleId}
+                      onSolved={() => recordCompletionAndShowModal()}
+                    />
                   </div>
                 );
               }
@@ -1678,6 +1834,28 @@ export default function PuzzleDetailPage() {
                     <ArgPuzzle
                       puzzleId={puzzleId}
                       argData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      alreadySolved={progress?.solved ?? false}
+                      onSolved={() => {
+                        setSuccess(true);
+                        recordCompletionAndShowModal();
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'blackout') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div className="mb-6 p-4 rounded-lg border text-white"
+                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
+                        ⬛ You already declassified this document!
+                      </div>
+                    )}
+                    <BlackoutPuzzle
+                      puzzleId={puzzleId}
+                      blackoutData={(puzzle.data ?? {}) as Record<string, unknown>}
                       alreadySolved={progress?.solved ?? false}
                       onSolved={() => {
                         setSuccess(true);
@@ -2054,96 +2232,9 @@ export default function PuzzleDetailPage() {
                 </div>
               )}
 
-              <div style={{ borderBottomColor: "#3891A6", borderBottomWidth: "1px", paddingBottom: "1.5rem", marginBottom: "1.5rem" }} />
-
-              {puzzle?.puzzleType !== 'sudoku' && (
-                <>
-                  {/* Hints Section */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setShowHints(!showHints)}
-                        className="font-semibold transition-colors hover:opacity-80"
-                        style={{ color: "#FDE74C" }}
-                      >
-                        {showHints ? "Hide Hints ↑" : "Show Hints ↓"} ({hints.length})
-                      </button>
-                      <span
-                        className="text-xs px-2 py-1 rounded-full font-medium"
-                        style={{
-                          backgroundColor: hintTokens > 0 ? "rgba(253, 231, 76, 0.15)" : "rgba(255, 107, 107, 0.15)",
-                          color: hintTokens > 0 ? "#FDE74C" : "#FF6B6B",
-                        }}
-                      >
-                        💡 {hintTokens} token{hintTokens !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    {hints.length > 0 && (
-                      <button
-                        onClick={() => setShowStats(!showStats)}
-                        className="text-sm px-3 py-1 rounded-lg transition-colors hover:opacity-80"
-                        style={{
-                          backgroundColor: showStats
-                            ? "rgba(56,145,166,0.2)"
-                            : "rgba(56,145,166,0.08)",
-                          color: showStats ? "#9BD1D6" : "#6baabb",
-                        }}
-                      >
-                        {showStats ? "Hide Stats" : "View Stats"}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Hints Display */}
-                  {showHints && (
-                    <div className="space-y-4 mb-6">
-                      {hints.length === 0 ? (
-                        <p style={{ color: "#DDDBF1" }}>No hints available for this puzzle</p>
-                      ) : (
-                        hints.map((hint, index) => (
-                          <HintCard
-                            key={hint.id}
-                            hint={hint}
-                            index={index}
-                            isRevealed={revealedHints.has(hint.id)}
-                            isLoading={revealingHint === hint.id}
-                            hintTokens={hintTokens}
-                            onReveal={handleRevealHint}
-                            onRateHelpfulness={handleRateHelpfulness}
-                          />
-                        ))
-                      )}
-                    </div>
-                  )}
-
-                  {/* Stats Display */}
-                  {showStats && hints.length > 0 && (
-                    <div className="mb-6">
-                      <HintStatsOverlay hints={hints} />
-                    </div>
-                  )}
-
-                  {/* Hint History */}
-                  {showHints && hints.length > 0 && (
-                    <div>
-                      <HintHistoryPanel
-                        historyEntries={hints
-                          .flatMap((h) => h.userHistory.map((h2) => ({ ...h2, hintId: h.id })))
-                          .sort(
-                            (a, b) =>
-                              new Date(b.revealedAt).getTime() - new Date(a.revealedAt).getTime()
-                          )}
-                        puzzleId={puzzleId}
-                        totalCostSoFar={hints
-                          .flatMap((h) => h.userHistory)
-                          .reduce((sum, h) => sum + h.pointsCost, 0)}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
             </div>
-          </div>
+            </div>{/* end card body */}
+          </div>{/* end card outer */}
         </div>
       </div>
     </div>

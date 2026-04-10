@@ -105,12 +105,24 @@ type EscapeRoomResponse = {
 export function EscapeRoomPuzzle({
   puzzleId,
   teamId,
+  lobbyId,
   onComplete,
 }: {
   puzzleId: string;
   teamId?: string;
+  lobbyId?: string;
   onComplete?: () => void;
 }) {
+  // sessionId is either the lobbyId (for lobby runs) or the teamId (for team runs)
+  const sessionId = lobbyId ?? teamId ?? null;
+  // sessionParam is the query string fragment used in GET fetch URLs
+  const sessionParam = lobbyId
+    ? `lobbyId=${encodeURIComponent(lobbyId)}`
+    : teamId
+    ? `teamId=${encodeURIComponent(teamId)}`
+    : '';
+  // sessionBody is the partial body object sent to escape-room API POST routes
+  const sessionBody = lobbyId ? { lobbyId } : { teamId };
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +155,7 @@ export function EscapeRoomPuzzle({
   const [sessionBusy, setSessionBusy] = useState(false);
   const [clientTimedOut, setClientTimedOut] = useState(false);
   const [timeExpiredModalOpen, setTimeExpiredModalOpen] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const completedRef = useRef(false);
   const initialCompletedAtRef = useRef<string | null | undefined>(undefined);
   const abortHandledRef = useRef(false);
@@ -150,6 +163,8 @@ export function EscapeRoomPuzzle({
   const socketRef = useRef<any>(null);
   const soundEnabledRef = useRef(true);
   const minTeamSizeRef = useRef<number>(1);
+  const currentUserNameRef = useRef<string>('');
+  const isLeaderRef = useRef<boolean>(false);
 
   useEffect(() => {
     soundEnabledRef.current = !!soundEnabled;
@@ -179,9 +194,9 @@ export function EscapeRoomPuzzle({
   const chatAbortRef = useRef<AbortController | null>(null);
 
   const refreshState = useCallback(async () => {
-    if (!teamId) return;
+    if (!sessionId) return;
     try {
-      const st = await fetch(`/api/puzzles/escape-room/${puzzleId}/state?teamId=${encodeURIComponent(teamId)}`);
+      const st = await fetch(`/api/puzzles/escape-room/${puzzleId}/state?${sessionParam}`);
       if (!st.ok) return;
       const sj = await st.json().catch(() => null);
       if (sj && sj.inventory) setInventory(sj.inventory || []);
@@ -198,23 +213,26 @@ export function EscapeRoomPuzzle({
       setFailedAt(sj?.failedAt ? String(sj.failedAt) : null);
       setFailedReason(sj?.failedReason ? String(sj.failedReason) : null);
       setCompletedAt(sj?.completedAt ? String(sj.completedAt) : null);
-      setIsLeader(!!sj?.isLeader);
+      const leader = !!sj?.isLeader;
+      setIsLeader(leader);
+      isLeaderRef.current = leader;
+      setIsPaused(!!sj?.pausedAt);
     } catch {
       // ignore
     }
-  }, [teamId, puzzleId]);
+  }, [sessionId, puzzleId]);
 
   const exitToDashboard = useCallback(() => {
     try {
-      if (teamId && currentUserId) {
-        try { socketRef.current?.emit('leaveEscapeRoom', { teamId, puzzleId, userId: currentUserId }); } catch {}
+      if (sessionId && currentUserId) {
+        try { socketRef.current?.emit('leaveEscapeRoom', { teamId: sessionId, puzzleId, userId: currentUserId }); } catch {}
       }
     } finally {
       try { socketRef.current?.disconnect(); } catch {}
       socketRef.current = null;
       router.push('/dashboard');
     }
-  }, [router, teamId, puzzleId, currentUserId]);
+  }, [router, sessionId, puzzleId, currentUserId]);
 
 
   useEffect(() => {
@@ -232,11 +250,11 @@ export function EscapeRoomPuzzle({
         setLoading(true);
         setError(null);
 
-        if (!teamId) {
-          throw new Error('This escape room must be played with a team. Open it from a team lobby.');
+        if (!sessionId) {
+          throw new Error('This escape room must be played with a team or lobby. Open it from a team lobby.');
         }
 
-        const res = await fetch(`/api/puzzles/escape-room/${puzzleId}?teamId=${encodeURIComponent(teamId)}`);
+        const res = await fetch(`/api/puzzles/escape-room/${puzzleId}?${sessionParam}`);
         if (!res.ok) throw new Error("Failed to load escape room");
         const j = await res.json();
         if (cancelled) return;
@@ -250,6 +268,7 @@ export function EscapeRoomPuzzle({
           if (u.ok) {
             const uj = await u.json().catch(() => null);
             if (uj?.id) setCurrentUserId(String(uj.id));
+            if (uj?.name) currentUserNameRef.current = String(uj.name);
           }
         } catch {
           // ignore
@@ -265,7 +284,7 @@ export function EscapeRoomPuzzle({
           // ignore
         }
 
-        const st = await fetch(`/api/puzzles/escape-room/${puzzleId}/state?teamId=${encodeURIComponent(teamId)}`);
+        const st = await fetch(`/api/puzzles/escape-room/${puzzleId}/state?${sessionParam}`);
         if (st.ok) {
           const sj = await st.json().catch(() => null);
           if (sj && sj.inventory) setInventory(sj.inventory || []);
@@ -284,7 +303,10 @@ export function EscapeRoomPuzzle({
           const initialCompletedAt = sj?.completedAt ? String(sj.completedAt) : null;
           initialCompletedAtRef.current = initialCompletedAt;
           setCompletedAt(initialCompletedAt);
-          setIsLeader(!!sj?.isLeader);
+          const initialLeader = !!sj?.isLeader;
+          setIsLeader(initialLeader);
+          isLeaderRef.current = initialLeader;
+          setIsPaused(!!sj?.pausedAt);
         } else {
           // If we can't fetch initial state, treat as "not completed" baseline.
           initialCompletedAtRef.current = null;
@@ -298,10 +320,10 @@ export function EscapeRoomPuzzle({
       }
     })();
     return () => { cancelled = true; };
-  }, [puzzleId, teamId]);
+  }, [puzzleId, sessionId]);
 
   useEffect(() => {
-    if (!teamId || !currentUserId) return;
+    if (!sessionId || !currentUserId) return;
     let cancelled = false;
     (async () => {
       try {
@@ -323,7 +345,11 @@ export function EscapeRoomPuzzle({
 
         socket.on('connect', () => {
           try {
-            socket.emit('joinEscapeRoom', { teamId, puzzleId, userId: currentUserId, requiredPlayers: minTeamSizeRef.current });
+            // For lobby-based runs, always pass requiredPlayers=1 so a single player
+            // disconnect does not abort the session for everyone else. The contribution
+            // gate was already removed; consistency requires the same here.
+            const effectiveRequired = lobbyId ? 1 : minTeamSizeRef.current;
+            socket.emit('joinEscapeRoom', { teamId: sessionId, puzzleId, userId: currentUserId, userName: currentUserNameRef.current, isHost: isLeaderRef.current, isLobby: !!lobbyId, requiredPlayers: effectiveRequired });
           } catch {
             // ignore
           }
@@ -340,10 +366,8 @@ export function EscapeRoomPuzzle({
         socket.on('escapeSessionUpdated', (payload: any) => {
           try {
             if (!payload) return;
-            if (payload.teamId && payload.teamId !== teamId) return;
+            if (payload.teamId && payload.teamId !== sessionId) return;
             if (payload.puzzleId && payload.puzzleId !== puzzleId) return;
-
-            if (payload.briefingAcks) setBriefingAcks(payload.briefingAcks || {});
             if (payload.inventoryLocks) setInventoryLocks(payload.inventoryLocks || {});
             if (payload.runStartedAt !== undefined) setRunStartedAt(payload.runStartedAt ? String(payload.runStartedAt) : null);
             if (payload.runExpiresAt !== undefined) setRunExpiresAt(payload.runExpiresAt ? String(payload.runExpiresAt) : null);
@@ -371,7 +395,7 @@ export function EscapeRoomPuzzle({
         socket.on('escapeActivity', (payload: any) => {
           try {
             if (!payload) return;
-            if (payload.teamId && payload.teamId !== teamId) return;
+            if (payload.teamId && payload.teamId !== sessionId) return;
             if (payload.puzzleId && payload.puzzleId !== puzzleId) return;
             const entry = payload.entry as EscapeActivityEntry | undefined;
             if (!entry || !entry.id || !entry.ts || !entry.title) return;
@@ -382,10 +406,39 @@ export function EscapeRoomPuzzle({
           }
         });
 
+        socket.on('escapeHostChanged', (payload: any) => {
+          try {
+            if (payload?.teamId && payload.teamId !== sessionId) return;
+            if (payload?.puzzleId && payload.puzzleId !== puzzleId) return;
+            // Re-fetch state so every client gets the correct isLeader value.
+            refreshState().catch(() => null);
+          } catch {
+            // ignore
+          }
+        });
+
+        socket.on('escapePlayerLeft', (payload: any) => {
+          try {
+            if (payload?.teamId && payload.teamId !== sessionId) return;
+            if (payload?.puzzleId && payload.puzzleId !== puzzleId) return;
+            const name = payload?.userName || 'A teammate';
+            pushActivity({
+              id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+              ts: new Date().toISOString(),
+              type: 'system' as any,
+              title: `${name} left the game`,
+              actor: { id: payload?.userId || '', name },
+              meta: {},
+            });
+          } catch {
+            // ignore
+          }
+        });
+
         socket.on('escapeAborted', (payload: any) => {
           try {
             if (abortHandledRef.current) return;
-            if (payload?.teamId && payload.teamId !== teamId) return;
+            if (payload?.teamId && payload.teamId !== sessionId) return;
             if (payload?.puzzleId && payload.puzzleId !== puzzleId) return;
             abortHandledRef.current = true;
 
@@ -394,7 +447,12 @@ export function EscapeRoomPuzzle({
               reason === 'missing_player'
                 ? 'A teammate did not join in time. The lobby was reset — please restart.'
                 : 'A teammate disconnected. The lobby was reset — please restart.';
-            const url = `/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}&notice=${encodeURIComponent(notice)}`;
+            // Prefer going back to the escape room lobby page
+            const url = lobbyId
+              ? `/escape-rooms/${puzzleId}/lobby`
+              : teamId
+              ? `/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(puzzleId)}&notice=${encodeURIComponent(notice)}`
+              : '/dashboard';
 
             try {
               router.push(url);
@@ -413,15 +471,15 @@ export function EscapeRoomPuzzle({
     return () => {
       cancelled = true;
       try {
-        socketRef.current?.emit('leaveEscapeRoom', { teamId, puzzleId, userId: currentUserId });
+        socketRef.current?.emit('leaveEscapeRoom', { teamId: sessionId, puzzleId, userId: currentUserId });
       } catch {}
       try { socketRef.current?.disconnect(); } catch {}
       socketRef.current = null;
     };
-  }, [teamId, puzzleId, currentUserId, router, playSfx]);
+  }, [sessionId, puzzleId, currentUserId, router, playSfx, lobbyId, teamId]);
 
   useEffect(() => {
-    if (!teamId) return;
+    if (!sessionId) return;
     let cancelled = false;
 
     const fetchChat = async () => {
@@ -434,7 +492,7 @@ export function EscapeRoomPuzzle({
       chatAbortRef.current = c;
       try {
         const res = await fetch(
-          `/api/team/lobby/chat?teamId=${encodeURIComponent(teamId)}&puzzleId=${encodeURIComponent(puzzleId)}&limit=200`,
+          `/api/team/lobby/chat?teamId=${encodeURIComponent(teamId ?? '')}&puzzleId=${encodeURIComponent(puzzleId)}&limit=200`,
           { signal: c.signal }
         );
         if (!res.ok) return;
@@ -1001,7 +1059,7 @@ export function EscapeRoomPuzzle({
     const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'trigger', hotspotId, teamId }),
+      body: JSON.stringify({ action: 'trigger', hotspotId, ...sessionBody }),
     });
     const jb = await r.json().catch(() => null);
     setMiniPuzzleState(null);
@@ -1058,7 +1116,7 @@ export function EscapeRoomPuzzle({
           const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/action`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'use', hotspotId, teamId, itemKey: selectedInventoryKey }),
+            body: JSON.stringify({ action: 'use', hotspotId, ...sessionBody, itemKey: selectedInventoryKey }),
           });
           const jb = await r.json().catch(() => null);
           if (r.ok) {
@@ -1163,7 +1221,7 @@ export function EscapeRoomPuzzle({
         const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/action`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'trigger', hotspotId, teamId }),
+          body: JSON.stringify({ action: 'trigger', hotspotId, ...sessionBody }),
         });
         const jb = await r.json().catch(() => null);
         if (!r.ok) {
@@ -1195,7 +1253,7 @@ export function EscapeRoomPuzzle({
       const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'pickupPreview', hotspotId, teamId }),
+        body: JSON.stringify({ action: 'pickupPreview', hotspotId, ...sessionBody }),
       });
       const jb = await r.json().catch(() => null);
       playSfx(jb?.sfx);
@@ -1279,7 +1337,7 @@ export function EscapeRoomPuzzle({
       actionInFlightRef.current = false;
       setIsActionInFlight(false);
     }
-  }, [teamId, runStartedAt, failedAt, completedAt, pendingPickup, layout, puzzleId, playSfx, playBuiltinSfx, selectedInventoryKey, inventory, inventoryItems, inventoryLocks, currentUserId, clearPickupTimer, triggerSceneShake, showPenaltyToast, handleMiniPuzzleSolve]);
+  }, [sessionId, sessionBody, runStartedAt, failedAt, completedAt, pendingPickup, layout, puzzleId, playSfx, playBuiltinSfx, selectedInventoryKey, inventory, inventoryItems, inventoryLocks, currentUserId, clearPickupTimer, triggerSceneShake, showPenaltyToast, handleMiniPuzzleSolve]);
 
   const handleActionModalChoice = useCallback((index: number) => {
     if (!actionModalChoices || actionModalChoices.length === 0) return;
@@ -1308,7 +1366,7 @@ export function EscapeRoomPuzzle({
       const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'pickup', hotspotId: pendingPickup.hotspotId, teamId }),
+        body: JSON.stringify({ action: 'pickup', hotspotId: pendingPickup.hotspotId, ...sessionBody }),
       });
       const jb = await r.json().catch(() => null);
       playSfx(jb?.sfx);
@@ -1520,7 +1578,7 @@ export function EscapeRoomPuzzle({
       const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ackBriefing', teamId }),
+        body: JSON.stringify({ action: 'ackBriefing', ...sessionBody }),
       });
       const jb = await r.json().catch(() => null);
       if (r.ok && jb?.briefingAcks) setBriefingAcks(jb.briefingAcks || {});
@@ -1541,7 +1599,7 @@ export function EscapeRoomPuzzle({
       const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'startRun', teamId }),
+        body: JSON.stringify({ action: 'startRun', ...sessionBody }),
       });
       const jb = await r.json().catch(() => null);
       if (r.ok) {
@@ -1564,7 +1622,7 @@ export function EscapeRoomPuzzle({
       const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'acquireLock', teamId, itemKey }),
+        body: JSON.stringify({ action: 'acquireLock', ...sessionBody, itemKey }),
       });
       const jb = await r.json().catch(() => null);
       if (r.ok && jb?.inventoryLocks) {
@@ -1594,7 +1652,7 @@ export function EscapeRoomPuzzle({
       const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'releaseLock', teamId, itemKey }),
+        body: JSON.stringify({ action: 'releaseLock', ...sessionBody, itemKey }),
       });
       const jb = await r.json().catch(() => null);
       if (r.ok && jb?.inventoryLocks) setInventoryLocks(jb.inventoryLocks || {});
@@ -1670,6 +1728,19 @@ export function EscapeRoomPuzzle({
               </div>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {isPaused && lobbyId ? (
+        <div className="mb-3 rounded-lg border border-amber-700/60 bg-amber-950/30 p-5 text-amber-100 shadow-[0_0_30px_rgba(180,120,0,0.2)] space-y-3">
+          <div className="font-semibold tracking-wide uppercase text-xs text-amber-400/80">Session Paused</div>
+          <p className="text-sm leading-relaxed opacity-80">Your game was paused. To resume with the timer restored, go back to the lobby and click <strong>Resume Game</strong>.</p>
+          <a
+            href={`/escape-rooms/${puzzleId}/lobby`}
+            className="inline-block px-4 py-2 rounded-lg bg-amber-700/60 hover:bg-amber-600/70 text-amber-50 text-sm font-semibold transition"
+          >
+            ← Back to Lobby
+          </a>
         </div>
       ) : null}
 

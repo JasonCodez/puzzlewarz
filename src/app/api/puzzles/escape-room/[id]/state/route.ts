@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireEscapeRoomTeamContext } from "@/lib/escapeRoomTeamAuth";
+import { requireEscapeRoomTeamContext, progressWhereClause, getSessionMembers, getLobbyHostId } from "@/lib/escapeRoomTeamAuth";
 import { getLobbyLeaderId } from "@/lib/teamLobbyStore";
 
 function safeJsonParse<T>(raw: unknown, fallback: T): T {
@@ -25,9 +25,10 @@ export async function GET(
     if (ctx instanceof NextResponse) return ctx;
 
     const [progress, escapeRoom] = await Promise.all([
-      (prisma as any).teamEscapeProgress.findUnique({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+      (prisma as any).teamEscapeProgress.findFirst({
+        where: progressWhereClause(ctx),
         select: {
+          id: true,
           inventory: true,
           sceneState: true,
           solvedStages: true,
@@ -39,19 +40,26 @@ export async function GET(
           failedAt: true,
           failedReason: true,
           completedAt: true,
+          pausedAt: true,
+          pausedRemainingMs: true,
         },
       }),
       prisma.escapeRoomPuzzle.findUnique({ where: { id: ctx.escapeRoomId }, select: { timeLimitSeconds: true } }),
     ]);
 
-    const lobbyLeaderId = getLobbyLeaderId(ctx.teamId, puzzleId);
-    // Keep leader resolution consistent with session endpoint:
-    // if lobby state is missing after restart, allow team members to proceed.
-    const isLeader = lobbyLeaderId ? lobbyLeaderId === ctx.userId : true;
+    // Leader resolution: lobby runs use DB host; team runs use in-memory store.
+    let isLeader = true;
+    if (ctx.isLobby) {
+      const hostId = await getLobbyHostId(ctx);
+      isLeader = !hostId || hostId === ctx.userId;
+    } else {
+      const lobbyLeaderId = getLobbyLeaderId(ctx.teamId, puzzleId);
+      isLeader = lobbyLeaderId ? lobbyLeaderId === ctx.userId : true;
+    }
 
     const markUsersFailed = async (failedAt: Date, failedReason: string) => {
       try {
-        const members = await prisma.teamMember.findMany({ where: { teamId: ctx.teamId }, select: { userId: true } });
+        const members = await getSessionMembers(ctx);
         const userIds = members.map((m) => m.userId).filter(Boolean);
         await Promise.all(
           userIds.map((userId) =>
@@ -86,7 +94,7 @@ export async function GET(
       ) {
         const failAt = new Date();
         const updated = await (prisma as any).teamEscapeProgress.update({
-          where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+          where: { id: progress.id },
           data: { failedAt: failAt, failedReason: "Time expired" },
           select: { failedAt: true, failedReason: true },
         });
@@ -147,6 +155,8 @@ export async function GET(
       completedAt: progress?.completedAt ?? null,
       isLeader,
       timeLimitSeconds: escapeRoom?.timeLimitSeconds ?? null,
+      pausedAt: progress?.pausedAt ?? null,
+      pausedRemainingMs: progress?.pausedRemainingMs ?? null,
     });
   } catch (e) {
     console.error('Failed to fetch player room state', e);

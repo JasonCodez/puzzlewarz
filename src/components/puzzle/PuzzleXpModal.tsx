@@ -18,8 +18,6 @@ export interface PuzzleXpModalProps {
 }
 
 const COUNTER_DURATION = 1400; // ms
-const DISMISS_NORMAL = 3000;   // ms
-const DISMISS_LEVELUP = 5000;  // ms — level-up gets more time
 
 // ─── Sub-component: standard puzzle-complete modal ────────────────────────────
 function NormalModal({
@@ -51,11 +49,6 @@ function NormalModal({
     const t = setTimeout(() => setBarWidth(newProgress), 350);
     return () => clearTimeout(t);
   }, [newProgress]);
-
-  useEffect(() => {
-    const t = setTimeout(onDismiss, DISMISS_NORMAL);
-    return () => clearTimeout(t);
-  }, [onDismiss]);
 
   return (
     <motion.div
@@ -100,7 +93,13 @@ function NormalModal({
           </div>
         </div>
 
-        <p className="text-xs" style={{ color: "#4b5563" }}>Rating screen opening shortly…</p>
+        <button
+          onClick={onDismiss}
+          className="w-full py-2.5 rounded-xl font-bold text-sm tracking-wide transition-colors"
+          style={{ backgroundColor: "#FDE74C", color: "#020202" }}
+        >
+          Continue
+        </button>
       </motion.div>
     </motion.div>
   );
@@ -178,12 +177,6 @@ function LevelUpModal({
     const t = setTimeout(() => setShowDetails(true), 600);
     return () => clearTimeout(t);
   }, []);
-
-  // Auto-dismiss
-  useEffect(() => {
-    const t = setTimeout(onDismiss, DISMISS_LEVELUP);
-    return () => clearTimeout(t);
-  }, [onDismiss]);
 
   return (
     <motion.div
@@ -313,7 +306,13 @@ function LevelUpModal({
           </div>
         </motion.div>
 
-        <p className="text-xs" style={{ color: "#374151" }}>Rating screen opening shortly…</p>
+        <button
+          onClick={onDismiss}
+          className="w-full py-2.5 rounded-xl font-bold text-sm tracking-wide transition-colors"
+          style={{ backgroundColor: "#FDE74C", color: "#020202" }}
+        >
+          Continue
+        </button>
       </motion.div>
     </motion.div>
   );

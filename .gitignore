@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# dev build cache (redirected to C:\ for faster I/O)
+C:/tmp/puzzlewarz-next
+
 # production
 /build
 

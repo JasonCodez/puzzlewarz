@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireEscapeRoomTeamContext } from "@/lib/escapeRoomTeamAuth";
+import { requireEscapeRoomTeamContext, progressWhereClause, getSessionMembers } from "@/lib/escapeRoomTeamAuth";
 import {
-  isContributionGateSatisfied,
-  parseContributionGate,
   recordStageContribution,
-  summarizeStageContributions,
 } from "@/lib/escape-room-contribution";
 
 function safeJsonParse<T>(raw: unknown, fallback: T): T {
@@ -26,9 +23,9 @@ export async function POST(
     const puzzleId = resolved.id;
 
     const body = await request.json().catch(() => ({}));
-    const { stageIndex, answer, teamId } = body as { stageIndex?: number; answer?: string; teamId?: string };
+    const { stageIndex, answer, teamId, lobbyId } = body as { stageIndex?: number; answer?: string; teamId?: string; lobbyId?: string };
 
-    const ctx = await requireEscapeRoomTeamContext(request, puzzleId, { teamId });
+    const ctx = await requireEscapeRoomTeamContext(request, puzzleId, { teamId: lobbyId ? undefined : teamId, lobbyId });
     if (ctx instanceof NextResponse) return ctx;
 
     if (typeof stageIndex !== 'number') {
@@ -46,12 +43,12 @@ export async function POST(
       if (ok) {
         // Persist solved stage to team progress (best-effort)
         try {
-          const progress = await (prisma as any).teamEscapeProgress.findUnique({
-            where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
-            select: { solvedStages: true, currentStageIndex: true, sceneState: true },
+          const progress = await (prisma as any).teamEscapeProgress.findFirst({
+            where: progressWhereClause(ctx),
+            select: { id: true, solvedStages: true, currentStageIndex: true, sceneState: true },
           });
 
-          const teamRows = await prisma.teamMember.findMany({ where: { teamId: ctx.teamId }, select: { userId: true } });
+          const teamRows = await getSessionMembers(ctx);
           const teamUserIds = teamRows.map((m) => m.userId).filter(Boolean);
 
           const stageMeta = safeJsonParse<Record<string, unknown>>(stage.puzzleData, {});
@@ -61,26 +58,6 @@ export async function POST(
             stageIndex: currentStage,
             userId: ctx.userId,
           });
-          const contributionGate = parseContributionGate(stageMeta, {
-            requiredDistinct: Math.max(1, teamUserIds.length),
-            minActionsPerPlayer: 1,
-          });
-          const contributionSummary = summarizeStageContributions({
-            sceneStateRaw: sceneStateWithContribution,
-            stageIndex: currentStage,
-            teamUserIds,
-            gate: contributionGate,
-          });
-          if (!isContributionGateSatisfied(contributionSummary)) {
-            return NextResponse.json(
-              {
-                error: `All teammates must contribute before advancing. Progress: ${contributionSummary.distinctContributors}/${contributionSummary.requiredDistinct} contributors with at least ${contributionSummary.minActionsPerPlayer} action(s).`,
-                contribution: contributionSummary,
-              },
-              { status: 409 }
-            );
-          }
-
           let solvedStages: number[] = [];
           try {
             solvedStages = progress?.solvedStages ? JSON.parse(progress.solvedStages) : [];
@@ -93,7 +70,7 @@ export async function POST(
           solvedStages.sort((a, b) => a - b);
 
           await (prisma as any).teamEscapeProgress.update({
-            where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+            where: { id: progress!.id },
             data: {
               solvedStages: JSON.stringify(solvedStages),
               currentStageIndex: Math.max(progress?.currentStageIndex ?? 0, stage.order),

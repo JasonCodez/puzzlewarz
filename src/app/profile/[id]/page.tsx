@@ -444,6 +444,13 @@ export default function PublicProfilePage() {
                 <MessageCircle className="w-4 h-4" /> Message
               </button>
             )}
+            <Link
+              href={`/warz?invite=${userId}`}
+              className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+              style={{ backgroundColor: '#7c3aed', color: 'white' }}
+            >
+              ⚔️ Challenge to Warz
+            </Link>
           </div>
         )}
 

@@ -1,0 +1,1434 @@
+"use client";
+
+/**
+ * JigsawPuzzleCanvas — Canvas2D implementation
+ *
+ * Architecture:
+ *  - Single <canvas> fills the board area  (all piece rendering via Canvas2D)
+ *  - Horizontal scrollable tray below the board (DOM-level, not canvas)
+ *  - requestAnimationFrame render loop with dirty-flag (no unnecessary repaints)
+ *  - Path2D cache per piece shape (same bezier math as original, now as Path2D)
+ *  - Hit-testing via ctx.isPointInPath on the Path2D cache
+ *  - Smooth drag via pointer-events directly on the canvas element
+ *  - Spring snap animation in rAF loop — no GSAP needed for physics
+ *  - Completion: GSAP shimmer + energy-ring DOM overlays (same as before)
+ *  - localStorage save/resume preserved exactly
+ *  - Same external props API — all call-sites unchanged
+ */
+
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useLayoutEffect,
+} from "react";
+import { createPortal } from "react-dom";
+import gsap from "gsap";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EdgeMap { top: number; right: number; bottom: number; left: number }
+
+interface PiecePos { x: number; y: number }
+
+interface Piece {
+  id: string;
+  row: number;
+  col: number;
+  edges: EdgeMap;
+  correct: PiecePos;
+  pos: PiecePos;
+  groupId: string;
+  z: number;
+  snapped: boolean;
+}
+
+type PathOpts = {
+  featureSpan?: number; neckSpan?: number; headSpan?: number;
+  tabDepth?: number; neckPinch?: number; shoulderDepth?: number;
+  shoulderSpan?: number; cornerInset?: number; smooth?: number;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Local-storage helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface SavedProgress {
+  pieces: Record<string, { relX: number; relY: number; groupId: string; snapped: boolean; z: number }>;
+  elapsedMs: number;
+  savedAt: number;
+}
+
+function getStorageKey(
+  puzzleId: string | undefined, imageUrl: string, rows: number, cols: number
+): string {
+  if (puzzleId) return `jigsaw-progress-${puzzleId}`;
+  const slug = (imageUrl ?? "").replace(/[^a-zA-Z0-9]/g, "").slice(-24);
+  return `jigsaw-progress-${rows}x${cols}-${slug}`;
+}
+
+function saveJigsawProgress(key: string, pieces: Piece[], elapsedMs: number) {
+  try {
+    const data: SavedProgress = {
+      pieces: Object.fromEntries(pieces.map(p => [p.id, {
+        relX: p.pos.x - p.correct.x, relY: p.pos.y - p.correct.y,
+        groupId: p.groupId, snapped: p.snapped, z: p.z,
+      }])),
+      elapsedMs, savedAt: Date.now(),
+    };
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch { /* quota / SSR */ }
+}
+
+function loadJigsawProgress(key: string): SavedProgress | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as SavedProgress) : null;
+  } catch { return null; }
+}
+
+function clearJigsawProgress(key: string) {
+  try { localStorage.removeItem(key); } catch { /* noop */ }
+}
+
+function applyProgress(base: Piece[], saved: SavedProgress): Piece[] {
+  return base.map(p => {
+    const s = saved.pieces[p.id];
+    if (!s) return p;
+    return { ...p, pos: { x: p.correct.x + s.relX, y: p.correct.y + s.relY },
+      groupId: s.groupId, snapped: s.snapped, z: s.z };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Edge generation  (identical logic as old SVG version)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildEdges(rows: number, cols: number): Map<string, EdgeMap> {
+  const map = new Map<string, EdgeMap>();
+  const rnd = () => (Math.random() < 0.5 ? 1 : -1);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const id = `${r}-${c}`;
+      const e: EdgeMap = { top: 0, right: 0, bottom: 0, left: 0 };
+      if (r > 0) e.top = -map.get(`${r - 1}-${c}`)!.bottom;
+      if (c > 0) e.left = -map.get(`${r}-${c - 1}`)!.right;
+      e.right = c < cols - 1 ? rnd() : 0;
+      e.bottom = r < rows - 1 ? rnd() : 0;
+      map.set(id, e);
+    }
+  }
+  return map;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Path2D builder  — mirrors `piecePath()` SVG math but into a Path2D object
+// ─────────────────────────────────────────────────────────────────────────────
+
+type EdgeCmd = ["L", number, number] | ["C", number, number, number, number, number, number];
+
+function edgeProfile(L: number, dir: number, opts: PathOpts, sizeRef: number): EdgeCmd[] {
+  if (dir === 0) return [["L", L, 0]];
+  const sign = dir;
+  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+
+  const featureSpan = Math.min(Math.max(0.42, Math.min(0.56, clamp01(opts.featureSpan ?? 0.5))) * sizeRef, L * 0.72);
+  const neckSpan    = Math.min(Math.max(0.12, Math.min(0.21, clamp01(opts.neckSpan    ?? 0.18))) * sizeRef, Math.min(featureSpan * 0.62, L * 0.42));
+  const rawHead     = Math.min(Math.max(0.22, Math.min(0.32, clamp01(opts.headSpan   ?? 0.27))) * sizeRef, Math.min(featureSpan * 0.84, L * 0.58));
+  const headSpan    = Math.max(rawHead, neckSpan * 1.34);
+
+  const mid = L / 2;
+  const a = mid - featureSpan / 2, b = mid - neckSpan / 2;
+  const c = mid + neckSpan / 2, d = mid + featureSpan / 2;
+
+  const tabD     = sign * Math.min((opts.tabDepth ?? 0.22) * sizeRef, sizeRef * 0.3, L * 0.28);
+  const neckD    = Math.max(0.001 * sizeRef, (opts.neckPinch ?? 0) * sizeRef);
+  const neckY    = sign * neckD;
+  const shoulderY = sign * Math.max(0, (opts.shoulderDepth ?? 0) * sizeRef) * 0.14;
+  const headY    = tabD - sign * headSpan / 2;
+  const apex: [number, number] = [mid, tabD];
+  const ss      = Math.min(Math.max(0.08, Math.min(0.16, clamp01(opts.shoulderSpan ?? 0.12))) * sizeRef, L * 0.28);
+
+  return [
+    ["L", a, 0],
+    ["C", a + ss * 0.9, shoulderY,        b - ss * 0.08,  neckY * 0.96, b, neckY],
+    ["C", b + neckSpan * 0.16, neckY,     mid - headSpan * 0.5, headY + (tabD - headY) * 0.38, mid - headSpan * 0.35, headY + (tabD - headY) * 0.82],
+    ["C", mid - headSpan * 0.22, tabD - sign * headSpan * 0.025, mid - headSpan * 0.08, tabD - sign * headSpan * 0.01, ...apex],
+    ["C", mid + headSpan * 0.08, tabD - sign * headSpan * 0.01, mid + headSpan * 0.22, tabD - sign * headSpan * 0.025, mid + headSpan * 0.35, headY + (tabD - headY) * 0.82],
+    ["C", mid + headSpan * 0.5, headY + (tabD - headY) * 0.38, c - neckSpan * 0.16, neckY,  c, neckY],
+    ["C", c + ss * 0.08, neckY * 0.96,   d - ss * 0.9,  shoulderY,   d, 0],
+    ["L", L, 0],
+  ];
+}
+
+function buildPath2D(pw: number, ph: number, edges: EdgeMap, opts: PathOpts): Path2D {
+  const sizeRef = Math.min(pw, ph);
+  const inset = Math.max(0, Math.min(sizeRef * 0.08, (opts.cornerInset ?? 0)));
+
+  const { top: topDir, right: rDir, bottom: bDir, left: lDir } = edges;
+  const rTL = lDir === 0 && topDir === 0 ? inset : 0;
+  const rTR = topDir === 0 && rDir === 0 ? inset : 0;
+  const rBR = rDir === 0 && bDir === 0 ? inset : 0;
+  const rBL = bDir === 0 && lDir === 0 ? inset : 0;
+
+  // Emit edge in world space given a transform (start, along, out directions, length, tab dir)
+  function emitEdge(
+    path: Path2D,
+    sx: number, sy: number,
+    ax: number, ay: number, // "along" unit vector
+    ox: number, oy: number, // "out" unit vector (tab protrudes this way)
+    L: number, dir: number
+  ) {
+    for (const cmd of edgeProfile(L, dir, opts, sizeRef)) {
+      if (cmd[0] === "L") {
+        path.lineTo(sx + ax * cmd[1] + ox * cmd[2], sy + ay * cmd[1] + oy * cmd[2]);
+      } else {
+        // bezierCurveTo
+        path.bezierCurveTo(
+          sx + ax * cmd[1] + ox * cmd[2], sy + ay * cmd[1] + oy * cmd[2],
+          sx + ax * cmd[3] + ox * cmd[4], sy + ay * cmd[3] + oy * cmd[4],
+          sx + ax * cmd[5] + ox * cmd[6], sy + ay * cmd[5] + oy * cmd[6],
+        );
+      }
+    }
+  }
+
+  const path = new Path2D();
+  path.moveTo(rTL, 0);
+
+  // Top edge (along → +x, outward → -y)
+  emitEdge(path, rTL, 0, 1, 0, 0, -1, pw - rTL - rTR, topDir);
+  if (rTR > 0) path.quadraticCurveTo(pw, 0, pw, rTR); else path.lineTo(pw, 0);
+
+  // Right edge (along → +y, outward → +x)
+  emitEdge(path, pw, rTR, 0, 1, 1, 0, ph - rTR - rBR, rDir);
+  if (rBR > 0) path.quadraticCurveTo(pw, ph, pw - rBR, ph); else path.lineTo(pw, ph);
+
+  // Bottom edge (along → -x, outward → +y)
+  emitEdge(path, pw - rBR, ph, -1, 0, 0, 1, pw - rBR - rBL, bDir);
+  if (rBL > 0) path.quadraticCurveTo(0, ph, 0, ph - rBL); else path.lineTo(0, ph);
+
+  // Left edge (along → -y, outward → -x)
+  emitEdge(path, 0, ph - rBL, 0, -1, -1, 0, ph - rBL - rTL, lDir);
+  if (rTL > 0) path.quadraticCurveTo(0, 0, rTL, 0); else path.lineTo(rTL, 0);
+
+  path.closePath();
+  return path;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Props interface  (identical to old SVG component — all call-sites unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface JigsawPuzzleProps {
+  imageUrl: string;
+  rows?: number;
+  cols?: number;
+  boardWidth?: number;
+  boardHeight?: number;
+  /** kept for API compat */
+  stagePadding?: number;
+  trayHeight?: number;
+  neighborSnapTolerance?: number;
+  boardSnapTolerance?: number;
+  trayScatter?: number;
+  tabRadius?: number;
+  tabDepth?: number;
+  neckWidth?: number;
+  neckDepth?: number;
+  shoulderLen?: number;
+  shoulderDepth?: number;
+  cornerInset?: number;
+  smooth?: number;
+  containerStyle?: React.CSSProperties;
+  onComplete?: (t?: number) => Promise<number | void> | number | void;
+  onShowRatingModal?: () => void;
+  suppressInternalCongrats?: boolean;
+  onControlsReady?: (api: {
+    reset: () => void;
+    sendLooseToTray: () => void;
+    enterFullscreen: () => void;
+    exitFullscreen: () => void;
+    isFullscreen: boolean;
+  }) => void;
+  puzzleId?: string;
+  tableBackground?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+const dist2 = (dx: number, dy: number) => Math.hypot(dx, dy);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function JigsawPuzzleSVGWithTray({
+  imageUrl, rows = 4, cols = 6,
+  boardWidth = 640, boardHeight = 480,
+  trayHeight: trayHeightProp = 160,
+  neighborSnapTolerance = 24, boardSnapTolerance = 18,
+  tabRadius = 0.18, tabDepth = 0.22,
+  neckWidth = 0.22, neckDepth = 0.10,
+  shoulderLen = 0.22, shoulderDepth = 0.08,
+  cornerInset = 1, smooth = 0.55,
+  onComplete, onShowRatingModal,
+  suppressInternalCongrats = false, onControlsReady,
+  puzzleId, tableBackground, containerStyle = {},
+}: JigsawPuzzleProps) {
+
+  // ── Refs ──────────────────────────────────────────────────────────────────
+  const canvasRef       = useRef<HTMLCanvasElement>(null);
+  const wrapperRef      = useRef<HTMLDivElement>(null);
+  const shimmerOuterRef = useRef<HTMLDivElement>(null);
+  const shimmerInnerRef = useRef<HTMLDivElement>(null);
+  const shimmerInnerBRef = useRef<HTMLDivElement>(null);
+  const shimmerInnerCRef = useRef<HTMLDivElement>(null);
+  const energyRingRef   = useRef<HTMLDivElement>(null);
+  const energyGlowRef   = useRef<HTMLDivElement>(null);
+  const messageRef      = useRef<HTMLDivElement>(null);
+
+  // Image
+  const imgRef           = useRef<HTMLImageElement | null>(null);
+  const [imageOk, setImageOk] = useState<boolean | null>(null);
+  const [effectiveUrl, setEffectiveUrl] = useState<string>(imageUrl ?? "");
+  const [proxyTried, setProxyTried]   = useState(false);
+  const [reloadKey, setReloadKey]     = useState(0);
+
+  // Logical dimensions of board (never changes after init)
+  const pw = boardWidth / cols;
+  const ph = boardHeight / rows;
+  const pwRef = useRef(pw);
+  const phRef = useRef(ph);
+  pwRef.current = pw; phRef.current = ph;
+
+  // Stage: the canvas logical space is STAGE_SCALE × the board, board centered within it.
+  // p.pos / p.correct are in board-relative coords (0..boardWidth, 0..boardHeight for correct).
+  // boardOffX/Y is added at render-time and hit-test-time only.
+  const STAGE_SCALE = 1.8;
+  const stageW = boardWidth * STAGE_SCALE;
+  const stageH = boardHeight * STAGE_SCALE;
+  const boardOffX = (stageW - boardWidth) / 2;
+  const boardOffY = (stageH - boardHeight) / 2;
+  const boardOffXRef = useRef(boardOffX);
+  const boardOffYRef = useRef(boardOffY);
+  boardOffXRef.current = boardOffX;
+  boardOffYRef.current = boardOffY;
+
+  // DPR-aware canvas pixel dimensions
+  const [canvasW, setCanvasW] = useState(boardWidth);
+  const [canvasH, setCanvasH] = useState(boardHeight);
+  const scaleRef = useRef(1); // stage logical px  →  CSS px (canvas element CSS size)
+
+  // Tray height
+  const TRAY_H = Math.max(80, trayHeightProp ?? 160);
+
+  // Path2D cache keyed by piece id (rebuilt whenever rows/cols/opts change)
+  const pathCacheRef = useRef<Map<string, Path2D>>(new Map());
+
+  // Path opts (memoised from props)
+  const pathOpts = useMemo<PathOpts>(() => ({
+    featureSpan:  clamp(0.46 + shoulderLen * 0.06,  0.44, 0.54),
+    headSpan:     clamp(tabRadius * 1.5,             0.255, 0.33),
+    neckSpan:     clamp(neckWidth * 0.74,            0.14,  0.19),
+    tabDepth:     clamp(tabDepth * 0.95,             0.17,  0.225),
+    neckPinch:    clamp(neckDepth * 0.03,            0.0008, 0.004),
+    shoulderSpan: clamp(shoulderLen * 0.56,          0.09,  0.14),
+    shoulderDepth:clamp(shoulderDepth * 0.02,        0.0006, 0.0025),
+    cornerInset:  clamp(cornerInset * Math.min(pw, ph) * 0.06, 0, Math.min(pw, ph) * 0.08),
+    smooth:       clamp(smooth, 0.72, 0.94),
+  }), [tabRadius, tabDepth, neckWidth, neckDepth, shoulderLen, shoulderDepth, cornerInset, smooth, pw, ph]);
+
+  // Pieces state (live copy in ref for renderer, React state for UI)
+  const piecesRef = useRef<Piece[]>([]);
+  const [pieces, setPiecesState] = useState<Piece[]>([]);
+  const setPieces = useCallback((fn: Piece[] | ((p: Piece[]) => Piece[])) => {
+    setPiecesState(prev => {
+      const next = typeof fn === "function" ? fn(prev) : fn;
+      piecesRef.current = next;
+      dirtyRef.current = true;
+      return next;
+    });
+  }, []);
+
+  // Drag  
+  const dragRef = useRef<{
+    active: boolean; pointerId: number | null;
+    groupId: string | null; anchorId: string | null;
+    anchorOff: PiecePos; starts: Map<string, PiecePos>;
+    dx: number; dy: number;
+  }>({ active: false, pointerId: null, groupId: null, anchorId: null,
+       anchorOff: { x: 0, y: 0 }, starts: new Map(), dx: 0, dy: 0 });
+
+  // Snap spring  
+  type SnapAnim = { groupId: string; dx: number; dy: number; t0: number; dur: number };
+  const snapRef = useRef<SnapAnim | null>(null);
+
+  // rAF
+  const rafRef   = useRef<number | null>(null);
+  const dirtyRef = useRef(true);
+
+  // Completion
+  const completedRef  = useRef(false);
+  const [showCongrats, setShowCongrats]     = useState(false);
+  const [awardedPoints, setAwardedPoints]   = useState<number | null>(null);
+  const startTimeRef  = useRef(Date.now());
+  const storageKeyRef = useRef("");
+
+  // Save/resume
+  const [resumed, setResumed]       = useState(false);
+  const savedElapsedRef             = useRef(0);
+
+  // Fullscreen
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const isFullscreenRef = useRef(false);
+  const [portalReady, setPortalReady]   = useState(false);
+
+  // UI helpers
+  const [isTouchDevice, setIsTouchDevice]               = useState(false);
+  const [mobileHintDismissed, setMobileHintDismissed]   = useState(false);
+  const [showPreview, setShowPreview]                   = useState(false);
+  const controlsAssignedRef = useRef(false);
+
+  // ── Rebuild Path2D cache ─────────────────────────────────────────────────
+
+  const rebuildCache = useCallback((edgesMap: Map<string, EdgeMap>) => {
+    const cache = new Map<string, Path2D>();
+    for (const [id, edges] of edgesMap) {
+      cache.set(id, buildPath2D(pwRef.current, phRef.current, edges, pathOpts));
+    }
+    pathCacheRef.current = cache;
+  }, [pathOpts]);
+
+  // ── Piece manipulation helpers ───────────────────────────────────────────
+
+  function moveGroup(arr: Piece[], gid: string, dx: number, dy: number): Piece[] {
+    return arr.map(p => p.groupId !== gid ? p : { ...p, pos: { x: p.pos.x + dx, y: p.pos.y + dy } });
+  }
+  function mergeInto(arr: Piece[], target: string, src: string): Piece[] {
+    if (target === src) return arr;
+    const targetSnapped = arr.some(p => p.groupId === target && p.snapped);
+    return arr.map(p => p.groupId !== src ? p : { ...p, groupId: target, snapped: targetSnapped || p.snapped });
+  }
+  function normaliseGroup(arr: Piece[], gid: string): Piece[] {
+    const group = arr.filter(p => p.groupId === gid);
+    if (group.length <= 1) return arr;
+    if (group.some(p => p.snapped)) {
+      return arr.map(p => p.groupId !== gid ? p : { ...p, snapped: true, pos: { ...p.correct } });
+    }
+    const anchor = [...group].sort((a, b) => a.pos.y - b.pos.y || a.pos.x - b.pos.x || a.id.localeCompare(b.id))[0];
+    return arr.map(p => p.groupId !== gid ? p : {
+      ...p, pos: {
+        x: anchor.pos.x + (p.correct.x - anchor.correct.x),
+        y: anchor.pos.y + (p.correct.y - anchor.correct.y),
+      }
+    });
+  }
+
+  // Try to snap group to board position
+  function snapToBoardIfClose(arr: Piece[], gid: string, tol: number): { pieces: Piece[]; snapped: boolean; dx: number; dy: number } {
+    const group = arr.filter(p => p.groupId === gid);
+    if (!group.length) return { pieces: arr, snapped: false, dx: 0, dy: 0 };
+    const dxs = group.map(p => p.correct.x - p.pos.x).sort((a, b) => a - b);
+    const dys = group.map(p => p.correct.y - p.pos.y).sort((a, b) => a - b);
+    const mid = Math.floor(group.length / 2);
+    const dx = dxs[mid], dy = dys[mid];
+    let maxErr = 0;
+    for (const p of group) {
+      maxErr = Math.max(maxErr, dist2(p.correct.x - p.pos.x - dx, p.correct.y - p.pos.y - dy));
+    }
+    if (maxErr > 1.5 || dist2(dx, dy) > tol) return { pieces: arr, snapped: false, dx: 0, dy: 0 };
+    const moved = moveGroup(arr, gid, dx, dy);
+    const result = moved.map(p => p.groupId !== gid ? p : { ...p, snapped: true, pos: { ...p.correct } });
+    return { pieces: result, snapped: true, dx, dy };
+  }
+
+  // Merge neighbours that are close enough
+  const snapMergeNeighbours = useCallback((arr: Piece[], gid: string, tol: number): Piece[] => {
+    let next = arr; let changed = true;
+    while (changed) {
+      changed = false;
+      const byId = new Map(next.map(p => [p.id, p]));
+      for (const p of next.filter(pz => pz.groupId === gid)) {
+        for (const [dr, dc] of [[-1,0],[0,1],[1,0],[0,-1]]) {
+          const nr = p.row + dr, nc = p.col + dc;
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+          const nb = byId.get(`${nr}-${nc}`);
+          if (!nb || nb.groupId === gid) continue;
+          const expected = { x: p.pos.x + (nb.correct.x - p.correct.x), y: p.pos.y + (nb.correct.y - p.correct.y) };
+          if (dist2(nb.pos.x - expected.x, nb.pos.y - expected.y) <= tol) {
+            next = moveGroup(next, nb.groupId, expected.x - nb.pos.x, expected.y - nb.pos.y);
+            next = mergeInto(next, gid, nb.groupId);
+            next = normaliseGroup(next, gid);
+            changed = true; break;
+          }
+        }
+        if (changed) break;
+      }
+    }
+    return next;
+  }, [rows, cols]);
+
+  // ── Spawn helper ─────────────────────────────────────────────────────────
+
+  const pickSpawn = useCallback((logW: number, logH: number): PiecePos => {
+    const _pw = pwRef.current, _ph = phRef.current;
+    // logW/logH are the stage dimensions in board-relative coords (stage = STAGE_SCALE × board)
+    // The board occupies boardOffX..boardOffX+boardWidth, boardOffY..boardOffY+boardHeight
+    const _bOffX = boardOffXRef.current, _bOffY = boardOffYRef.current;
+    const pad = Math.round(Math.min(_pw, _ph) * 0.08);
+    const fL = _bOffX - pad, fT = _bOffY - pad, fR = _bOffX + boardWidth + pad, fB = _bOffY + boardHeight + pad;
+    const maxX = logW - _pw, maxY = logH - _ph;
+    const outside = (x: number, y: number) => x + _pw <= fL || x >= fR || y + _ph <= fT || y >= fB;
+    type Rect = { x0: number; x1: number; y0: number; y1: number; area: number };
+    const rects: Rect[] = [];
+    const add = (x0: number, x1: number, y0: number, y1: number) => {
+      const ax = clamp(x0, 0, maxX), bx = clamp(x1, 0, maxX);
+      const ay = clamp(y0, 0, maxY), by = clamp(y1, 0, maxY);
+      if (bx > ax && by > ay) rects.push({ x0: ax, x1: bx, y0: ay, y1: by, area: (bx - ax) * (by - ay) });
+    };
+    add(0, fL - _pw, 0, maxY);
+    add(fR, maxX, 0, maxY);
+    add(fL, fR - _pw, 0, fT - _ph);
+    add(fL, fR - _pw, fB, maxY);
+    if (rects.length > 0) {
+      const total = rects.reduce((s, r) => s + r.area, 0) || 1;
+      let pick = Math.random() * total;
+      let chosen = rects[0];
+      for (const r of rects) { pick -= r.area; if (pick <= 0) { chosen = r; break; } }
+      for (let i = 0; i < 30; i++) {
+        const x = chosen.x0 + Math.random() * (chosen.x1 - chosen.x0);
+        const y = chosen.y0 + Math.random() * (chosen.y1 - chosen.y0);
+        if (outside(x, y)) return { x, y };
+      }
+    }
+    for (let i = 0; i < 200; i++) {
+      const x = Math.random() * maxX, y = Math.random() * maxY;
+      if (outside(x, y)) return { x, y };
+    }
+    return { x: 0, y: 0 };
+  }, [boardWidth, boardHeight]);
+
+  // ── Build starter pieces ─────────────────────────────────────────────────
+
+  const buildInitial = useCallback((
+    edgesMap: Map<string, EdgeMap>,
+  ): Piece[] => {
+    // Stage dimensions in board-relative space — stage is STAGE_SCALE × board
+    const stageLogW = boardWidth * STAGE_SCALE;
+    const stageLogH = boardHeight * STAGE_SCALE;
+    const list: Piece[] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const id = `${r}-${c}`;
+        // correct positions are board-relative (board starts at boardOffX, boardOffY in stage space,
+        // but we store all positions relative to the stage, i.e. boardOff + grid position).
+        const correct = {
+          x: boardOffXRef.current + c * pwRef.current,
+          y: boardOffYRef.current + r * phRef.current,
+        };
+        list.push({
+          id, row: r, col: c, edges: edgesMap.get(id)!,
+          correct, pos: pickSpawn(stageLogW, stageLogH),
+          groupId: id, z: 1, snapped: false,
+        });
+      }
+    }
+    return list;
+  }, [rows, cols, boardWidth, boardHeight, STAGE_SCALE, pickSpawn]);
+
+  // ── Initialise / re-initialise ───────────────────────────────────────────
+
+  const edgesMapRef = useRef<Map<string, EdgeMap>>(new Map());
+
+  useEffect(() => {
+    const edgesMap = buildEdges(rows, cols);
+    edgesMapRef.current = edgesMap;
+    rebuildCache(edgesMap);
+
+    const key = getStorageKey(puzzleId, imageUrl, rows, cols);
+    storageKeyRef.current = key;
+
+    const initial = buildInitial(edgesMap);
+    const saved   = loadJigsawProgress(key);
+    let finalPieces: Piece[];
+
+    if (saved && Object.keys(saved.pieces).length === rows * cols) {
+      savedElapsedRef.current = saved.elapsedMs ?? 0;
+      startTimeRef.current = Date.now() - savedElapsedRef.current;
+      finalPieces = applyProgress(initial, saved);
+      setResumed(true);
+      setTimeout(() => setResumed(false), 3500);
+    } else {
+      savedElapsedRef.current = 0;
+      startTimeRef.current = Date.now();
+      finalPieces = initial;
+    }
+
+    completedRef.current = false;
+    piecesRef.current = finalPieces;
+    setPiecesState(finalPieces);
+    dirtyRef.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, cols, imageUrl]);
+
+  // ── Image loading ────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    setEffectiveUrl(imageUrl ?? "");
+    setImageOk(null);
+    setProxyTried(false);
+  }, [imageUrl]);
+
+  useEffect(() => {
+    if (!effectiveUrl) { setImageOk(false); return; }
+    let cancelled = false;
+    const img = new Image();
+    // crossOrigin intentionally omitted: canvas taint is acceptable (no toDataURL/getImageData
+    // calls), and omitting it lets R2/CDN images load without requiring CORS headers.
+    img.onload = () => {
+      if (cancelled) return;
+      imgRef.current = img;
+      setImageOk(true);
+      dirtyRef.current = true;
+    };
+    img.onerror = () => {
+      if (cancelled) return;
+      if (!proxyTried && imageUrl) {
+        setProxyTried(true);
+        setEffectiveUrl(`/api/image-proxy?url=${encodeURIComponent(imageUrl)}`);
+      } else {
+        imgRef.current = null;
+        setImageOk(false);
+        dirtyRef.current = true;
+      }
+    };
+    img.src = effectiveUrl + (effectiveUrl.includes("?") ? "&" : "?") + `_ck=${reloadKey}`;
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveUrl, reloadKey, proxyTried]);
+
+  // ── Responsive canvas resize ─────────────────────────────────────────────
+
+  useLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const update = () => {
+      const availW = wrapper.clientWidth || boardWidth;
+      // Scale the STAGE (not just the board) to fit the available area.
+      // STAGE_SCALE > 1, so the board occupies the center and pieces scatter around it.
+      const stageAspect = (boardWidth * STAGE_SCALE) / (boardHeight * STAGE_SCALE);
+      const availH = isFullscreen
+        ? (window.innerHeight || 600) - TRAY_H - 56
+        : Math.min(window.innerHeight * 0.62, Math.max(320, availW / stageAspect));
+
+      // s: stage logical px → CSS px
+      const s = Math.min(availW / (boardWidth * STAGE_SCALE), availH / (boardHeight * STAGE_SCALE));
+      const physW = Math.round(boardWidth * STAGE_SCALE * s);
+      const physH = Math.round(boardHeight * STAGE_SCALE * s);
+      scaleRef.current = s;
+      setCanvasW(physW);
+      setCanvasH(physH);
+
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width  = physW * dpr;
+        canvas.height = physH * dpr;
+        canvas.style.width  = `${physW}px`;
+        canvas.style.height = `${physH}px`;
+        dirtyRef.current = true;
+      }
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(wrapper);
+    window.addEventListener("resize", update);
+    return () => { ro.disconnect(); window.removeEventListener("resize", update); };
+  }, [isFullscreen, boardWidth, boardHeight, TRAY_H, setPieces]);
+
+  // ── Auto-save (debounced) ────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (completedRef.current || !storageKeyRef.current) return;
+    const id = setTimeout(() => {
+      if (!completedRef.current) {
+        saveJigsawProgress(storageKeyRef.current, piecesRef.current, Math.max(0, Date.now() - startTimeRef.current));
+      }
+    }, 800);
+    return () => clearTimeout(id);
+  }, [pieces]);
+
+  // ── Solved check ─────────────────────────────────────────────────────────
+
+  const isSolved = useMemo(() => {
+    if (!pieces.length) return false;
+    const g = pieces[0].groupId;
+    return pieces.every(p => p.groupId === g) &&
+           pieces.every(p => dist2(p.pos.x - p.correct.x, p.pos.y - p.correct.y) < 1);
+  }, [pieces]);
+  const isSolvedRef = useRef(false);
+  isSolvedRef.current = isSolved;
+
+  // ── rAF render loop ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const render = (now: number) => {
+      rafRef.current = requestAnimationFrame(render);
+
+      // Advance snap spring
+      const snap = snapRef.current;
+      if (snap) {
+        const t = Math.min(1, (now - snap.t0) / snap.dur);
+        const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+        snap.dx = snap.dx * (1 - ease);
+        snap.dy = snap.dy * (1 - ease);
+        if (t >= 1) snapRef.current = null;
+        dirtyRef.current = true;
+      }
+
+      if (!dirtyRef.current) return;
+      dirtyRef.current = false;
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const W = canvas.width, H = canvas.height;
+      const s = scaleRef.current * dpr;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Background
+      const bgImg = document.getElementById("jigsaw-table-bg") as HTMLImageElement | null;
+      if (tableBackground && bgImg?.complete && bgImg.naturalWidth > 0) {
+        ctx.drawImage(bgImg, 0, 0, W, H);
+      } else {
+        ctx.fillStyle = "#0a0e14";
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      ctx.save();
+      ctx.scale(s, s);   // from here: 1 unit = 1 stage logical px
+
+      const _pw = pwRef.current, _ph = phRef.current;
+      const _bOffX = boardOffXRef.current, _bOffY = boardOffYRef.current;
+      const solved = isSolvedRef.current;
+
+      // Board area background + faint reference image
+      if (!solved) {
+        ctx.fillStyle = "#131720";
+        ctx.fillRect(_bOffX, _bOffY, boardWidth, boardHeight);
+        if (imageOk && imgRef.current) {
+          ctx.globalAlpha = 0.10;
+          ctx.drawImage(imgRef.current, _bOffX, _bOffY, boardWidth, boardHeight);
+          ctx.globalAlpha = 1;
+        }
+        // Ghost slot outlines
+        ctx.strokeStyle = "rgba(255,255,255,0.07)";
+        ctx.lineWidth = 1 / s;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const path = pathCacheRef.current.get(`${r}-${c}`);
+            if (!path) continue;
+            ctx.save(); ctx.translate(_bOffX + c * _pw, _bOffY + r * _ph); ctx.stroke(path); ctx.restore();
+          }
+        }
+        // Board border
+        ctx.strokeStyle = "rgba(255,255,255,0.22)";
+        ctx.lineWidth = 1.5 / s;
+        ctx.strokeRect(_bOffX, _bOffY, boardWidth, boardHeight);
+      }
+
+      // Sort: z-order, dragging group on top
+      const drag = dragRef.current;
+      const ag   = drag.active ? drag.groupId : null;
+      const sorted = [...piecesRef.current].sort((a, b) => {
+        const da = ag && a.groupId === ag ? 1 : 0;
+        const db = ag && b.groupId === ag ? 1 : 0;
+        return (da - db) || (a.z - b.z);
+      });
+
+      for (const p of sorted) {
+        const path = pathCacheRef.current.get(p.id);
+        if (!path) continue;
+
+        const dragging = ag !== null && p.groupId === ag;
+        // p.pos is in stage space (includes boardOff); Path2D starts at (0,0) in piece-local space
+        let px = p.pos.x, py = p.pos.y;
+        if (dragging) { px += drag.dx; py += drag.dy; }
+        if (snapRef.current && p.groupId === snapRef.current.groupId) {
+          px += snapRef.current.dx; py += snapRef.current.dy;
+        }
+
+        ctx.save();
+        ctx.translate(px, py);
+
+        // Drop shadow while dragging
+        if (dragging) {
+          ctx.shadowColor = "rgba(0,0,0,0.60)";
+          ctx.shadowBlur  = 20 / s;
+          ctx.shadowOffsetX = 3 / s;
+          ctx.shadowOffsetY = 9 / s;
+        }
+
+        // Clip + image
+        // After translate(px,py), piece-local (0,0) is at stage position (px,py).
+        // The correct board position for this piece is (boardOffX + col*pw, boardOffY + row*ph).
+        // We want slice (col*pw, row*ph) in image space to align at (0,0) in piece-local space.
+        // drawImage origin in piece-local = boardOffX - px + boardOffX... simplified:
+        // image top-left in piece-local = -(px - boardOffX) = boardOffX - px (since image starts at boardOffX in stage space)
+        // but we also need to offset the image by the piece's grid position:
+        // drawImage at (-( px - _bOffX ), -( py - _bOffY ), boardWidth, boardHeight)
+        const imgX = _bOffX - px;
+        const imgY = _bOffY - py;
+        ctx.save();
+        ctx.clip(path);
+        if (imageOk && imgRef.current) {
+          ctx.drawImage(imgRef.current, imgX, imgY, boardWidth, boardHeight);
+        } else {
+          const hue = ((p.row * cols + p.col) / (rows * cols)) * 360;
+          ctx.fillStyle = `hsl(${hue},38%,28%)`;
+          ctx.fill(path); // fill(path) covers tab protrusions; fillRect(0,0,pw,ph) would miss them
+        }
+        // Highlight sweep
+        ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+        const hl = ctx.createLinearGradient(0, 0, _pw, _ph);
+        hl.addColorStop(0, `rgba(255,255,255,${dragging ? 0.13 : 0.05})`);
+        hl.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = hl;
+        ctx.fill(path); // same: fill(path) covers tabs
+        ctx.restore();
+
+        // Outline
+        ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = (p.snapped || solved)
+          ? "rgba(255,255,255,0.14)"
+          : dragging ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.30)";
+        ctx.lineWidth = dragging ? 1.6 / s : 1 / s;
+        ctx.stroke(path);
+
+        ctx.restore();
+      }
+
+      ctx.restore(); // undo scale
+    };
+
+    rafRef.current = requestAnimationFrame(render);
+    return () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current); };
+  }, [boardWidth, boardHeight, rows, cols, imageOk, tableBackground]);
+
+  useEffect(() => { dirtyRef.current = true; }, [imageOk, pieces]);
+
+  // ── Hit testing ──────────────────────────────────────────────────────────
+
+  const hitTest = useCallback((lx: number, ly: number): Piece | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const drag = dragRef.current;
+    const ag   = drag.active ? drag.groupId : null;
+    const sorted = [...piecesRef.current].sort((a, b) => {
+      const da = ag && a.groupId === ag ? 1 : 0;
+      const db = ag && b.groupId === ag ? 1 : 0;
+      return (db - da) || (b.z - a.z);
+    });
+    for (const p of sorted) {
+      if (p.snapped) continue;
+      const path = pathCacheRef.current.get(p.id);
+      if (!path) continue;
+      let px = p.pos.x, py = p.pos.y;
+      if (snapRef.current && p.groupId === snapRef.current.groupId) {
+        px += snapRef.current.dx; py += snapRef.current.dy;
+      }
+      // lx/ly are in stage logical space; piece path is in piece-local space (0,0 at piece origin)
+      if (ctx.isPointInPath(path, lx - px, ly - py)) return p;
+    }
+    return null;
+  }, []);
+
+  // ── Client → logical canvas coords ──────────────────────────────────────
+
+  const clientToLogical = useCallback((cx: number, cy: number): PiecePos => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: cx, y: cy };
+    const rect = canvas.getBoundingClientRect();
+    const s = scaleRef.current;
+    return { x: (cx - rect.left) / s, y: (cy - rect.top) / s };
+  }, []);
+
+  // ── Canvas pointer handlers ──────────────────────────────────────────────
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (completedRef.current || isSolvedRef.current) return;
+    const lp  = clientToLogical(e.clientX, e.clientY);
+    const hit = hitTest(lp.x, lp.y);
+    if (!hit) return;
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.stopPropagation();
+
+    const group = piecesRef.current.filter(p => p.groupId === hit.groupId);
+    if (group.some(p => p.snapped)) return;
+
+    // Bring group to front
+    setPieces(prev => {
+      const maxZ = prev.reduce((m, p) => Math.max(m, p.z), 1);
+      return prev.map(p => p.groupId === hit.groupId ? { ...p, z: maxZ + 1 } : p);
+    });
+
+    const starts = new Map<string, PiecePos>();
+    for (const p of group) starts.set(p.id, { ...p.pos });
+
+    dragRef.current = {
+      active: true, pointerId: e.pointerId,
+      groupId: hit.groupId, anchorId: hit.id,
+      anchorOff: { x: lp.x - hit.pos.x, y: lp.y - hit.pos.y },
+      starts, dx: 0, dy: 0,
+    };
+    dirtyRef.current = true;
+  }, [clientToLogical, hitTest, setPieces]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag.active || e.pointerId !== drag.pointerId) return;
+    const lp   = clientToLogical(e.clientX, e.clientY);
+    const aStart = drag.starts.get(drag.anchorId!);
+    if (!aStart) return;
+
+    const rawDx = lp.x - drag.anchorOff.x - aStart.x;
+    const rawDy = lp.y - drag.anchorOff.y - aStart.y;
+
+    const _pw = pwRef.current, _ph = phRef.current;
+    // Stage logical dimensions
+    const stageLogW = boardWidth * STAGE_SCALE;
+    const stageLogH = boardHeight * STAGE_SCALE;
+
+    let minX = Infinity, minY = Infinity;
+    for (const sp of drag.starts.values()) { minX = Math.min(minX, sp.x); minY = Math.min(minY, sp.y); }
+
+    drag.dx = clamp(rawDx, -minX, stageLogW - _pw - minX);
+    drag.dy = clamp(rawDy, -minY, stageLogH - _ph - minY);
+    dirtyRef.current = true;
+  }, [clientToLogical, boardWidth, boardHeight]);
+
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag.active || e.pointerId !== drag.pointerId) return;
+
+    const { groupId, starts, dx, dy } = drag;
+    drag.active = false; drag.pointerId = null; drag.groupId = null;
+    drag.dx = 0; drag.dy = 0;
+    if (!groupId) return;
+
+    // Commit drag positions
+    let next = piecesRef.current.map(p => {
+      if (p.groupId !== groupId) return p;
+      const sp = starts.get(p.id);
+      return sp ? { ...p, pos: { x: sp.x + dx, y: sp.y + dy } } : p;
+    });
+
+    const adjBoard    = boardSnapTolerance / scaleRef.current;
+    const adjNeighbor = neighborSnapTolerance / scaleRef.current;
+
+    let lastSnapDelta: { dx: number; dy: number } | null = null;
+    const s1 = snapToBoardIfClose(next, groupId, adjBoard);
+    next = s1.pieces;
+    if (s1.snapped) lastSnapDelta = { dx: s1.dx, dy: s1.dy };
+    next = snapMergeNeighbours(next, groupId, adjNeighbor);
+    const s2 = snapToBoardIfClose(next, groupId, adjBoard);
+    next = s2.pieces;
+    if (s2.snapped) lastSnapDelta = { dx: s2.dx, dy: s2.dy };
+
+    if (lastSnapDelta && dist2(lastSnapDelta.dx, lastSnapDelta.dy) > 0.1) {
+      snapRef.current = {
+        groupId, dx: -lastSnapDelta.dx, dy: -lastSnapDelta.dy,
+        t0: performance.now(), dur: 200,
+      };
+    }
+
+    setPieces(next);
+  }, [boardSnapTolerance, neighborSnapTolerance, snapMergeNeighbours, setPieces]);
+
+  // ── Completion effect ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isSolved || completedRef.current) return;
+    completedRef.current = true;
+    clearJigsawProgress(storageKeyRef.current);
+    const elapsed = Math.max(0, Math.round((Date.now() - startTimeRef.current) / 1000));
+
+    (async () => {
+      try {
+        const reduced = typeof window !== "undefined" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const tl = gsap.timeline({ defaults: { ease: "power2.inOut" } });
+        const label = "flare";
+        tl.addLabel(label);
+
+        const canvas = canvasRef.current;
+        if (canvas && !reduced) {
+          tl.to(canvas, { boxShadow: "0 0 46px 14px rgba(255,215,0,0.75)", duration: 0.18, ease: "power3.out" }, label);
+          tl.to(canvas, { boxShadow: "0 0 0px 0px rgba(255,215,0,0)", duration: 0.38 }, `${label}+=0.18`);
+        }
+        if (!reduced && wrapperRef.current) {
+          tl.fromTo(wrapperRef.current,
+            { x: 0, y: 0 },
+            { x: 1.2, y: -0.8, duration: 0.06, yoyo: true, repeat: 4, ease: "power2.inOut", clearProps: "x,y" },
+            label);
+        }
+        if (!reduced && energyRingRef.current && energyGlowRef.current) {
+          tl.set([energyRingRef.current, energyGlowRef.current], { autoAlpha: 0, scale: 0.25, transformOrigin: "50% 50%" }, label);
+          tl.to([energyRingRef.current, energyGlowRef.current], { autoAlpha: 1, duration: 0.05 }, label);
+          tl.to(energyGlowRef.current, { scale: 1.6, autoAlpha: 0, duration: 0.55, ease: "power3.out" }, `${label}+=0.03`);
+          tl.to(energyRingRef.current, { scale: 2.0, autoAlpha: 0, duration: 0.62, ease: "power3.out" }, `${label}+=0.02`);
+        }
+        if (shimmerOuterRef.current && shimmerInnerRef.current) {
+          tl.set(shimmerOuterRef.current, { autoAlpha: 1 }, label);
+          tl.set([shimmerInnerRef.current, shimmerInnerBRef.current, shimmerInnerCRef.current].filter(Boolean) as gsap.TweenTarget,
+            { xPercent: -250, autoAlpha: 0 }, label);
+          tl.fromTo(shimmerInnerRef.current, { xPercent: -220, autoAlpha: 0 }, { xPercent: 220, autoAlpha: 1, duration: 0.70, ease: "power3.inOut" }, `${label}+=0.06`);
+          if (shimmerInnerBRef.current)
+            tl.fromTo(shimmerInnerBRef.current, { xPercent: -240, autoAlpha: 0 }, { xPercent: 240, autoAlpha: 0.85, duration: 0.92, ease: "power2.inOut" }, `${label}+=0.12`);
+          if (shimmerInnerCRef.current)
+            tl.fromTo(shimmerInnerCRef.current, { xPercent: -260, autoAlpha: 0 }, { xPercent: 260, autoAlpha: 0.95, duration: 0.55, ease: "power4.inOut" }, `${label}+=0.20`);
+          tl.to(shimmerOuterRef.current, { autoAlpha: 0, duration: 0.22 }, ">-0.06");
+        }
+        tl.play();
+        await new Promise<void>(res => tl.eventCallback("onComplete", res));
+
+        let pts: number | void | undefined;
+        if (onComplete) {
+          try { const r = onComplete(elapsed); pts = r instanceof Promise ? await r : r; } catch { /* noop */ }
+        }
+
+        await new Promise(r => setTimeout(r, 1000));
+
+        if (!suppressInternalCongrats) {
+          setShowCongrats(true);
+          if (messageRef.current)
+            gsap.fromTo(messageRef.current, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 1, ease: "power2.out" });
+        }
+
+        if (typeof pts === "number") {
+          setAwardedPoints(0);
+          await new Promise<void>(resolve => {
+            const obj = { val: 0 };
+            gsap.to(obj, { val: pts as number, duration: 0.9, ease: "power2.out",
+              onUpdate: () => setAwardedPoints(Math.round(obj.val)),
+              onComplete: () => { setAwardedPoints(pts as number); resolve(); },
+            });
+          });
+        } else {
+          setAwardedPoints(null);
+        }
+
+        await new Promise(r => setTimeout(r, 1700));
+        if (messageRef.current)
+          await new Promise<void>(res =>
+            gsap.to(messageRef.current!, { autoAlpha: 0, y: 8, duration: 0.45, ease: "power2.in", onComplete: res }));
+        if (!suppressInternalCongrats) setShowCongrats(false);
+        if (isFullscreen) { setIsFullscreen(false); await new Promise(r => setTimeout(r, 200)); }
+        if (onShowRatingModal) onShowRatingModal();
+      } catch (err) {
+        console.error("Jigsaw completion error:", err);
+        if (onComplete) { try { onComplete(elapsed); } catch { /* noop */ } }
+        if (isFullscreen) setIsFullscreen(false);
+        if (onShowRatingModal) onShowRatingModal();
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSolved]);
+
+  // ── Controls API ─────────────────────────────────────────────────────────
+
+  const sendLooseToTray = useCallback(() => {
+    setPieces(prev => {
+      const logW = boardWidth * STAGE_SCALE;
+      const logH = boardHeight * STAGE_SCALE;
+      const gids = [...new Set(prev.map(p => p.groupId))];
+      let next = [...prev.map(p => ({ ...p }))];
+      for (const gid of gids) {
+        const group = next.filter(p => p.groupId === gid);
+        if (group.some(p => p.snapped)) continue;
+        const tgt = {
+          x: clamp(Math.random() * (logW - pwRef.current * 2) + pwRef.current, 0, logW - pwRef.current),
+          y: clamp(Math.random() * (logH - phRef.current * 2) + phRef.current, 0, logH - phRef.current),
+        };
+        // Avoid placing on top of board
+        const _bOffX = boardOffXRef.current, _bOffY = boardOffYRef.current;
+        const onBoard = (x: number, y: number) =>
+          x + pwRef.current > _bOffX && x < _bOffX + boardWidth &&
+          y + phRef.current > _bOffY && y < _bOffY + boardHeight;
+        const minX = Math.min(...group.map(p => p.pos.x));
+        const minY = Math.min(...group.map(p => p.pos.y));
+        const shifted = { x: tgt.x - minX, y: tgt.y - minY };
+        // Only move if destination avoids the board; otherwise keep current pos
+        if (!onBoard(minX + shifted.x, minY + shifted.y)) {
+          next = next.map(p => p.groupId !== gid ? p : { ...p, pos: { x: p.pos.x + shifted.x, y: p.pos.y + shifted.y } });
+        }
+      }
+      return next;
+    });
+  }, [boardWidth, boardHeight, setPieces]);
+  const sendLooseRef = useRef(sendLooseToTray);
+  useEffect(() => { sendLooseRef.current = sendLooseToTray; }, [sendLooseToTray]);
+
+  useEffect(() => {
+    if (!onControlsReady || controlsAssignedRef.current) return;
+    const api = {
+      reset: () => {
+        clearJigsawProgress(storageKeyRef.current);
+        const fresh = buildInitial(edgesMapRef.current);
+        completedRef.current = false;
+        startTimeRef.current = Date.now();
+        savedElapsedRef.current = 0;
+        setPieces(fresh);
+      },
+      sendLooseToTray: () => sendLooseRef.current(),
+      enterFullscreen: () => setIsFullscreen(true),
+      exitFullscreen:  () => setIsFullscreen(false),
+      get isFullscreen() { return isFullscreenRef.current; },
+    };
+    try { onControlsReady(api as never); controlsAssignedRef.current = true; } catch { /* noop */ }
+  }, [onControlsReady, buildInitial, setPieces]);
+
+  // One-time setup
+  useEffect(() => {
+    setPortalReady(true);
+    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window);
+  }, []);
+  useEffect(() => { isFullscreenRef.current = isFullscreen; }, [isFullscreen]);
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const fn = (e: KeyboardEvent) => e.key === "Escape" && setIsFullscreen(false);
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
+  }, [isFullscreen]);
+
+  // ── Tray ─────────────────────────────────────────────────────────────────
+
+  /** Pieces that haven't landed on the board yet */
+  const trayPieces = useMemo(() =>
+    pieces.filter(p => !p.snapped).sort((a, b) => (a.row * cols + a.col) - (b.row * cols + b.col)),
+    [pieces, cols]);
+
+  /** Drag a piece from the tray up onto the canvas */
+  const onTrayDragDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>, pid: string) => {
+    if (completedRef.current || isSolvedRef.current) return;
+    const p = piecesRef.current.find(x => x.id === pid);
+    if (!p || p.snapped) return;
+    e.stopPropagation();
+
+    // Place piece at center of stage (away from the board)
+    const tX = boardOffXRef.current - pwRef.current - 8;
+    const tY = boardOffYRef.current + (boardHeight - phRef.current) / 2;
+
+    setPieces(prev => {
+      const maxZ = prev.reduce((m, x) => Math.max(m, x.z), 1);
+      return prev.map(x => x.id !== pid ? x : { ...x, z: maxZ + 1, pos: { x: tX, y: tY } });
+    });
+
+    const lp = clientToLogical(e.clientX, e.clientY);
+    const starts = new Map<string, PiecePos>([[pid, { x: tX, y: tY }]]);
+    dragRef.current = {
+      active: true, pointerId: e.pointerId,
+      groupId: p.groupId, anchorId: pid,
+      anchorOff: { x: lp.x - tX, y: lp.y - tY },
+      starts, dx: 0, dy: 0,
+    };
+    dirtyRef.current = true;
+    try { canvasRef.current?.setPointerCapture(e.pointerId); } catch { /* noop */ }
+  }, [boardWidth, boardHeight, clientToLogical, setPieces]);
+
+  /** Mini canvas for tray thumbnails */
+  const TrayThumb = useCallback(({ piece }: { piece: Piece }) => {
+    const ref = useRef<HTMLCanvasElement>(null);
+    const SCALE = 0.52;
+    const tw = Math.round(pwRef.current * SCALE);
+    const th = Math.round(phRef.current * SCALE);
+
+    useEffect(() => {
+      const c = ref.current;
+      if (!c) return;
+      const dpr = window.devicePixelRatio || 1;
+      c.width  = tw * dpr;
+      c.height = th * dpr;
+      c.style.width  = `${tw}px`;
+      c.style.height = `${th}px`;
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.scale(dpr * SCALE, dpr * SCALE);
+      const path = pathCacheRef.current.get(piece.id);
+      if (!path) return;
+      ctx.save();
+      ctx.clip(path);
+      if (imageOk && imgRef.current) {
+        // In tray thumbnail: piece is at (0,0) in thumb space; image slice is col*pw,row*ph
+        ctx.drawImage(imgRef.current,
+          -piece.col * pwRef.current, -piece.row * phRef.current,
+          boardWidth, boardHeight);
+      } else {
+        const hue = ((piece.row * cols + piece.col) / (rows * cols)) * 360;
+        ctx.fillStyle = `hsl(${hue},38%,32%)`;
+        ctx.fillRect(0, 0, pwRef.current, phRef.current);
+      }
+      const hl = ctx.createLinearGradient(0, 0, pwRef.current, phRef.current);
+      hl.addColorStop(0, "rgba(255,255,255,0.12)"); hl.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = hl; ctx.fillRect(0, 0, pwRef.current, phRef.current);
+      ctx.restore();
+      ctx.strokeStyle = "rgba(255,255,255,0.32)";
+      ctx.lineWidth = 1.2 / SCALE;
+      ctx.stroke(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [piece.id, imageOk]);
+
+    return (
+      <canvas
+        ref={ref}
+        width={tw} height={th}
+        style={{ display: "block", width: tw, height: th, cursor: "grab", borderRadius: 4,
+                 flexShrink: 0, touchAction: "none", userSelect: "none" }}
+        onPointerDown={e => onTrayDragDown(e, piece.id)}
+      />
+    );
+  }, [imageOk, boardWidth, boardHeight, rows, cols, onTrayDragDown]);
+
+  const groupCount = useMemo(() => new Set(pieces.map(p => p.groupId)).size, [pieces]);
+
+  // ── JSX ──────────────────────────────────────────────────────────────────
+
+  const ui = (
+    <div
+      ref={wrapperRef}
+      style={{
+        position: isFullscreen ? "fixed" : "relative",
+        inset: isFullscreen ? 0 : undefined,
+        zIndex: isFullscreen ? 12000 : undefined,
+        width: isFullscreen ? "100vw" : "100%",
+        height: isFullscreen ? "100vh" : undefined,
+        backgroundColor: "#070a0f",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        ...containerStyle,
+      }}
+    >
+      {/* ── Canvas area ──────────────────────────────── */}
+      <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+        {/* Table background image (drawn in canvas AND as HTML element for GSAP access) */}
+        {tableBackground && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img id="jigsaw-table-bg" src={tableBackground} alt=""
+               aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+                                    objectFit: "cover", pointerEvents: "none" }} />
+        )}
+
+        <canvas
+          ref={canvasRef}
+          width={canvasW} height={canvasH}
+          style={{
+            display: "block", width: "100%", height: "100%",
+            touchAction: "none", userSelect: "none", cursor: "default",
+          }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        />
+
+        {/* Shimmer overlay */}
+        <div ref={shimmerOuterRef}
+             style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0, zIndex: 999, overflow: "hidden" }}>
+          <div ref={shimmerInnerRef}
+               style={{ position: "absolute", left: 0, top: 0, width: "60%", height: "100%",
+                        background: "linear-gradient(90deg,rgba(255,215,0,0) 0%,rgba(255,215,0,0.92) 52%,rgba(255,215,0,0) 100%)",
+                        transform: "skewX(-20deg)", willChange: "transform,opacity" }} />
+          <div ref={shimmerInnerBRef}
+               style={{ position: "absolute", left: 0, top: 0, width: "85%", height: "100%",
+                        background: "linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,215,0,0.36) 35%,rgba(255,215,0,0.22) 52%,rgba(255,215,0,0.28) 68%,rgba(255,255,255,0) 100%)",
+                        transform: "skewX(-18deg)", opacity: 0, willChange: "transform,opacity" }} />
+          <div ref={shimmerInnerCRef}
+               style={{ position: "absolute", left: 0, top: 0, width: "40%", height: "100%",
+                        background: "linear-gradient(90deg,rgba(255,215,0,0) 0%,rgba(255,215,0,0.85) 48%,rgba(255,215,0,0) 100%)",
+                        transform: "skewX(-22deg)", opacity: 0, willChange: "transform,opacity" }} />
+        </div>
+
+        {/* Energy ring */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1001, overflow: "visible" }}>
+          <div ref={energyGlowRef}
+               style={{ position: "absolute", left: "50%", top: "50%", width: "115%", height: "115%",
+                        transform: "translate(-50%,-50%)", borderRadius: 9999, opacity: 0,
+                        background: "radial-gradient(circle,rgba(255,215,0,0.42) 0%,rgba(255,215,0,0.16) 36%,rgba(255,215,0,0) 72%)",
+                        willChange: "transform,opacity" }} />
+          <div ref={energyRingRef}
+               style={{ position: "absolute", left: "50%", top: "50%", width: "110%", height: "110%",
+                        transform: "translate(-50%,-50%)", borderRadius: 9999,
+                        border: "2px solid rgba(255,215,0,0.80)",
+                        boxShadow: "0 0 22px 6px rgba(255,215,0,0.22)", opacity: 0,
+                        willChange: "transform,opacity" }} />
+        </div>
+
+        {/* Congrats message */}
+        <div ref={messageRef}
+             style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
+                      pointerEvents: "none", zIndex: 9999, opacity: 0 }}>
+          <div style={{ background: "rgba(0,0,0,0.72)", padding: "20px 28px", borderRadius: 14,
+                        textAlign: "center", maxWidth: "min(720px,90%)" }}>
+            <div style={{ color: "#FDE74C", fontSize: 24, fontWeight: 800, marginBottom: 8 }}>
+              Congratulations! Puzzle completed!
+            </div>
+            <div style={{ color: "#DDDBF1", fontSize: 16 }}>
+              You&apos;ve been awarded{" "}
+              <span style={{ color: "#FDE74C", fontWeight: 800 }}>{awardedPoints ?? "..."}</span>{" "}
+              points!
+            </div>
+          </div>
+        </div>
+
+        {/* Resumed banner */}
+        {resumed && (
+          <div style={{ position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
+                        zIndex: 9000, background: "rgba(16,185,129,0.92)", color: "white",
+                        fontSize: 13, fontWeight: 600, padding: "6px 14px", borderRadius: 20,
+                        pointerEvents: "none", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
+            ✓ Progress restored — pick up where you left off
+          </div>
+        )}
+
+        {/* Mobile hint */}
+        {isTouchDevice && !isFullscreen && !mobileHintDismissed && !isSolved && (
+          <div style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
+                        zIndex: 9100, display: "flex", alignItems: "center", gap: 8,
+                        background: "rgba(10,20,40,0.88)", color: "white", fontSize: 12, fontWeight: 500,
+                        padding: "7px 12px", borderRadius: 22, boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
+                        border: "1px solid rgba(255,255,255,0.12)", whiteSpace: "nowrap" }}>
+            <span>Drag pieces · try fullscreen</span>
+            <button onClick={() => setIsFullscreen(true)}
+                    style={{ background: "rgba(99,102,241,0.9)", border: "none", color: "white",
+                             padding: "3px 10px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+              Fullscreen
+            </button>
+            <button onClick={() => setMobileHintDismissed(true)}
+                    aria-label="Dismiss"
+                    style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
+                             cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px" }}>
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* Preview button */}
+        {imageOk && effectiveUrl && !isSolved && (
+          <button onClick={() => setShowPreview(v => !v)}
+                  style={{ position: "absolute", bottom: 12, right: 12, zIndex: 9100,
+                           background: showPreview ? "rgba(99,102,241,0.9)" : "rgba(10,20,40,0.85)",
+                           color: "rgba(255,255,255,0.9)", border: "1px solid rgba(255,255,255,0.2)",
+                           borderRadius: 14, padding: "5px 13px", fontSize: 12, fontWeight: 600,
+                           cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 5 }}>
+            🖼 {showPreview ? "Hide Preview" : "Preview Image"}
+          </button>
+        )}
+
+        {/* Preview overlay */}
+        {showPreview && effectiveUrl && (
+          <div onClick={() => setShowPreview(false)}
+               style={{ position: "absolute", inset: 0, zIndex: 9500, display: "flex",
+                        alignItems: "center", justifyContent: "center",
+                        background: "rgba(0,0,0,0.75)", cursor: "pointer" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={effectiveUrl} alt="Puzzle preview"
+                 style={{ maxWidth: "80%", maxHeight: "80%", objectFit: "contain", borderRadius: 8,
+                          boxShadow: "0 8px 40px rgba(0,0,0,0.7)", border: "2px solid rgba(255,255,255,0.2)",
+                          pointerEvents: "none" }} />
+            <div style={{ position: "absolute", top: 12, right: 12, color: "rgba(255,255,255,0.7)",
+                          fontSize: 13, fontWeight: 600 }}>
+              Click anywhere to close
+            </div>
+          </div>
+        )}
+
+        {/* Image error */}
+        {imageOk === false && (
+          <div style={{ position: "absolute", left: 12, top: 12, background: "rgba(0,0,0,0.6)",
+                        color: "white", padding: "6px 10px", borderRadius: 8, fontSize: 12, zIndex: 200 }}>
+            Image failed to load.{" "}
+            <button onClick={() => {
+                      setImageOk(null); setReloadKey(k => k + 1);
+                      setProxyTried(false); setEffectiveUrl(imageUrl ?? "");
+                    }}
+                    style={{ marginLeft: 8, background: "#2b6cb0", color: "white", border: "none",
+                             padding: "4px 8px", borderRadius: 6, cursor: "pointer" }}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Fullscreen exit */}
+        {isFullscreen && (
+          <button onClick={() => setIsFullscreen(false)}
+                  style={{ position: "absolute", right: 12, top: 12, zIndex: 13000, padding: "6px 8px",
+                           borderRadius: 8, background: "rgba(0,0,0,0.5)", color: "white",
+                           border: "1px solid rgba(255,255,255,0.06)", cursor: "pointer" }}>
+            Exit Fullscreen
+          </button>
+        )}
+
+        {/* Stats */}
+        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 200,
+                      display: "flex", gap: 8, alignItems: "center", pointerEvents: "none" }}>
+          <div style={{ background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.8)", fontSize: 11,
+                        fontWeight: 600, padding: "4px 10px", borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.1)", letterSpacing: "0.02em" }}>
+            {pieces.filter(p => p.snapped).length}/{pieces.length} placed
+          </div>
+          {groupCount > 1 && (
+            <div style={{ background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.6)", fontSize: 11,
+                          fontWeight: 600, padding: "4px 10px", borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.08)" }}>
+              {groupCount} groups
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Tray ─────────────────────────────────────── */}
+      {!isSolved && trayPieces.length > 0 && (
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.4)",
+                      backdropFilter: "blur(8px)" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.35)",
+                        letterSpacing: "0.1em", textTransform: "uppercase",
+                        padding: "6px 12px 2px", userSelect: "none" }}>
+            Pieces ({trayPieces.length} remaining)
+          </div>
+          <div style={{ display: "flex", gap: 8, padding: "8px 12px 12px",
+                        overflowX: "auto", overflowY: "hidden",
+                        height: TRAY_H, alignItems: "center",
+                        WebkitOverflowScrolling: "touch",
+                        scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>
+            {trayPieces.map(p => <TrayThumb key={p.id} piece={p} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (isFullscreen && portalReady && typeof document !== "undefined") {
+    return createPortal(ui, document.body);
+  }
+  return ui;
+}

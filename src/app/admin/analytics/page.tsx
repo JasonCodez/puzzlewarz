@@ -75,12 +75,35 @@ interface PuzzleReview {
   };
 }
 
+interface GridlockRecentSolve {
+  id: string;
+  puzzleId: string;
+  puzzleTitle: string;
+  rank: string;
+  elapsedSeconds: number;
+  submissionCount: number;
+  solvedAt: string;
+  isGuest: boolean;
+  userName: string | null;
+}
+
+interface GridlockPuzzleSummary {
+  puzzleId: string;
+  title: string;
+  totalSolves: number;
+  avgSeconds: number;
+  avgAttempts: number;
+  rankBreakdown: Record<string, number>;
+}
+
 export default function AdminAnalyticsPage() {
   const { data: session, status } = useSession();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [reviews, setReviews] = useState<PuzzleReview[]>([]);
+  const [gridlockSolves, setGridlockSolves] = useState<GridlockRecentSolve[]>([]);
+  const [gridlockSummaries, setGridlockSummaries] = useState<GridlockPuzzleSummary[]>([]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -95,9 +118,10 @@ export default function AdminAnalyticsPage() {
 
   const checkAdminAndFetchData = async () => {
     try {
-      const [analyticsRes, reviewsRes] = await Promise.all([
+      const [analyticsRes, reviewsRes, gridlockRes] = await Promise.all([
         fetch("/api/admin/analytics"),
         fetch("/api/admin/reviews"),
+        fetch("/api/admin/gridlock-solves"),
       ]);
 
       if (analyticsRes.ok) {
@@ -111,6 +135,12 @@ export default function AdminAnalyticsPage() {
       if (reviewsRes.ok) {
         const reviewsData = await reviewsRes.json();
         setReviews(reviewsData.reviews);
+      }
+
+      if (gridlockRes.ok) {
+        const gd = await gridlockRes.json();
+        setGridlockSolves(gd.recentSolves ?? []);
+        setGridlockSummaries(gd.puzzleSummaries ?? []);
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -494,6 +524,99 @@ export default function AdminAnalyticsPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Gridlock File Solves */}
+          <div
+            className="rounded-lg p-6 border mb-8"
+            style={{
+              backgroundColor: "rgba(255, 208, 0, 0.05)",
+              borderColor: "rgba(255, 208, 0, 0.25)",
+            }}
+          >
+            <h2 className="text-xl font-bold text-white mb-5 flex items-center gap-2">
+              🔐 Gridlock File Solves
+            </h2>
+
+            {/* Per-puzzle summary */}
+            {gridlockSummaries.length > 0 && (
+              <div className="mb-6">
+                <p className="text-xs font-mono text-yellow-500/70 tracking-widest uppercase mb-3">Puzzle Summary</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm font-mono">
+                    <thead>
+                      <tr className="text-left border-b border-white/10">
+                        <th className="pb-2 pr-4 text-xs text-gray-500 font-normal">Puzzle</th>
+                        <th className="pb-2 pr-4 text-xs text-gray-500 font-normal text-right">Solves</th>
+                        <th className="pb-2 pr-4 text-xs text-gray-500 font-normal text-right">Avg Time</th>
+                        <th className="pb-2 pr-4 text-xs text-gray-500 font-normal text-right">Avg Attempts</th>
+                        <th className="pb-2 text-xs text-gray-500 font-normal">Rank Split</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gridlockSummaries.map((s) => (
+                        <tr key={s.puzzleId} className="border-b border-white/5">
+                          <td className="py-2 pr-4 text-white max-w-[180px] truncate">{s.title}</td>
+                          <td className="py-2 pr-4 text-yellow-400 text-right font-bold">{s.totalSolves}</td>
+                          <td className="py-2 pr-4 text-gray-300 text-right">
+                            {s.avgSeconds < 60
+                              ? `${Math.round(s.avgSeconds)}s`
+                              : `${Math.floor(s.avgSeconds / 60)}m ${Math.round(s.avgSeconds % 60)}s`}
+                          </td>
+                          <td className="py-2 pr-4 text-gray-300 text-right">{s.avgAttempts.toFixed(1)}</td>
+                          <td className="py-2 text-gray-400 text-xs">
+                            {(['S','A','B','C','F'] as const)
+                              .filter(r => s.rankBreakdown[r])
+                              .map(r => `${r}:${s.rankBreakdown[r]}`)
+                              .join('  ')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Recent solves feed */}
+            <p className="text-xs font-mono text-yellow-500/70 tracking-widest uppercase mb-3">Recent Solves (last 50)</p>
+            {gridlockSolves.length === 0 ? (
+              <p className="text-center py-6 text-gray-600 text-sm font-mono">No solves recorded yet</p>
+            ) : (
+              <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                {gridlockSolves.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between px-3 py-2 rounded text-xs font-mono"
+                    style={{ backgroundColor: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.05)" }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className="font-black w-5 text-center"
+                        style={{
+                          color: s.rank === 'S' ? '#FFD700' : s.rank === 'A' ? '#7DF9AA' : s.rank === 'B' ? '#60CFFF' : s.rank === 'C' ? '#C0C0C0' : '#9CA3AF',
+                        }}
+                      >
+                        {s.rank}
+                      </span>
+                      <span className="text-white truncate max-w-[160px]">{s.puzzleTitle}</span>
+                      <span className="text-gray-500">
+                        {s.isGuest ? '👤 guest' : (s.userName ?? 'user')}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 flex-shrink-0 text-gray-500">
+                      <span>{s.submissionCount} attempt{s.submissionCount !== 1 ? 's' : ''}</span>
+                      <span>
+                        {s.elapsedSeconds < 60
+                          ? `${s.elapsedSeconds}s`
+                          : `${Math.floor(s.elapsedSeconds / 60)}m ${s.elapsedSeconds % 60}s`}
+                      </span>
+                      <span>{new Date(s.solvedAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* User Reviews (Admin Only) */}

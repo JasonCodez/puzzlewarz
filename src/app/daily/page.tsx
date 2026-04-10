@@ -292,7 +292,15 @@ export default function DailyPage() {
       evaluate(g, word).map(s => EMOJI[s as keyof typeof EMOJI] ?? "⬛").join("")
     );
     const score = status === "won" ? `${guesses.length}/${MAX_ROWS}` : `X/${MAX_ROWS}`;
-    const text  = `Puzzle Warz Daily #${dayNum} ${score}\n\n${rows.join("\n")}\n\nhttps://puzzlewarz.com/daily`;
+    const streakLine = dailyStreak > 0
+      ? (status === "won"
+        ? `\n🔥 ${dailyStreak}-day streak`
+        : `\n😔 Streak broken at ${dailyStreak} days`)
+      : "";
+    const taunt = status === "won"
+      ? "\nThink you can beat it? 👇"
+      : "\nI'll get it tomorrow. 💪";
+    const text = `⚔️ PuzzleWarz Daily #${dayNum} — ${score}\n\n${rows.join("\n")}${streakLine}${taunt}\nhttps://puzzlewarz.com/daily`;
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({ text });
     } else {

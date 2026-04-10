@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireEscapeRoomTeamContext } from "@/lib/escapeRoomTeamAuth";
+import { requireEscapeRoomTeamContext, progressWhereClause, getSessionMembers, getLobbyHostId } from "@/lib/escapeRoomTeamAuth";
 import { getLobbyLeaderId } from "@/lib/teamLobbyStore";
 
 function safeJsonParse<T>(raw: unknown, fallback: T): T {
@@ -61,9 +61,10 @@ export async function POST(
     const puzzleId = resolved.id;
 
     const body = await request.json().catch(() => ({}));
-    const { action, teamId, itemKey } = body as {
+    const { action, teamId, lobbyId, itemKey } = body as {
       action?: string;
       teamId?: string;
+      lobbyId?: string;
       itemKey?: string;
     };
 
@@ -71,15 +72,16 @@ export async function POST(
 
     // For session operations we want to allow reading/updating pre-run state, but still block retry after fail/complete.
     const ctx = await requireEscapeRoomTeamContext(request, puzzleId, {
-      teamId,
+      teamId: lobbyId ? undefined : teamId,
+      lobbyId,
       requireStarted: true,
       requireNotFinished: true,
     });
     if (ctx instanceof NextResponse) return ctx;
 
     const [progress, user] = await Promise.all([
-      (prisma as any).teamEscapeProgress.findUnique({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+      (prisma as any).teamEscapeProgress.findFirst({
+        where: progressWhereClause(ctx),
         select: {
           id: true,
           inventory: true,
@@ -103,17 +105,22 @@ export async function POST(
     }
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    // Leader is the creator of the current lobby (teamId::puzzleId).
-    // If the lobby isn't in-memory (e.g., after a restart), fall back to allowing start.
-    const lobbyLeaderId = getLobbyLeaderId(ctx.teamId, puzzleId);
-    const isLeader = lobbyLeaderId ? lobbyLeaderId === ctx.userId : true;
+    // Leader: for lobby mode check DB host; for team mode use in-memory store.
+    let isLeader = true;
+    if (ctx.isLobby) {
+      const hostId = await getLobbyHostId(ctx);
+      isLeader = !hostId || hostId === ctx.userId;
+    } else {
+      const lobbyLeaderId = getLobbyLeaderId(ctx.teamId, puzzleId);
+      isLeader = lobbyLeaderId ? lobbyLeaderId === ctx.userId : true;
+    }
 
     if (action === "ackBriefing") {
       const acks = safeJsonParse<BriefingAcksMap>(progress.briefingAcks, {});
       acks[ctx.userId] = nowIso();
 
       const updated = await (prisma as any).teamEscapeProgress.update({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+        where: { id: progress.id },
         data: { briefingAcks: JSON.stringify(acks) },
         select: { briefingAcks: true, runStartedAt: true, runExpiresAt: true },
       });
@@ -147,10 +154,7 @@ export async function POST(
         return NextResponse.json({ ok: true, runStartedAt: progress.runStartedAt, runExpiresAt: progress.runExpiresAt });
       }
 
-      const members = await prisma.teamMember.findMany({
-        where: { teamId: ctx.teamId },
-        select: { userId: true },
-      });
+      const members = await getSessionMembers(ctx);
       const memberIds = new Set(members.map((m) => m.userId));
 
       const escapeRoom = await prisma.escapeRoomPuzzle.findUnique({
@@ -173,8 +177,32 @@ export async function POST(
       const startedAt = new Date();
       const expiresAt = new Date(startedAt.getTime() + limitSeconds * 1000);
 
+      // For team-mode runs: abandon any paused solo saves for team members on this escape room.
+      // This resets their solo progress so it doesn't interfere with the shared team session.
+      if (!ctx.isLobby) {
+        const memberIdList = Array.from(memberIds);
+        if (memberIdList.length > 0) {
+          await (prisma as any).teamEscapeProgress.updateMany({
+            where: {
+              soloUserId: { in: memberIdList },
+              escapeRoomId: ctx.escapeRoomId,
+              pausedAt: { not: null },
+              completedAt: null,
+              failedAt: null,
+            },
+            data: {
+              failedAt: startedAt,
+              failedReason: "solo_abandoned",
+              pausedAt: null,
+              pausedRemainingMs: null,
+              soloUserId: null,
+            },
+          });
+        }
+      }
+
       const updated = await (prisma as any).teamEscapeProgress.update({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+        where: { id: progress.id },
         data: { runStartedAt: startedAt, runExpiresAt: expiresAt },
         select: { runStartedAt: true, runExpiresAt: true, briefingAcks: true },
       });
@@ -231,7 +259,7 @@ export async function POST(
       };
 
       const updated = await (prisma as any).teamEscapeProgress.update({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+        where: { id: progress.id },
         data: { inventoryLocks: JSON.stringify(locks) },
         select: { inventoryLocks: true },
       });
@@ -271,13 +299,13 @@ export async function POST(
 
       delete locks[itemKey];
 
-      const updated = await (prisma as any).teamEscapeProgress.update({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+      const updated2 = await (prisma as any).teamEscapeProgress.update({
+        where: { id: progress.id },
         data: { inventoryLocks: JSON.stringify(locks) },
         select: { inventoryLocks: true },
       });
 
-      const inventoryLocks = safeJsonParse(updated.inventoryLocks, {});
+      const inventoryLocks = safeJsonParse(updated2.inventoryLocks, {});
       await emitEscapeSession(ctx.teamId, puzzleId, {
         teamId: ctx.teamId,
         puzzleId,
@@ -300,7 +328,7 @@ export async function POST(
       delete locks[itemKey];
 
       const updated = await (prisma as any).teamEscapeProgress.update({
-        where: { teamId_escapeRoomId: { teamId: ctx.teamId, escapeRoomId: ctx.escapeRoomId } },
+        where: { id: progress.id },
         data: { inventoryLocks: JSON.stringify(locks) },
         select: { inventoryLocks: true },
       });

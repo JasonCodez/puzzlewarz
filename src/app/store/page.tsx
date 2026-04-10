@@ -684,13 +684,12 @@ function StorePageInner() {
     ? items
     : items.filter((i) => i.category === activeCategory);
 
-  if (status === "unauthenticated") {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#0a0c10" }}>
-        <p className="text-white">Please sign in to access the store.</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/auth/signin');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  if (status === "unauthenticated") return null;
 
   return (
     <div className="min-h-screen px-4 pt-28 pb-12" style={{ backgroundColor: "#0a0c10" }}>

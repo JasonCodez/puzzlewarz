@@ -161,6 +161,8 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [referral, setReferral] = useState<{ inviteCode: string; link: string; signedUp: number } | null>(null);
+  const [referralCopied, setReferralCopied] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -170,7 +172,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (session?.user?.email) {
-      Promise.all([fetchUserStats(), fetchAdminStatus()]).finally(() => {
+      Promise.all([fetchUserStats(), fetchAdminStatus(), fetchReferral()]).finally(() => {
         setLoading(false);
         setTimeout(() => setMounted(true), 60);
       });
@@ -199,6 +201,13 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Failed to check admin status:', error);
     }
+  };
+
+  const fetchReferral = async () => {
+    try {
+      const res = await fetch('/api/user/referral');
+      if (res.ok) setReferral(await res.json());
+    } catch { /* non-fatal */ }
   };
 
   /* ── Loading skeleton ─────────────────────────────────── */
@@ -332,6 +341,59 @@ export default function Dashboard() {
               <StatCard key={i} {...s} delay={0.08 + i * 0.1} visible={mounted} />
             ))}
           </div>
+
+          {/* ── Referral widget ─────────────────────────── */}
+          {referral && (
+            <div style={{
+              marginBottom: 48,
+              padding: '20px 24px',
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, rgba(255,208,0,0.06) 0%, rgba(0,0,0,0) 70%)',
+              border: '1px solid rgba(255,208,0,0.2)',
+              display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16,
+              opacity: mounted ? 1 : 0, transform: mounted ? 'translateY(0)' : 'translateY(18px)',
+              transition: 'opacity 0.6s ease 0.35s, transform 0.5s ease 0.35s',
+            }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#FFD700', marginBottom: 4 }}>
+                  🔗 Invite Friends
+                </div>
+                <div style={{ fontSize: 13, color: '#9ca3af', lineHeight: 1.5 }}>
+                  {referral.signedUp > 0
+                    ? `${referral.signedUp} player${referral.signedUp !== 1 ? 's' : ''} joined via your link`
+                    : 'Share your link — every solver on the board makes it more competitive'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <code style={{
+                  fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#FFD700',
+                  background: 'rgba(255,208,0,0.08)', border: '1px solid rgba(255,208,0,0.2)',
+                  borderRadius: 8, padding: '6px 12px', letterSpacing: '0.05em',
+                  maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  display: 'block',
+                }}>
+                  {referral.link}
+                </code>
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(referral.link);
+                    setReferralCopied(true);
+                    setTimeout(() => setReferralCopied(false), 2000);
+                  }}
+                  style={{
+                    padding: '7px 16px', borderRadius: 8, fontWeight: 700, fontSize: 12,
+                    fontFamily: 'ui-monospace, monospace', cursor: 'pointer',
+                    background: referralCopied ? 'rgba(125,249,170,0.15)' : 'rgba(255,208,0,0.12)',
+                    border: referralCopied ? '1px solid rgba(125,249,170,0.4)' : '1px solid rgba(255,208,0,0.35)',
+                    color: referralCopied ? '#7DF9AA' : '#FFD700',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {referralCopied ? '✓ Copied!' : 'Copy Link'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Core nav cards ──────────────────────────────── */}
           <div style={{ marginBottom: isAdmin ? 48 : 0 }}>

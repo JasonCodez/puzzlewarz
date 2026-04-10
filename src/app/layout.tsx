@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s | Puzzle Warz",
   },
   description:
-    "The ultimate multiplayer puzzle platform. Solve ARG-style challenges solo or with your team, climb real-time leaderboards, and unlock achievements on Puzzle Warz.",
+    "Daily logic puzzles. Find the hidden rule, crack the grid, see how you rank. Free to play — Puzzle Warz.",
   keywords: [
     "puzzle platform",
     "online puzzles",
@@ -49,24 +49,15 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: "Puzzle Warz",
-    title: "Puzzle Warz — Solve Challenges, Compete & Win",
+    title: "Puzzle Warz — Crack Today's Gridlock File",
     description:
-      "The ultimate multiplayer puzzle platform. Solve ARG-style challenges solo or with your team, climb real-time leaderboards, and unlock achievements.",
-    images: [
-      {
-        url: "/images/puzzle_warz_logo.png",
-        width: 1200,
-        height: 630,
-        alt: "Puzzle Warz",
-      },
-    ],
+      "Daily logic puzzles. Find the hidden rule, crack the grid, see how you rank. Free to play.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Puzzle Warz — Solve Challenges, Compete & Win",
+    title: "Puzzle Warz — Crack Today's Gridlock File",
     description:
-      "The ultimate multiplayer puzzle platform. Solve ARG-style challenges solo or with your team, climb real-time leaderboards, and unlock achievements.",
-    images: ["/images/puzzle_warz_logo.png"],
+      "Daily logic puzzles. Find the hidden rule, crack the grid, see how you rank. Free to play.",
   },
   icons: {
     icon: "/images/puzzle_warz_logo.png",

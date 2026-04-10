@@ -1077,6 +1077,12 @@ interface PuzzleTypeFieldsProps {
 export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange }: PuzzleTypeFieldsProps) {
   const [detectiveJson, setDetectiveJson] = useState<string>('');
   const [detectiveJsonError, setDetectiveJsonError] = useState<string>('');
+  const [crimeCaseJson, setCrimeCaseJson] = useState<string>('');
+  const [crimeCaseJsonError, setCrimeCaseJsonError] = useState<string>('');
+  const [parasiteCodeJson, setParasiteCodeJson] = useState<string>('');
+  const [parasiteCodeJsonError, setParasiteCodeJsonError] = useState<string>('');
+  const [gridlockFileJson, setGridlockFileJson] = useState<string>('');
+  const [gridlockFileJsonError, setGridlockFileJsonError] = useState<string>('');
   const [templateId, setTemplateId] = useState<string>('');
   const [templateConfirm, setTemplateConfirm] = useState(false);
 
@@ -1535,6 +1541,389 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
           Match Color Names (e.g., blue)
         </label>
       </div>
+    </div>
+  );
+
+  // ── Crime RPG initializer ────────────────────────────────────────────────
+  useEffect(() => {
+    if (puzzleType !== 'crime_rpg') return;
+    const existing = (puzzleData as any)?.crimeCase;
+    const template = {
+      caseTitle: 'The Cartographer\'s Last Map',
+      premise: 'A renowned cartographer is found dead in his locked study. Three colleagues had keys. The map he was working on — rumoured to expose a buried secret — is missing. You have 48 hours before the estate is sold and the evidence destroyed.',
+      caseClockHours: 48,
+      sceneImageUrl: '',
+      evidence: [
+        {
+          id: 'e1',
+          label: 'Torn Letter',
+          type: 'document',
+          summary: 'Half a letter found in the grate. Ink still legible.',
+          content: 'Victor —\n\nIf this reaches you I am already beyond helping. The map is not what they think. Look beneath the —\n\n[TORN]',
+          imageUrl: '',
+          hiddenLayers: [
+            {
+              id: 'e1_layer1',
+              trigger: 'contrast',
+              filterThreshold: 2.2,
+              revealText: 'A faint second handwriting appears in the margin: "Do not let R. see this. He already suspects."',
+            },
+          ],
+        },
+        {
+          id: 'e2',
+          label: 'Access Log',
+          type: 'record',
+          summary: 'Electronic log for the study\'s smart lock. Last 24 hours.',
+          content: '2024-03-14  08:12  UNLOCK  —  card #4 (Renata H.)\n2024-03-14  08:55  LOCK    —  auto-close\n2024-03-14  13:40  UNLOCK  —  card #4 (Renata H.)\n2024-03-14  14:02  LOCK    —  manual\n2024-03-14  21:17  UNLOCK  —  card #1 (Victor M. — MASTER)\n2024-03-14  21:19  LOCK    —  auto-close\n2024-03-15  02:41  UNLOCK  —  card #4 (Renata H.)\n2024-03-15  02:44  LOCK    —  manual\n2024-03-15  07:03  UNLOCK  —  card #2 (Dmitri L.)\n2024-03-15  07:03  ALARM   —  body found',
+          imageUrl: '',
+        },
+        {
+          id: 'e3',
+          label: 'Chat Log: Renata & Victor',
+          type: 'chat_log',
+          summary: 'Encrypted message thread recovered from Victor\'s phone.',
+          content: 'Renata: I saw what you found in the annexe. You should have told me.\nVictor: It was never yours to know.\nRenata: You can\'t publish those coordinates without the consortium\'s approval.\nVictor: Watch me.\n[14 hours gap]\nRenata: We can still work this out. Meet me tonight.\nVictor: Come after 9. I\'ll leave the lock off.',
+          imageUrl: '',
+          hiddenLayers: [
+            {
+              id: 'e3_layer1',
+              trigger: 'combine',
+              combineWithId: 'e2',
+              revealText: 'Cross-referencing the chat with the access log: Renata arrived at 02:41 — five hours after Victor said he\'d leave the lock off. That gap is unaccounted for.',
+            },
+          ],
+        },
+        {
+          id: 'e4',
+          label: 'Autopsy Summary',
+          type: 'record',
+          summary: 'Pathologist\'s preliminary findings.',
+          content: 'Victim: Victor Malone, 61\nTime of death: 22:00–23:30 (±45 min)\nCause: Cardiac arrest\nNote: Traces of digoxin found in blood — 3× therapeutic threshold.\nNote: Victim had a documented heart condition; prescription on file.\nNote: A digoxin overdose in a patient with existing cardiac issues can be undetectable without a full toxicology screen.',
+          imageUrl: '',
+        },
+        {
+          id: 'e5',
+          label: 'Renata\'s Bag Contents',
+          type: 'photo',
+          summary: 'Inventory photo taken when suspect was detained.',
+          content: 'Items photographed:\n- Wallet\n- Car keys (rental, same model as tyre tracks outside)\n- Prescription bottle (label scratched off, pills match digoxin)\n- A torn corner of paper matching the grain of the Torn Letter\n- Map tube (empty)',
+          imageUrl: '',
+          hiddenLayers: [
+            {
+              id: 'e5_layer1',
+              trigger: 'zoom',
+              revealText: 'Zooming in on the prescription bottle: the batch number is still readable — FL-2291. The dispensing pharmacy\'s records will show when and by whom this was collected.',
+            },
+          ],
+        },
+      ],
+      suspects: [
+        {
+          id: 'renata',
+          name: 'Renata Holst',
+          age: 44,
+          role: 'Consortium Director',
+          photoUrl: '',
+          bio: 'Holds access card #4. Was in the building twice during the night. Stands to lose funding rights if Victor publishes independently. No alibi for the 22:00 window.',
+          interrogation: [
+            {
+              id: 'renata_q1',
+              question: 'Where were you between 21:00 and 23:00 on the night of the incident?',
+              answer: 'I was at my apartment. I had no reason to be there that late.',
+              isFlaggedAnswer: false,
+            },
+            {
+              id: 'renata_q2',
+              question: 'Access logs show you entered the study at 02:41. What were you looking for?',
+              answer: 'I... I forgot some papers. That\'s all. I didn\'t see anything unusual.',
+              isFlaggedAnswer: true,
+            },
+            {
+              id: 'renata_q3',
+              question: 'Are you familiar with digoxin?',
+              answer: 'Only in passing. I know it\'s a heart medication. Victor mentioned it once.',
+              isFlaggedAnswer: true,
+            },
+          ],
+        },
+        {
+          id: 'dmitri',
+          name: 'Dmitri Lenz',
+          age: 38,
+          role: 'Research Assistant',
+          photoUrl: '',
+          bio: 'Holds access card #2. Found the body at 07:03. Claims he arrived early to collect equipment. Seemed calm during questioning.',
+          interrogation: [
+            {
+              id: 'dmitri_q1',
+              question: 'Why did you arrive so early that morning?',
+              answer: 'I always come in early to run calibrations. It\'s part of my routine.',
+              isFlaggedAnswer: false,
+            },
+            {
+              id: 'dmitri_q2',
+              question: 'Did you notice anything unusual when you arrived?',
+              answer: 'The study door was ajar. I thought that was odd. Victor always locks it.',
+              isFlaggedAnswer: false,
+            },
+          ],
+        },
+        {
+          id: 'elena',
+          name: 'Elena Voss',
+          age: 55,
+          role: 'Estate Lawyer',
+          photoUrl: '',
+          bio: 'Does not have a building key but was seen in the car park at 21:45. Primary beneficiary of Victor\'s will. No known motive related to the map.',
+          interrogation: [
+            {
+              id: 'elena_q1',
+              question: 'Why were you in the car park at 21:45?',
+              answer: 'Victor called me about an urgent amendment to his will. I waited but he never came down.',
+              isFlaggedAnswer: true,
+            },
+            {
+              id: 'elena_q2',
+              question: 'Did you enter the building that night?',
+              answer: 'No. I don\'t have access. I waited outside for twenty minutes then left.',
+              isFlaggedAnswer: false,
+            },
+          ],
+        },
+      ],
+      mechanisms: [
+        'Digoxin overdose administered in Victor\'s evening drink',
+        'Blunt force trauma staged as a fall',
+        'Suffocation using a pillow (no marks at autopsy)',
+        'Induced cardiac arrest via electric shock',
+      ],
+      timeline: [
+        { id: 't1', time: '08:12', description: 'Renata enters the study — first visit.', correctPosition: 1 },
+        { id: 't2', time: '13:40', description: 'Renata enters again, stays 22 minutes.', correctPosition: 2 },
+        { id: 't3', time: '21:17', description: 'Victor unlocks his own study.', correctPosition: 3 },
+        { id: 't4', time: '~22:15', description: 'Victor dies (estimated from autopsy).', correctPosition: 4 },
+        { id: 't5', time: '02:41', description: 'Renata enters the study alone in the night.', correctPosition: 5 },
+        { id: 't6', time: '07:03', description: 'Dmitri finds the body.', correctPosition: 6 },
+      ],
+      solution: {
+        principalSuspectId: 'renata',
+        mechanism: 'Digoxin overdose administered in Victor\'s evening drink',
+        requiredEvidenceIds: ['e2', 'e3', 'e4', 'e5'],
+      },
+      retentionUnlock: 'SEALED EVIDENCE — CASE #VX-2291\n\nThe map was recovered from a safety deposit box held under a shell company registered to Renata Holst. The coordinates it contained pointed to an unclaimed mineral survey in disputed territory — worth an estimated $800M in extraction rights.\n\nThe map is now in the custody of the International Geographic Institute.\n\nRenata Holst was charged with first-degree murder and conspiracy to defraud. Trial date: pending.',
+    };
+    try {
+      const next = existing && typeof existing === 'object' ? existing : template;
+      setCrimeCaseJson(JSON.stringify(next, null, 2));
+      setCrimeCaseJsonError('');
+      onDataChange('crimeCase', next);
+    } catch {
+      setCrimeCaseJson(JSON.stringify(template, null, 2));
+      setCrimeCaseJsonError('');
+      onDataChange('crimeCase', template);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzleType]);
+
+  const renderCrimeCaseFields = () => (
+    <div className="space-y-4">
+      <div className="text-sm text-gray-300">
+        Configure the <span className="font-semibold">Crime RPG</span> case by editing the JSON below.
+        The template includes a fully playable sample case — replace it with your own.
+      </div>
+      <div className="text-xs text-gray-500 space-y-1">
+        <div><span className="text-yellow-400 font-semibold">evidence[].type</span> — one of: <code>document</code>, <code>photo</code>, <code>chat_log</code>, <code>record</code>, <code>audio_log</code></div>
+        <div><span className="text-yellow-400 font-semibold">evidence[].imageUrl</span> — optional URL; for <code>photo</code> type this is the primary image; for all other types it renders as an &quot;Attached Photo&quot; beneath the content</div>
+        <div><span className="text-yellow-400 font-semibold">suspects[].photoUrl</span> — optional URL for a suspect portrait; renders as a full-width banner with gradient overlay on the card</div>
+        <div><span className="text-yellow-400 font-semibold">suspects[].interrogation</span> — optional array of Q&amp;A objects (<code>id</code>, <code>question</code>, <code>answer</code>, <code>isFlaggedAnswer?</code>); reveals a 🎙 Interrogate button per suspect; answers with <code>isFlaggedAnswer:true</code> surface a 🚩 badge on the suspect card</div>
+        <div><span className="text-yellow-400 font-semibold">sceneImageUrl</span> — optional URL for a crime scene overview image; enables the &quot;Scene&quot; tab with click-to-zoom</div>
+        <div><span className="text-yellow-400 font-semibold">hiddenLayers[].trigger</span> — one of: <code>contrast</code> (slider), <code>zoom</code> (button), <code>combine</code> (link two evidence items)</div>
+        <div><span className="text-yellow-400 font-semibold">solution.requiredEvidenceIds</span> — the IDs the player must select as their evidence chain</div>
+      </div>
+      <textarea
+        value={crimeCaseJson}
+        onChange={(e) => {
+          const next = e.target.value;
+          setCrimeCaseJson(next);
+          try {
+            const parsed = JSON.parse(next);
+            onDataChange('crimeCase', parsed);
+            setCrimeCaseJsonError('');
+          } catch {
+            setCrimeCaseJsonError('Invalid JSON — fix before saving.');
+          }
+        }}
+        className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-96"
+        spellCheck={false}
+      />
+      {crimeCaseJsonError ? <div className="text-sm text-red-300">{crimeCaseJsonError}</div> : null}
+    </div>
+  );
+
+  // ── Parasite Code initializer ─────────────────────────────────────────────
+  useEffect(() => {
+    if (puzzleType !== 'parasite_code') return;
+    const existing = (puzzleData as any)?.parasiteCode;
+    const template = {
+      caseTitle: 'The Overtime Ghost',
+      programName: 'payroll_v4.prg',
+      contextNarrative: 'Accounts Payable flagged an anomaly last quarter: a $12,000 overpayment that the payroll system claimed never happened. The program has been running unchanged for three years. Last week the same amount disappeared again — this time from payroll batch #1209. You have a copy of the source. Find the lines that should not be there.',
+      strainFamily: 'output-manipulator',
+      activationCondition: 'Triggers when DEPT equals "EXEC" AND BASE_PAY exceeds 10000',
+      parasiteLineIds: ['L09', 'L10', 'L11'],
+      program: [
+        { id: 'L01', lineNumber: 1,  opcode: 'LOAD', operands: ['R0', 'DEPT'],        comment: 'load department code' },
+        { id: 'L02', lineNumber: 2,  opcode: 'LOAD', operands: ['R1', 'BASE_PAY'],    comment: 'load base salary' },
+        { id: 'L03', lineNumber: 3,  opcode: 'LOAD', operands: ['R2', 'BONUS_PCT'],   comment: 'bonus percentage' },
+        { id: 'L04', lineNumber: 4,  opcode: 'MUL',  operands: ['R3', 'R1', 'R2'],   comment: 'R3 = bonus amount' },
+        { id: 'L05', lineNumber: 5,  opcode: 'ADD',  operands: ['R4', 'R1', 'R3'],   comment: 'R4 = total pay' },
+        { id: 'L06', lineNumber: 6,  opcode: 'SET',  operands: ['R5', 'EXEC'],        comment: '' },
+        { id: 'L07', lineNumber: 7,  opcode: 'CMP',  operands: ['R0', 'R5'],          comment: 'compare dept to EXEC' },
+        { id: 'L08', lineNumber: 8,  opcode: 'IF',   operands: ['FLAG', '!=', '1'],   comment: 'skip if not EXEC dept' },
+        { id: 'L09', lineNumber: 9,  opcode: 'SET',  operands: ['R6', '12000'],       comment: '', isParasite: true },
+        { id: 'L10', lineNumber: 10, opcode: 'ADD',  operands: ['R4', 'R4', 'R6'],   comment: '', isParasite: true },
+        { id: 'L11', lineNumber: 11, opcode: 'OUT',  operands: ['R6'],                comment: '', isParasite: true },
+        { id: 'L12', lineNumber: 12, opcode: 'OUT',  operands: ['R4'],                comment: 'output final pay' },
+        { id: 'L13', lineNumber: 13, opcode: 'HALT', operands: [],                    comment: '' },
+      ],
+      testInputs: [
+        {
+          id: 'T1',
+          label: 'Standard employee — Dept: SALES, Pay: $4,200',
+          values: { DEPT: 'SALES', BASE_PAY: 4200, BONUS_PCT: 0.05 },
+          expectedOutput: '$4,410',
+          activatesParasite: false,
+        },
+        {
+          id: 'T2',
+          label: 'Executive — Dept: EXEC, Pay: $14,500',
+          values: { DEPT: 'EXEC', BASE_PAY: 14500, BONUS_PCT: 0.1 },
+          expectedOutput: '$15,950',
+          activatesParasite: true,
+        },
+      ],
+      retentionUnlock: 'INTERNAL AUDIT — CASE #PR-0044\n\nThe overflow was traced to a contractor who had read access to the payroll service repo. The $12,000 figure was routed to an external ACH account registered under a shell entity.\n\nContracting relationship terminated. Matter referred to financial crimes unit.',
+    };
+    try {
+      const next = existing && typeof existing === 'object' ? existing : template;
+      setParasiteCodeJson(JSON.stringify(next, null, 2));
+      setParasiteCodeJsonError('');
+      onDataChange('parasiteCode', next);
+    } catch {
+      setParasiteCodeJson(JSON.stringify(template, null, 2));
+      setParasiteCodeJsonError('');
+      onDataChange('parasiteCode', template);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzleType]);
+
+  const renderParasiteCodeFields = () => (
+    <div className="space-y-4">
+      <div className="text-sm text-gray-300">
+        Configure the <span className="font-semibold">Parasite Code</span> case by editing the JSON below.
+        The template includes a fully playable sample — replace it with your own.
+      </div>
+      <div className="text-xs text-gray-500 space-y-1">
+        <div><span className="text-yellow-400 font-semibold">program[].id</span> — e.g. &quot;L01&quot; — IDs the player submits as their quarantine list</div>
+        <div><span className="text-yellow-400 font-semibold">program[].opcode</span> — one of: <code>SET ADD SUB MUL CMP IF GOTO CALL RET LOAD OUT HALT</code></div>
+        <div><span className="text-yellow-400 font-semibold">program[].isParasite</span> — <code>true</code> on parasite lines; stripped before sending to client</div>
+        <div><span className="text-yellow-400 font-semibold">parasiteLineIds</span> — array of IDs that form the correct quarantine answer</div>
+        <div><span className="text-yellow-400 font-semibold">strainFamily</span> — one of: <code>timing-parasite input-triggered-sleeper obfuscated-redirect logic-bomb data-exfil privilege-escalation output-manipulator persistence-hook covert-channel</code></div>
+        <div><span className="text-yellow-400 font-semibold">testInputs[].activatesParasite</span> — <code>true</code> shows a red warning when the player runs that input</div>
+        <div><span className="text-yellow-400 font-semibold">activationCondition</span> — revealed to the player <em>only after</em> they solve the puzzle</div>
+        <div><span className="text-yellow-400 font-semibold">retentionUnlock</span> — optional declassified lore text shown after solve</div>
+      </div>
+      <textarea
+        value={parasiteCodeJson}
+        onChange={(e) => {
+          const next = e.target.value;
+          setParasiteCodeJson(next);
+          try {
+            const parsed = JSON.parse(next);
+            onDataChange('parasiteCode', parsed);
+            setParasiteCodeJsonError('');
+          } catch {
+            setParasiteCodeJsonError('Invalid JSON — fix before saving.');
+          }
+        }}
+        className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-96"
+        spellCheck={false}
+      />
+      {parasiteCodeJsonError ? <div className="text-sm text-red-300">{parasiteCodeJsonError}</div> : null}
+    </div>
+  );
+
+  // ── Gridlock File initializer ─────────────────────────────────────────────
+  useEffect(() => {
+    if (puzzleType !== 'gridlock_file') return;
+    const existing = (puzzleData as any)?.gridlockFile;
+    const template = {
+      fileNumber: 1,
+      fileTitle: "The Multiplication Alphabet",
+      flavorText: "A 4×4 cipher matrix recovered from a decommissioned terminal. Rows and columns appear to encode something alphabetical.",
+      gridType: "letter",
+      grid: [
+        [{ value: "A" }, { value: "B" }, { value: "C" }, { value: "D" }],
+        [{ value: "B" }, { value: "D" }, { value: "F" }, { value: "H" }],
+        [{ value: "C" }, { value: "F" }, { value: "I" }, { value: "L" }],
+        [{ value: "D" }, { value: "H" }, { value: "L" }, { value: "P", isMissing: true }]
+      ],
+      correctAnswers: ["P"],
+      ruleExplanation: "Cell(row, col) = the letter at position row×col in the alphabet (A=1). Row 4, Col 4 = 16 = P.",
+      primaryRuleFamily: "alphabetic",
+      primaryRuleAxis: "cell-position",
+      hints: [
+        { id: "H1", text: "The top-left cell is A. The position in the alphabet equals the product of its row and column numbers.", cost: 1 },
+        { id: "H2", text: "Row 4, Col 4 = 4×4 = 16. What is the 16th letter of the alphabet?", cost: 1 }
+      ],
+      retentionUnlock: "TRANSMISSION LOG — TERMINAL 04\n\nThis encoding scheme was used to map memory addresses to register labels in early assembly systems. Each register's name encoded its position in the execution pipeline."
+    };
+    try {
+      const next = existing && typeof existing === 'object' ? existing : template;
+      setGridlockFileJson(JSON.stringify(next, null, 2));
+      setGridlockFileJsonError('');
+      onDataChange('gridlockFile', next);
+    } catch {
+      setGridlockFileJson(JSON.stringify(template, null, 2));
+      setGridlockFileJsonError('');
+      onDataChange('gridlockFile', template);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzleType]);
+
+  const renderGridlockFileFields = () => (
+    <div className="space-y-4">
+      <div className="text-sm text-gray-300">
+        Configure the <span className="font-semibold">Gridlock File</span> puzzle by editing the JSON below.
+        The template shows a fully playable Day 1 puzzle — replace it with your own.
+      </div>
+      <div className="text-xs text-gray-500 space-y-1">
+        <div><span className="text-yellow-400 font-semibold">grid</span> — 2D array of <code>{'{'}value, isMissing?{'}'}</code>. Set <code>isMissing: true</code> on cells the player must solve.</div>
+        <div><span className="text-yellow-400 font-semibold">correctAnswers</span> — ordered array matching each <code>isMissing</code> cell left-to-right, top-to-bottom.</div>
+        <div><span className="text-yellow-400 font-semibold">primaryRuleFamily</span> — one of: <code>arithmetic geometric fibonacci polynomial alphabetic compound-word constraint positional semantic hybrid</code></div>
+        <div><span className="text-yellow-400 font-semibold">primaryRuleAxis</span> — one of: <code>rows columns both diagonal spiral cell-position</code></div>
+        <div><span className="text-yellow-400 font-semibold">ruleExplanation</span> — shown ONLY after the player solves correctly.</div>
+        <div><span className="text-yellow-400 font-semibold">retentionUnlock</span> — optional lore text revealed after solve.</div>
+        <div><span className="text-yellow-400 font-semibold">hints[].cost</span> — XP cost deducted when hint is revealed (default 1).</div>
+      </div>
+      <textarea
+        value={gridlockFileJson}
+        onChange={(e) => {
+          const next = e.target.value;
+          setGridlockFileJson(next);
+          try {
+            const parsed = JSON.parse(next);
+            onDataChange('gridlockFile', parsed);
+            setGridlockFileJsonError('');
+          } catch {
+            setGridlockFileJsonError('Invalid JSON — fix before saving.');
+          }
+        }}
+        className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-96"
+        spellCheck={false}
+      />
+      {gridlockFileJsonError ? <div className="text-sm text-red-300">{gridlockFileJsonError}</div> : null}
     </div>
   );
 
@@ -2617,6 +3006,443 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     );
   };
 
+  // ── Blackout ──────────────────────────────────────────────────────────────
+  //
+  // Admin writes the document with [[double brackets]] around words to redact.
+  // The designer parses those markers live, shows a per-redaction config panel,
+  // and produces the data blob the player-side renderer consumes.
+
+  const renderBlackoutFields = () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getEncodedClue, getCipherLabel, CIPHER_OPTIONS } = require('@/lib/blackout-ciphers') as typeof import('@/lib/blackout-ciphers');
+    const rawDocument = asString(puzzleData.rawDocument, '');
+    const documentTitle = asString(puzzleData.documentTitle, '');
+    const classification = asString(puzzleData.classification, 'CLASSIFIED');
+    const flavorText = asString(puzzleData.flavorText, '');
+    const successMessage = asString(puzzleData.successMessage, '');
+    const answerMode = asString(puzzleData.answerMode, 'free_text') as 'free_text' | 'multiple_choice';
+    const stampSrc     = asString(puzzleData.stampSrc, '');
+    const stampOpacity = typeof puzzleData.stampOpacity === 'number' ? puzzleData.stampOpacity : 0.25;
+    const stampX       = typeof puzzleData.stampX === 'number' ? puzzleData.stampX : 50;
+    const stampY       = typeof puzzleData.stampY === 'number' ? puzzleData.stampY : 50;
+    const stampScale   = typeof puzzleData.stampScale === 'number' ? puzzleData.stampScale : 1;
+
+    // Parse [[word or phrase]] markers from rawDocument
+    const redactionRegex = /\[\[(.+?)\]\]/g;
+    const parsedWords: string[] = [];
+    let match: RegExpExecArray | null;
+    const tempRegex = new RegExp(redactionRegex.source, 'g');
+    while ((match = tempRegex.exec(rawDocument)) !== null) {
+      parsedWords.push(match[1]);
+    }
+
+    // Merge with existing redaction metadata (hints, options)
+    const existingMeta: Record<string, unknown>[] = Array.isArray(puzzleData.redactions)
+      ? (puzzleData.redactions as Record<string, unknown>[])
+      : [];
+
+    const redactions: Record<string, unknown>[] = parsedWords.map((word, i) => ({
+      placeholder: word,
+      hint: asString(existingMeta[i]?.hint, ''),
+      options: Array.isArray(existingMeta[i]?.options) ? existingMeta[i].options : [],
+      cipherType: asString(existingMeta[i]?.cipherType, 'none'),
+      cipherShift: typeof existingMeta[i]?.cipherShift === 'number' ? existingMeta[i].cipherShift : 13,
+      cipherKey: asString(existingMeta[i]?.cipherKey, 'KEY'),
+    }));
+
+    // Update parent whenever rawDocument changes
+    const updateRedactionsFromDoc = (newDoc: string) => {
+      onDataChange('rawDocument', newDoc);
+      const r = new RegExp(/\[\[(.+?)\]\]/g);
+      const words: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = r.exec(newDoc)) !== null) words.push(m[1]);
+      const existing: Record<string, unknown>[] = Array.isArray(puzzleData.redactions)
+        ? (puzzleData.redactions as Record<string, unknown>[])
+        : [];
+      onDataChange('redactions', words.map((word, i) => ({
+        placeholder: word,
+        hint: asString(existing[i]?.hint, ''),
+        options: Array.isArray(existing[i]?.options) ? existing[i].options : [],
+        cipherType: asString(existing[i]?.cipherType, 'none'),
+        cipherShift: typeof existing[i]?.cipherShift === 'number' ? existing[i].cipherShift : 13,
+        cipherKey: asString(existing[i]?.cipherKey, 'KEY'),
+      })));
+    };
+
+    const updateRedactionMeta = (idx: number, key: string, value: unknown) => {
+      const next = redactions.map((r, i) => i === idx ? { ...r, [key]: value } : r);
+      onDataChange('redactions', next);
+    };
+
+    const updateRedactionOptions = (idx: number, raw: string) => {
+      const opts = raw.split('\n').map((s) => s.trim()).filter(Boolean);
+      updateRedactionMeta(idx, 'options', opts);
+    };
+
+    // Preview: replace [[word]] with ████ blocks for visual preview
+    const previewText = rawDocument.replace(/\[\[(.+?)\]\]/g, (_, w) =>
+      '█'.repeat(Math.max(3, Math.min(w.length, 12)))
+    );
+
+    const CLASSIFICATION_OPTIONS = [
+      'UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP SECRET', 'TS // SCI',
+      'EYES ONLY', 'RESTRICTED', 'INTERNAL', 'CLASSIFIED',
+    ];
+
+    const fieldCls = 'w-full px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-white placeholder-gray-500 text-sm';
+    const labelCls = 'block text-xs font-semibold text-gray-400 mb-1';
+
+    return (
+      <div className="space-y-6">
+
+        {/* How-to hint */}
+        <div className="rounded-lg p-3 text-xs"
+          style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.3)', color: '#c4b5fd' }}>
+          <p className="font-bold mb-1">⬛ How Blackout works</p>
+          <p>Write the document in the text area below. Wrap any word or phrase you want <strong>redacted</strong> in <code>[[double brackets]]</code>.</p>
+          <p className="mt-1">Example: <code>The agent known as [[NIGHTFALL]] was last seen in [[Berlin]] on [[March 14th]].</code></p>
+          <p className="mt-1">Players see black bars and must guess the hidden word. Each redaction can have its own hint and (optionally) multiple-choice options.</p>
+        </div>
+
+        {/* Classification + Title */}
+        <div className="grid grid-cols-[160px_1fr] gap-4">
+          <div>
+            <label className={labelCls}>Classification Level</label>
+            <select
+              value={classification}
+              onChange={(e) => onDataChange('classification', e.target.value)}
+              className={fieldCls}
+            >
+              {CLASSIFICATION_OPTIONS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Document Title <span className="text-red-400">*</span></label>
+            <input
+              type="text"
+              value={documentTitle}
+              onChange={(e) => onDataChange('documentTitle', e.target.value)}
+              placeholder="e.g. OPERATION NIGHTFALL — FIELD REPORT #7"
+              className={fieldCls}
+            />
+          </div>
+        </div>
+
+        {/* Flavor text */}
+        <div>
+          <label className={labelCls}>Flavor Text <span className="font-normal text-gray-500">(optional — shown above the document)</span></label>
+          <textarea
+            rows={2}
+            value={flavorText}
+            onChange={(e) => onDataChange('flavorText', e.target.value)}
+            placeholder="A partially-declassified file surfaced on the dark web. Key words have been suppressed. How good is your memory?"
+            className={fieldCls}
+          />
+        </div>
+
+        {/* Stamp / Watermark */}
+        <div>
+          <label className={labelCls}>Document Stamp / Watermark <span className="font-normal text-gray-500">(optional — overlaid on the paper document)</span></label>
+          <div className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(71,85,105,0.5)' }}>
+            <div className="flex items-start gap-4">
+              <div className="flex items-center gap-2">
+                <label
+                  className="cursor-pointer inline-block px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                  style={{ background: 'rgba(124,58,237,0.3)', border: '1px solid rgba(124,58,237,0.5)' }}
+                >
+                  {stampSrc ? '↑ Replace Image' : '↑ Upload Stamp Image'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (ev) => onDataChange('stampSrc', ev.target?.result as string);
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                {stampSrc && (
+                  <button
+                    type="button"
+                    onClick={() => onDataChange('stampSrc', '')}
+                    className="px-3 py-2 rounded-lg text-xs text-red-400"
+                    style={{ border: '1px solid rgba(239,68,68,0.4)' }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {stampSrc && (
+                <div style={{ width: 80, height: 80, background: '#e8dcc8', border: '1px solid #c5b89a', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={stampSrc} alt="stamp preview" style={{ maxWidth: '100%', maxHeight: '100%', opacity: stampOpacity }} />
+                </div>
+              )}
+            </div>
+            {stampSrc && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <label className={labelCls}>Opacity — {Math.round(stampOpacity * 100)}%</label>
+                  <input
+                    type="range" min={5} max={100} step={5}
+                    value={Math.round(stampOpacity * 100)}
+                    onChange={(e) => onDataChange('stampOpacity', Number(e.target.value) / 100)}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Position X — {stampX}%</label>
+                  <input
+                    type="range" min={0} max={100} step={5}
+                    value={stampX}
+                    onChange={(e) => onDataChange('stampX', Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Position Y — {stampY}%</label>
+                  <input
+                    type="range" min={0} max={100} step={5}
+                    value={stampY}
+                    onChange={(e) => onDataChange('stampY', Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Scale — {stampScale.toFixed(2)}×</label>
+                  <input
+                    type="range" min={25} max={300} step={5}
+                    value={Math.round(stampScale * 100)}
+                    onChange={(e) => onDataChange('stampScale', Number(e.target.value) / 100)}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Answer mode */}
+        <div className="flex gap-6 items-center">
+          <span className={labelCls} style={{ marginBottom: 0 }}>Answer Mode</span>
+          {(['free_text', 'multiple_choice'] as const).map((mode) => (
+            <label key={mode} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input
+                type="radio"
+                name="answerMode"
+                value={mode}
+                checked={answerMode === mode}
+                onChange={() => onDataChange('answerMode', mode)}
+                className="h-4 w-4"
+              />
+              {mode === 'free_text' ? '🔡 Free text (players type)' : '🔘 Multiple choice (you provide options per redaction)'}
+            </label>
+          ))}
+        </div>
+
+        {/* Document text area */}
+        <div>
+          <label className={labelCls}>
+            Document Text <span className="text-red-400">*</span>
+            <span className="font-normal text-gray-500 ml-2">— wrap words to redact in [[double brackets]]</span>
+          </label>
+          <textarea
+            rows={10}
+            value={rawDocument}
+            onChange={(e) => updateRedactionsFromDoc(e.target.value)}
+            placeholder={
+`INTELLIGENCE REPORT — CASE 47-C
+
+Subject: [[Marcus Holt]], 38, male. Last known alias: [[ECHO-9]].
+
+On [[14 March]] at approximately [[21:15]], subject was observed entering the Ashwood Hotel using a key card registered under the name [[Elena Voss]]. He ascended to floor [[seven]] carrying a brown leather briefcase.
+
+At [[23:30]], security found the room vacant. The window was unlatched. A single playing card — the [[eight]] of clubs — was left on the pillow.`
+            }
+            className={`${fieldCls} font-mono text-xs resize-y`}
+            spellCheck={false}
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            {parsedWords.length > 0
+              ? `${parsedWords.length} redaction${parsedWords.length !== 1 ? 's' : ''} detected: ${parsedWords.map((w) => `[[${w}]]`).join(', ')}`
+              : 'No [[redactions]] found yet.'}
+          </p>
+        </div>
+
+        {/* Live preview */}
+        {rawDocument && (
+          <div>
+            <label className={labelCls}>Player Preview</label>
+            <div
+              className="rounded-lg p-4 font-mono text-xs whitespace-pre-wrap leading-relaxed"
+              style={{
+                background: 'rgba(15,23,42,0.8)',
+                border: '1px solid rgba(71,85,105,0.5)',
+                color: '#94a3b8',
+              }}
+            >
+              <div style={{ color: '#ef4444', fontWeight: 700, letterSpacing: '0.15em', fontSize: 10, marginBottom: 8 }}>
+                ⚠ {classification}
+              </div>
+              <div style={{ color: '#f1f5f9', fontWeight: 700, marginBottom: 12, fontSize: 11, letterSpacing: '0.05em' }}>
+                {documentTitle || 'UNTITLED DOCUMENT'}
+              </div>
+              {previewText}
+            </div>
+          </div>
+        )}
+
+        {/* Per-redaction settings */}
+        {redactions.length > 0 && (
+          <div>
+            <label className="block text-sm font-bold text-white mb-3">
+              Redaction Settings
+            </label>
+            <div className="space-y-4">
+              {redactions.map((r, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-xl p-4 space-y-3"
+                  style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(71,85,105,0.5)' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="text-xs font-mono font-bold px-2 py-1 rounded"
+                      style={{ background: 'rgba(124,58,237,0.2)', color: '#c4b5fd', border: '1px solid rgba(124,58,237,0.3)' }}
+                    >
+                      [{idx + 1}]
+                    </span>
+                    <span
+                      className="inline-flex items-center px-3 py-1 rounded text-xs font-bold tracking-widest"
+                      style={{ background: '#0f172a', color: '#0f172a', border: '2px solid #334155', userSelect: 'none' }}
+                      title={`Hidden word: ${r.placeholder}`}
+                    >
+                      {'█'.repeat(Math.max(3, Math.min(String(r.placeholder).length, 12)))}
+                    </span>
+                    <code className="text-xs text-purple-300 ml-1">&ldquo;{String(r.placeholder)}&rdquo;</code>
+                  </div>
+
+                  {/* Cipher type selector (only for free_text mode) */}
+                  {answerMode !== 'multiple_choice' && (() => {
+                    const ct = asString(r.cipherType, 'none');
+                    const cs = typeof r.cipherShift === 'number' ? r.cipherShift : 13;
+                    const ck = asString(r.cipherKey, 'KEY');
+                    const encoded = ct !== 'none' ? getEncodedClue(String(r.placeholder), ct as import('@/lib/blackout-ciphers').CipherType, cs, ck) : '';
+                    return (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+                          <div>
+                            <label className={labelCls}>Cipher Type <span className="font-normal text-gray-500">(determines what decode clue is shown to the player)</span></label>
+                            <select
+                              value={ct}
+                              onChange={e => updateRedactionMeta(idx, 'cipherType', e.target.value)}
+                              className={fieldCls}
+                            >
+                              {CIPHER_OPTIONS.map((o: {value: string; label: string}) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {ct === 'caesar' && (
+                            <div style={{ width: '80px' }}>
+                              <label className={labelCls}>Key (shift)</label>
+                              <input
+                                type="number"
+                                min={1} max={25}
+                                value={cs}
+                                onChange={e => updateRedactionMeta(idx, 'cipherShift', Number(e.target.value))}
+                                className={fieldCls}
+                              />
+                            </div>
+                          )}
+                          {ct === 'vigenere' && (
+                            <div style={{ width: '120px' }}>
+                              <label className={labelCls}>Keyword</label>
+                              <input
+                                type="text"
+                                value={ck}
+                                onChange={e => updateRedactionMeta(idx, 'cipherKey', e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+                                placeholder="KEY"
+                                className={fieldCls}
+                                style={{ textTransform: 'uppercase' }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {ct !== 'none' && encoded && (
+                          <div>
+                            <label className={labelCls}>Encoded clue preview <span className="font-normal text-gray-500">(this is what players will see)</span></label>
+                            <div
+                              className="rounded p-3 font-mono text-xs tracking-wider"
+                              style={{ background: '#050a05', border: '1px solid #1a4a1a', color: '#4dff4d' }}
+                            >
+                              <div style={{ color: '#888', fontSize: '9px', letterSpacing: '0.15em', marginBottom: '4px' }}>
+                                {getCipherLabel(ct as import('@/lib/blackout-ciphers').CipherType, cs, ck)}
+                              </div>
+                              {encoded}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <div>
+                    <label className={labelCls}>Hint <span className="font-normal text-gray-500">(optional — shown after wrong attempts if cipher type is "None")</span></label>
+                    <input
+                      type="text"
+                      value={asString(r.hint, '')}
+                      onChange={(e) => updateRedactionMeta(idx, 'hint', e.target.value)}
+                      placeholder="e.g. A European capital city"
+                      className={fieldCls}
+                    />
+                  </div>
+
+                  {answerMode === 'multiple_choice' && (
+                    <div>
+                      <label className={labelCls}>
+                        Multiple Choice Options <span className="font-normal text-gray-500">(one per line — include the correct answer among them)</span>
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={Array.isArray(r.options) ? (r.options as string[]).join('\n') : ''}
+                        onChange={(e) => updateRedactionOptions(idx, e.target.value)}
+                        placeholder={`${r.placeholder}\nWrong option A\nWrong option B\nWrong option C`}
+                        className={`${fieldCls} font-mono`}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        The correct answer is always <strong>&ldquo;{String(r.placeholder)}&rdquo;</strong> — it must appear in this list.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Success message */}
+        <div>
+          <label className={labelCls}>Success Message <span className="font-normal text-gray-500">(shown when all redactions are solved)</span></label>
+          <input
+            type="text"
+            value={successMessage}
+            onChange={(e) => onDataChange('successMessage', e.target.value)}
+            placeholder="e.g. File declassified. The truth was always hidden in plain sight."
+            className={fieldCls}
+          />
+        </div>
+      </div>
+    );
+  };
+
   const typeSpecificRenders: Record<string, () => JSX.Element> = {
     cipher: renderCipherFields,
     text_extraction: renderTextExtractionFields,
@@ -2630,10 +3456,14 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     pattern: renderPatternFields,
     escape_room: renderEscapeRoomFields,
     detective_case: renderDetectiveCaseFields,
+    crime_rpg: renderCrimeCaseFields,
+    parasite_code: renderParasiteCodeFields,
+    gridlock_file: renderGridlockFileFields,
     crack_safe: renderCrackSafeFields,
     word_crack: renderWordleFields,
     word_search: renderWordSearchFields,
     anagram_blitz: renderAnagramBlitzFields,
+    blackout: renderBlackoutFields,
     arg: renderArgFields,
   };
 

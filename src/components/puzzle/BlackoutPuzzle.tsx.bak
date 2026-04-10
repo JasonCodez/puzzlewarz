@@ -1,0 +1,441 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+
+interface Redaction {
+  placeholder: string;
+  hint: string;
+  options: string[];
+}
+
+interface BlackoutData {
+  rawDocument: string;
+  documentTitle: string;
+  classification: string;
+  flavorText: string;
+  answerMode: "free_text" | "multiple_choice";
+  redactions: Redaction[];
+  successMessage: string;
+}
+
+type Segment =
+  | { type: "text"; content: string }
+  | { type: "redaction"; index: number };
+
+function parseDocument(rawDocument: string): Segment[] {
+  const segments: Segment[] = [];
+  let lastIndex = 0;
+  let redactionIndex = 0;
+  const regex = /\[\[([^\]]+)\]\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(rawDocument)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: "text", content: rawDocument.slice(lastIndex, match.index) });
+    }
+    segments.push({ type: "redaction", index: redactionIndex++ });
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < rawDocument.length) {
+    segments.push({ type: "text", content: rawDocument.slice(lastIndex) });
+  }
+  return segments;
+}
+
+/** US government classification colour conventions */
+function clsTheme(level: string): { bg: string; fg: string } {
+  const l = (level ?? "").toUpperCase();
+  if (l === "UNCLASSIFIED")              return { bg: "#1a5c1a", fg: "#ffffff" };
+  if (l === "CONFIDENTIAL")              return { bg: "#003087", fg: "#ffffff" };
+  if (l === "SECRET")                    return { bg: "#c8300b", fg: "#ffffff" };
+  /* TOP SECRET, TS // SCI, EYES ONLY … */
+  return                                        { bg: "#b85c00", fg: "#ffffff" };
+}
+
+interface BlackoutPuzzleProps {
+  puzzleId: string;
+  blackoutData: Record<string, unknown>;
+  alreadySolved?: boolean;
+  onSolved?: () => void;
+}
+
+export default function BlackoutPuzzle({
+  puzzleId,
+  blackoutData,
+  alreadySolved = false,
+  onSolved,
+}: BlackoutPuzzleProps) {
+  const data         = blackoutData as unknown as BlackoutData;
+  const redactions   = Array.isArray(data.redactions) ? data.redactions as Redaction[] : [];
+  const segments     = parseDocument(data.rawDocument ?? "");
+  const answerMode   = data.answerMode ?? "free_text";
+  const clsLabel     = (data.classification ?? "TOP SECRET").toUpperCase();
+  const theme        = clsTheme(clsLabel);
+
+  const [solved,    setSolved]    = useState<boolean[]>(() => Array(redactions.length).fill(alreadySolved));
+  const [inputs,    setInputs]    = useState<string[]>(() => Array(redactions.length).fill(""));
+  const [hints,     setHints]     = useState<string[]>(() => Array(redactions.length).fill(""));
+  const [wrong,     setWrong]     = useState<boolean[]>(() => Array(redactions.length).fill(false));
+  const [allSolved, setAllSolved] = useState(alreadySolved);
+  const calledRef = useRef(false);
+
+  /* Generate a stable doc-reference number from the puzzleId */
+  const refNum = puzzleId
+    ? (parseInt(puzzleId.replace(/-/g, "").slice(0, 4), 16) % 900) + 100
+    : 247;
+  const refYear = new Date().getFullYear() % 100;
+  const docRef  = `DOC-${refNum}-${String(refYear).padStart(2, "0")}`;
+
+  useEffect(() => {
+    if (!calledRef.current && solved.length > 0 && solved.every(Boolean)) {
+      setAllSolved(true);
+      calledRef.current = true;
+      onSolved?.();
+    }
+  }, [solved, onSolved]);
+
+  function checkAnswer(index: number, answer: string) {
+    const correct = redactions[index]?.placeholder ?? "";
+    if (answer.trim().toLowerCase() === correct.trim().toLowerCase()) {
+      setSolved(prev => { const n = [...prev]; n[index] = true;  return n; });
+      setWrong (prev => { const n = [...prev]; n[index] = false; return n; });
+      setHints (prev => { const n = [...prev]; n[index] = "";    return n; });
+    } else {
+      setWrong(prev => { const n = [...prev]; n[index] = true; return n; });
+      const h = redactions[index]?.hint;
+      setHints(prev => {
+        const n = [...prev];
+        n[index] = h ? h : "INCORRECT — RE-VERIFY AND RESUBMIT";
+        return n;
+      });
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>, idx: number) {
+    if (e.key === "Enter") { e.preventDefault(); checkAnswer(idx, inputs[idx] ?? ""); }
+  }
+
+  const solvedCount = solved.filter(Boolean).length;
+
+  /* ─── Shared inline styles ───────────────────────────────────────── */
+  const FONT   = "'Courier New', Courier, monospace";
+  const PAPER  = "#f0ead8";
+  const INK    = "#1a1408";
+  const RULE   = "#c5b89a";
+  const FADED  = "#6b5e45";
+
+  /* ─── Render ─────────────────────────────────────────────────────── */
+  return (
+    <div className="w-full">
+
+      {/* ── Dark outer surface (desk / envelope) ── */}
+      <div style={{ background: "#111", padding: "24px 20px", borderRadius: "4px" }}>
+
+        {/* Progress strip */}
+        {!allSolved && redactions.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" }}>
+            <div style={{ flex: 1, height: "2px", background: "#2a2a2a" }}>
+              <div style={{
+                width: `${(solvedCount / redactions.length) * 100}%`,
+                height: "100%",
+                background: theme.bg,
+                transition: "width 0.4s",
+              }} />
+            </div>
+            <span style={{ fontFamily: FONT, fontSize: "10px", color: "#555", letterSpacing: "0.08em" }}>
+              {solvedCount}/{redactions.length}&nbsp;DECLASSIFIED
+            </span>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+             THE PAPER DOCUMENT
+            ══════════════════════════════════════════════════════════════ */}
+        <div style={{
+          background: PAPER,
+          color: INK,
+          fontFamily: FONT,
+          maxWidth: "740px",
+          margin: "0 auto",
+          boxShadow: "0 8px 40px rgba(0,0,0,0.8), 2px 2px 0 rgba(255,255,255,0.03) inset",
+          border: `1px solid ${RULE}`,
+          position: "relative",
+        }}>
+
+          {/* ── TOP classification banner ── */}
+          <Banner theme={theme} label={clsLabel} strikethrough={allSolved} />
+
+          {/* ── Letterhead ── */}
+          <div style={{
+            padding: "16px 52px 14px",
+            borderBottom: `2px solid ${RULE}`,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: "16px",
+          }}>
+            {/* Left: agency */}
+            <div style={{ fontSize: "10px", lineHeight: "1.75", color: INK }}>
+              <div style={{ fontSize: "12px", fontWeight: "bold", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                Intelligence Operations Division
+              </div>
+              <div style={{ letterSpacing: "0.06em" }}>WASHINGTON, D.C. 20505</div>
+              <div style={{ marginTop: "4px", fontSize: "9px", color: FADED, letterSpacing: "0.06em" }}>
+                HANDLE VIA {clsLabel} CHANNELS ONLY
+              </div>
+            </div>
+
+            {/* Right: doc ref + date */}
+            <div style={{ fontSize: "10px", lineHeight: "1.75", color: INK, textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontWeight: "bold", letterSpacing: "0.06em" }}>{docRef}</div>
+              <div style={{ letterSpacing: "0.04em" }}>
+                {new Date().toLocaleDateString("en-US", { day: "2-digit", month: "long", year: "numeric" })}
+              </div>
+              <div style={{ marginTop: "4px", fontSize: "9px", color: FADED, letterSpacing: "0.06em" }}>
+                COPY&nbsp;1&nbsp;OF&nbsp;1
+              </div>
+            </div>
+          </div>
+
+          {/* ── MEMORANDUM FOR / Subject ── */}
+          {(data.documentTitle || data.flavorText) && (
+            <div style={{ padding: "14px 52px 0px", fontSize: "13px", lineHeight: "1.9" }}>
+              {data.documentTitle && (
+                <div>
+                  <span style={{ fontWeight: "bold" }}>MEMORANDUM&nbsp;FOR:&nbsp;</span>
+                  <span style={{ textDecoration: "underline", textUnderlineOffset: "3px" }}>
+                    {data.documentTitle}
+                  </span>
+                </div>
+              )}
+              {data.flavorText && (
+                <div>
+                  <span style={{ fontWeight: "bold" }}>Subject:&nbsp;</span>
+                  {data.flavorText}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Divider ── */}
+          <div style={{ margin: `10px 52px`, borderTop: `1px solid ${RULE}` }} />
+
+          {/* ── Document body ── */}
+          <div style={{
+            padding: "0 52px 36px",
+            fontSize: "13px",
+            lineHeight: "3",
+            color: INK,
+            whiteSpace: "pre-wrap",
+          }}>
+            {segments.map((seg, i) => {
+              if (seg.type === "text") {
+                return <span key={i}>{seg.content}</span>;
+              }
+
+              const idx        = seg.index;
+              const isSolved   = solved[idx] ?? false;
+              const redaction  = redactions[idx];
+              const answer     = redaction?.placeholder ?? "";
+              const isWrong    = wrong[idx] ?? false;
+              const hintText   = hints[idx] ?? "";
+              const opts       = Array.isArray(redaction?.options) ? redaction.options : [];
+              /* Width proportional to the hidden word */
+              const barPx      = Math.max(64, answer.length * 9 + 16);
+
+              return (
+                <span key={i} style={{
+                  display: "inline-flex",
+                  flexDirection: "column",
+                  verticalAlign: "top",
+                  margin: "0 1px",
+                }}>
+                  {/* ── The redaction bar / revealed text ── */}
+                  {isSolved ? (
+                    <span style={{
+                      display: "inline-block",
+                      minWidth: `${barPx}px`,
+                      color: "#1a5c1a",
+                      fontWeight: "bold",
+                      letterSpacing: "0.03em",
+                      borderBottom: "1px solid #1a5c1a",
+                      lineHeight: "1.3",
+                      paddingBottom: "1px",
+                    }}>
+                      {answer}
+                    </span>
+                  ) : (
+                    <span style={{
+                      display: "inline-block",
+                      minWidth: `${barPx}px`,
+                      height: "17px",
+                      background: "#0d0d0d",
+                      verticalAlign: "middle",
+                      marginTop: "3px",
+                    }} />
+                  )}
+
+                  {/* ── Input controls (only when unsolved) ── */}
+                  {!isSolved && (
+                    <span style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      marginTop: "3px",
+                      lineHeight: "1",
+                    }}>
+                      {answerMode === "free_text" ? (
+                        <span style={{ display: "flex", gap: "2px", alignItems: "stretch" }}>
+                          <input
+                            type="text"
+                            value={inputs[idx] ?? ""}
+                            onChange={e => setInputs(prev => {
+                              const n = [...prev]; n[idx] = e.target.value; return n;
+                            })}
+                            onKeyDown={e => handleKeyDown(e, idx)}
+                            autoComplete="off"
+                            placeholder="DECLASSIFY…"
+                            style={{
+                              minWidth: `${barPx - 28}px`,
+                              padding: "2px 5px",
+                              fontSize: "10px",
+                              fontFamily: FONT,
+                              background: isWrong ? "#fff0ec" : "#fff8f0",
+                              border: `1px solid ${isWrong ? "#9b1c1c" : "#a08060"}`,
+                              color: INK,
+                              outline: "none",
+                              letterSpacing: "0.04em",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => checkAnswer(idx, inputs[idx] ?? "")}
+                            style={{
+                              padding: "0 7px",
+                              fontSize: "11px",
+                              fontFamily: FONT,
+                              background: "#1a1408",
+                              color: PAPER,
+                              border: "none",
+                              cursor: "pointer",
+                              letterSpacing: "0.02em",
+                            }}
+                          >
+                            ✓
+                          </button>
+                        </span>
+                      ) : (
+                        /* Multiple choice */
+                        <span style={{ display: "flex", flexWrap: "wrap", gap: "2px" }}>
+                          {opts.map((opt, oi) => (
+                            <button
+                              key={oi}
+                              type="button"
+                              onClick={() => checkAnswer(idx, opt)}
+                              style={{
+                                padding: "1px 7px",
+                                fontSize: "10px",
+                                fontFamily: FONT,
+                                background: "#fff8f0",
+                                border: `1px solid ${isWrong ? "#9b1c1c" : "#a08060"}`,
+                                color: INK,
+                                cursor: "pointer",
+                                letterSpacing: "0.03em",
+                              }}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </span>
+                      )}
+
+                      {/* Hint text */}
+                      {hintText && (
+                        <span style={{
+                          fontSize: "9px",
+                          fontFamily: FONT,
+                          color: "#9b1c1c",
+                          marginTop: "2px",
+                          letterSpacing: "0.04em",
+                          fontStyle: "italic",
+                        }}>
+                          ▸ {hintText}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+
+          {/* ── Document footer strip ── */}
+          <div style={{
+            borderTop: `1px solid ${RULE}`,
+            padding: "8px 52px",
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: "8.5px",
+            color: FADED,
+            letterSpacing: "0.07em",
+          }}>
+            <span>CLASSIFIED BY: DIRECTOR OF NATIONAL INTELLIGENCE</span>
+            <span>DERIVED FROM: MULTIPLE SOURCES</span>
+            <span>DECLASSIFY ON: OADR</span>
+          </div>
+
+          {/* ── BOTTOM classification banner ── */}
+          <Banner theme={theme} label={clsLabel} strikethrough={allSolved} />
+        </div>
+
+        {/* ── All-solved success notice ── */}
+        {allSolved && (
+          <div style={{
+            marginTop: "20px",
+            padding: "14px 24px",
+            background: "rgba(26, 92, 26, 0.12)",
+            border: "1px solid #1a5c1a",
+            textAlign: "center",
+            fontFamily: FONT,
+            color: "#1a5c1a",
+          }}>
+            <div style={{ fontWeight: "bold", letterSpacing: "0.15em", marginBottom: "6px", fontSize: "13px" }}>
+              ✓ DOCUMENT FULLY DECLASSIFIED
+            </div>
+            {data.successMessage && (
+              <div style={{ fontSize: "11px", color: "#888", marginTop: "4px" }}>
+                {data.successMessage}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Classification banner sub-component ──────────────────────────── */
+function Banner({
+  theme,
+  label,
+  strikethrough,
+}: {
+  theme: { bg: string; fg: string };
+  label: string;
+  strikethrough: boolean;
+}) {
+  return (
+    <div style={{
+      background: theme.bg,
+      color: theme.fg,
+      textAlign: "center",
+      padding: "5px 20px",
+      fontSize: "13px",
+      fontWeight: "bold",
+      letterSpacing: "0.55em",
+      fontFamily: "'Courier New', Courier, monospace",
+      textDecoration: strikethrough ? "line-through" : "none",
+      userSelect: "none",
+    }}>
+      {label}
+    </div>
+  );
+}

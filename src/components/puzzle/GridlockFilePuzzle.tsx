@@ -1,0 +1,1065 @@
+'use client';
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import type {
+  GridlockFileClientData,
+  GridlockRank,
+  RuleFamily,
+  RuleAxis,
+  GridCell,
+} from '@/lib/gridlockFile';
+import { GRIDLOCK_RANK_LABELS, GRIDLOCK_RANK_COLORS } from '@/lib/gridlockFile';
+import {
+  getAnonId,
+  getAnonStreak,
+  updateAnonStreak,
+  getAnonSolved,
+  setAnonSolved,
+  addPendingRewards,
+  isStreakAlive,
+  type AnonStreakState,
+} from '@/lib/gridlockAnon';
+import GridlockStreakNudge from '@/components/puzzle/GridlockStreakNudge';
+import GridlockArcComplete from '@/components/puzzle/GridlockArcComplete';
+import GridlockStandings from '@/components/puzzle/GridlockStandings';
+import GuestRewardModal from '@/components/puzzle/GuestRewardModal';
+
+// ── Props ────────────────────────────────────────────────────────────────────
+interface GridlockFilePuzzleProps {
+  puzzleId: string;
+  onSolved: () => void;
+  /** When true: uses public guest API routes and tracks state in localStorage only */
+  guestMode?: boolean;
+  /** When true: hides the internal file header (use when a parent wrapper already shows it) */
+  hideHeader?: boolean;
+}
+
+// ── Server state ──────────────────────────────────────────────────────────────
+interface ServerState {
+  puzzle: GridlockFileClientData;
+  solved: boolean;
+  solvedAt: string | null;
+  submissionCount: number;
+  hintsUsed: number;
+  rank: GridlockRank;
+  ruleExplanation: string | null;
+  retentionUnlock: string | null;
+}
+
+interface SubmitResult {
+  correct: boolean;
+  answerResult: { correct: boolean; correctCount: number; totalMissing: number };
+  lawResult: string;
+  partialHint: string | null;
+  submissionCount: number;
+  rank: GridlockRank;
+  ruleExplanation?: string;
+  retentionUnlock?: string | null;
+  arcDay?: number;
+  arcNumber?: number;
+  streak?: number;
+  arcXpBonus?: number;
+  xpReward?: number;
+  pointsReward?: number;
+}
+
+// ── Law Declaration options ────────────────────────────────────────────────────
+const RULE_FAMILIES: { value: RuleFamily; label: string }[] = [
+  { value: 'arithmetic',    label: 'Arithmetic (constant step)' },
+  { value: 'geometric',     label: 'Geometric (constant ratio)' },
+  { value: 'fibonacci',     label: 'Fibonacci / Recursive sum' },
+  { value: 'polynomial',    label: 'Polynomial / Power rule' },
+  { value: 'alphabetic',    label: 'Alphabetic position' },
+  { value: 'compound-word', label: 'Compound word structure' },
+  { value: 'constraint',    label: 'Logical constraint' },
+  { value: 'positional',    label: 'Positional encoding' },
+  { value: 'semantic',      label: 'Semantic / Word meaning' },
+  { value: 'hybrid',        label: 'Hybrid (multiple systems)' },
+];
+
+const RULE_AXES: { value: RuleAxis; label: string }[] = [
+  { value: 'rows',          label: 'Rows' },
+  { value: 'columns',       label: 'Columns' },
+  { value: 'both',          label: 'Both rows and columns' },
+  { value: 'diagonal',      label: 'Diagonal' },
+  { value: 'spiral',        label: 'Spiral / outward' },
+  { value: 'cell-position', label: 'Cell position (r × c)' },
+];
+
+const LAW_RESULT_TEXT: Record<string, string> = {
+  'confirmed':     '✓ Law confirmed — exact match.',
+  'alternate':     '✓ Alternate law accepted — both descriptions are valid.',
+  'partial':       '◑ Partially correct — one component of the law is right.',
+  'incorrect':     '✗ Law rejected — try re-examining the structure.',
+  'not-declared':  '',
+};
+// ── Timer helpers ───────────────────────────────────────────────────────────
+function formatTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+const LAW_RESULT_COLOR: Record<string, string> = {
+  'confirmed':    '#7DF9AA',
+  'alternate':    '#7DF9AA',
+  'partial':      '#FFD580',
+  'incorrect':    '#FF9EC4',
+  'not-declared': '#6b7280',
+};
+
+// ── Rank badge ─────────────────────────────────────────────────────────────────
+function RankBadge({ rank, size = 'sm' }: { rank: GridlockRank; size?: 'sm' | 'lg' }) {
+  const color = GRIDLOCK_RANK_COLORS[rank];
+  const label = GRIDLOCK_RANK_LABELS[rank];
+  if (size === 'lg') {
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <div className="text-5xl font-black font-mono tracking-tighter" style={{ color, textShadow: `0 0 20px ${color}` }}>
+          {rank}
+        </div>
+        <div className="text-xs font-mono tracking-widest uppercase" style={{ color }}>{label}</div>
+      </div>
+    );
+  }
+  return (
+    <span className="inline-block px-2 py-0.5 rounded text-xs font-black font-mono tracking-wider"
+      style={{ color, border: `1px solid ${color}`, background: `${color}15` }}>
+      {rank} — {label}
+    </span>
+  );
+}
+
+// ── Grid display component ────────────────────────────────────────────────────
+function GridDisplay({
+  grid,
+  answers,
+  onAnswer,
+  solved,
+  illuminated,
+}: {
+  grid: GridCell[][];
+  answers: string[];
+  onAnswer: (missingIndex: number, value: string) => void;
+  solved: boolean;
+  lastResult: SubmitResult | null;
+  illuminated: boolean;
+}) {
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const cols = grid[0]?.length ?? 1;
+
+  const cellSize = cols <= 3 ? 84 : cols <= 5 ? 68 : 54;
+  const fontSize = cols <= 3 ? '1.6rem' : cols <= 5 ? '1.3rem' : '1.05rem';
+
+  let missingIdx = 0;
+
+  return (
+    <div
+      style={{
+        display: 'inline-grid',
+        gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`,
+        gap: 8,
+      }}
+    >
+      {grid.map((row, ri) =>
+        row.map((cell, ci) => {
+          const delay = (ri * cols + ci) * 0.055;
+
+          if (cell.isMissing) {
+            const idx = missingIdx++;
+            const answered = (answers[idx] ?? '').trim() !== '';
+            return (
+              <motion.div
+                key={`${ri}-${ci}`}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={illuminated
+                  ? { opacity: 1, scale: [1, 1.1, 1] }
+                  : { opacity: 1, scale: 1 }
+                }
+                transition={{ duration: 0.45, delay }}
+                style={{ position: 'relative' }}
+              >
+                <input
+                  ref={el => { inputRefs.current[idx] = el; }}
+                  type="text"
+                  value={answers[idx] ?? ''}
+                  onChange={e => onAnswer(idx, e.target.value)}
+                  disabled={solved}
+                  placeholder="?"
+                  style={{
+                    width: cellSize,
+                    height: cellSize,
+                    textAlign: 'center',
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                    fontWeight: 900,
+                    fontSize,
+                    letterSpacing: '0.02em',
+                    borderRadius: 10,
+                    outline: 'none',
+                    transition: 'all 0.2s',
+                    background: solved
+                      ? 'linear-gradient(135deg, rgba(125,249,170,0.22), rgba(125,249,170,0.1))'
+                      : answered
+                      ? 'linear-gradient(135deg, rgba(125,249,170,0.14), rgba(125,249,170,0.05))'
+                      : 'linear-gradient(135deg, rgba(255,208,0,0.12), rgba(255,208,0,0.04))',
+                    border: solved
+                      ? '2px solid #7DF9AA'
+                      : answered
+                      ? '2px solid rgba(125,249,170,0.75)'
+                      : '2px solid rgba(255,208,0,0.9)',
+                    boxShadow: solved
+                      ? '0 0 18px rgba(125,249,170,0.4), inset 0 1px 0 rgba(125,249,170,0.2)'
+                      : answered
+                      ? '0 0 10px rgba(125,249,170,0.2), inset 0 1px 0 rgba(125,249,170,0.1)'
+                      : '0 0 12px rgba(255,208,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
+                    color: solved ? '#7DF9AA' : '#FFD700',
+                    caretColor: '#FFD700',
+                  }}
+                />
+              </motion.div>
+            );
+          }
+
+          return (
+            <motion.div
+              key={`${ri}-${ci}`}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay }}
+              style={{
+                width: cellSize,
+                height: cellSize,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 10,
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                fontWeight: 700,
+                fontSize,
+                letterSpacing: '0.02em',
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.04))',
+                border: '2px solid rgba(255,255,255,0.18)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 6px rgba(0,0,0,0.4)',
+                color: '#f1f5f9',
+                userSelect: 'none',
+              }}
+            >
+              {String(cell.value)}
+            </motion.div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+// ── Law declaration panel ─────────────────────────────────────────────────────
+function LawDeclarationPanel({
+  declaredFamily,
+  declaredAxis,
+  onFamily,
+  onAxis,
+  lawResult,
+  disabled,
+}: {
+  declaredFamily: RuleFamily | '';
+  declaredAxis: RuleAxis | '';
+  onFamily: (v: RuleFamily) => void;
+  onAxis: (v: RuleAxis) => void;
+  lawResult: string;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasResult = lawResult && lawResult !== 'not-declared';
+  const confirmed = lawResult === 'confirmed' || lawResult === 'alternate';
+
+  return (
+    <div style={{ borderRadius: 10, overflow: 'hidden', border: `1px solid ${hasResult ? (confirmed ? 'rgba(125,249,170,0.3)' : 'rgba(255,150,100,0.25)') : 'rgba(255,255,255,0.09)'}`, background: 'rgba(255,255,255,0.02)' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: 11,
+          letterSpacing: '0.1em',
+          color: '#9ca3af',
+          transition: 'color 0.15s',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, opacity: 0.6 }}>{open ? '▼' : '▶'}</span>
+          <span style={{ color: '#e5e7eb', fontWeight: 700 }}>DECLARE A LAW</span>
+          <span style={{ color: '#4b5563' }}>— optional bonus</span>
+        </span>
+        {hasResult && (
+          <span style={{ fontSize: 12, color: LAW_RESULT_COLOR[lawResult], fontWeight: 800 }}>
+            {confirmed ? '✓ CONFIRMED' : '◑ PARTIAL'}
+          </span>
+        )}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ padding: '4px 16px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <p style={{ fontSize: 11, color: '#6b7280', marginBottom: 12, lineHeight: 1.6, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                Identify the hidden rule. Correct declarations boost your rank — wrong ones never penalise.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: '#6b7280', letterSpacing: '0.1em', marginBottom: 5, fontFamily: 'monospace' }}>RULE FAMILY</div>
+                  <select
+                    value={declaredFamily}
+                    onChange={e => onFamily(e.target.value as RuleFamily)}
+                    disabled={disabled}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 7, fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e5e7eb', outline: 'none' }}
+                  >
+                    <option value="" style={{ background: '#1a1a1a', color: '#e5e7eb' }}>— select —</option>
+                    {RULE_FAMILIES.map(f => (
+                      <option key={f.value} value={f.value} style={{ background: '#1a1a1a', color: '#e5e7eb' }}>{f.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#6b7280', letterSpacing: '0.1em', marginBottom: 5, fontFamily: 'monospace' }}>AXIS</div>
+                  <select
+                    value={declaredAxis}
+                    onChange={e => onAxis(e.target.value as RuleAxis)}
+                    disabled={disabled}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 7, fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e5e7eb', outline: 'none' }}
+                  >
+                    <option value="" style={{ background: '#1a1a1a', color: '#e5e7eb' }}>— select —</option>
+                    {RULE_AXES.map(a => (
+                      <option key={a.value} value={a.value} style={{ background: '#1a1a1a', color: '#e5e7eb' }}>{a.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {hasResult && (
+                <p style={{ marginTop: 10, fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: LAW_RESULT_COLOR[lawResult] }}>
+                  {LAW_RESULT_TEXT[lawResult]}
+                </p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Hint panel ────────────────────────────────────────────────────────────────
+function HintPanel({
+  hints,
+  usedHintIds,
+  onUse,
+  disabled,
+}: {
+  hints: GridlockFileClientData['hints'];
+  usedHintIds: Set<string>;
+  onUse: (id: string) => void;
+  disabled: boolean;
+}) {
+  if (!hints || hints.length === 0) return null;
+  const usedCount = [...usedHintIds].filter(id => hints.some(h => h.id === id)).length;
+  return (
+    <div style={{ borderRadius: 10, border: '1px solid rgba(255,208,0,0.15)', background: 'rgba(255,208,0,0.02)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px 8px', borderBottom: '1px solid rgba(255,208,0,0.1)' }}>
+        <span style={{ fontSize: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#92400e', letterSpacing: '0.14em', fontWeight: 700 }}>📡 SIGNALS</span>
+        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#6b7280' }}>{usedCount}/{hints.length} used</span>
+      </div>
+      <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {hints.map((h, i) => {
+          const used = usedHintIds.has(h.id);
+          return (
+            <motion.div
+              key={h.id}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '9px 12px',
+                borderRadius: 8,
+                background: used ? 'rgba(255,213,128,0.06)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${used ? 'rgba(255,213,128,0.2)' : 'rgba(255,255,255,0.07)'}`,
+              }}
+            >
+              {used ? (
+                <p style={{ fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#fcd34d', lineHeight: 1.5, margin: 0 }}>{h.text}</p>
+              ) : (
+                <>
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#6b7280' }}>Signal {i + 1} · {h.cost} token{h.cost !== 1 ? 's' : ''}</span>
+                  <button
+                    onClick={() => onUse(h.id)}
+                    disabled={disabled}
+                    style={{
+                      fontSize: 10,
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                      fontWeight: 700,
+                      letterSpacing: '0.1em',
+                      padding: '4px 10px',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'all 0.15s',
+                      color: '#FFD580',
+                      border: '1px solid rgba(255,213,128,0.4)',
+                      background: 'rgba(255,213,128,0.08)',
+                      opacity: disabled ? 0.4 : 1,
+                    }}
+                  >
+                    UNLOCK
+                  </button>
+                </>
+              )}
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Solved screen ──────────────────────────────────────────────────────────────
+function SolvedScreen({
+  puzzleId,
+  rank,
+  submissionCount,
+  hintsUsed,
+  ruleExplanation,
+  retentionUnlock,
+  lawResult,
+  elapsedSeconds,
+  fileNumber,
+  fileTitle,
+}: {
+  puzzleId: string;
+  rank: GridlockRank;
+  submissionCount: number;
+  hintsUsed: number;
+  ruleExplanation: string | null;
+  retentionUnlock: string | null;
+  lawResult: string;
+  elapsedSeconds: number;
+  fileNumber?: number;
+  fileTitle?: string;
+}) {
+  const shareText = generateShareText(
+    fileNumber ?? 0,
+    fileTitle ?? 'Classified File',
+    rank,
+    submissionCount,
+    hintsUsed,
+    lawResult,
+    elapsedSeconds,
+  );
+  const shareUrl = 'https://puzzlewarz.com';
+
+  const handleFacebook = () => {
+    window.open(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(shareText)}`,
+      '_blank',
+      'width=600,height=500',
+    );
+  };
+
+  const handleTwitter = () => {
+    window.open(
+      `https://x.com/intent/tweet?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`,
+      '_blank',
+      'width=600,height=500',
+    );
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="space-y-5 max-w-xl mx-auto">
+      <div className="border border-green-500/30 rounded-lg p-6 bg-black/60 text-center space-y-3">
+        <div className="text-xs font-mono text-green-400/70 tracking-widest uppercase">FILE CRACKED</div>
+        <RankBadge rank={rank} size="lg" />
+        {elapsedSeconds > 0 && (
+          <div className="text-2xl font-black font-mono tracking-tighter" style={{ color: '#7DF9AA', textShadow: '0 0 12px #7DF9AA55' }}>
+            ⏱ {formatTime(elapsedSeconds)}
+          </div>
+        )}
+        <div className="text-sm font-mono text-gray-400">
+          {submissionCount} attempt{submissionCount !== 1 ? 's' : ''} · {hintsUsed} signal{hintsUsed !== 1 ? 's' : ''} used
+        </div>
+        {lawResult && lawResult !== 'not-declared' && (
+          <div className="text-xs font-mono" style={{ color: LAW_RESULT_COLOR[lawResult] }}>
+            Law Declaration: {LAW_RESULT_TEXT[lawResult]}
+          </div>
+        )}
+
+        {/* Social share buttons */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', paddingTop: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={handleTwitter}
+            title="Share on X / Twitter"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.06)', color: '#e5e7eb',
+              fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace, monospace',
+              cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.12)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.4)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.2)'; }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.631zM17.083 20.248h1.833L7.084 4.126H5.117z"/>
+            </svg>
+            Share on X
+          </button>
+          <button
+            onClick={handleFacebook}
+            title="Share on Facebook"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(24,119,242,0.4)',
+              background: 'rgba(24,119,242,0.1)', color: '#5b9cf6',
+              fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace, monospace',
+              cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(24,119,242,0.22)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(24,119,242,0.7)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(24,119,242,0.1)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(24,119,242,0.4)'; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.313 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.886v2.268h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/>
+            </svg>
+            Share on Facebook
+          </button>
+        </div>
+      </div>
+
+      <GridlockStandings
+        puzzleId={puzzleId}
+        playerRank={rank}
+        elapsedSeconds={elapsedSeconds}
+      />
+
+      {ruleExplanation && (
+        <div className="border border-yellow-500/20 rounded-lg p-4 bg-yellow-900/10 space-y-2">
+          <div className="text-xs font-mono text-yellow-400/70 tracking-widest uppercase">RULE DISCLOSED</div>
+          <p className="text-sm font-mono text-yellow-200 leading-relaxed">{ruleExplanation}</p>
+        </div>
+      )}
+
+      {retentionUnlock && (
+        <div className="border border-gray-600 rounded-lg p-4 bg-gray-900/50 space-y-2">
+          <div className="text-xs font-mono text-gray-500 tracking-widest uppercase">DECLASSIFIED</div>
+          <pre className="text-xs font-mono text-gray-300 whitespace-pre-wrap leading-relaxed">{retentionUnlock}</pre>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ── Share card generator ───────────────────────────────────────────────────────
+function generateShareText(
+  fileNumber: number,
+  fileTitle: string,
+  rank: GridlockRank,
+  submissionCount: number,
+  hintsUsed: number,
+  lawResult: string,
+  elapsedSeconds: number,
+): string {
+  const rankEmoji: Record<GridlockRank, string> = { S: '🟡', A: '🟢', B: '🔵', C: '⚪', F: '🔴' };
+  const lines = [
+    `📁 GRIDLOCK FILE #${fileNumber.toString().padStart(3, '0')}`,
+    `"${fileTitle}"`,
+    ``,
+    `${rankEmoji[rank]} ${rank}-RANK — ${GRIDLOCK_RANK_LABELS[rank]}`,
+    elapsedSeconds > 0 ? `⏱ Solved in ${formatTime(elapsedSeconds)}` : '',
+    `${submissionCount === 1 ? '🎯' : '🔁'} ${submissionCount} attempt${submissionCount !== 1 ? 's' : ''}${hintsUsed > 0 ? ` · ${hintsUsed} hint${hintsUsed !== 1 ? 's' : ''}` : ' · no hints'}`,
+    lawResult === 'confirmed' || lawResult === 'alternate'
+      ? `🧠 Law declared correctly`
+      : '',
+    ``,
+    `Can you crack today's file?`,
+    `puzzlewarz.com/puzzles`,
+  ].filter(l => l !== '');
+  return lines.join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = false, hideHeader = false }: GridlockFilePuzzleProps) {
+  const [serverState, setServerState] = useState<ServerState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Answer inputs — one entry per missing cell
+  const [answers, setAnswers] = useState<string[]>([]);
+  // Law Declaration (optional)
+  const [declaredFamily, setDeclaredFamily] = useState<RuleFamily | ''>('');
+  const [declaredAxis, setDeclaredAxis] = useState<RuleAxis | ''>('');
+  // Hints revealed client-side
+  const [usedHintIds, setUsedHintIds] = useState<Set<string>>(new Set());
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
+  const [illuminated, setIlluminated] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // ── Guest-mode tracking ─────────────────────────────────────────────────────────
+  const [guestSubmissionCount, setGuestSubmissionCount] = useState(0);
+  const [streak, setStreak] = useState<AnonStreakState | null>(null);
+  const [arcCompleteVisible, setArcCompleteVisible] = useState(false);
+  const [guestRewardData, setGuestRewardData] = useState<{ xp: number; points: number } | null>(null);
+
+  // ── Timer ────────────────────────────────────────────────────────────────────
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerStartRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startTimer = useCallback(() => {
+    if (timerIntervalRef.current) return; // already running
+    timerStartRef.current = Date.now();
+    timerIntervalRef.current = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - (timerStartRef.current ?? Date.now())) / 1000));
+    }, 1000);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (timerStartRef.current) {
+      setElapsedSeconds(Math.floor((Date.now() - timerStartRef.current) / 1000));
+    }
+  }, []);
+
+  // Clean up on unmount
+  useEffect(() => () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); }, []);
+
+  // ── Load ────────────────────────────────────────────────────────────────────
+  const loadState = useCallback(async () => {
+    try {
+      const endpoint = guestMode
+        ? `/api/gridlock/guest/${puzzleId}/state`
+        : `/api/puzzles/${puzzleId}/gridlock/state`;
+
+      const res = await fetch(endpoint);
+      if (!res.ok) throw new Error('Failed to load');
+      const data = await res.json();
+
+      if (guestMode) {
+        // Build a client-only ServerState — progress read from localStorage
+        const anonSolved = getAnonSolved();
+        const record = anonSolved[puzzleId];
+        const anonStreak = getAnonStreak();
+        setStreak(anonStreak);
+
+        setServerState({
+          puzzle: data.puzzle,
+          solved: Boolean(record),
+          solvedAt: record ? record.date : null,
+          submissionCount: record?.submissionCount ?? 0,
+          hintsUsed: 0,
+          rank: (record?.rank as GridlockRank) ?? 'F',
+          ruleExplanation: null,
+          retentionUnlock: null,
+        });
+
+        if (record) {
+          setElapsedSeconds(record.elapsedSeconds);
+          setIlluminated(true);
+          // If already solved and it was today, re-surface the rule explanation via a fresh fetch
+        } else {
+          startTimer();
+        }
+      } else {
+        setServerState(data);
+        if (data.solved) {
+          setIlluminated(true);
+        } else {
+          startTimer();
+        }
+      }
+
+      const missingCount = data.puzzle.grid.flat().filter((c: GridCell) => c.isMissing).length;
+      setAnswers(Array(missingCount).fill(''));
+    } catch (e) {
+      setError('Failed to load puzzle. Please refresh.');
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [puzzleId, guestMode, startTimer]);
+
+  useEffect(() => { loadState(); }, [loadState]);
+
+  // ── Answer handler ──────────────────────────────────────────────────────────
+  const handleAnswer = useCallback((idx: number, value: string) => {
+    setAnswers(prev => {
+      const next = [...prev];
+      next[idx] = value;
+      return next;
+    });
+  }, []);
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  const handleSubmit = useCallback(async () => {
+    if (submitting || answers.every(a => a.trim() === '')) return;
+    setSubmitting(true);
+
+    const nextGuestCount = guestMode ? guestSubmissionCount + 1 : undefined;
+
+    try {
+      const endpoint = guestMode
+        ? `/api/gridlock/guest/${puzzleId}/submit`
+        : `/api/puzzles/${puzzleId}/gridlock/submit`;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answers: answers.map(a => a.trim()),
+          declaredFamily: declaredFamily || undefined,
+          declaredAxis: declaredAxis || undefined,
+          elapsedSeconds,
+          ...(guestMode && { submissionCount: nextGuestCount, anonId: getAnonId() }),
+        }),
+      });
+      const data: SubmitResult = await res.json();
+      setSubmitResult(data);
+
+      const resolvedSubmissionCount = guestMode ? (nextGuestCount ?? 1) : data.submissionCount;
+
+      if (data.correct) {
+        stopTimer();
+        setIlluminated(true);
+
+        if (guestMode) {
+          // Persist solve to localStorage
+          setAnonSolved(puzzleId, {
+            rank: data.rank,
+            elapsedSeconds,
+            date: new Date().toISOString().slice(0, 10),
+            arcDay: data.arcDay,
+            submissionCount: resolvedSubmissionCount,
+          });
+          // Update streak
+          const updated = updateAnonStreak(
+            streak ?? getAnonStreak(),
+            data.arcDay ?? 0,
+            data.retentionUnlock ?? undefined,
+          );
+          setStreak(updated);
+          // Trigger arc complete overlay when all 7 days solved
+          if (updated.arcSolvedDays.length === 7) {
+            setArcCompleteVisible(true);
+          }
+          // Store pending rewards and show the reward modal
+          const xp = data.xpReward ?? 100;
+          const pts = data.pointsReward ?? 100;
+          addPendingRewards(xp, pts);
+          setGuestRewardData({ xp, points: pts });
+        }
+
+        setServerState(prev => prev ? {
+          ...prev,
+          solved: true,
+          submissionCount: resolvedSubmissionCount,
+          rank: data.rank,
+          ruleExplanation: data.ruleExplanation ?? null,
+          retentionUnlock: data.retentionUnlock ?? null,
+        } : prev);
+        onSolved();
+      } else {
+        if (guestMode) {
+          setGuestSubmissionCount(nextGuestCount ?? 1);
+        }
+        setServerState(prev => prev ? {
+          ...prev,
+          submissionCount: resolvedSubmissionCount,
+          rank: data.rank,
+        } : prev);
+      }
+    } catch (e) {
+      console.error('[submit]', e);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [answers, declaredFamily, declaredAxis, puzzleId, submitting, onSolved, guestMode, guestSubmissionCount, elapsedSeconds, streak, stopTimer]);
+
+  // ── Copy share card ─────────────────────────────────────────────────────────
+  const handleShare = useCallback(async () => {
+    if (!serverState) return;
+    const text = generateShareText(
+      serverState.puzzle.fileNumber ?? 0,
+      serverState.puzzle.fileTitle ?? '',
+      serverState.rank,
+      serverState.submissionCount,
+      serverState.hintsUsed,
+      submitResult?.lawResult ?? 'not-declared',
+      elapsedSeconds,
+    );
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch { /* ignore */ }
+  }, [serverState, submitResult]);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48 text-green-400 font-mono text-sm animate-pulse">
+        ▶ LOADING GRIDLOCK FILE…
+      </div>
+    );
+  }
+  if (error || !serverState) {
+    return (
+      <div className="p-6 border border-red-700/50 rounded-lg bg-red-900/10 text-red-400 font-mono text-sm">
+        {error ?? 'Puzzle data unavailable.'}
+      </div>
+    );
+  }
+
+  const { puzzle } = serverState;
+  const solved = serverState.solved;
+  const streakAlive = streak ? isStreakAlive(streak.lastSolvedDate) : false;
+
+  return (
+    <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} className="space-y-6">
+      {/* Arc complete overlay */}
+      <AnimatePresence>
+        {arcCompleteVisible && streak && (
+          <GridlockArcComplete
+            streak={streak}
+            rank={serverState.rank}
+            elapsedSeconds={elapsedSeconds}
+            guestMode={guestMode}
+            onClose={() => setArcCompleteVisible(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Guest reward modal — shown once after a guest solves */}
+      <AnimatePresence>
+        {guestRewardData && (
+          <GuestRewardModal
+            xpEarned={guestRewardData.xp}
+            pointsEarned={guestRewardData.points}
+            puzzleTitle={serverState.puzzle.fileTitle}
+            onDismiss={() => setGuestRewardData(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Header */}
+      {!hideHeader && (
+      <div className="flex flex-wrap items-start justify-between gap-3 pb-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+        <div>
+          <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+            GRIDLOCK FILE #{String(puzzle.fileNumber ?? '?').padStart(3, '0')}
+          </div>
+          <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#f9fafb', marginTop: 4, lineHeight: 1.2 }}>
+            {puzzle.fileTitle}
+          </div>
+          <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 6, fontStyle: 'italic', lineHeight: 1.5 }}>
+            {puzzle.flavorText}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {streak && streak.count > 0 && (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
+              style={{
+                background: streakAlive ? 'rgba(255,208,0,0.1)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${streakAlive ? 'rgba(255,208,0,0.35)' : 'rgba(255,255,255,0.1)'}`,
+                color: streakAlive ? '#FFD700' : '#6b7280',
+              }}
+            >
+              <span>{streakAlive ? '🔥' : '💀'}</span>
+              <span>{streak.count}</span>
+            </div>
+          )}
+          {!solved && (
+            <div style={{ fontSize: '1rem', fontWeight: 900, color: '#7DF9AA', letterSpacing: '0.06em', fontVariantNumeric: 'tabular-nums' }}>
+              {formatTime(elapsedSeconds)}
+            </div>
+          )}
+          {serverState.submissionCount > 0 && (
+            <RankBadge rank={serverState.rank} />
+          )}
+        </div>
+      </div>
+      )}
+
+      {solved ? (
+        // ── Solved view ────────────────────────────────────────────────────────
+        <div className="space-y-5">
+          {/* Grid (read-only, illuminated) */}
+          <div className="flex justify-center py-4" style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <GridDisplay
+              grid={puzzle.grid}
+              answers={answers}
+              onAnswer={() => {}}
+              solved
+              lastResult={submitResult}
+              illuminated={illuminated}
+            />
+          </div>
+
+          <SolvedScreen
+            puzzleId={puzzleId}
+            rank={serverState.rank}
+            submissionCount={serverState.submissionCount}
+            hintsUsed={serverState.hintsUsed}
+            ruleExplanation={serverState.ruleExplanation}
+            retentionUnlock={serverState.retentionUnlock}
+            lawResult={submitResult?.lawResult ?? 'not-declared'}
+            elapsedSeconds={elapsedSeconds}
+            fileNumber={serverState.puzzle.fileNumber}
+            fileTitle={serverState.puzzle.fileTitle}
+          />
+
+          <button
+            onClick={handleShare}
+            className="w-full py-2.5 rounded font-mono font-bold text-sm uppercase tracking-widest transition-all"
+            style={{
+              background: copied ? 'rgba(125,249,170,0.15)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${copied ? '#7DF9AA55' : '#374151'}`,
+              color: copied ? '#7DF9AA' : '#9ca3af',
+            }}
+          >
+            {copied ? '✓ COPIED TO CLIPBOARD' : '📋 SHARE RESULT'}
+          </button>
+
+          {/* Nudge after solve (guest only) */}
+          <GridlockStreakNudge
+            arcDay={puzzle.arcDay ?? 1}
+            streakCount={streak?.count ?? 0}
+            arcSolvedDays={streak?.arcSolvedDays ?? []}
+            guestMode={guestMode}
+          />
+        </div>
+      ) : (
+        // ── Active play view ───────────────────────────────────────────────────
+        <div className="space-y-5">
+          {/* Grid */}
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 20px', background: 'radial-gradient(ellipse at center, rgba(255,208,0,0.05) 0%, rgba(0,0,0,0) 70%), rgba(255,255,255,0.025)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.09)' }}>
+            <GridDisplay
+              grid={puzzle.grid}
+              answers={answers}
+              onAnswer={handleAnswer}
+              solved={false}
+              lastResult={submitResult}
+              illuminated={false}
+            />
+          </div>
+
+          {/* Wrong answer feedback */}
+          <AnimatePresence>
+            {submitResult && !submitResult.correct && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0 }}
+                style={{
+                  borderRadius: 10,
+                  padding: '12px 16px',
+                  border: '1px solid rgba(255,96,96,0.35)',
+                  background: 'linear-gradient(135deg, rgba(255,60,60,0.12), rgba(255,60,60,0.05))',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#FF6060', marginBottom: submitResult.partialHint ? 4 : 0 }}>
+                  ✕ Incorrect — {submitResult.submissionCount} attempt{submitResult.submissionCount !== 1 ? 's' : ''} so far
+                </div>
+                {submitResult.partialHint && (
+                  <div style={{ fontSize: 12, color: '#FCD34D', marginTop: 4 }}>{submitResult.partialHint}</div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Hints */}
+          <HintPanel
+            hints={puzzle.hints}
+            usedHintIds={usedHintIds}
+            onUse={id => setUsedHintIds(prev => new Set([...prev, id]))}
+            disabled={solved}
+          />
+
+          {/* Law Declaration (optional) */}
+          <LawDeclarationPanel
+            declaredFamily={declaredFamily}
+            declaredAxis={declaredAxis}
+            onFamily={setDeclaredFamily}
+            onAxis={setDeclaredAxis}
+            lawResult={submitResult?.lawResult ?? 'not-declared'}
+            disabled={solved}
+          />
+
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || answers.every(a => !a.trim())}
+            style={{
+              width: '100%',
+              padding: '14px 0',
+              borderRadius: 10,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontWeight: 900,
+              fontSize: 13,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              transition: 'all 0.18s',
+              background: submitting
+                ? 'rgba(255,208,0,0.06)'
+                : 'linear-gradient(135deg, rgba(255,208,0,0.18), rgba(255,208,0,0.08))',
+              border: '1px solid rgba(255,208,0,0.5)',
+              boxShadow: '0 0 20px rgba(255,208,0,0.12), inset 0 1px 0 rgba(255,255,255,0.06)',
+              color: '#FFD700',
+              opacity: (submitting || answers.every(a => !a.trim())) ? 0.4 : 1,
+            }}
+          >
+            {submitting ? '▶ ANALYSING…' : `▶ SUBMIT ANSWER${answers.filter(a => a.trim()).length > 1 ? 'S' : ''}`}
+          </button>
+
+          <div style={{ fontSize: 11, textAlign: 'center', color: '#374151', fontFamily: 'monospace', letterSpacing: '0.06em' }}>
+            {serverState.submissionCount > 0 ? `${serverState.submissionCount} attempt${serverState.submissionCount !== 1 ? 's' : ''} · ${serverState.hintsUsed} signal${serverState.hintsUsed !== 1 ? 's' : ''} used` : 'No attempts yet'}
+          </div>
+
+          {/* Streak nudge (guest only, shows after a solve) */}
+          {submitResult?.correct === false && (
+            <GridlockStreakNudge
+              arcDay={puzzle.arcDay ?? 1}
+              streakCount={streak?.count ?? 0}
+              arcSolvedDays={streak?.arcSolvedDays ?? []}
+              guestMode={guestMode}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
