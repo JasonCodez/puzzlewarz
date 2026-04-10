@@ -71,6 +71,7 @@ model User {
   warzChallengesOpposed  PuzzleWarzChallenge[]  @relation("WarzOpponent")
   warzWins               PuzzleWarzChallenge[]  @relation("WarzWinner")
   gridlockSolves         GridlockSolve[]
+  leaderboardRewards     LeaderboardReward[]
 
   // Point Store — consumables
   streakShields          Int                        @default(0)
@@ -856,6 +857,36 @@ model GlobalLeaderboard {
   updatedAt     DateTime @updatedAt
 
   @@map("global_leaderboard")
+}
+
+// ── Weekly / Monthly competitive leaderboards ─────────────────────────────────
+model LeaderboardPeriod {
+  id          String                @id @default(cuid())
+  type        String                // "weekly" | "monthly"
+  startsAt    DateTime
+  endsAt      DateTime
+  settledAt   DateTime?             // null = still active
+  rewards     LeaderboardReward[]
+
+  @@index([type, endsAt])
+  @@map("leaderboard_periods")
+}
+
+model LeaderboardReward {
+  id         String            @id @default(cuid())
+  periodId   String
+  userId     String
+  rank       Int
+  points     Int               // bonus points awarded
+  xp         Int               // bonus XP awarded
+  awardedAt  DateTime          @default(now())
+  period     LeaderboardPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([periodId, userId])
+  @@index([periodId])
+  @@index([userId])
+  @@map("leaderboard_rewards")
 }
 
 model Announcement {

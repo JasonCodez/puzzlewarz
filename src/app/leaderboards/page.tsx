@@ -17,13 +17,44 @@ interface LeaderboardEntry {
   isCurrentUser?: boolean;
 }
 
-type Tab = "global" | "following";
+interface PeriodEntry {
+  userId: string;
+  userName: string | null;
+  userImage: string | null;
+  activeFlair: string;
+  periodPoints: number;
+  puzzlesSolved: number;
+  rank: number;
+}
+
+interface RewardTier {
+  rank: number | string;
+  points: number;
+  xp: number;
+}
+
+type Tab = "global" | "following" | "weekly" | "monthly";
+
+function formatCountdown(endsAt: string): string {
+  const diff = new Date(endsAt).getTime() - Date.now();
+  if (diff <= 0) return "Ended";
+  const d = Math.floor(diff / 86_400_000);
+  const h = Math.floor((diff % 86_400_000) / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  if (d > 0) return `${d}d ${h}h remaining`;
+  if (h > 0) return `${h}h ${m}m remaining`;
+  return `${m}m remaining`;
+}
 
 export default function LeaderboardsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("global");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [periodEntries, setPeriodEntries] = useState<PeriodEntry[]>([]);
+  const [periodUserRank, setPeriodUserRank] = useState<PeriodEntry | null>(null);
+  const [periodEndsAt, setPeriodEndsAt] = useState<string | null>(null);
+  const [periodRewardTiers, setPeriodRewardTiers] = useState<RewardTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [userRank, setUserRank] = useState<LeaderboardEntry | null>(null);
@@ -47,6 +78,16 @@ export default function LeaderboardsPage() {
     setLoading(true);
     setError("");
     try {
+      if (tab === "weekly" || tab === "monthly") {
+        const res = await fetch(`/api/leaderboards/period?type=${tab}`);
+        if (!res.ok) throw new Error("Failed to fetch period leaderboard");
+        const data = await res.json();
+        setPeriodEntries(data.entries ?? []);
+        setPeriodUserRank(data.userRank ?? null);
+        setPeriodEndsAt(data.endsAt ?? null);
+        setPeriodRewardTiers(data.rewardTiers ?? []);
+        return;
+      }
       const url = tab === "following" ? "/api/leaderboards/following" : "/api/leaderboards/global";
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch leaderboard");
@@ -115,19 +156,26 @@ export default function LeaderboardsPage() {
           </div>
 
           {/* Tab switcher */}
-          <div className="flex gap-2 mt-4">
-            {(["global", "following"] as Tab[]).map((tab) => (
+          <div className="flex flex-wrap gap-2 mt-4">
+            {(
+              [
+                { id: "global",   label: "🌍 Global"  },
+                { id: "following",label: "👥 Following"},
+                { id: "weekly",   label: "📅 Weekly"  },
+                { id: "monthly",  label: "🗓️ Monthly" },
+              ] as { id: Tab; label: string }[]
+            ).map(({ id, label }) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+                key={id}
+                onClick={() => setActiveTab(id)}
                 className="px-5 py-2 rounded-lg font-semibold text-sm transition-all"
                 style={{
-                  backgroundColor: activeTab === tab ? '#3891A6' : 'rgba(56,145,166,0.12)',
-                  color: activeTab === tab ? '#fff' : '#3891A6',
+                  backgroundColor: activeTab === id ? '#3891A6' : 'rgba(56,145,166,0.12)',
+                  color: activeTab === id ? '#fff' : '#3891A6',
                   border: '1px solid rgba(56,145,166,0.4)',
                 }}
               >
-                {tab === "global" ? "🌍 Global" : "👥 Following"}
+                {label}
               </button>
             ))}
           </div>
@@ -155,123 +203,233 @@ export default function LeaderboardsPage() {
           </div>
         )}
 
-        {/* Your Rank Card */}
-        {userRank && (
-          <div className="mb-8 rounded-lg p-4 sm:p-6 border" style={{ backgroundColor: 'rgba(56, 145, 166, 0.15)', borderColor: '#3891A6' }}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm" style={{ color: '#DDDBF1' }}>{activeTab === "following" ? "YOUR RANK (AMONG FOLLOWING)" : "YOUR RANK"}</p>
-                <p className="text-3xl font-bold text-white">
-                  #{userRank.rank}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-5xl font-bold" style={{ color: '#FDE74C' }}>
-                  {userRank.totalPoints}
-                </p>
-                <p className="text-sm" style={{ color: '#DDDBF1' }}>
-                  {userRank.puzzlesSolved} puzzles solved
-                </p>
-              </div>
+        {/* ── Period (weekly / monthly) view ─────────────────────────────── */}
+        {(activeTab === "weekly" || activeTab === "monthly") && (
+          <>
+            {/* Countdown + reward info */}
+            <div className="mb-6 flex flex-wrap gap-4">
+              {periodEndsAt && (
+                <div className="flex-1 min-w-[200px] rounded-lg p-4 border" style={{ backgroundColor: 'rgba(56,145,166,0.1)', borderColor: '#3891A6' }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: '#3891A6' }}>⏳ TIME REMAINING</p>
+                  <p className="text-xl font-bold text-white">{formatCountdown(periodEndsAt)}</p>
+                  <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>Ends {new Date(periodEndsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                </div>
+              )}
+              {periodRewardTiers.length > 0 && (
+                <div className="flex-1 min-w-[260px] rounded-lg p-4 border" style={{ backgroundColor: 'rgba(253,231,76,0.06)', borderColor: 'rgba(253,231,76,0.3)' }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: '#FDE74C' }}>🏆 END-OF-{activeTab === "weekly" ? "WEEK" : "MONTH"} REWARDS (TOP 50)</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    {periodRewardTiers.map((t) => (
+                      <div key={String(t.rank)} className="flex justify-between text-xs">
+                        <span style={{ color: '#d1d5db' }}>#{t.rank}</span>
+                        <span style={{ color: '#FDE74C' }}>{t.points.toLocaleString()} pts</span>
+                        <span style={{ color: '#a78bfa' }}>+{t.xp} XP</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+
+            {/* Your period rank */}
+            {periodUserRank && (
+              <div className="mb-8 rounded-lg p-4 sm:p-6 border" style={{ backgroundColor: 'rgba(56, 145, 166, 0.15)', borderColor: '#3891A6' }}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm" style={{ color: '#DDDBF1' }}>YOUR RANK THIS {activeTab === "weekly" ? "WEEK" : "MONTH"}</p>
+                    <p className="text-3xl font-bold text-white">#{periodUserRank.rank}</p>
+                    {periodUserRank.rank <= 50 && (
+                      <p className="text-xs mt-1" style={{ color: '#4ade80' }}>✓ You&apos;re in the reward zone!</p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-5xl font-bold" style={{ color: '#FDE74C' }}>{periodUserRank.periodPoints}</p>
+                    <p className="text-sm" style={{ color: '#DDDBF1' }}>{periodUserRank.puzzlesSolved} puzzles solved</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Period table */}
+            <div className="bg-slate-800/50 rounded-lg overflow-hidden border" style={{ borderColor: '#3891A6' }}>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-900/50 border-b" style={{ borderColor: '#3891A6' }}>
+                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>RANK</th>
+                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>PLAYER</th>
+                      <th className="hidden sm:table-cell px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>PUZZLES</th>
+                      <th className="px-3 sm:px-6 py-4 text-right text-xs font-semibold" style={{ color: '#3891A6' }}>PTS THIS {activeTab === "weekly" ? "WEEK" : "MONTH"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {periodEntries.map((entry) => (
+                      <tr
+                        key={entry.userId}
+                        className="hover:bg-slate-700/30 transition-colors"
+                        style={{
+                          borderBottom: '1px solid rgba(56, 145, 166, 0.2)',
+                          backgroundColor: entry.userId === (session?.user as any)?.id ? 'rgba(56, 145, 166, 0.15)' : 'transparent',
+                        }}
+                      >
+                        <td className={`px-3 sm:px-6 py-3 font-bold ${getRankColor(entry.rank)}`}>
+                          <span className="text-lg">{getMedalEmoji(entry.rank)}</span>
+                          {entry.rank <= 50 && entry.rank > 3 && (
+                            <span className="ml-1 text-xs" style={{ color: '#FDE74C' }}>🎁</span>
+                          )}
+                        </td>
+                        <td className="px-3 sm:px-6 py-3">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={entry.userImage || '/images/default-avatar.svg'}
+                              alt=""
+                              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              onError={(e) => { const img = e.currentTarget; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
+                            />
+                            <Link href={`/profile/${entry.userId}`} className="text-white font-semibold hover:underline hover:text-[#3891A6]">
+                              {entry.userName || "Anonymous"}{entry.activeFlair && entry.activeFlair !== "none" ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {entry.activeFlair}</span> : ""}
+                            </Link>
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell px-6 py-3 text-slate-300">{entry.puzzlesSolved}</td>
+                        <td className="px-3 sm:px-6 py-3 text-right">
+                          <span className="text-lg font-bold" style={{ color: '#FDE74C' }}>{entry.periodPoints}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {periodEntries.length === 0 && (
+                <div className="p-8 text-center text-slate-400">No activity yet this {activeTab === "weekly" ? "week" : "month"}. Solve a puzzle to appear here!</div>
+              )}
+            </div>
+          </>
         )}
 
-        {/* Leaderboard Table */}
-        <div className="bg-slate-800/50 rounded-lg overflow-hidden border" style={{ borderColor: '#3891A6' }}>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-900/50 border-b" style={{ borderColor: '#3891A6' }}>
-                  <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
-                    RANK
-                  </th>
-                  <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
-                    PLAYER
-                  </th>
-                  <th className="hidden sm:table-cell px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
-                    PUZZLES
-                  </th>
-                  <th className="px-3 sm:px-6 py-4 text-right text-xs font-semibold" style={{ color: '#3891A6' }}>
-                    POINTS
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry, index) => (
-                  <tr
-                    key={entry.userId}
-                    className={`hover:bg-slate-700/30 transition-colors`}
-                    style={{
-                      borderBottom: `1px solid rgba(56, 145, 166, 0.2)`,
-                      backgroundColor: entry.userId === (session?.user as any)?.id ? 'rgba(56, 145, 166, 0.15)' : 'transparent'
-                    }}
-                  >
-                    <td className={`px-3 sm:px-6 py-3 font-bold ${getRankColor(entry.rank)}`}>
-                      <span className="text-lg">
-                        {getMedalEmoji(entry.rank)}
-                      </span>
-                    </td>
-                    <td className="px-3 sm:px-6 py-3">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={entry.userImage || '/images/default-avatar.svg'}
-                          alt=""
-                          className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                          onError={(e) => { const img = e.currentTarget; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
-                        />
-                        {entry.userId ? (
-                          <Link
-                            href={`/profile/${entry.userId}`}
-                            className="text-white font-semibold hover:underline hover:text-[#3891A6]"
-                          >
-                            {entry.userName || "Anonymous"}{entry.activeFlair && entry.activeFlair !== "none" ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {entry.activeFlair}</span> : ""}
-                          </Link>
-                        ) : (
-                          <span className="text-white font-semibold">{entry.userName || "Anonymous"}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="hidden sm:table-cell px-6 py-3 text-slate-300">
-                      {entry.puzzlesSolved}
-                    </td>
-                    <td className="px-3 sm:px-6 py-3 text-right">
-                      <span className="text-lg font-bold" style={{ color: '#FDE74C' }}>
-                        {entry.totalPoints}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {/* ── Global / Following view ─────────────────────────────────────── */}
+        {(activeTab === "global" || activeTab === "following") && (
+          <>
+            {/* Your Rank Card */}
+            {userRank && (
+              <div className="mb-8 rounded-lg p-4 sm:p-6 border" style={{ backgroundColor: 'rgba(56, 145, 166, 0.15)', borderColor: '#3891A6' }}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm" style={{ color: '#DDDBF1' }}>{activeTab === "following" ? "YOUR RANK (AMONG FOLLOWING)" : "YOUR RANK"}</p>
+                    <p className="text-3xl font-bold text-white">
+                      #{userRank.rank}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-5xl font-bold" style={{ color: '#FDE74C' }}>
+                      {userRank.totalPoints}
+                    </p>
+                    <p className="text-sm" style={{ color: '#DDDBF1' }}>
+                      {userRank.puzzlesSolved} puzzles solved
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
-          {entries.length === 0 && (
-            <div className="p-8 text-center text-slate-400">
-              No players yet. Be the first to solve a puzzle!
+            {/* Leaderboard Table */}
+            <div className="bg-slate-800/50 rounded-lg overflow-hidden border" style={{ borderColor: '#3891A6' }}>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-900/50 border-b" style={{ borderColor: '#3891A6' }}>
+                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
+                        RANK
+                      </th>
+                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
+                        PLAYER
+                      </th>
+                      <th className="hidden sm:table-cell px-6 py-4 text-left text-xs font-semibold" style={{ color: '#3891A6' }}>
+                        PUZZLES
+                      </th>
+                      <th className="px-3 sm:px-6 py-4 text-right text-xs font-semibold" style={{ color: '#3891A6' }}>
+                        POINTS
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map((entry) => (
+                      <tr
+                        key={entry.userId}
+                        className={`hover:bg-slate-700/30 transition-colors`}
+                        style={{
+                          borderBottom: `1px solid rgba(56, 145, 166, 0.2)`,
+                          backgroundColor: entry.userId === (session?.user as any)?.id ? 'rgba(56, 145, 166, 0.15)' : 'transparent'
+                        }}
+                      >
+                        <td className={`px-3 sm:px-6 py-3 font-bold ${getRankColor(entry.rank)}`}>
+                          <span className="text-lg">
+                            {getMedalEmoji(entry.rank)}
+                          </span>
+                        </td>
+                        <td className="px-3 sm:px-6 py-3">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={entry.userImage || '/images/default-avatar.svg'}
+                              alt=""
+                              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              onError={(e) => { const img = e.currentTarget; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
+                            />
+                            {entry.userId ? (
+                              <Link
+                                href={`/profile/${entry.userId}`}
+                                className="text-white font-semibold hover:underline hover:text-[#3891A6]"
+                              >
+                                {entry.userName || "Anonymous"}{entry.activeFlair && entry.activeFlair !== "none" ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {entry.activeFlair}</span> : ""}
+                              </Link>
+                            ) : (
+                              <span className="text-white font-semibold">{entry.userName || "Anonymous"}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell px-6 py-3 text-slate-300">
+                          {entry.puzzlesSolved}
+                        </td>
+                        <td className="px-3 sm:px-6 py-3 text-right">
+                          <span className="text-lg font-bold" style={{ color: '#FDE74C' }}>
+                            {entry.totalPoints}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {entries.length === 0 && (
+                <div className="p-8 text-center text-slate-400">
+                  No players yet. Be the first to solve a puzzle!
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Info Footer */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-slate-800/50 rounded-lg p-4 border" style={{ borderColor: '#3891A6' }}>
-            <p className="text-sm mb-2" style={{ color: '#DDDBF1' }}>🥇 Top Players</p>
-            <p className="text-2xl font-bold text-white">{entries.length}</p>
-          </div>
-          <div className="bg-slate-800/50 rounded-lg p-4 border" style={{ borderColor: '#3891A6' }}>
-            <p className="text-sm mb-2" style={{ color: '#DDDBF1' }}>📊 Total Points</p>
-            <p className="text-2xl font-bold text-white">
-              {entries.reduce((sum, e) => sum + e.totalPoints, 0)}
-            </p>
-          </div>
-          <div className="bg-slate-800/50 rounded-lg p-4 border" style={{ borderColor: '#3891A6' }}>
-            <p className="text-sm mb-2" style={{ color: '#DDDBF1' }}>🧩 Puzzles Solved</p>
-            <p className="text-2xl font-bold text-white">
-              {entries.reduce((sum, e) => sum + e.puzzlesSolved, 0)}
-            </p>
-          </div>
-        </div>
+            {/* Info Footer */}
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-800/50 rounded-lg p-4 border" style={{ borderColor: '#3891A6' }}>
+                <p className="text-sm mb-2" style={{ color: '#DDDBF1' }}>🥇 Top Players</p>
+                <p className="text-2xl font-bold text-white">{entries.length}</p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-4 border" style={{ borderColor: '#3891A6' }}>
+                <p className="text-sm mb-2" style={{ color: '#DDDBF1' }}>📊 Total Points</p>
+                <p className="text-2xl font-bold text-white">
+                  {entries.reduce((sum, e) => sum + e.totalPoints, 0)}
+                </p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-4 border" style={{ borderColor: '#3891A6' }}>
+                <p className="text-sm mb-2" style={{ color: '#DDDBF1' }}>🧩 Puzzles Solved</p>
+                <p className="text-2xl font-bold text-white">
+                  {entries.reduce((sum, e) => sum + e.puzzlesSolved, 0)}
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+
       </div>
       </div>
     </div>
