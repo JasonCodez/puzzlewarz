@@ -160,8 +160,8 @@ export default function HomeClient() {
           .hw-share-pre { font-size: 12px !important; padding: 16px 14px !important; overflow-x: auto !important; max-width: 100% !important; }
           .hw-share-cta { max-width: 100% !important; }
           .hw-final-section { padding: 80px 16px !important; }
-          .hw-footer-inner { flex-direction: column !important; gap: 28px !important; }
-          .hw-footer-nav { flex-direction: column !important; gap: 28px !important; }
+          .hw-footer-inner { flex-direction: column !important; gap: 28px !important; align-items: center !important; text-align: center !important; }
+          .hw-footer-nav { flex-direction: column !important; gap: 28px !important; align-items: center !important; text-align: center !important; }
           .hw-footer-bottom { flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 4px !important; }
           .hw-live-feed { padding: 10px 14px !important; }
           .hw-badge { font-size: 9px !important; padding: 4px 10px !important; }

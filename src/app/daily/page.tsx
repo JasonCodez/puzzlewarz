@@ -366,8 +366,8 @@ export default function DailyPage() {
         .pw-fadein{ animation: pw-fadein 0.25s ease; }
         .pw-bounce{ animation: pw-bounce 0.7s ease; }
         @keyframes pw-modal-in {
-          from{opacity:0;transform:scale(0.75) translateY(24px)}
-          to{opacity:1;transform:scale(1) translateY(0)}
+          from{opacity:0;transform:scale(0.82)}
+          to{opacity:1;transform:scale(1)}
         }
         @keyframes pw-counter {
           from{opacity:0;transform:translateY(12px)}

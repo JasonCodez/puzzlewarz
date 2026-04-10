@@ -59,9 +59,9 @@ export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, 
       >
         <motion.div
           key="guest-reward-card"
-          initial={{ scale: 0.8, opacity: 0, y: 24 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.8, opacity: 0, y: 24 }}
+          initial={{ scale: 0.82, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.82, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 220, damping: 20 }}
           className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden text-center"
           style={{
@@ -93,14 +93,14 @@ export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, 
             {!puzzleTitle && <div className="mb-5" />}
 
             {/* Rewards row */}
-            <div className="flex items-center justify-center gap-8 mb-6">
+            <div className="flex items-center justify-center gap-6 mb-6 px-4">
               {/* XP */}
               <div className="flex flex-col items-center gap-1">
                 <div className="flex items-end gap-1">
-                  <span className="text-5xl font-extrabold tabular-nums leading-none" style={{ color: '#FDE74C' }}>
+                  <span className="text-4xl font-extrabold tabular-nums leading-none" style={{ color: '#FDE74C' }}>
                     +{displayXp}
                   </span>
-                  <span className="text-xl font-bold mb-1" style={{ color: '#FFB86B' }}>XP</span>
+                  <span className="text-lg font-bold mb-1" style={{ color: '#FFB86B' }}>XP</span>
                 </div>
                 <span className="text-xs font-mono" style={{ color: '#6B7280' }}>Experience</span>
               </div>
@@ -111,7 +111,7 @@ export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, 
               {/* Points */}
               <div className="flex flex-col items-center gap-1">
                 <div className="flex items-end gap-1">
-                  <span className="text-5xl font-extrabold tabular-nums leading-none" style={{ color: '#7DF9AA' }}>
+                  <span className="text-4xl font-extrabold tabular-nums leading-none" style={{ color: '#7DF9AA' }}>
                     +{displayPoints}
                   </span>
                 </div>
