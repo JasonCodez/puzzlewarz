@@ -150,6 +150,22 @@ export default function HomeClient() {
         @media (max-width:700px) {
           .hero-btns { flex-direction: column !important; align-items:stretch !important; }
         }
+        @media (max-width:640px) {
+          .hw-hero { padding: 72px 16px 48px !important; }
+          .hw-orb-1 { width: 260px !important; height: 260px !important; top: 4% !important; left: -4% !important; }
+          .hw-orb-2 { display: none !important; }
+          .hw-section { padding: 48px 16px !important; }
+          .hw-steps-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+          .hw-share-wrap { flex-direction: column !important; gap: 20px !important; align-items: stretch !important; }
+          .hw-share-pre { font-size: 12px !important; padding: 16px 14px !important; overflow-x: auto !important; max-width: 100% !important; }
+          .hw-share-cta { max-width: 100% !important; }
+          .hw-final-section { padding: 80px 16px !important; }
+          .hw-footer-inner { flex-direction: column !important; gap: 28px !important; }
+          .hw-footer-nav { flex-direction: column !important; gap: 28px !important; }
+          .hw-footer-bottom { flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 4px !important; }
+          .hw-live-feed { padding: 10px 14px !important; }
+          .hw-badge { font-size: 9px !important; padding: 4px 10px !important; }
+        }
       `}</style>
 
       <main style={{ backgroundColor: "#010101", minHeight: "100vh", overflowX: "hidden", fontFamily: "system-ui, -apple-system, sans-serif" }}>
@@ -157,10 +173,10 @@ export default function HomeClient() {
         {/* ══════════════════════════════════════════════════════
             HERO
         ══════════════════════════════════════════════════════ */}
-        <section style={{ position: "relative", padding: "120px 20px 80px", overflow: "hidden", textAlign: "center" }}>
+        <section className="hw-hero" style={{ position: "relative", padding: "120px 20px 80px", overflow: "hidden", textAlign: "center" }}>
           <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-            <div style={{ position:"absolute", top:"8%", left:"12%", width:560, height:560, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,208,0,0.13) 0%, transparent 68%)", animation:"pw-orb-float 20s ease-in-out infinite", filter:"blur(2px)" }} />
-            <div style={{ position:"absolute", top:"25%", right:"8%", width:420, height:420, borderRadius:"50%", background:"radial-gradient(circle, rgba(56,145,166,0.12) 0%, transparent 68%)", animation:"pw-orb-float2 25s ease-in-out infinite" }} />
+            <div className="hw-orb-1" style={{ position:"absolute", top:"8%", left:"12%", width:560, height:560, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,208,0,0.13) 0%, transparent 68%)", animation:"pw-orb-float 20s ease-in-out infinite", filter:"blur(2px)" }} />
+            <div className="hw-orb-2" style={{ position:"absolute", top:"25%", right:"8%", width:420, height:420, borderRadius:"50%", background:"radial-gradient(circle, rgba(56,145,166,0.12) 0%, transparent 68%)", animation:"pw-orb-float2 25s ease-in-out infinite" }} />
             <div style={{ position:"absolute", inset:0, backgroundImage:"radial-gradient(circle, rgba(255,208,0,0.45) 1px, transparent 1px)", backgroundSize:"34px 34px", animation:"pw-grid-in 2s ease forwards" }} />
             <div style={{ position:"absolute", inset:0, background:"radial-gradient(ellipse 90% 70% at 50% 50%, transparent 30%, #010101 100%)" }} />
           </div>
@@ -168,7 +184,7 @@ export default function HomeClient() {
           <div style={{ maxWidth: 760, margin: "0 auto", position: "relative" }}>
             <div style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"6px 14px", borderRadius:999, background:"rgba(57,212,110,0.07)", border:"1px solid rgba(57,212,110,0.25)", marginBottom:28, ...fade(heroVisible, 0) }}>
               <span style={{ width:7, height:7, borderRadius:"50%", background:"#39D46E", animation:"pw-pulse-dot 1.5s ease-in-out infinite" }} />
-              <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#39D46E" }}>
+              <span className="hw-badge" style={{ fontSize:11, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#39D46E" }}>
                 Daily puzzle · Free to play · No account needed
               </span>
             </div>
@@ -202,9 +218,9 @@ export default function HomeClient() {
             RECENT SOLVES FEED — social proof ticker
         ══════════════════════════════════════════════════════ */}
         {recentSolves.length > 0 && (
-          <div style={{ padding:"0 20px 0", overflow:"hidden" }}>
-            <div style={{ maxWidth:1100, margin:"0 auto", borderRadius:12, border:"1px solid rgba(255,255,255,0.06)", background:"rgba(255,255,255,0.02)", padding:"12px 20px" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:16, overflowX:"auto", scrollbarWidth:"none" }}>
+          <div style={{ padding:"0 16px 0", overflow:"hidden" }}>
+            <div className="hw-live-feed" style={{ maxWidth:1100, margin:"0 auto", borderRadius:12, border:"1px solid rgba(255,255,255,0.06)", background:"rgba(255,255,255,0.02)", padding:"12px 20px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, overflowX:"auto", scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
                 <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#374151", flexShrink:0 }}>🔴 LIVE</span>
                 {recentSolves.slice(0, 8).map(s => {
                   const rankColor: Record<string, string> = { S:"#FFD700", A:"#7DF9AA", B:"#60a5fa", C:"#f97316", F:"#ef4444" };
@@ -226,7 +242,7 @@ export default function HomeClient() {
         {/* ══════════════════════════════════════════════════════
             GRIDLOCK FILE — THE CENTERPIECE
         ══════════════════════════════════════════════════════ */}
-        <section id="gridlock" style={{ padding:"100px 20px 60px" }}>
+        <section id="gridlock" className="hw-section" style={{ padding:"100px 20px 60px" }}>
           <div ref={gridlockReveal.ref} style={{ maxWidth:1100, margin:"0 auto" }}>
             <div style={{ textAlign:"center", marginBottom:48 }}>
               <div style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"5px 14px", borderRadius:999, background:"rgba(255,208,0,0.07)", border:"1px solid rgba(255,208,0,0.25)", marginBottom:20, animation:"pw-badge-pulse 2.5s ease-in-out infinite", ...fade(gridlockReveal.visible, 0) }}>
@@ -257,7 +273,7 @@ export default function HomeClient() {
         {/* ══════════════════════════════════════════════════════
             HOW IT WORKS — minimal, provocative
         ══════════════════════════════════════════════════════ */}
-        <section style={{ padding:"80px 20px", borderTop:"1px solid rgba(56,145,166,0.08)" }}>
+        <section className="hw-section" style={{ padding:"80px 20px", borderTop:"1px solid rgba(56,145,166,0.08)" }}>
           <div ref={howReveal.ref} style={{ maxWidth:900, margin:"0 auto", textAlign:"center" }}>
             <h2 style={{ fontSize:"clamp(26px,4vw,44px)", fontWeight:900, color:"#fff", letterSpacing:"-0.025em", marginBottom:14, ...fade(howReveal.visible, 0) }}>
               Find the hidden rule.<br />Solve the grid.<br /><span style={{ color:"#FFD700" }}>Beat everyone else.</span>
@@ -265,7 +281,7 @@ export default function HomeClient() {
             <p style={{ color:"#4B5563", fontSize:16, maxWidth:440, margin:"0 auto 56px", lineHeight:1.7, ...fade(howReveal.visible, 0.1) }}>
               That&apos;s it. No tutorial needed. No hand-holding. Either you see it or you don&apos;t.
             </p>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:24, ...fade(howReveal.visible, 0.18) }}>
+            <div className="hw-steps-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:24, ...fade(howReveal.visible, 0.18) }}>
               {[
                 { n:"01", title:"Study the Grid", body:"Every cell contains data. Most of it is noise. One pattern is the key.", icon:"🔍" },
                 { n:"02", title:"Declare the Law", body:"Name the rule that governs the grid. Right or wrong — commit.", icon:"⚖️" },
@@ -288,13 +304,13 @@ export default function HomeClient() {
         {/* ══════════════════════════════════════════════════════
             SHARE / VIRAL HOOK
         ══════════════════════════════════════════════════════ */}
-        <section style={{ padding:"80px 20px", borderTop:"1px solid rgba(255,255,255,0.04)" }}>
+        <section className="hw-section" style={{ padding:"80px 20px", borderTop:"1px solid rgba(255,255,255,0.04)" }}>
           <div ref={shareReveal.ref} style={{ maxWidth:800, margin:"0 auto" }}>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:40, alignItems:"center", justifyContent:"center" }}>
-              <div style={{ flexShrink:0, ...fade(shareReveal.visible, 0) }}>
-                <pre style={{ fontFamily:"ui-monospace,monospace", fontSize:14, lineHeight:1.9, color:"#d1fae5", background:"rgba(57,212,110,0.04)", border:"1px solid rgba(57,212,110,0.2)", borderRadius:14, padding:"24px 28px", whiteSpace:"pre", margin:0 }}>{EXAMPLE_SHARE}</pre>
+            <div className="hw-share-wrap" style={{ display:"flex", flexWrap:"wrap", gap:40, alignItems:"center", justifyContent:"center" }}>
+              <div style={{ flexShrink:0, minWidth:0, ...fade(shareReveal.visible, 0) }}>
+                <pre className="hw-share-pre" style={{ fontFamily:"ui-monospace,monospace", fontSize:14, lineHeight:1.9, color:"#d1fae5", background:"rgba(57,212,110,0.04)", border:"1px solid rgba(57,212,110,0.2)", borderRadius:14, padding:"24px 28px", whiteSpace:"pre", margin:0, overflowX:"auto" }}>{EXAMPLE_SHARE}</pre>
               </div>
-              <div style={{ maxWidth:300, ...fade(shareReveal.visible, 0.12) }}>
+              <div className="hw-share-cta" style={{ maxWidth:300, ...fade(shareReveal.visible, 0.12) }}>
                 <p style={{ fontSize:11, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#39D46E", marginBottom:14 }}>Challenge Your Friends</p>
                 <h3 style={{ fontSize:"clamp(22px,3vw,32px)", fontWeight:800, color:"#fff", letterSpacing:"-0.02em", marginBottom:14, lineHeight:1.2 }}>Share Your Result. Make It Personal.</h3>
                 <p style={{ color:"#6B7280", fontSize:15, lineHeight:1.7, marginBottom:24 }}>Every solve auto-generates a shareable card. Drop it in the group chat. Dare them to beat your time.</p>
@@ -312,7 +328,7 @@ export default function HomeClient() {
         {/* ══════════════════════════════════════════════════════
             SECONDARY FEATURES
         ══════════════════════════════════════════════════════ */}
-        <section style={{ padding:"80px 20px", borderTop:"1px solid rgba(255,255,255,0.04)" }}>
+        <section className="hw-section" style={{ padding:"80px 20px", borderTop:"1px solid rgba(255,255,255,0.04)" }}>
           <div ref={featuresReveal.ref} style={{ maxWidth:1100, margin:"0 auto" }}>
             <div style={{ textAlign:"center", marginBottom:48 }}>
               <p style={{ fontSize:11, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#6B7280", marginBottom:12, ...fade(featuresReveal.visible, 0) }}>The Full Arsenal</p>
@@ -353,6 +369,7 @@ export default function HomeClient() {
         ══════════════════════════════════════════════════════ */}
         <section
           ref={finalReveal.ref}
+          className="hw-final-section"
           style={{ padding:"140px 20px", textAlign:"center", background:"radial-gradient(ellipse 80% 60% at 50% 50%, rgba(255,208,0,0.07) 0%, transparent 70%)", borderTop:"1px solid rgba(255,208,0,0.1)" }}
         >
           <div style={{ maxWidth:580, margin:"0 auto" }}>
@@ -382,7 +399,7 @@ export default function HomeClient() {
             FOOTER
         ══════════════════════════════════════════════════════ */}
         <footer style={{ padding:"56px 20px", borderTop:"1px solid rgba(255,255,255,0.05)" }}>
-          <div style={{ maxWidth:1100, margin:"0 auto", display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"flex-start", gap:40, marginBottom:40 }}>
+          <div className="hw-footer-inner" style={{ maxWidth:1100, margin:"0 auto", display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"flex-start", gap:40, marginBottom:40 }}>
             <div>
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
                 <img src="/images/puzzle_warz_logo.png" alt="PuzzleWarz" style={{ height:28, width:"auto" }} />
@@ -390,7 +407,7 @@ export default function HomeClient() {
               </div>
               <p style={{ color:"#374151", fontSize:12, maxWidth:220, lineHeight:1.6 }}>Daily puzzles. Live leaderboards. Head-to-head battles.</p>
             </div>
-            <div style={{ display:"flex", gap:48, fontSize:14, flexWrap:"wrap" }}>
+            <div className="hw-footer-nav" style={{ display:"flex", gap:48, fontSize:14, flexWrap:"wrap" }}>
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                 <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#374151", marginBottom:4 }}>Play</p>
                 {[["Gridlock File", "#gridlock"], ["Warz Battles", "/warz"], ["Leaderboard", "/leaderboard"], ["Daily Puzzle", "/frequency"]].map(([l, h]) => (
@@ -411,7 +428,7 @@ export default function HomeClient() {
               </div>
             </div>
           </div>
-          <div style={{ paddingTop:20, borderTop:"1px solid rgba(255,255,255,0.04)", display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+          <div className="hw-footer-bottom" style={{ paddingTop:20, borderTop:"1px solid rgba(255,255,255,0.04)", display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, alignItems:"center" }}>
             <p style={{ color:"#1F2937", fontSize:12 }}>&copy; 2026 PuzzleWarz · All rights reserved</p>
             <p style={{ color:"#1F2937", fontSize:12 }}>Train your mind. Earn your rank.</p>
           </div>

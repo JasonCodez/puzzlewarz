@@ -7,6 +7,7 @@ import Link from "next/link";
 import PuzzleTypeFields from "@/components/admin/PuzzleTypeFields";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import SudokuGenerator from "@/components/puzzle/SudokuGenerator";
+import { createDefaultGridlockFileData, getGridlockFileData } from "@/lib/gridlockFile";
 
 interface HintEntry {
   text: string;
@@ -217,7 +218,12 @@ export default function AdminPuzzlesPage() {
         puzzleData: (p.data as Record<string, unknown>) || {},
         isWarzExclusive: (p as any).isWarzExclusive === true,
         gridlockReleaseAt: (p as any).schedule?.releaseAt
-          ? new Date((p as any).schedule.releaseAt).toISOString().slice(0, 10)
+          ? (() => {
+              const d = new Date((p as any).schedule.releaseAt);
+              // Format for datetime-local input: YYYY-MM-DDTHH:MM in local time
+              const pad = (n: number) => String(n).padStart(2, '0');
+              return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            })()
           : "",
       };
 
@@ -284,10 +290,23 @@ export default function AdminPuzzlesPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === "pointsReward" || name === "xpReward" ? parseInt(value) : value,
-    }));
+    setFormData((prev) => {
+      const nextValue = name === "pointsReward" || name === "xpReward" ? parseInt(value) : value;
+      const nextState = {
+        ...prev,
+        [name]: nextValue,
+      };
+
+      if (name === "puzzleType" && value === "gridlock_file") {
+        const parsedGridlock = getGridlockFileData(prev.puzzleData);
+        nextState.puzzleData = {
+          ...prev.puzzleData,
+          gridlockFile: parsedGridlock ?? createDefaultGridlockFileData(),
+        };
+      }
+
+      return nextState;
+    });
   };
 
   const handleHintChange = (index: number, field: keyof HintEntry, value: string | number) => {
@@ -628,6 +647,16 @@ export default function AdminPuzzlesPage() {
           };
         }
       }
+      if (formData.puzzleType === 'gridlock_file') {
+        const parsedGridlock = getGridlockFileData(cleanedPuzzleData);
+        if (!parsedGridlock) {
+          throw new Error('Gridlock File puzzles require a valid gridlockFile payload. Check grid, correctAnswers, ruleExplanation, and primary rule metadata in the admin JSON editor.');
+        }
+        cleanedPuzzleData = {
+          ...cleanedPuzzleData,
+          gridlockFile: parsedGridlock,
+        };
+      }
       const submitBody: any = { ...formData, hints: filteredHints, puzzleData: cleanedPuzzleData };
       if (formData.puzzleType === 'sudoku' && sudokuPuzzle) {
         submitBody.sudokuGrid = sudokuPuzzle.puzzle;
@@ -653,9 +682,9 @@ export default function AdminPuzzlesPage() {
       if (formData.puzzleType === 'gridlock_file') {
         // Answers are stored in puzzleData.gridlockFile.correctAnswers
         delete submitBody.correctAnswer;
-        // Include releaseAt for scheduling
+        // Include releaseAt for scheduling — convert datetime-local (local time) to UTC ISO string
         if (formData.gridlockReleaseAt) {
-          submitBody.gridlockReleaseAt = formData.gridlockReleaseAt;
+          submitBody.gridlockReleaseAt = new Date(formData.gridlockReleaseAt).toISOString();
         }
       }
       if (formData.puzzleType === 'parasite_code') {
@@ -711,13 +740,25 @@ export default function AdminPuzzlesPage() {
       });
 
       if (!response.ok) {
-        let errorData;
+        let errorData: any = null;
+        let rawText = "";
         try {
-          errorData = await response.json();
+          rawText = await response.text();
+          errorData = rawText ? JSON.parse(rawText) : null;
         } catch {
-          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+          errorData = rawText ? { raw: rawText } : null;
         }
-        throw new Error(errorData.error || "Failed to create puzzle");
+        console.error("[SUBMIT] Puzzle creation error response:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          rawText,
+        });
+        throw new Error(
+          errorData?.details
+            ? `${errorData.error || "Failed to create puzzle"}: ${errorData.details}`
+            : (errorData?.error || rawText || `HTTP ${response.status}: ${response.statusText}` || "Failed to create puzzle")
+        );
       }
 
       const createdPuzzle = await response.json();
@@ -1035,14 +1076,14 @@ export default function AdminPuzzlesPage() {
                   {/* Gridlock File: release date scheduler */}
                   {formData.puzzleType === 'gridlock_file' && (
                     <div>
-                      <label className="block text-sm font-semibold text-gray-300 mb-2">📅 Go-Live Date (UTC)</label>
+                      <label className="block text-sm font-semibold text-gray-300 mb-2">📅 Go-Live Date &amp; Time (your local time)</label>
                       <input
-                        type="date"
+                        type="datetime-local"
                         value={formData.gridlockReleaseAt}
                         onChange={e => setFormData(prev => ({ ...prev, gridlockReleaseAt: e.target.value }))}
                         className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
                       />
-                      <p className="text-xs text-gray-500 mt-1">Leave blank to make it live immediately. Set this to queue puzzles for future days.</p>
+                      <p className="text-xs text-gray-500 mt-1">Leave blank to make it live immediately. The time is in <strong className="text-gray-400">your local timezone</strong> — set to tomorrow midnight to queue for tomorrow.</p>
                     </div>
                   )}
 

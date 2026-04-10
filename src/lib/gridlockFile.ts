@@ -111,13 +111,67 @@ export type GridlockFileClientData = Omit<
   'correctAnswers' | 'shadowRuleNote' | 'seasonKeyIndex'
 >;
 
+export const DEFAULT_GRIDLOCK_FILE_TEMPLATE: GridlockFileData = {
+  fileNumber: 1,
+  fileTitle: 'The Multiplication Alphabet',
+  flavorText:
+    'A 4x4 cipher matrix recovered from a decommissioned terminal. Rows and columns appear to encode something alphabetical.',
+  gridType: 'letter',
+  grid: [
+    [{ value: 'A' }, { value: 'B' }, { value: 'C' }, { value: 'D' }],
+    [{ value: 'B' }, { value: 'D' }, { value: 'F' }, { value: 'H' }],
+    [{ value: 'C' }, { value: 'F' }, { value: 'I' }, { value: 'L' }],
+    [{ value: 'D' }, { value: 'H' }, { value: 'L' }, { value: 'P', isMissing: true }],
+  ],
+  correctAnswers: ['P'],
+  ruleExplanation:
+    'Cell(row, col) = the letter at position row*col in the alphabet (A=1). Row 4, Col 4 = 16 = P.',
+  primaryRuleFamily: 'alphabetic',
+  primaryRuleAxis: 'cell-position',
+  hints: [
+    {
+      id: 'H1',
+      text: 'The top-left cell is A. The position in the alphabet equals the product of its row and column numbers.',
+      cost: 1,
+    },
+    {
+      id: 'H2',
+      text: 'Row 4, Col 4 = 4*4 = 16. What is the 16th letter of the alphabet?',
+      cost: 1,
+    },
+  ],
+  retentionUnlock:
+    'TRANSMISSION LOG - TERMINAL 04\n\nThis encoding scheme was used to map memory addresses to register labels in early assembly systems. Each register\'s name encoded its position in the execution pipeline.',
+};
+
+export function createDefaultGridlockFileData(): GridlockFileData {
+  return JSON.parse(JSON.stringify(DEFAULT_GRIDLOCK_FILE_TEMPLATE)) as GridlockFileData;
+}
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 
+function parseGridlockRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === 'string') {
+    try {
+      return parseGridlockRecord(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
 export function getGridlockFileData(puzzleData: unknown): GridlockFileData | null {
-  if (!puzzleData || typeof puzzleData !== 'object') return null;
-  const d = puzzleData as Record<string, unknown>;
-  if (!d.gridlockFile || typeof d.gridlockFile !== 'object') return null;
-  const g = d.gridlockFile as Record<string, unknown>;
+  const root = parseGridlockRecord(puzzleData);
+  if (!root) return null;
+
+  const nested = parseGridlockRecord(root.gridlockFile);
+  const g = nested ?? root;
 
   if (
     !Array.isArray(g.grid) ||

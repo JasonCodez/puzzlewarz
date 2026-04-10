@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { getGridlockFileData } from "@/lib/gridlockFile";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -82,6 +83,16 @@ export async function PUT(
 
   const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg", "gridlock_file", "parasite_code"].includes(puzzleType);
 
+  if (puzzleType === 'gridlock_file') {
+    const parsed = getGridlockFileData(puzzleData);
+    if (!parsed) {
+      return NextResponse.json(
+        { error: 'Gridlock File puzzles require puzzleData.gridlockFile with valid grid, correctAnswers, ruleExplanation, and rule metadata' },
+        { status: 400 }
+      );
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     // 1. Update core puzzle fields
     await tx.puzzle.update({
@@ -94,7 +105,7 @@ export async function PUT(
         isWarzExclusive: isWarzExclusive === true,
         ...(categoryRecord ? { categoryId: categoryRecord.id } : {}),
         ...(!isSpecialType ? { riddleAnswer: correctAnswer } : {}),
-        ...(([ "escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg"].includes(puzzleType)) && puzzleData != null
+        ...(([ "escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file"].includes(puzzleType)) && puzzleData != null
           ? { data: puzzleData }
           : {}),
       },

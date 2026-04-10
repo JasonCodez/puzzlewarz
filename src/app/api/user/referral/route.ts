@@ -4,6 +4,14 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
 
+function getReferralBaseUrl() {
+  const configured = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "";
+  if (!configured || configured.includes("localhost") || configured.includes("127.0.0.1")) {
+    return "https://puzzlewarz.com";
+  }
+  return configured.replace(/\/$/, "");
+}
+
 // GET /api/user/referral
 // Returns (or creates) the user's referral invite code + stats.
 export async function GET(request: NextRequest) {
@@ -38,7 +46,7 @@ export async function GET(request: NextRequest) {
     where: { referrerId: user.id, refereeId: { not: null } },
   });
 
-  const baseUrl = process.env.NEXTAUTH_URL || "https://puzzlewarz.com";
+  const baseUrl = getReferralBaseUrl();
   return NextResponse.json({
     inviteCode: referral.inviteCode,
     link: `${baseUrl}/auth/register?ref=${referral.inviteCode}`,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { ensureGridlockArcAchievement } from "@/lib/ensureCoreAchievements";
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,6 +26,8 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       );
     }
+
+    await ensureGridlockArcAchievement();
 
     // Get all achievements
     const allAchievements = await prisma.achievement.findMany({

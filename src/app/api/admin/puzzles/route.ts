@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { notifyPuzzleRelease } from "@/lib/notification-service";
 import { getDetectiveCaseData } from "@/lib/detectiveCase";
+import { getGridlockFileData } from "@/lib/gridlockFile";
 
 type MultiPartInput = {
   title?: string;
@@ -178,6 +179,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (puzzleType === 'gridlock_file') {
+      const parsed = getGridlockFileData(puzzleData);
+      if (!parsed) {
+        return NextResponse.json(
+          { error: 'Gridlock File puzzles require puzzleData.gridlockFile with valid grid, correctAnswers, ruleExplanation, and rule metadata' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate difficulty value
     const validDifficulties = ["easy", "medium", "hard", "extreme"];
     const puzzleDifficulty = difficulty && validDifficulties.includes(difficulty.toLowerCase()) 
@@ -236,7 +247,7 @@ export async function POST(request: NextRequest) {
               },
             }
           : undefined,
-      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' ? undefined : {
+      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'gridlock_file' || puzzleType === 'parasite_code' ? undefined : {
         create: [
           {
             answer: correctAnswer,
@@ -280,7 +291,7 @@ export async function POST(request: NextRequest) {
         : undefined,
     };
 
-    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search' || puzzleType === 'anagram_blitz' || puzzleType === 'arg' || puzzleType === 'blackout') && typeof puzzleData !== 'undefined') {
+    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search' || puzzleType === 'anagram_blitz' || puzzleType === 'arg' || puzzleType === 'blackout' || puzzleType === 'gridlock_file') && typeof puzzleData !== 'undefined') {
       createData.data = puzzleData;
     }
 
@@ -555,7 +566,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error creating puzzle:", error);
     return NextResponse.json(
-      { error: "Failed to create puzzle" },
+      {
+        error: "Failed to create puzzle",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }

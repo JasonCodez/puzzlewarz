@@ -2,6 +2,7 @@
 
 import React, { JSX, useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { createDefaultGridlockFileData, getGridlockFileData } from '@/lib/gridlockFile';
 // Dynamically import the advanced Escape Room Designer (client-side only)
 const EscapeRoomDesigner = dynamic(() => import("@/app/escape-rooms/Designer"), { ssr: false });
 
@@ -1857,30 +1858,10 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
   // ── Gridlock File initializer ─────────────────────────────────────────────
   useEffect(() => {
     if (puzzleType !== 'gridlock_file') return;
-    const existing = (puzzleData as any)?.gridlockFile;
-    const template = {
-      fileNumber: 1,
-      fileTitle: "The Multiplication Alphabet",
-      flavorText: "A 4×4 cipher matrix recovered from a decommissioned terminal. Rows and columns appear to encode something alphabetical.",
-      gridType: "letter",
-      grid: [
-        [{ value: "A" }, { value: "B" }, { value: "C" }, { value: "D" }],
-        [{ value: "B" }, { value: "D" }, { value: "F" }, { value: "H" }],
-        [{ value: "C" }, { value: "F" }, { value: "I" }, { value: "L" }],
-        [{ value: "D" }, { value: "H" }, { value: "L" }, { value: "P", isMissing: true }]
-      ],
-      correctAnswers: ["P"],
-      ruleExplanation: "Cell(row, col) = the letter at position row×col in the alphabet (A=1). Row 4, Col 4 = 16 = P.",
-      primaryRuleFamily: "alphabetic",
-      primaryRuleAxis: "cell-position",
-      hints: [
-        { id: "H1", text: "The top-left cell is A. The position in the alphabet equals the product of its row and column numbers.", cost: 1 },
-        { id: "H2", text: "Row 4, Col 4 = 4×4 = 16. What is the 16th letter of the alphabet?", cost: 1 }
-      ],
-      retentionUnlock: "TRANSMISSION LOG — TERMINAL 04\n\nThis encoding scheme was used to map memory addresses to register labels in early assembly systems. Each register's name encoded its position in the execution pipeline."
-    };
+    const existing = getGridlockFileData((puzzleData as any)?.gridlockFile ?? puzzleData);
+    const template = createDefaultGridlockFileData();
     try {
-      const next = existing && typeof existing === 'object' ? existing : template;
+      const next = existing ?? template;
       setGridlockFileJson(JSON.stringify(next, null, 2));
       setGridlockFileJsonError('');
       onDataChange('gridlockFile', next);
@@ -1913,7 +1894,11 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
           const next = e.target.value;
           setGridlockFileJson(next);
           try {
-            const parsed = JSON.parse(next);
+            const parsed = getGridlockFileData(JSON.parse(next));
+            if (!parsed) {
+              setGridlockFileJsonError('Gridlock JSON must include grid, correctAnswers, ruleExplanation, and primary rule metadata.');
+              return;
+            }
             onDataChange('gridlockFile', parsed);
             setGridlockFileJsonError('');
           } catch {

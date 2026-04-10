@@ -34,6 +34,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ path?: string[
   try {
     const { path: parts } = await ctx.params;
     const safeParts = (parts || []).filter(Boolean);
+    const isAvatarPath = safeParts[0] === 'avatars';
 
     // Primary: persistent uploads dir
     const uploadPath = resolveUploadsPath(...safeParts);
@@ -67,6 +68,26 @@ export async function GET(_req: Request, ctx: { params: Promise<{ path?: string[
           console.error('[uploads] failed reading public file', { publicPath, code: err2.code });
           return NextResponse.json({ error: 'internal' }, { status: 500 });
         }
+
+        if (isAvatarPath) {
+          const fallbackAvatar = resolvePublicPath('images', 'default-avatar.svg');
+          try {
+            const fallbackBuf = await readFile(fallbackAvatar);
+            return new NextResponse(fallbackBuf, {
+              status: 200,
+              headers: {
+                'Content-Type': 'image/svg+xml',
+                'Cache-Control': 'public, max-age=3600',
+              },
+            });
+          } catch (fallbackErr) {
+            if (isNodeError(fallbackErr) && fallbackErr.code && fallbackErr.code !== 'ENOENT') {
+              console.error('[uploads] failed reading avatar fallback file', { fallbackAvatar, code: fallbackErr.code });
+              return NextResponse.json({ error: 'internal' }, { status: 500 });
+            }
+          }
+        }
+
         return NextResponse.json({ error: 'not found' }, { status: 404 });
       }
     }

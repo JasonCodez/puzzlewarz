@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { ensureGridlockArcAchievement } from '@/lib/ensureCoreAchievements';
 import {
   getGridlockFileData,
   validateGridlockAnswer,
@@ -221,8 +222,9 @@ export async function POST(
       // Award arc completion achievement when Day 7 is solved (idempotent)
       let arcAchievement: { id: string; title: string; description: string; icon: string; rarity: string } | null = null;
       if (fileData.arcDay === 7) {
+        const ensured = await ensureGridlockArcAchievement();
         const achievement = await prisma.achievement.findUnique({
-          where: { name: 'gridlock_arc_complete' },
+          where: { id: ensured.id },
           select: { id: true, title: true, description: true, icon: true, rarity: true },
         });
         if (achievement) {
