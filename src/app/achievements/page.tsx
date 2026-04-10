@@ -34,6 +34,7 @@ interface AchievementsData {
     rare: number;
     epic: number;
     legendary: number;
+    exclusive: number;
   };
   rarityUnlockedCount: {
     common: number;
@@ -41,6 +42,7 @@ interface AchievementsData {
     rare: number;
     epic: number;
     legendary: number;
+    exclusive: number;
   };
 }
 

@@ -189,6 +189,9 @@ export async function GET(request: NextRequest) {
       legendary: allAchievements.filter(
         (a: { rarity?: string }) => a.rarity === "legendary"
       ).length,
+      exclusive: allAchievements.filter(
+        (a: { rarity?: string }) => a.rarity === "exclusive"
+      ).length,
     };
 
     const rarityUnlockedCount = {
@@ -204,6 +207,9 @@ export async function GET(request: NextRequest) {
         .length,
       legendary: achievements.filter(
         (a: { rarity?: string; unlocked?: boolean }) => a.rarity === "legendary" && a.unlocked
+      ).length,
+      exclusive: achievements.filter(
+        (a: { rarity?: string; unlocked?: boolean }) => a.rarity === "exclusive" && a.unlocked
       ).length,
     };
 
