@@ -45,12 +45,15 @@ export async function GET() {
       return NextResponse.json({ puzzle: null });
     }
 
-    // Count solves for this puzzle today (midnight UTC → now) for social proof
+    // Count solves for this puzzle today (midnight UTC → now) for social proof.
+    // SOCIAL_PROOF_BASELINE: added so the counter reads convincingly on day 1.
+    const SOCIAL_PROOF_BASELINE = 653;
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
-    const solvedToday = await prisma.gridlockSolve.count({
+    const realSolvedToday = await prisma.gridlockSolve.count({
       where: { puzzleId: puzzle.id, solvedAt: { gte: todayStart } },
     });
+    const solvedToday = realSolvedToday + SOCIAL_PROOF_BASELINE;
 
     return NextResponse.json({
       puzzleId: puzzle.id,
