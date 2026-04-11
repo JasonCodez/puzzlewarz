@@ -66,6 +66,8 @@ export async function POST(
     const guessArr = cleanGuess.split("");
     const usedCode: boolean[] = Array(code.length).fill(false);
     const usedGuess: boolean[] = Array(code.length).fill(false);
+    // per-position hint: "green" = correct digit + position, "yellow" = present but wrong position, "grey" = not in code
+    const hints: string[] = Array(code.length).fill("grey");
 
     let bulls = 0; // correct digit + correct position
     let cows = 0;  // correct digit + wrong position
@@ -74,6 +76,7 @@ export async function POST(
     for (let i = 0; i < code.length; i++) {
       if (guessArr[i] === codeArr[i]) {
         bulls++;
+        hints[i] = "green";
         usedCode[i] = true;
         usedGuess[i] = true;
       }
@@ -86,6 +89,7 @@ export async function POST(
         if (usedCode[j]) continue;
         if (guessArr[i] === codeArr[j]) {
           cows++;
+          hints[i] = "yellow";
           usedCode[j] = true;
           break;
         }
@@ -94,7 +98,7 @@ export async function POST(
 
     const correct = bulls === code.length;
 
-    return NextResponse.json({ bulls, cows, correct, digits: code.length });
+    return NextResponse.json({ bulls, cows, correct, digits: code.length, hints });
   } catch (err) {
     console.error("[safe/guess] Error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

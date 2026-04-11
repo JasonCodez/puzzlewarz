@@ -9,6 +9,7 @@ type GuessResult = {
   bulls: number;
   cows: number;
   correct: boolean;
+  hints?: string[]; // per-position: "green" | "yellow" | "grey"
 };
 
 interface SafeData {
@@ -153,7 +154,7 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
         return;
       }
 
-      const result: GuessResult = { guess, bulls: data.bulls, cows: data.cows, correct: data.correct };
+      const result: GuessResult = { guess, bulls: data.bulls, cows: data.cows, correct: data.correct, hints: data.hints };
       const next = [...history, result];
       setHistory(next);
       setCurr(Array(digits).fill(""));
@@ -828,45 +829,30 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
                   {i + 1}
                 </span>
 
-                {/* Guess digits */}
+                {/* Guess digits with per-position color feedback */}
                 <div className="flex gap-1">
-                  {r.guess.split("").map((d, di) => (
-                    <span
-                      key={di}
-                      className="flex items-center justify-center font-black text-sm rounded"
-                      style={{
-                        width: 26,
-                        height: 28,
-                        background: "#1A1A1A",
-                        border: "1px solid #2A2A2A",
-                        color: "#EEE",
-                      }}
-                    >
-                      {d}
-                    </span>
-                  ))}
+                  {r.guess.split("").map((d, di) => {
+                    const hint = r.hints?.[di] ?? "grey";
+                    const bg = hint === "green" ? "rgba(56,211,153,0.25)" : hint === "yellow" ? "rgba(253,231,76,0.2)" : "#1A1A1A";
+                    const border = hint === "green" ? "2px solid #38D399" : hint === "yellow" ? "2px solid #FDE74C" : "1px solid #2A2A2A";
+                    const color = hint === "green" ? "#38D399" : hint === "yellow" ? "#FDE74C" : "#EEE";
+                    return (
+                      <span
+                        key={di}
+                        className="flex items-center justify-center font-black text-sm rounded"
+                        style={{ width: 26, height: 28, background: bg, border, color }}
+                        title={hint === "green" ? "Correct digit & position" : hint === "yellow" ? "Right digit, wrong position" : "Not in code"}
+                      >
+                        {d}
+                      </span>
+                    );
+                  })}
                 </div>
 
-                {/* Bulls/cows indicators */}
-                <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                  {/* Bulls: filled circles = correct digit + position */}
-                  {Array.from({ length: r.bulls }).map((_, j) => (
-                    <span key={`b-${j}`}
-                          title="Correct digit, correct position"
-                          style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#38D399" }} />
-                  ))}
-                  {/* Cows: outlined circles = correct digit wrong position */}
-                  {Array.from({ length: r.cows }).map((_, j) => (
-                    <span key={`c-${j}`}
-                          title="Correct digit, wrong position"
-                          style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "transparent", border: "2px solid #FDE74C" }} />
-                  ))}
-                  {/* Extra filler */}
-                  {Array.from({ length: digits - r.bulls - r.cows }).map((_, j) => (
-                    <span key={`e-${j}`}
-                          title="Not in combination"
-                          style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#222", border: "1px solid #333" }} />
-                  ))}
+                {/* Bulls/cows summary (counts only, for reference) */}
+                <div className="flex items-center gap-1 ml-auto shrink-0 text-xs font-mono" style={{ color: "#555" }}>
+                  <span style={{ color: "#38D399" }}>{r.bulls}🟢</span>
+                  <span style={{ color: "#FDE74C" }}>{r.cows}🟡</span>
                 </div>
               </div>
             ))}
@@ -877,12 +863,12 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
         {history.length > 0 && isPlaying && (
           <div className="flex justify-center gap-5 mt-2 mb-4">
             {[
-              { fill: "#38D399", border: "none", label: "Right digit + position" },
-              { fill: "transparent", border: "2px solid #FDE74C", label: "Right digit, wrong spot" },
-              { fill: "#222", border: "1px solid #333", label: "Not in code" },
-            ].map(({ fill, border, label }) => (
+              { bg: "rgba(56,211,153,0.25)", border: "2px solid #38D399", color: "#38D399", label: "Right digit + position" },
+              { bg: "rgba(253,231,76,0.2)",  border: "2px solid #FDE74C", color: "#FDE74C", label: "Right digit, wrong spot" },
+              { bg: "#1A1A1A",               border: "1px solid #2A2A2A", color: "#EEE",    label: "Not in code" },
+            ].map(({ bg, border, color, label }) => (
               <div key={label} className="flex items-center gap-1.5">
-                <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: fill, border }} />
+                <span style={{ display: "inline-block", width: 18, height: 22, borderRadius: 4, background: bg, border, color, fontSize: 11, textAlign: "center", lineHeight: "22px", fontWeight: 900 }}>1</span>
                 <span className="text-xs" style={{ color: "#666" }}>{label}</span>
               </div>
             ))}
