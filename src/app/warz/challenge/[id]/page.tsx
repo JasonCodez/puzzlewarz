@@ -25,8 +25,8 @@ interface WarzChallenge {
       rotationEnabled: boolean;
     };
   };
-  challenger: { id: string; username: string };
-  opponent?: { id: string; username: string } | null;
+  challenger: { id: string; username: string; name?: string | null };
+  opponent?: { id: string; username: string; name?: string | null } | null;
   challengerTime?: number | null; // only visible after COMPLETED
   winner?: { id: string; username: string } | null;
 }
@@ -131,7 +131,7 @@ export default function WarzChallengePage() {
       setResult({
         won: data.winnerId === currentUser?.id,
         myTime: forfeited ? 999999 : secs,
-        challengerTime: data.challengerTime,
+        challengerTime: data.challenge?.challengerTime ?? null,
         tie: data.tie ?? false,
       });
     } catch {
@@ -146,7 +146,7 @@ export default function WarzChallengePage() {
     const pot = challenge.challengerWager * 2;
     const myFormatted = formatTime(result.myTime);
     const theirFormatted = result.challengerTime != null ? formatTime(result.challengerTime) : "DNF";
-    const opponent = challenge.challenger.username;
+    const opponent = challenge.challenger.name ?? challenge.challenger.username;
     const puzzleLabels: Record<string, string> = {
       sudoku: "Sudoku", jigsaw: "Jigsaw", word_crack: "Word Crack",
       word_search: "Word Search", anagram_blitz: "Anagram Blitz",
@@ -262,7 +262,7 @@ export default function WarzChallengePage() {
             <div className="w-px self-stretch" style={{ backgroundColor: "rgba(255,255,255,0.1)" }} />
             <div className="text-center">
               <div className="text-xs mb-1" style={{ color: "#6b7280" }}>
-                @{challenge.challenger.username}&apos;s time
+                {challenge.challenger.name ?? challenge.challenger.username}&apos;s time
               </div>
               <div className="text-xl font-black tabular-nums" style={{ color: "#e5e7eb" }}>
                 {result.challengerTime != null ? formatTime(result.challengerTime) : "—"}
@@ -328,7 +328,7 @@ export default function WarzChallengePage() {
         <div className="text-5xl mb-4">⚔️</div>
         <h1 className="text-2xl font-extrabold text-white mb-1">Battle Challenge</h1>
         <p className="text-sm mb-6" style={{ color: "#AB9F9D" }}>
-          <span className="font-semibold" style={{ color: "#FDE74C" }}>@{challenge.challenger.username}</span>{" "}
+          <span className="font-semibold" style={{ color: "#FDE74C" }}>{challenge.challenger.name ?? challenge.challenger.username}</span>{" "}
           is challenging you to a duel!
         </p>
 

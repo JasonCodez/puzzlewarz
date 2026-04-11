@@ -20,30 +20,71 @@ const prisma = new PrismaClient();
 const TOTAL_BOTS = 1358;
 
 // ─── Username generation ─────────────────────────────────────────────────────
-const PREFIXES = [
+const WORDS_A = [
   "Shadow","Cipher","Pixel","Neon","Glitch","Rogue","Frost","Void","Byte","Vex",
   "Hex","Echo","Blaze","Phantom","Storm","Crypt","Sage","Myth","Iron","Ghost",
-  "Nova","Drax","Krypt","Syn","Arc","Zed","Nexus","Dark","Swift","Ash",
-  "Grim","Cobalt","Quantum","Neural","Static","Vector","Toxic","Binary","Cinder",
-  "Spark","Dusk","Reaper","Wrath","Sable","Raven","Steel","Titan","Ember","Lux",
-  "Omen","Slate","Myst","Zenith","Apex","Onyx","Shard","Flare","Vortex","Prism",
-  "Cryptic","Puzzler","Riddle","Enigma","Maze","Decode","Unlock","Crack","Solve","Brain",
+  "Nova","Drax","Krypt","Syn","Arc","Nexus","Dark","Swift","Ash","Grim",
+  "Cobalt","Neural","Static","Vector","Toxic","Binary","Cinder","Spark","Dusk",
+  "Reaper","Wrath","Sable","Raven","Steel","Titan","Ember","Lux","Omen","Slate",
+  "Zenith","Apex","Onyx","Shard","Flare","Prism","Quantum","Azure","Crimson",
+  "Lunar","Solar","Astral","Omega","Delta","Alpha","Sigma","Zephyr","Thorn",
+  "Blade","Viper","Cobra","Talon","Rift","Haze","Pulse","Flux","Drift","Phase",
 ];
-const NOUNS = [
-  "Mind","Wolf","Fox","Hawk","Blade","Claw","Fang","Byte","Code","Vault",
-  "Lock","Key","Cell","Node","Pulse","Grid","Lane","Trap","Wire","Hex",
-  "Rune","Ink","Warden","Breaker","Hunter","Seeker","Solver","Cracker","King","Lord",
-  "Prowler","Shifter","Stalker","Runner","Striker","Weaver","Forger","Caster","Bender","Walker",
-  "Cipher","Phantom","Ghost","Specter","Wraith","Shade","Demon","Knight","Mage","Rogue",
+const WORDS_B = [
+  "Mind","Wolf","Fox","Hawk","Blade","Claw","Fang","Code","Vault","Lock",
+  "Key","Node","Grid","Lane","Wire","Rune","Warden","Breaker","Hunter","Seeker",
+  "Solver","Cracker","King","Lord","Prowler","Shifter","Runner","Striker","Weaver",
+  "Forger","Caster","Bender","Walker","Specter","Wraith","Shade","Knight","Mage",
+  "Spike","Ridge","Forge","Crypt","Maze","Peak","Core","Monk","Ninja","Scout",
+  "Spawn","Agent","Titan","Beast","Force","Edge","Drone","Clone","Guard","Sniper",
 ];
-const SUFFIXES = [
-  "","","","","", // empty = no suffix (more common)
-  "x","z","_","X","Z",
-  "99","420","777","101","404",
-  "Pro","XL","OG","HD","Max",
-  "_real","_gg","_pw","_bot","_elite",
+const SPECIAL_PREFIXES = [
+  "x","X","i","o","v","The","Itz","Real","Pro","OG","Not","Dark","Ultra","Hyper","Super","Mega",
 ];
+const SUFFIX_WORDS = ["Pro","GG","WZ","Ace","Rex","Max","OG","Jr","II","III","HD","XD"];
 
+function pickByIndex<T>(arr: T[], seed: number): T {
+  return arr[((seed % arr.length) + arr.length) % arr.length];
+}
+
+function generateUsername(index: number): string {
+  const pattern = index % 8;
+  let name: string;
+  const mixLower = index % 7 === 0;
+
+  if (pattern === 0) {
+    name = pickByIndex(WORDS_A, index * 7) + pickByIndex(WORDS_B, index * 13);
+  } else if (pattern === 1) {
+    name = pickByIndex(WORDS_A, index * 11) + pickByIndex(WORDS_B, index * 17) +
+           pickByIndex(["2","3","7","9","21","42","69","77","99","100","404","777"], index * 3);
+  } else if (pattern === 2) {
+    name = pickByIndex([...WORDS_A, ...WORDS_B], index * 19) +
+           pickByIndex(["7","9","11","42","69","77","99","100","404","1337"], index * 5);
+  } else if (pattern === 3) {
+    const pre = pickByIndex(SPECIAL_PREFIXES, index * 23);
+    name = pre + pickByIndex(WORDS_A, index * 29) + pickByIndex(WORDS_B, index * 31);
+  } else if (pattern === 4) {
+    name = pickByIndex(WORDS_A, index * 37) + pickByIndex(WORDS_B, index * 41) +
+           pickByIndex(SUFFIX_WORDS, index * 43);
+  } else if (pattern === 5) {
+    name = pickByIndex(WORDS_A, index * 47) + pickByIndex(WORDS_A, index * 53);
+    if (mixLower) name = name.toLowerCase();
+  } else if (pattern === 6) {
+    name = (pickByIndex(WORDS_A, index * 59) + pickByIndex(WORDS_B, index * 61)).toLowerCase() +
+           pickByIndex(["","","7","9","77","99","42","404"], index * 67);
+  } else {
+    name = pickByIndex([...WORDS_A, ...WORDS_B], index * 71) + pickByIndex(SUFFIX_WORDS, index * 73);
+  }
+
+  // Strip any accidental underscores
+  name = name.replace(/_/g, "");
+
+  // Append index only as last-resort disambiguation (very short)
+  return name + "_b" + index;
+}
+
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
 function pickRand<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -52,23 +93,6 @@ function randInt(min: number, max: number): number {
 }
 function randFloat(min: number, max: number): number {
   return Math.random() * (max - min) + min;
-}
-
-function generateUsername(index: number): string {
-  // Vary patterns
-  const pattern = index % 4;
-  let name: string;
-  if (pattern === 0) {
-    name = pickRand(PREFIXES) + pickRand(NOUNS);
-  } else if (pattern === 1) {
-    name = pickRand(PREFIXES) + pickRand(NOUNS) + randInt(1, 999);
-  } else if (pattern === 2) {
-    name = pickRand(NOUNS) + "_" + pickRand(PREFIXES);
-  } else {
-    name = pickRand(PREFIXES) + pickRand(SUFFIXES);
-  }
-  // Guarantee uniqueness via index
-  return name + "_" + index;
 }
 
 // ─── Avatar URLs (DiceBear — free, public, no auth) ──────────────────────────

@@ -512,13 +512,13 @@ async function seedSeason1() {
     return;
   }
 
-  // Season dates: April 7 2026 → July 6 2026 (3 months)
+  // Season dates: April 7 2026 → June 6 2026 (2 months)
   const season = await prisma.season.create({
     data: {
       name: "Season 1 — Ignition",
       description: "The first PuzzleWarz season. Prove your worth and forge your legacy.",
       startDate: new Date(Date.UTC(2026, 3, 7)),   // 2026-04-07
-      endDate:   new Date(Date.UTC(2026, 6, 6)),   // 2026-07-06
+      endDate:   new Date(Date.UTC(2026, 5, 6)),   // 2026-06-06
       isActive: true,
       premiumPrice: 500,
     },

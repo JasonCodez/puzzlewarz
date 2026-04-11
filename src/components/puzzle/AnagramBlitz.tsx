@@ -15,6 +15,7 @@ interface AnagramBlitzProps {
   anagramData: Record<string, unknown>;
   alreadySolved?: boolean;
   onSolved?: () => void;
+  onFailed?: () => void;
 }
 
 function scramble(word: string): string {
@@ -38,6 +39,7 @@ export default function AnagramBlitz({
   anagramData,
   alreadySolved = false,
   onSolved,
+  onFailed,
 }: AnagramBlitzProps) {
   const words: string[] = Array.isArray(anagramData.words)
     ? (anagramData.words as string[]).map((w) => String(w).toUpperCase()).filter(Boolean)
@@ -98,7 +100,10 @@ export default function AnagramBlitz({
       if (timerRef.current) clearInterval(timerRef.current);
 
       const allCorrect = solved.length === words.length;
-      if (!allCorrect) return;
+      if (!allCorrect) {
+        onFailed?.();
+        return;
+      }
 
       setSubmitting(true);
       try {
@@ -114,7 +119,7 @@ export default function AnagramBlitz({
         setSubmitting(false);
       }
     },
-    [puzzleId, words.length, onSolved]
+    [puzzleId, words.length, onSolved, onFailed]
   );
 
   // Timer

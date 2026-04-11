@@ -23,6 +23,7 @@ interface Props {
   puzzleId: string;
   wordCrackData: Record<string, unknown>;
   onSolved?: () => void;
+  onFailed?: () => void;
   alreadySolved?: boolean;
   warzMode?: boolean;
   failedAttempts?: number;
@@ -156,7 +157,7 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
 
 // â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alreadySolved, warzMode, failedAttempts: initialFailedAttempts = 0 }: Props) {
+export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onFailed, alreadySolved, warzMode, failedAttempts: initialFailedAttempts = 0 }: Props) {
   const skin = usePuzzleSkin();
   const wordLength = Math.max(3, Math.min(10, Number(wordCrackData.wordLength ?? 5)));
   const maxGuesses = Math.max(1, Math.min(10, Number(wordCrackData.maxGuesses ?? 6)));
@@ -317,7 +318,9 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
       } else if (newGuesses.length >= maxGuesses) {
         setTimeout(() => {
           setGameStatus("lost");
-          if (!warzMode && !gameLossRecorded.current) {
+          if (warzMode) {
+            onFailed?.();
+          } else if (!gameLossRecorded.current) {
             gameLossRecorded.current = true;
             fetch(`/api/puzzles/${puzzleId}/progress`, {
               method: "POST",

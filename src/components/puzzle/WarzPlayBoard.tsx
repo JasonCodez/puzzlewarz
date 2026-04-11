@@ -48,6 +48,8 @@ export default function WarzPlayBoard({ puzzle, wager, onDone, submitError, onRe
   const [elapsed, setElapsed] = useState(0);
   const [solved, setSolved] = useState(false);
   const [showForfeitConfirm, setShowForfeitConfirm] = useState(false);
+  const [showFailedModal, setShowFailedModal] = useState(false);
+  const [failCountdown, setFailCountdown] = useState(5);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -56,12 +58,32 @@ export default function WarzPlayBoard({ puzzle, wager, onDone, submitError, onRe
     return () => clearInterval(interval);
   }, [solved]);
 
+  // Auto-forfeit countdown after puzzle failure
+  useEffect(() => {
+    if (!showFailedModal) return;
+    if (failCountdown <= 0) {
+      setSolved(true);
+      onDone(0, true);
+      return;
+    }
+    const t = setTimeout(() => setFailCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [showFailedModal, failCountdown, onDone]);
+
   const handleSolved = useCallback((overrideSeconds?: number) => {
     if (solved) return;
     setSolved(true);
     const secs = overrideSeconds ?? Math.max(1, Math.round((Date.now() - startRef.current) / 1000));
     onDone(secs);
   }, [solved, onDone]);
+
+  const handleFailed = useCallback(() => {
+    if (solved) return;
+    // Stop the warz timer and show the failure modal
+    setSolved(true);
+    setFailCountdown(5);
+    setShowFailedModal(true);
+  }, [solved]);
 
   const handleForfeit = () => {
     setSolved(true);
@@ -151,6 +173,45 @@ export default function WarzPlayBoard({ puzzle, wager, onDone, submitError, onRe
     </AnimatePresence>
   );
 
+  const failedModal = (
+    <AnimatePresence>
+      {showFailedModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        >
+          <motion.div
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.85, opacity: 0 }}
+            className="w-full max-w-sm mx-4 rounded-2xl border-2 p-8 text-center shadow-2xl"
+            style={{ backgroundColor: "rgba(10,8,0,0.99)", borderColor: "#ef4444" }}
+          >
+            <div className="text-5xl mb-3">💀</div>
+            <h2 className="text-2xl font-extrabold mb-2" style={{ color: "#f87171" }}>Puzzle Failed</h2>
+            <p className="text-sm mb-2" style={{ color: "#AB9F9D" }}>
+              You ran out of attempts. Your wager of{" "}
+              <span className="font-bold" style={{ color: "#FDE74C" }}>{wager} pts</span>{" "}
+              goes to your opponent.
+            </p>
+            <p className="text-lg font-black tabular-nums mb-6" style={{ color: "#f87171" }}>
+              Forfeiting in {failCountdown}…
+            </p>
+            <button
+              onClick={() => { setSolved(true); onDone(0, true); }}
+              className="w-full py-2 rounded-xl font-bold text-sm"
+              style={{ backgroundColor: "rgba(220,38,38,0.85)", color: "#fff" }}
+            >
+              Forfeit Now
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   const renderPuzzle = () => {
     switch (puzzle.puzzleType) {
       case "word_crack":
@@ -161,6 +222,7 @@ export default function WarzPlayBoard({ puzzle, wager, onDone, submitError, onRe
             alreadySolved={false}
             warzMode
             onSolved={() => handleSolved()}
+            onFailed={handleFailed}
           />
         );
 
@@ -214,6 +276,7 @@ export default function WarzPlayBoard({ puzzle, wager, onDone, submitError, onRe
             anagramData={puzzle.data ?? {}}
             alreadySolved={false}
             onSolved={() => handleSolved()}
+            onFailed={handleFailed}
           />
         );
 
@@ -246,6 +309,7 @@ export default function WarzPlayBoard({ puzzle, wager, onDone, submitError, onRe
     <div>
       {header}
       {forfeitModal}
+      {failedModal}
       <div className={solved ? "pointer-events-none opacity-60" : ""}>
         {renderPuzzle()}
       </div>
