@@ -321,7 +321,17 @@ export default function WordSearchPuzzle({
           <div
             ref={gridRef}
             className="flex-shrink-0"
-            style={{ display: "flex", flexDirection: "column", gap: 3, touchAction: "none" }}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 3,
+              touchAction: "none",
+              background: "rgba(0,0,0,0.55)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
+              borderRadius: "0.75rem",
+              padding: "10px",
+            }}
             onMouseLeave={endDrag}
             onMouseUp={endDrag}
             onTouchStart={handleTouchStart}
@@ -359,10 +369,10 @@ export default function WordSearchPuzzle({
                           ? `2px solid ${color!.border}`
                           : `2px solid ${skin.tileBorder}`,
                         color: isSelected
-                          ? "#c7d2fe"
+                          ? "#ffffff"
                           : isFound
                           ? color!.text
-                          : "#94a3b8",
+                          : skin.tileText,
                         boxShadow: isFound ? `0 0 6px ${color!.border}40` : "none",
                         userSelect: "none",
                         WebkitUserSelect: "none",
