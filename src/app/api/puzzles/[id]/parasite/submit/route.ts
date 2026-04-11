@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { getParasiteCodeData, validateQuarantine, calcRank } from '@/lib/parasiteCode';
+import { getAttemptStatus, recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from '@/lib/attemptLimit';
 
 export async function POST(
   req: NextRequest,
@@ -31,6 +32,15 @@ export async function POST(
     });
     if (alreadySolved) {
       return NextResponse.json({ error: 'Already solved', alreadySolved: true }, { status: 400 });
+    }
+
+    // Enforce 3-attempt limit
+    const attemptStatus = await getAttemptStatus(user.id, puzzleId);
+    if (attemptStatus.locked) {
+      return NextResponse.json(
+        { error: 'No attempts remaining', locked: true, attemptsUsed: attemptStatus.failedAttempts, maxAttempts: MAX_PUZZLE_ATTEMPTS },
+        { status: 403 }
+      );
     }
 
     const puzzle = await prisma.puzzle.findUnique({
@@ -151,6 +161,9 @@ export async function POST(
         totalParasiteCount: result.totalParasiteCount,
         submissionCount,
         rank,
+        attemptsUsed: await recordFailedAttempt(user.id, puzzleId),
+        attemptsRemaining: Math.max(0, MAX_PUZZLE_ATTEMPTS - (attemptStatus.failedAttempts + 1)),
+        locked: (attemptStatus.failedAttempts + 1) >= MAX_PUZZLE_ATTEMPTS,
       });
     }
   } catch (e) {

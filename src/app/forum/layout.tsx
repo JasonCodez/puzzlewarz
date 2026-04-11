@@ -14,6 +14,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { redirect } from "next/navigation";
+
 export default function ForumLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  redirect("/puzzles");
 }

@@ -56,7 +56,6 @@ const MORE_LINKS = [
   { href: "/teams",        label: "Teams" },
   { href: "/achievements", label: "Achievements" },
   { href: "/learn",        label: "Learn" },
-  { href: "/forum",        label: "Forum" },
   { href: "/faq",          label: "FAQ" },
 ];
 
@@ -260,6 +259,16 @@ export default function Navbar() {
           <div className="desktop-nav hidden nav:flex items-center gap-2 shrink-0">
             {session && !loading ? (
               <>
+                <Link
+                  href="/search"
+                  aria-label="Search puzzles"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 text-zinc-400 hover:text-white"
+                  style={{ backgroundColor: isActive(pathname, "/search") ? "rgba(56,145,166,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                  </svg>
+                </Link>
                 <NotificationBell onActivate={() => setMobileOpen(false)} />
                 <MessagesBell onActivate={() => setMobileOpen(false)} />
 
@@ -488,6 +497,18 @@ export default function Navbar() {
                   </Link>
                 );
               })}
+              <Link
+                href="/search"
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-base font-medium transition-all duration-200"
+                style={{
+                  color: isActive(pathname, "/search") ? "#3891A6" : "#9ca3af",
+                  backgroundColor: isActive(pathname, "/search") ? "rgba(56,145,166,0.1)" : "transparent",
+                  borderLeft: isActive(pathname, "/search") ? "2px solid #3891A6" : "2px solid transparent",
+                }}
+                onClick={() => setMobileOpen(false)}
+              >
+                🔍 Search Puzzles
+              </Link>
               <div className="my-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
               <Link
                 href="/profile"

@@ -932,13 +932,13 @@ function StorePageInner() {
                     </div>
                   </div>
 
-                  <p className="text-xs leading-relaxed flex-1" style={{ color: "#AB9F9D" }}>
+                  <p className="text-xs leading-relaxed flex-1" style={{ color: "#DDDBF1" }}>
                     {item.description}
                   </p>
 
                   {/* Price + actions */}
                   <div className="flex items-center justify-between gap-2 mt-1">
-                    <span className="font-extrabold text-sm" style={{ color: canAfford ? "#FFB86B" : "#6b7280" }}>
+                    <span className="font-extrabold text-sm" style={{ color: canAfford ? "#FFB86B" : "#9ca3af" }}>
                       {item.price.toLocaleString()} pts
                     </span>
 
@@ -960,7 +960,7 @@ function StorePageInner() {
                           disabled={!canAfford || isBuying}
                           onClick={() => handlePurchase(item)}
                           className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40"
-                          style={{ background: canAfford ? "linear-gradient(135deg, #FDE74C, #FFB86B)" : "rgba(255,255,255,0.08)", color: canAfford ? "#1a1400" : "#6b7280" }}
+                          style={{ background: canAfford ? "linear-gradient(135deg, #FDE74C, #FFB86B)" : "rgba(255,255,255,0.08)", color: canAfford ? "#1a1400" : "#9ca3af" }}
                         >
                           {isBuying ? "…" : "Buy"}
                         </button>

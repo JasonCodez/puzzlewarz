@@ -1169,9 +1169,6 @@ export default function WitnessPage() {
                     >
                       Open the File →
                     </button>
-                    <p style={{ textAlign: "center", color: MUTED, fontSize: 12 }}>
-                      No account required. No tricks. Just your memory.
-                    </p>
                   </>
                 )}
               </div>

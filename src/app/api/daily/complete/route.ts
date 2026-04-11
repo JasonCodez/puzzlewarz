@@ -138,10 +138,37 @@ export async function POST(request: NextRequest) {
         });
         const existingLb = await prisma.globalLeaderboard.findFirst({ where: { userId: currentUser.id } });
         if (existingLb) {
+          // Capture old rank before update for the rank-up notification
+          const oldRank = await prisma.globalLeaderboard.count({
+            where: { totalPoints: { gt: existingLb.totalPoints } },
+          }) + 1;
+
           await prisma.globalLeaderboard.update({
             where: { id: existingLb.id },
             data: { totalPoints: { increment: reward.points } },
           });
+
+          // Fire rank-up notification if the user climbed ≥3 places (fire-and-forget)
+          (async () => {
+            try {
+              const newPoints = existingLb.totalPoints + reward.points;
+              const newRank = await prisma.globalLeaderboard.count({
+                where: { totalPoints: { gt: newPoints } },
+              }) + 1;
+              const passed = oldRank - newRank;
+              if (passed >= 3) {
+                const { createNotification } = await import("@/lib/notification-service");
+                await createNotification({
+                  userId: currentUser.id,
+                  type: "system",
+                  title: `📈 You jumped ${passed} places!`,
+                  message: `You're now ranked #${newRank} on the global leaderboard. Keep solving to climb higher!`,
+                  icon: "📈",
+                  relatedId: "/leaderboard",
+                });
+              }
+            } catch { /* non-fatal */ }
+          })();
         } else {
           await prisma.globalLeaderboard.create({ data: { userId: currentUser.id, totalPoints: reward.points } });
         }
@@ -203,7 +230,35 @@ export async function POST(request: NextRequest) {
       })();
     }
 
-    return NextResponse.json({ success: true, shieldUsed, reward });
+    // ── Season pass upgrade nudge ───────────────────────────────────────
+    // On the 3rd win, check if user is not premium → include showUpgradeOffer flag
+    let showUpgradeOffer = false;
+    if (won) {
+      try {
+        const winCount = await prisma.dailyWordRecord.count({
+          where: { userId: currentUser.id, won: true },
+        });
+        if (winCount === 3) {
+          const now = new Date();
+          const pass = await prisma.userSeasonPass.findFirst({
+            where: {
+              userId: currentUser.id,
+              isPremium: false,
+              season: { isActive: true, startDate: { lte: now }, endDate: { gte: now } },
+            },
+            select: { id: true },
+          });
+          // Show offer if they have a free pass (or no pass at all = implicit free tier)
+          if (pass || !await prisma.userSeasonPass.findFirst({
+            where: { userId: currentUser.id, season: { isActive: true, startDate: { lte: now }, endDate: { gte: now } } },
+          })) {
+            showUpgradeOffer = true;
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    return NextResponse.json({ success: true, shieldUsed, reward, showUpgradeOffer });
   } catch (err) {
     console.error("[DAILY COMPLETE]", err);
     return NextResponse.json({ error: "Failed to record completion" }, { status: 500 });

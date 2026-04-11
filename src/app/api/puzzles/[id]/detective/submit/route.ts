@@ -6,6 +6,7 @@ import { getDetectiveCaseData, isDetectiveCaseAnswerCorrect } from '@/lib/detect
 import { validateSameOrigin } from '@/lib/requestSecurity';
 import { calcLevel } from '@/lib/levels';
 import { awardSeasonXp } from '@/lib/seasonXp';
+import { getAttemptStatus, recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from '@/lib/attemptLimit';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -47,13 +48,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Detective case is not configured' }, { status: 500 });
     }
 
-    const existingIncorrect = await prisma.puzzleSubmission.findFirst({
-      where: { puzzleId, userId: user.id, isCorrect: false },
-      select: { id: true },
-    });
-
-    if (existingIncorrect) {
-      return NextResponse.json({ error: 'Case locked', locked: true, lockedReason: 'incorrect_submission' }, { status: 403 });
+    // Check 3-attempt limit (replaces the old single-wrong-answer lock)
+    const attemptStatus = await getAttemptStatus(user.id, puzzleId);
+    if (attemptStatus.locked) {
+      return NextResponse.json(
+        { error: 'Case locked — no attempts remaining', locked: true, attemptsUsed: attemptStatus.failedAttempts, maxAttempts: MAX_PUZZLE_ATTEMPTS },
+        { status: 403 }
+      );
     }
 
     const correctCount = await prisma.puzzleSubmission.count({
@@ -103,7 +104,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
 
     if (!correct) {
-      return NextResponse.json({ correct: false, locked: true, lockedReason: 'incorrect_submission' });
+      const newFailedCount = await recordFailedAttempt(user.id, puzzleId);
+      const nowLocked = newFailedCount >= MAX_PUZZLE_ATTEMPTS;
+      return NextResponse.json({
+        correct: false,
+        locked: nowLocked,
+        lockedReason: nowLocked ? 'attempts_exhausted' : 'incorrect_submission',
+        attemptsUsed: newFailedCount,
+        attemptsRemaining: Math.max(0, MAX_PUZZLE_ATTEMPTS - newFailedCount),
+      });
     }
 
     const newCorrectCount = correctCount + 1;

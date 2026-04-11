@@ -8,6 +8,7 @@ import { validateSameOrigin } from "@/lib/requestSecurity";
 
 import { calcLevel } from "@/lib/levels";
 import { awardSeasonXp } from "@/lib/seasonXp";
+import { incrementStreak } from "@/lib/streakService";
 
 // GET /api/puzzles/[id]/progress - Fetch user's progress for puzzle
 export async function GET(
@@ -69,6 +70,7 @@ export async function GET(
           id: null,
           solved: false,
           attempts: 0,
+          failedAttempts: 0,
           successfulAttempts: 0,
           totalTimeSpent: 0,
           completionPercentage: 0,
@@ -103,7 +105,7 @@ export async function GET(
 
 // POST /api/puzzles/[id]/progress - Update progress (start session, log attempt, etc)
 const UpdateProgressSchema = z.object({
-  action: z.enum(["start_session", "end_session", "log_attempt", "attempt_success", "lock_puzzle", "clear_state", "start_sudoku_timer"]),
+  action: z.enum(["start_session", "end_session", "log_attempt", "attempt_success", "lock_puzzle", "clear_state", "start_sudoku_timer", "record_game_loss"]),
   // Some callers send null; accept it and normalize later.
   durationSeconds: z.number().nullable().optional(),
   hintUsed: z.boolean().nullable().optional(),
@@ -505,6 +507,28 @@ export async function POST(
             console.error('Failed to award XP on puzzle success:', err);
           }
 
+          // ── Streak ────────────────────────────────────────────────────
+          try {
+            await incrementStreak(user.id);
+          } catch (err) {
+            console.error('Failed to update streak on puzzle success:', err);
+          }
+
+          // ── Real-time leaderboard broadcast ───────────────────────────
+          try {
+            const socketUrl = process.env.SOCKET_URL;
+            if (socketUrl) {
+              fetch(`${socketUrl}/emit`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-socket-secret': process.env.SOCKET_SECRET ?? '',
+                },
+                body: JSON.stringify({ event: 'leaderboard:update', payload: { userId: user.id } }),
+              }).catch(() => {/* non-critical */});
+            }
+          } catch { /* non-critical */ }
+
         break;
 
       case "lock_puzzle": {
@@ -542,6 +566,19 @@ export async function POST(
               },
             });
           }
+        }
+        break;
+      }
+
+      case "record_game_loss": {
+        // Called by multi-guess puzzle components (Word Crack, Crack Safe) when
+        // the player exhausts all guesses without solving. Each full failed game
+        // counts as one attempt toward the MAX_PUZZLE_ATTEMPTS limit.
+        if (!progress.solved) {
+          await prisma.userPuzzleProgress.update({
+            where: { id: progress.id },
+            data: { failedAttempts: { increment: 1 }, lastAttemptAt: new Date() },
+          });
         }
         break;
       }

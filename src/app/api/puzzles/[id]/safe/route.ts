@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
+import { getAttemptStatus, MAX_PUZZLE_ATTEMPTS } from "@/lib/attemptLimit";
 
 export async function POST(
   request: NextRequest,
@@ -36,6 +37,20 @@ export async function POST(
 
     if (!code) {
       return NextResponse.json({ error: "No code configured for this puzzle" }, { status: 400 });
+    }
+
+    // Check 3-attempt limit (each full failed game = 1 attempt)
+    const attemptStatus = await getAttemptStatus(currentUser.id, puzzleId);
+    if (attemptStatus.locked) {
+      return NextResponse.json(
+        {
+          locked: true,
+          attemptsUsed: attemptStatus.failedAttempts,
+          maxAttempts: MAX_PUZZLE_ATTEMPTS,
+          revealCode: code,
+        },
+        { status: 403 }
+      );
     }
 
     const cleanGuess = guess.replace(/\D/g, "");

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
+import { getAttemptStatus, recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from "@/lib/attemptLimit";
 
 export async function POST(request: NextRequest, context: { params: { id: string } } | { params: Promise<{ id: string }> }) {
 	try {
@@ -37,6 +38,18 @@ export async function POST(request: NextRequest, context: { params: { id: string
 
 		if (!puzzle) {
 			return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
+		}
+
+		// Enforce 3-attempt limit for applicable puzzle types (not gridlock, sudoku, jigsaw, escape_room)
+		const attemptLimitTypes = ["riddle", "general", "math", "code_master", "arg", "blackout", "anagram_blitz", "word_search"];
+		if (attemptLimitTypes.includes(puzzle.puzzleType)) {
+			const attemptStatus = await getAttemptStatus(currentUser.id, puzzleId);
+			if (attemptStatus.locked) {
+				return NextResponse.json(
+					{ error: "No attempts remaining", locked: true, attemptsUsed: attemptStatus.failedAttempts, maxAttempts: MAX_PUZZLE_ATTEMPTS },
+					{ status: 403 }
+				);
+			}
 		}
 
 		// If puzzle has no riddle answer but is a Sudoku, treat the special 'SUDOKU_SOLVED' token as correct
@@ -132,6 +145,19 @@ export async function POST(request: NextRequest, context: { params: { id: string
 		}
 
 		const isCorrect = puzzle.riddleAnswer.trim().toLowerCase() === answer.trim().toLowerCase();
+
+		if (!isCorrect && attemptLimitTypes.includes(puzzle.puzzleType)) {
+			const newFailedCount = await recordFailedAttempt(currentUser.id, puzzleId);
+			const nowLocked = newFailedCount >= MAX_PUZZLE_ATTEMPTS;
+			return NextResponse.json({
+				correct: false,
+				attemptsUsed: newFailedCount,
+				attemptsRemaining: Math.max(0, MAX_PUZZLE_ATTEMPTS - newFailedCount),
+				locked: nowLocked,
+				...(nowLocked && { revealAnswer: puzzle.riddleAnswer }),
+			});
+		}
+
 		return NextResponse.json({ correct: isCorrect });
 	} catch (err) {
 		return NextResponse.json({ error: "Server error" }, { status: 500 });

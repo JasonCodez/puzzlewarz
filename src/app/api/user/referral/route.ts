@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   const baseUrl = getReferralBaseUrl();
   return NextResponse.json({
     inviteCode: referral.inviteCode,
-    link: `${baseUrl}/auth/register?ref=${referral.inviteCode}`,
+    link: `${baseUrl}/invite/${referral.inviteCode}`,
     signedUp,
   });
 }

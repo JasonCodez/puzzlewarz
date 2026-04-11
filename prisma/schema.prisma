@@ -685,6 +685,10 @@ model UserPuzzleProgress {
   successfulAttempts    Int                  @default(0)
   totalTimeSpent        Int                  @default(0)
 
+  // Multi-attempt system: count full failed games/attempts (not total guesses).
+  // Puzzles lock after MAX_PUZZLE_ATTEMPTS (3) failed attempts.
+  failedAttempts        Int                  @default(0)
+
   // Sudoku anti-cheat: persist a per-user deadline so refresh cannot reset the timer.
   sudokuStartedAt        DateTime?
   sudokuExpiresAt        DateTime?

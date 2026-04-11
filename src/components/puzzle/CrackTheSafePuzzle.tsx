@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
+import { MAX_PUZZLE_ATTEMPTS } from "@/lib/puzzleConstants";
 
 type GuessResult = {
   guess: string;
@@ -23,9 +24,11 @@ interface Props {
   puzzleId: string;
   safeData: SafeData;
   onSolved?: () => void;
+  alreadySolved?: boolean;
+  failedAttempts?: number;
 }
 
-export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Props) {
+export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alreadySolved = false, failedAttempts: initialFailedAttempts = 0 }: Props) {
   const digits = Math.max(4, Math.min(8, safeData.digits ?? (safeData.safecode?.length ?? 6)));
   const maxAttempts = safeData.maxAttempts ?? 10;
   const clue = safeData.clue ?? "";
@@ -40,6 +43,23 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
   const [showSurprise, setShowSurprise] = useState(false);
   const [recording, setRecording] = useState(false);
   const [shaking, setShaking] = useState(false);
+  // 3-attempt system
+  const [failedAttempts, setFailedAttempts] = useState(initialFailedAttempts);
+  const [revealedCode, setRevealedCode] = useState<string | null>(null);
+  const gameLossRecorded = useRef(false);
+  const attemptsLocked = !alreadySolved && failedAttempts >= MAX_PUZZLE_ATTEMPTS;
+
+  /** Reset game state for a fresh attempt. */
+  const resetForNewAttempt = () => {
+    setHistory([]);
+    setCurr(Array(digits).fill(""));
+    setStatus("playing");
+    setError("");
+    setShaking(false);
+    setShowSurprise(false);
+    gameLossRecorded.current = false;
+    setTimeout(() => inputRefs.current[0]?.focus(), 50);
+  };
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const safeContainerRef = useRef<HTMLDivElement>(null);
@@ -122,6 +142,12 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.locked) {
+          if (data.revealCode) setRevealedCode(data.revealCode);
+          if (data.attemptsUsed !== undefined) setFailedAttempts(data.attemptsUsed);
+          setSubmitting(false);
+          return;
+        }
         setError(data.error ?? "Failed to check guess.");
         setSubmitting(false);
         return;
@@ -158,6 +184,20 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
         onSolved?.();
       } else if (next.length >= maxAttempts) {
         setStatus("lost");
+        if (!gameLossRecorded.current) {
+          gameLossRecorded.current = true;
+          fetch(`/api/puzzles/${puzzleId}/progress`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "record_game_loss" }),
+            credentials: "same-origin",
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.failedAttempts !== undefined) setFailedAttempts(d.failedAttempts);
+            })
+            .catch(() => {});
+        }
       }
     } catch (_) {
       setError("Network error. Please try again.");
@@ -165,6 +205,25 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
       setSubmitting(false);
     }
   }, [curr, digits, history, isPlaying, maxAttempts, puzzleId, submitting, onSolved]);
+
+  // Locked overlay
+  if (attemptsLocked) {
+    return (
+      <div className="flex flex-col items-center gap-6 p-8 text-center">
+        <div className="text-5xl">🔒</div>
+        <h3 className="font-black text-2xl" style={{ color: "#ef4444" }}>SAFE SEALED</h3>
+        <p style={{ color: "#9ca3af" }}>You&apos;ve used all {MAX_PUZZLE_ATTEMPTS} attempts on this puzzle.</p>
+        {revealedCode && (
+          <div className="mt-2">
+            <p className="text-sm mb-1" style={{ color: "#9ca3af" }}>The code was:</p>
+            <span className="font-black text-3xl tracking-[0.3em]" style={{ color: "#FDE74C" }}>
+              {revealedCode}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -836,8 +895,22 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved }: Pro
                style={{ border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}>
             <p className="text-lg font-black mb-1" style={{ color: "#ef4444" }}>Safe Locked 🔒</p>
             <p className="text-sm" style={{ color: "#888" }}>
-              You&apos;ve used all {maxAttempts} attempts. Better luck next time!
+              You&apos;ve used all {maxAttempts} guesses.
             </p>
+            {failedAttempts < MAX_PUZZLE_ATTEMPTS && (
+              <>
+                <p className="text-sm mt-1" style={{ color: "#9ca3af" }}>
+                  {MAX_PUZZLE_ATTEMPTS - failedAttempts} game{MAX_PUZZLE_ATTEMPTS - failedAttempts !== 1 ? "s" : ""} remaining
+                </p>
+                <button
+                  onClick={resetForNewAttempt}
+                  className="mt-3 px-5 py-2 rounded-xl font-black text-sm tracking-wider transition-all hover:scale-105 active:scale-95"
+                  style={{ background: "#FDE74C", color: "#020202" }}
+                >
+                  TRY AGAIN
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

@@ -13,6 +13,7 @@ import AttemptStats from "@/components/puzzle/AttemptStats";
 import CompletionPercentage from "@/components/puzzle/CompletionPercentage";
 import ImageViewer from "@/components/ImageViewer";
 import SudokuGrid from "@/components/puzzle/SudokuGrid";
+import { PuzzlePageSkeleton } from "@/components/Skeleton";
 import { EscapeRoomPuzzle } from "@/components/puzzle/EscapeRoomPuzzle";
 import PuzzleCompletionRatingModal from "@/components/puzzle/PuzzleCompletionRatingModal";
 import PuzzleXpModal from "@/components/puzzle/PuzzleXpModal";
@@ -173,6 +174,9 @@ interface PuzzleProgress {
   updatedAt: Date | string;
   sessionLogs: SessionLog[];
   partProgress: PuzzlePartProgress[];
+
+  // 3-attempt system
+  failedAttempts?: number;
 
   // Sudoku anti-cheat timer fields (server persisted)
   sudokuStartedAt?: Date | string | null;
@@ -855,6 +859,8 @@ export default function PuzzleDetailPage() {
     setShowXpModal(true);
     // Notify the Navbar (and any other listener) that XP has changed
     window.dispatchEvent(new CustomEvent('puzzlewarz:xp-updated'));
+    // Trigger an immediate achievement check instead of waiting for the 30-second poll
+    window.dispatchEvent(new CustomEvent('puzzlewarz:puzzle-solved'));
     const dismissDelay = after.level > before.level ? 5000 : 3000;
     setTimeout(() => {
       setShowXpModal(false);
@@ -1002,6 +1008,13 @@ export default function PuzzleDetailPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        if (data.locked) {
+          if (data.attemptsUsed !== undefined) {
+            setProgress((prev) => prev ? { ...prev, failedAttempts: data.attemptsUsed } : prev);
+          }
+          setError(`Puzzle locked — you've used all 3 attempts.`);
+          return;
+        }
         setError(data.error || "Failed to submit answer");
         return;
       }
@@ -1055,7 +1068,17 @@ export default function PuzzleDetailPage() {
         // Show XP modal then rating modal
         handlePuzzleSolved();
       } else {
-        setError(data.message || "Incorrect answer. Try again!");
+        // Update attempt count in progress state
+        if (data.attemptsUsed !== undefined) {
+          setProgress((prev) => prev ? { ...prev, failedAttempts: data.attemptsUsed } : prev);
+        }
+        if (data.locked) {
+          setError(`Puzzle locked — you've used all 3 attempts.${data.revealAnswer ? ` The answer was: ${data.revealAnswer}` : ""}`);
+        } else {
+          const remaining = data.attemptsRemaining;
+          const suffix = remaining !== undefined ? ` (${remaining} attempt${remaining !== 1 ? "s" : ""} left)` : "";
+          setError((data.message || "Incorrect answer. Try again!") + suffix);
+        }
       }
     } catch (err) {
       setError("An error occurred. Please try again.");
@@ -1067,10 +1090,8 @@ export default function PuzzleDetailPage() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#020202" }}>
-        <div style={{ color: "#FDE74C" }} className="text-lg">
-          Loading puzzle...
-        </div>
+      <div className="min-h-screen" style={{ backgroundColor: "#020202" }}>
+        <PuzzlePageSkeleton />
       </div>
     );
   }
@@ -1745,6 +1766,8 @@ export default function PuzzleDetailPage() {
                     <CrackTheSafePuzzle
                       puzzleId={puzzleId}
                       safeData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      alreadySolved={progress?.solved ?? false}
+                      failedAttempts={progress?.failedAttempts ?? 0}
                       onSolved={() => {
                         setSuccess(true);
                         recordCompletionAndShowModal();
@@ -1767,6 +1790,7 @@ export default function PuzzleDetailPage() {
                       puzzleId={puzzleId}
                       wordCrackData={(puzzle.data ?? {}) as Record<string, unknown>}
                       alreadySolved={progress?.solved ?? false}
+                      failedAttempts={progress?.failedAttempts ?? 0}
                       onSolved={() => {
                         setSuccess(true);
                         recordCompletionAndShowModal();

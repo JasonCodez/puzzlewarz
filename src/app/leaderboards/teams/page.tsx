@@ -207,7 +207,7 @@ export default function TeamLeaderboards() {
               </div>
               <div>
                 <p className="text-sm" style={{ color: '#DDDBF1' }}>Puzzles Solved</p>
-                <p className="text-2xl font-bold" style={{ color: '#AB9F9D' }}>
+                <p className="text-2xl font-bold" style={{ color: '#DDDBF1' }}>
                   {userTeamRank.totalPuzzlesSolved}
                 </p>
               </div>

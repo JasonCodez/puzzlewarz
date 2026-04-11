@@ -71,9 +71,9 @@ function StreakVisual() {
               boxShadow: i < 4 ? "0 0 12px rgba(56,145,166,0.4)" : "none",
             }}
           >
-            {i < 4 ? "🔥" : <span style={{ color: "#374151", fontSize: 12 }}>–</span>}
+            {i < 4 ? "🔥" : <span style={{ color: "#6b7280", fontSize: 12 }}>–</span>}
           </div>
-          <span style={{ fontSize: 10, color: i < 4 ? "#3891A6" : "#374151", fontWeight: 600 }}>{d}</span>
+          <span style={{ fontSize: 10, color: i < 4 ? "#3891A6" : "#6b7280", fontWeight: 600 }}>{d}</span>
         </div>
       ))}
     </div>
@@ -100,7 +100,7 @@ function LeaderboardVisual() {
         >
           <span style={{ fontSize: 16, width: 22 }}>{r.medal}</span>
           <span style={{ flex: 1, fontSize: 12, fontWeight: r.highlight ? 800 : 600, color: r.highlight ? "#FDE74C" : "#fff" }}>{r.name}</span>
-          <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>{r.pts} pts</span>
+          <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }}>{r.pts} pts</span>
         </div>
       ))}
     </div>
@@ -126,7 +126,7 @@ function PuzzlesVisual() {
         >
           <div style={{ fontSize: 22, marginBottom: 4 }}>{t.icon}</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 2 }}>{t.label}</div>
-          <div style={{ fontSize: 10, color: "#4B5563" }}>{t.sub}</div>
+          <div style={{ fontSize: 10, color: "#6b7280" }}>{t.sub}</div>
         </div>
       ))}
     </div>
@@ -251,7 +251,7 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
         <button
           onClick={finish}
           className="absolute top-4 right-4 z-10 transition-opacity hover:opacity-100"
-          style={{ color: "#374151", opacity: 0.6, background: "none", border: "none", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 8px" }}
+          style={{ color: "#9ca3af", opacity: 1, background: "none", border: "none", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 8px" }}
           aria-label="Skip tour"
         >
           ×

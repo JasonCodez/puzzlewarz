@@ -560,7 +560,7 @@ export default function Dashboard() {
           <div style={{ marginBottom: isAdmin ? 48 : 0 }}>
             <p style={{
               fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
-              color: '#374151', marginBottom: 20,
+              color: '#9ca3af', marginBottom: 20,
               opacity: mounted ? 1 : 0, transition: 'opacity 0.6s ease 0.4s',
             }}>
               Navigate

@@ -99,6 +99,7 @@ export default function DailyPage() {
   const [nextReward, setNextReward]   = useState<{ points: number; xp: number } | null>(null);
   const [earnedReward, setEarnedReward] = useState<{ points: number; xp: number; streakDay: number } | null>(null);
   const [showRewardModal, setShowRewardModal] = useState(false);
+  const [showUpgradeOffer, setShowUpgradeOffer] = useState(false);
 
   const dateKey  = new Date().toISOString().slice(0, 10);
   const storeKey = sessionUid ? `pw_daily_${dateKey}_${sessionUid}` : `pw_daily_${dateKey}`;
@@ -171,6 +172,7 @@ export default function DailyPage() {
           setEarnedReward(d.reward);
           setShowRewardModal(true);
         }
+        if (d.showUpgradeOffer) setShowUpgradeOffer(true);
         // Refresh streak + next reward
         return fetch("/api/daily/complete");
       })
@@ -724,6 +726,57 @@ export default function DailyPage() {
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#888" }}
             >
               Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Season Pass upgrade offer (fires on 3rd win) ───────────────────── */}
+      {showUpgradeOffer && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.82)", backdropFilter: "blur(8px)" }}
+          onClick={() => setShowUpgradeOffer(false)}
+        >
+          <div
+            className="relative w-full max-w-sm mx-4 rounded-2xl p-8 text-center"
+            style={{
+              background: "linear-gradient(135deg, #0a0a0a 0%, #020202 100%)",
+              border: "1px solid rgba(253,231,76,0.35)",
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowUpgradeOffer(false)}
+              className="absolute top-3 right-4 text-xl leading-none opacity-60 hover:opacity-100"
+              style={{ color: "#fff" }}
+            >
+              ×
+            </button>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
+            <div
+              className="font-black text-xl mb-2"
+              style={{ color: "#FDE74C", letterSpacing: "0.03em" }}
+            >
+              You&rsquo;re clearly hooked.
+            </div>
+            <div className="text-sm mb-6" style={{ color: "#DDDBF1", lineHeight: 1.7 }}>
+              3 wins in. Season Pass unlocks premium tier rewards, exclusive cosmetics, and bonus XP — all for $4.99 a season.
+            </div>
+            <a
+              href="/season-pass"
+              onClick={() => setShowUpgradeOffer(false)}
+              className="block py-3 px-6 rounded-xl font-black text-sm hover:opacity-90 transition-opacity mb-3"
+              style={{ background: "#FDE74C", color: "#020202", letterSpacing: "0.05em" }}
+            >
+              Unlock Season Pass →
+            </a>
+            <button
+              onClick={() => setShowUpgradeOffer(false)}
+              className="text-xs hover:opacity-80"
+              style={{ color: "#AB9F9D" }}
+            >
+              Maybe later
             </button>
           </div>
         </div>

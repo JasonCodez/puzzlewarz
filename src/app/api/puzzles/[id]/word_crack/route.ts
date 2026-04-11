@@ -4,6 +4,7 @@ import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 import { calcLevel } from "@/lib/levels";
 import { awardSeasonXp } from "@/lib/seasonXp";
+import { getAttemptStatus, MAX_PUZZLE_ATTEMPTS } from "@/lib/attemptLimit";
 
 export async function POST(
   request: NextRequest,
@@ -35,6 +36,22 @@ export async function POST(
 
     const wordleData = (puzzle.data ?? {}) as Record<string, unknown>;
     const word = String(wordleData.word ?? "").toUpperCase().trim();
+
+    // Check 3-attempt limit (each full failed game = 1 attempt)
+    if (!warzMode) {
+      const attemptStatus = await getAttemptStatus(currentUser.id, puzzleId);
+      if (attemptStatus.locked) {
+        return NextResponse.json(
+          {
+            locked: true,
+            attemptsUsed: attemptStatus.failedAttempts,
+            maxAttempts: MAX_PUZZLE_ATTEMPTS,
+            revealWord: word,
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     if (!word) {
       return NextResponse.json(

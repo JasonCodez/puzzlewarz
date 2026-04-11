@@ -117,7 +117,7 @@ function PuzzlePickerModal({
         <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
           <div>
             <h2 className="text-xl font-extrabold text-white">Choose Your Puzzle</h2>
-            <p className="text-xs mt-0.5" style={{ color: "#6b7280" }}>
+            <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>
               Only puzzles you&apos;ve never attempted are shown.
             </p>
           </div>

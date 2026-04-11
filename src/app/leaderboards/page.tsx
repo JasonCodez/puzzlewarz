@@ -103,6 +103,15 @@ export default function LeaderboardsPage() {
     }
   };
 
+  // Real-time updates: re-fetch when any player solves a puzzle
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => fetchLeaderboard(activeTab);
+    window.addEventListener("puzzlewarz:puzzle-solved", handler);
+    return () => window.removeEventListener("puzzlewarz:puzzle-solved", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#020202' }}>

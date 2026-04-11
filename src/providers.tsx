@@ -81,9 +81,12 @@ function GlobalAchievementModal() {
     };
     fetchAchievements();
     interval = setInterval(fetchAchievements, 30000);
+    // Also check immediately whenever a puzzle is solved
+    window.addEventListener('puzzlewarz:puzzle-solved', fetchAchievements);
     return () => {
       mounted = false;
       clearInterval(interval);
+      window.removeEventListener('puzzlewarz:puzzle-solved', fetchAchievements);
     };
   }, [session?.user?.email, shownStorageKey, enqueueAchievement, addShownAchievement, setShownAchievements]);
 

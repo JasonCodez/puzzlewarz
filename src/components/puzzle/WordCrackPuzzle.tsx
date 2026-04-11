@@ -25,6 +25,7 @@ interface Props {
   onSolved?: () => void;
   alreadySolved?: boolean;
   warzMode?: boolean;
+  failedAttempts?: number;
 }
 
 // â”€â”€â”€ Keyboard layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -37,18 +38,19 @@ const KEYBOARD_ROWS = [
 
 // â”€â”€â”€ Colour palette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+// CRACKED = right letter, right spot  |  CLOSE = in word, wrong spot  |  COLD = not in word
 const COLORS = {
-  correct: { bg: "#22c55e", border: "#16a34a", glow: "rgba(34,197,94,0.6)" },
-  present: { bg: "#eab308", border: "#ca8a04", glow: "rgba(234,179,8,0.6)" },
-  absent:  { bg: "#374151", border: "#4b5563", glow: "none" },
+  correct: { bg: "#38D399", border: "#10b981", glow: "rgba(56,211,153,0.65)" },
+  present: { bg: "#FDE74C", border: "#d97706", glow: "rgba(253,231,76,0.65)" },
+  absent:  { bg: "rgba(56,145,166,0.22)", border: "rgba(56,145,166,0.5)", glow: "none" },
   empty:   { bg: "transparent", border: "#374151", glow: "none" },
-  active:  { bg: "rgba(99,102,241,0.15)", border: "#818cf8", glow: "rgba(129,140,248,0.4)" },
+  active:  { bg: "rgba(253,231,76,0.08)", border: "#FDE74C", glow: "rgba(253,231,76,0.3)" },
 };
 
 const KEY_COLORS: Record<LetterStatus | "unused", string> = {
-  correct: "#16a34a",
-  present: "#ca8a04",
-  absent:  "#374151",
+  correct: "#10b981",
+  present: "#d97706",
+  absent:  "rgba(56,145,166,0.4)",
   unused:  "#4b5563",
 };
 
@@ -57,7 +59,7 @@ const KEY_COLORS: Record<LetterStatus | "unused", string> = {
 interface Particle { id: number; x: number; color: string; delay: number; duration: number; size: number; }
 
 function makeConfetti(): Particle[] {
-  const palette = ["#22c55e","#eab308","#818cf8","#f472b6","#38bdf8","#fb923c"];
+  const palette = ["#38D399","#FDE74C","#3891A6","#f472b6","#818cf8","#fb923c"];
   return Array.from({ length: 60 }, (_, i) => ({
     id: i,
     x: Math.random() * 100,
@@ -76,50 +78,63 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
       <div
         className="relative w-full max-w-md rounded-2xl p-6 text-white"
         style={{
-          background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
-          border: "1px solid rgba(129,140,248,0.3)",
-          boxShadow: "0 0 40px rgba(129,140,248,0.2), 0 25px 50px rgba(0,0,0,0.6)",
+          background: "linear-gradient(135deg, #040e0a 0%, #0c1a14 100%)",
+          border: "1px solid rgba(56,211,153,0.3)",
+          boxShadow: "0 0 40px rgba(56,211,153,0.15), 0 25px 50px rgba(0,0,0,0.6)",
         }}
       >
         {/* Title */}
         <div className="text-center mb-5">
-          <div className="text-4xl mb-2">🔡</div>
-          <h2 className="text-2xl font-black tracking-widest" style={{ color: "#818cf8" }}>HOW TO PLAY</h2>
-          <p className="text-gray-400 text-sm mt-1">Crack the hidden word!</p>
+          <div className="text-4xl mb-2">⚡</div>
+          <h2 className="text-2xl font-black tracking-widest" style={{ color: "#38D399" }}>HOW TO CRACK IT</h2>
+          <p className="text-sm mt-1" style={{ color: "#9ca3af" }}>Decode the hidden {wordLength}-letter word.</p>
         </div>
 
         {/* Rules */}
         <ul className="space-y-3 text-sm mb-6">
           <li className="flex items-start gap-3">
             <span className="text-lg">🎯</span>
-            <span>Guess the <strong className="text-white">{wordLength}-letter word</strong> in {maxGuesses} tries.</span>
+            <span>You have <strong className="text-white">{maxGuesses} attempts</strong> to break the {wordLength}-letter code.</span>
           </li>
           <li className="flex items-start gap-3">
             <span className="text-lg">⌨️</span>
-            <span>Type using your keyboard or tap the on-screen keys, then press <strong className="text-white">ENTER</strong>.</span>
+            <span>Type a word and press <strong className="text-white">ENTER</strong>. Each tile flips to reveal intel.</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <span className="text-lg">📊</span>
+            <span>Crack faster for a better <strong className="text-white">grade</strong> — S, A, B, C, or D.</span>
           </li>
         </ul>
 
         {/* Colour examples */}
         <div className="space-y-3 mb-6">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Tile colours mean:</p>
+          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#9ca3af" }}>Tile intel codes:</p>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg"
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg text-black"
               style={{ background: COLORS.correct.bg, boxShadow: `0 0 12px ${COLORS.correct.glow}` }}>C</div>
-            <span className="text-sm text-gray-300">🟢 <strong className="text-white">Correct</strong> — right letter, right spot</span>
+            <span className="text-sm">
+              🔓 <strong className="text-white">CRACKED</strong>
+              <span style={{ color: "#9ca3af" }}> — right letter, right position</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg"
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg text-black"
               style={{ background: COLORS.present.bg, boxShadow: `0 0 12px ${COLORS.present.glow}` }}>P</div>
-            <span className="text-sm text-gray-300">🟡 <strong className="text-white">Present</strong> — in the word, wrong spot</span>
+            <span className="text-sm">
+              🔍 <strong className="text-white">CLOSE</strong>
+              <span style={{ color: "#9ca3af" }}> — letter exists, wrong position</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg"
-              style={{ background: COLORS.absent.bg, border: `2px solid ${COLORS.absent.border}` }}>X</div>
-            <span className="text-sm text-gray-300">⚫ <strong className="text-white">Absent</strong> — not in the word</span>
+              style={{ background: COLORS.absent.bg, border: `2px solid ${COLORS.absent.border}`, color: "#9ca3af" }}>X</div>
+            <span className="text-sm">
+              ❌ <strong className="text-white">COLD</strong>
+              <span style={{ color: "#9ca3af" }}> — letter not in the word</span>
+            </span>
           </div>
         </div>
 
@@ -127,11 +142,12 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
           onClick={onClose}
           className="w-full py-3 rounded-xl font-black text-lg tracking-widest transition-all duration-150 active:scale-95"
           style={{
-            background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-            boxShadow: "0 0 20px rgba(99,102,241,0.5)",
+            background: "linear-gradient(135deg, #10b981, #38D399)",
+            boxShadow: "0 0 20px rgba(56,211,153,0.4)",
+            color: "#020202",
           }}
         >
-          LET'S GO! 🚀
+          START CRACKING ⚡
         </button>
       </div>
     </div>
@@ -140,11 +156,12 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
 
 // â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alreadySolved, warzMode }: Props) {
+export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alreadySolved, warzMode, failedAttempts: initialFailedAttempts = 0 }: Props) {
   const skin = usePuzzleSkin();
   const wordLength = Math.max(3, Math.min(10, Number(wordCrackData.wordLength ?? 5)));
   const maxGuesses = Math.max(1, Math.min(10, Number(wordCrackData.maxGuesses ?? 6)));
   const hint = String(wordCrackData.hint ?? "");
+  const MAX_ATTEMPTS = 3;
 
   const [showInstructions, setShowInstructions] = useState(!alreadySolved);
   const [guesses, setGuesses] = useState<GuessResult[][]>([]);
@@ -162,6 +179,26 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
   const [hintLevel, setHintLevel] = useState(0);
   const [hintReveal, setHintReveal] = useState<{ position: number; letter: string } | null>(null);
   const [hintLoading, setHintLoading] = useState(false);
+  // 3-attempt system
+  const [failedAttempts, setFailedAttempts] = useState(initialFailedAttempts);
+  const [revealedWord, setRevealedWord] = useState<string | null>(null);
+  const attemptsLocked = !alreadySolved && failedAttempts >= MAX_ATTEMPTS;
+  const gameLossRecorded = useRef(false);
+
+  /** Reset game state for a fresh attempt (same word, new board). */
+  const resetForNewAttempt = () => {
+    setGuesses([]);
+    setCurrentInput("");
+    setGameStatus("playing");
+    setError("");
+    setShakingRow(false);
+    setRevealingRow(null);
+    setRevealDone([]);
+    setPopCol(null);
+    setConfetti([]);
+    setBounceWin(false);
+    gameLossRecorded.current = false;
+  };
 
   const isPlaying = gameStatus === "playing" && !showInstructions;
   const onSolvedFired = useRef(false);
@@ -278,7 +315,23 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
           }
         }, revealTotal);
       } else if (newGuesses.length >= maxGuesses) {
-        setTimeout(() => setGameStatus("lost"), revealTotal);
+        setTimeout(() => {
+          setGameStatus("lost");
+          if (!warzMode && !gameLossRecorded.current) {
+            gameLossRecorded.current = true;
+            fetch(`/api/puzzles/${puzzleId}/progress`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "record_game_loss" }),
+              credentials: "same-origin",
+            })
+              .then((r) => r.json())
+              .then((d) => {
+                if (d.failedAttempts !== undefined) setFailedAttempts(d.failedAttempts);
+              })
+              .catch(() => {});
+          }
+        }, revealTotal);
       }
     } catch {
       setError("Network error — please try again");
@@ -359,7 +412,9 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
   }, [hintLevel, puzzleId, revealedPositions]);
 
   // â”€â”€ Build grid rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const rows = Array.from({ length: maxGuesses }, (_, r) => {
+  // Only render rows that have been played + the current active row (no ghost rows below)
+  const displayRowCount = gameStatus === "playing" ? guesses.length + 1 : guesses.length;
+  const rows = Array.from({ length: Math.min(displayRowCount, maxGuesses) }, (_, r) => {
     if (r < guesses.length) {
       return { rowIndex: r, letters: guesses[r].map(g => ({ char: g.letter, kind: g.status as LetterStatus | "empty" | "active" })) };
     } else if (r === guesses.length && gameStatus === "playing") {
@@ -375,8 +430,36 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
   });
 
   // â”€â”€ Guess quality label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const PRAISE = ["🔥 Genius!", "🌟 Magnificent!", "✨ Impressive!", "👏 Splendid!", "😊 Great!", "😅 Phew!"];
+  const PRAISE = ["⚡ LEGENDARY!", "🔓 MASTERCRACK!", "💥 IMPRESSIVE!", "👏 NICE WORK!", "😅 BARELY CRACKED!", "😤 BY A THREAD!"];
   const praiseIndex = Math.min(guesses.length - 1, PRAISE.length - 1);
+
+  const getGrade = (count: number, max: number): { grade: string; color: string } => {
+    if (count === 1) return { grade: "S", color: "#38D399" };
+    if (count === 2) return { grade: "A", color: "#a3e635" };
+    if (count <= Math.ceil(max * 0.5)) return { grade: "B", color: "#FDE74C" };
+    if (count <= Math.ceil(max * 0.75)) return { grade: "C", color: "#f97316" };
+    return { grade: "D", color: "#ef4444" };
+  };
+  const grade = getGrade(guesses.length, maxGuesses);
+
+  // Locked overlay — all 3 games used up
+  if (attemptsLocked) {
+    return (
+      <div className="flex flex-col items-center gap-6 p-8 text-center">
+        <div className="text-5xl">🔒</div>
+        <h3 className="font-black text-2xl" style={{ color: "#ef4444" }}>PUZZLE LOCKED</h3>
+        <p style={{ color: "#9ca3af" }}>You&apos;ve used all {MAX_ATTEMPTS} attempts on this puzzle.</p>
+        {revealedWord && (
+          <div className="mt-2">
+            <p className="text-sm mb-1" style={{ color: "#9ca3af" }}>The word was:</p>
+            <span className="font-black text-2xl tracking-widest" style={{ color: "#FDE74C" }}>
+              {revealedWord.toUpperCase()}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -500,44 +583,87 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
             </p>
           )}
           <p className="text-xs mt-1 font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
-            {wordLength} letters · {maxGuesses - guesses.length} guess{maxGuesses - guesses.length !== 1 ? "es" : ""} left
+            {wordLength} letters · {maxGuesses - guesses.length} attempt{maxGuesses - guesses.length !== 1 ? "s" : ""} remaining
           </p>
+          {!warzMode && gameStatus === "playing" && MAX_ATTEMPTS > 0 && (
+            <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>
+              Game {failedAttempts + 1} of {MAX_ATTEMPTS}
+            </p>
+          )}
         </div>
 
-        {/* â”€â”€ Error toast â”€â”€ */}
-        {error && (
+        {/* ─── Crack Meter ─── */}
+        {gameStatus === "playing" && (
+          <div className="w-full px-4" style={{ maxWidth: "320px" }}>
+            <div className="flex justify-between text-xs mb-1.5" style={{ color: "#9ca3af" }}>
+              <span className="font-bold tracking-widest">CRACK METER</span>
+              <span>{guesses.length} / {maxGuesses}</span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${(guesses.length / maxGuesses) * 100}%`,
+                  background: guesses.length / maxGuesses < 0.5
+                    ? "#38D399"
+                    : guesses.length / maxGuesses < 0.75
+                    ? "#FDE74C"
+                    : "#ef4444",
+                  boxShadow: guesses.length / maxGuesses >= 0.75
+                    ? "0 0 8px rgba(239,68,68,0.6)"
+                    : guesses.length / maxGuesses >= 0.5
+                    ? "0 0 8px rgba(253,231,76,0.5)"
+                    : "0 0 8px rgba(56,211,153,0.5)",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ─── Status toast (error or decrypting) ─── */}
+        {(error || submitting) && (
           <div
             className="px-5 py-2 rounded-full text-sm font-bold"
             style={{
-              background: "rgba(239,68,68,0.15)",
-              border: "1px solid rgba(239,68,68,0.5)",
-              color: "#fca5a5",
-              boxShadow: "0 0 16px rgba(239,68,68,0.3)",
+              background: submitting ? "rgba(56,211,153,0.1)" : "rgba(239,68,68,0.15)",
+              border: `1px solid ${submitting ? "rgba(56,211,153,0.4)" : "rgba(239,68,68,0.5)"}`,
+              color: submitting ? "#38D399" : "#fca5a5",
+              boxShadow: submitting ? "0 0 16px rgba(56,211,153,0.25)" : "0 0 16px rgba(239,68,68,0.3)",
+              letterSpacing: submitting ? "0.15em" : undefined,
             }}
           >
-            {error}
+            {submitting ? "⚡ DECRYPTING..." : error}
           </div>
         )}
 
         {/* â”€â”€ Win banner â”€â”€ */}
         {gameStatus === "won" && (
           <div
-            className={`px-6 py-3 rounded-2xl text-center font-black text-lg ${bounceWin ? "wc-win-bounce" : ""}`}
+            className={`px-6 py-4 rounded-2xl text-center ${bounceWin ? "wc-win-bounce" : ""}`}
             style={{
-              background: "linear-gradient(135deg, rgba(34,197,94,0.2), rgba(16,185,129,0.2))",
-              border: "1px solid rgba(34,197,94,0.5)",
-              boxShadow: "0 0 30px rgba(34,197,94,0.3)",
+              background: "linear-gradient(135deg, rgba(56,211,153,0.15), rgba(16,185,129,0.15))",
+              border: `1px solid ${grade.color}55`,
+              boxShadow: `0 0 30px ${grade.color}40`,
             }}
           >
-            <div style={{ color: "#4ade80", fontSize: "2rem" }}>🎉</div>
-            <div style={{ color: "#4ade80" }}>{PRAISE[praiseIndex]}</div>
-            <div className="text-sm font-normal mt-1" style={{ color: "#86efac" }}>
-              Solved in {guesses.length} {guesses.length === 1 ? "guess" : "guesses"}
+            <div style={{ fontSize: "2rem" }}>⚡</div>
+            <div className="font-black text-lg mt-1" style={{ color: grade.color }}>{PRAISE[praiseIndex]}</div>
+            <div className="flex items-center justify-center gap-3 mt-2">
+              <div
+                className="font-black text-3xl px-4 py-1 rounded-xl"
+                style={{ color: grade.color, background: `${grade.color}18`, border: `2px solid ${grade.color}` }}
+              >
+                {grade.grade}
+              </div>
+              <div className="text-sm" style={{ color: "#9ca3af" }}>
+                Cracked in {guesses.length}<br />
+                {guesses.length === 1 ? "attempt" : "attempts"}
+              </div>
             </div>
           </div>
         )}
 
-        {/* â”€â”€ Loss banner â”€â”€ */}
+        {/* Loss banner */}
         {gameStatus === "lost" && (
           <div
             className="px-6 py-3 rounded-2xl text-center"
@@ -547,11 +673,31 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, alr
             }}
           >
             <div className="text-2xl mb-1">💀</div>
-            <div className="font-black" style={{ color: "#f87171" }}>Better luck next time!</div>
+            <div className="font-black" style={{ color: "#f87171" }}>CODE NOT CRACKED</div>
+            {!warzMode && failedAttempts < MAX_ATTEMPTS && (
+              <>
+                <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>
+                  {MAX_ATTEMPTS - failedAttempts} game{MAX_ATTEMPTS - failedAttempts !== 1 ? "s" : ""} remaining
+                </div>
+                <button
+                  onClick={resetForNewAttempt}
+                  className="mt-3 px-5 py-2 rounded-xl font-black text-sm tracking-wider transition-all hover:scale-105 active:scale-95"
+                  style={{ background: "#FDE74C", color: "#020202" }}
+                >
+                  PLAY AGAIN
+                </button>
+              </>
+            )}
+            {!warzMode && failedAttempts >= MAX_ATTEMPTS && (
+              <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>No attempts remaining — puzzle locked</div>
+            )}
+            {warzMode && (
+              <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>Better intel next time!</div>
+            )}
           </div>
         )}
 
-        {/* ─── Grid ─── */}
+        {/* Grid */}
         <div
           className="wc-board"
           data-skin={skin._key ?? "default"}

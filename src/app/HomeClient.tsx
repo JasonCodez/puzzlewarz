@@ -208,7 +208,7 @@ export default function HomeClient() {
             </div>
 
             <div style={{ marginTop:40, display:"flex", justifyContent:"center", alignItems:"center", gap:10, ...fade(heroVisible, 0.44) }}>
-              <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:"#374151" }}>Next file in</span>
+              <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:"#9ca3af" }}>Next file in</span>
               <span style={{ fontSize:18, fontWeight:800, fontFamily:"ui-monospace,monospace", color:"#FFD700", letterSpacing:"0.08em" }}>{countdown}</span>
             </div>
           </div>
@@ -221,7 +221,7 @@ export default function HomeClient() {
           <div style={{ padding:"0 16px 0", overflow:"hidden" }}>
             <div className="hw-live-feed" style={{ maxWidth:1100, margin:"0 auto", borderRadius:12, border:"1px solid rgba(255,255,255,0.06)", background:"rgba(255,255,255,0.02)", padding:"12px 20px" }}>
               <div style={{ display:"flex", alignItems:"center", gap:12, overflowX:"auto", scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
-                <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#374151", flexShrink:0 }}>🔴 LIVE</span>
+                <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#9ca3af", flexShrink:0 }}>🔴 LIVE</span>
                 {recentSolves.slice(0, 8).map(s => {
                   const rankColor: Record<string, string> = { S:"#FFD700", A:"#7DF9AA", B:"#60a5fa", C:"#f97316", F:"#ef4444" };
                   const mins = s.minsAgo < 1 ? "just now" : s.minsAgo < 60 ? `${s.minsAgo}m ago` : `${Math.floor(s.minsAgo/60)}h ago`;
@@ -229,8 +229,8 @@ export default function HomeClient() {
                     <div key={s.id} style={{ display:"flex", alignItems:"center", gap:7, flexShrink:0, padding:"4px 10px", borderRadius:8, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
                       <span style={{ fontSize:11, fontWeight:700, color: rankColor[s.rank] ?? "#9ca3af", fontFamily:"monospace" }}>{s.rank}</span>
                       <span style={{ fontSize:11, color:"#d1d5db", fontFamily:"monospace" }}>{s.username}</span>
-                      {s.fileNumber && <span style={{ fontSize:10, color:"#4b5563", fontFamily:"monospace" }}>#{String(s.fileNumber).padStart(3,"0")}</span>}
-                      <span style={{ fontSize:10, color:"#374151", fontFamily:"monospace" }}>{mins}</span>
+                      {s.fileNumber && <span style={{ fontSize:10, color:"#9ca3af", fontFamily:"monospace" }}>#{String(s.fileNumber).padStart(3,"0")}</span>}
+                      <span style={{ fontSize:10, color:"#9ca3af", fontFamily:"monospace" }}>{mins}</span>
                     </div>
                   );
                 })}
@@ -313,13 +313,13 @@ export default function HomeClient() {
               <div className="hw-share-cta" style={{ maxWidth:300, ...fade(shareReveal.visible, 0.12) }}>
                 <p style={{ fontSize:11, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#39D46E", marginBottom:14 }}>Challenge Your Friends</p>
                 <h3 style={{ fontSize:"clamp(22px,3vw,32px)", fontWeight:800, color:"#fff", letterSpacing:"-0.02em", marginBottom:14, lineHeight:1.2 }}>Share Your Result. Make It Personal.</h3>
-                <p style={{ color:"#6B7280", fontSize:15, lineHeight:1.7, marginBottom:24 }}>Every solve auto-generates a shareable card. Drop it in the group chat. Dare them to beat your time.</p>
+                <p style={{ color:"#9ca3af", fontSize:15, lineHeight:1.7, marginBottom:24 }}>Every solve auto-generates a shareable card. Drop it in the group chat. Dare them to beat your time.</p>
                 <button
                   onClick={handleCopyShare}
                   className="pw-cta"
                   style={{ padding:"13px 28px", borderRadius:10, fontWeight:700, fontSize:14, color: copied ? "#000" : "#fff", background: copied ? "#39D46E" : "rgba(57,212,110,0.12)", border:`1px solid ${copied ? "#39D46E" : "rgba(57,212,110,0.35)"}`, cursor:"pointer", transition:"all 0.2s", width:"100%" }}
                 >{copied ? "✓ Copied!" : "📋 Copy Example Result"}</button>
-                <p style={{ fontSize:12, color:"#374151", marginTop:12, textAlign:"center" }}>Your real result includes your score and arc progress.</p>
+                <p style={{ fontSize:12, color:"#9ca3af", marginTop:12, textAlign:"center" }}>Your real result includes your score and arc progress.</p>
               </div>
             </div>
           </div>
@@ -331,7 +331,7 @@ export default function HomeClient() {
         <section className="hw-section" style={{ padding:"80px 20px", borderTop:"1px solid rgba(255,255,255,0.04)" }}>
           <div ref={featuresReveal.ref} style={{ maxWidth:1100, margin:"0 auto" }}>
             <div style={{ textAlign:"center", marginBottom:48 }}>
-              <p style={{ fontSize:11, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#6B7280", marginBottom:12, ...fade(featuresReveal.visible, 0) }}>The Full Arsenal</p>
+              <p style={{ fontSize:11, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#9ca3af", marginBottom:12, ...fade(featuresReveal.visible, 0) }}>The Full Arsenal</p>
               <h2 style={{ fontSize:"clamp(24px,4vw,40px)", fontWeight:800, color:"#fff", letterSpacing:"-0.025em", marginBottom:12, ...fade(featuresReveal.visible, 0.08) }}>The Gridlock File is just the beginning.</h2>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:18 }}>
@@ -353,7 +353,7 @@ export default function HomeClient() {
                     <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", padding:"3px 10px", borderRadius:999, color:f.tagColor, background:`${f.tagColor}14`, border:`1px solid ${f.tagColor}30` }}>{f.tag}</span>
                   </div>
                   <h3 style={{ color:"#fff", fontWeight:700, fontSize:17, margin:0 }}>{f.title}</h3>
-                  <p style={{ color:"#6B7280", fontSize:14, lineHeight:1.65, flexGrow:1, margin:0 }}>{f.body}</p>
+                  <p style={{ color:"#9ca3af", fontSize:14, lineHeight:1.65, flexGrow:1, margin:0 }}>{f.body}</p>
                   <Link href={f.href} style={{ fontSize:13, fontWeight:700, color:f.tagColor, textDecoration:"none", borderBottom:`1px solid ${f.tagColor}30`, paddingBottom:2, alignSelf:"flex-start", transition:"border-color 0.2s" }}
                     onMouseEnter={e => (e.currentTarget.style.borderColor = f.tagColor)}
                     onMouseLeave={e => (e.currentTarget.style.borderColor = `${f.tagColor}30`)}
@@ -376,7 +376,7 @@ export default function HomeClient() {
             <h2 style={{ fontSize:"clamp(32px,5vw,64px)", fontWeight:900, color:"#fff", letterSpacing:"-0.03em", lineHeight:1.0, marginBottom:24, ...fade(finalReveal.visible, 0) }}>
               I HAVE TO<br /><span className="pw-shimmer-text">TRY THIS</span><br />RIGHT NOW.
             </h2>
-            <p style={{ color:"#4B5563", fontSize:16, lineHeight:1.8, marginBottom:40, ...fade(finalReveal.visible, 0.12) }}>
+            <p style={{ color:"#9ca3af", fontSize:16, lineHeight:1.8, marginBottom:40, ...fade(finalReveal.visible, 0.12) }}>
               That instinct is correct. Today&apos;s file resets in{" "}
               <strong style={{ color:"#FFD700", fontFamily:"ui-monospace,monospace" }}>{countdown}</strong>.
               Miss it and the arc breaks.
@@ -391,7 +391,7 @@ export default function HomeClient() {
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#9CA3AF"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.12)"; }}
               >Create Free Account</Link>
             </div>
-            <p style={{ marginTop:20, fontSize:12, color:"#1F2937", ...fade(finalReveal.visible, 0.3) }}>No credit card. No install. No excuses.</p>
+            <p style={{ marginTop:20, fontSize:12, color:"#6b7280", ...fade(finalReveal.visible, 0.3) }}>No credit card. No install. No excuses.</p>
           </div>
         </section>
 
@@ -405,32 +405,32 @@ export default function HomeClient() {
                 <img src="/images/puzzle_warz_logo.png" alt="PuzzleWarz" style={{ height:28, width:"auto" }} />
                 <span style={{ fontSize:13, fontWeight:800, letterSpacing:"0.1em", textTransform:"uppercase", color:"#FFD700" }}>PuzzleWarz</span>
               </div>
-              <p style={{ color:"#374151", fontSize:12, maxWidth:220, lineHeight:1.6 }}>Daily puzzles. Live leaderboards. Head-to-head battles.</p>
+              <p style={{ color:"#9ca3af", fontSize:12, maxWidth:220, lineHeight:1.6 }}>Daily puzzles. Live leaderboards. Head-to-head battles.</p>
             </div>
             <div className="hw-footer-nav" style={{ display:"flex", gap:48, fontSize:14, flexWrap:"wrap" }}>
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#374151", marginBottom:4 }}>Play</p>
+                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#9ca3af", marginBottom:4 }}>Play</p>
                 {[["Gridlock File", "#gridlock"], ["Warz Battles", "/warz"], ["Leaderboard", "/leaderboard"], ["Daily Puzzle", "/frequency"]].map(([l, h]) => (
-                  <Link key={l} href={h} style={{ color:"#374151", textDecoration:"none", transition:"color 0.2s" }}
+                  <Link key={l} href={h} style={{ color:"#9ca3af", textDecoration:"none", transition:"color 0.2s" }}
                     onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-                    onMouseLeave={e => (e.currentTarget.style.color = "#374151")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "#9ca3af")}
                   >{l}</Link>
                 ))}
               </div>
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#374151", marginBottom:4 }}>Account</p>
+                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#9ca3af", marginBottom:4 }}>Account</p>
                 {[["Sign Up Free", "/auth/register"], ["Sign In", "/auth/signin"], ["Achievements", "/auth/register"]].map(([l, h]) => (
-                  <Link key={l} href={h} style={{ color:"#374151", textDecoration:"none", transition:"color 0.2s" }}
+                  <Link key={l} href={h} style={{ color:"#9ca3af", textDecoration:"none", transition:"color 0.2s" }}
                     onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-                    onMouseLeave={e => (e.currentTarget.style.color = "#374151")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "#9ca3af")}
                   >{l}</Link>
                 ))}
               </div>
             </div>
           </div>
           <div className="hw-footer-bottom" style={{ paddingTop:20, borderTop:"1px solid rgba(255,255,255,0.04)", display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, alignItems:"center" }}>
-            <p style={{ color:"#1F2937", fontSize:12 }}>&copy; 2026 PuzzleWarz · All rights reserved</p>
-            <p style={{ color:"#1F2937", fontSize:12 }}>Train your mind. Earn your rank.</p>
+            <p style={{ color:"#6b7280", fontSize:12 }}>&copy; 2026 PuzzleWarz · All rights reserved</p>
+            <p style={{ color:"#6b7280", fontSize:12 }}>Train your mind. Earn your rank.</p>
           </div>
         </footer>
 

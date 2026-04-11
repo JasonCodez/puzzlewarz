@@ -1085,7 +1085,7 @@ function ReportModal({
           <div className="px-6 py-8 text-center">
             <div className="text-4xl mb-3">✅</div>
             <p className="text-white font-semibold">Report submitted.</p>
-            <p className="text-sm mt-1" style={{ color: "#6B7280" }}>Our team will review it shortly.</p>
+            <p className="text-sm mt-1" style={{ color: "#9ca3af" }}>Our team will review it shortly.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
@@ -1111,7 +1111,7 @@ function ReportModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold mb-1.5 tracking-widest uppercase" style={{ color: "#6B7280" }}>
+              <label className="block text-xs font-bold mb-1.5 tracking-widest uppercase" style={{ color: "#9ca3af" }}>
                 Additional details <span className="normal-case font-normal">(optional)</span>
               </label>
               <textarea
@@ -1123,7 +1123,7 @@ function ReportModal({
                 className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-gray-600 resize-none"
                 style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
               />
-              <p className="text-xs mt-0.5 text-right" style={{ color: "#374151" }}>{details.length}/500</p>
+              <p className="text-xs mt-0.5 text-right" style={{ color: "#6b7280" }}>{details.length}/500</p>
             </div>
 
             {error && (
