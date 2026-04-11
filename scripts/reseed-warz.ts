@@ -84,7 +84,8 @@ async function main() {
     return;
   }
 
-  const warzRows: Parameters<typeof prisma.puzzleWarzChallenge.createMany>[0]["data"] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const warzRows: any[] = [];
 
   // ── 5. ~300 COMPLETED challenges (historical social proof) ────────────────
   const completedTarget = Math.min(300, warzBots.length - 1);

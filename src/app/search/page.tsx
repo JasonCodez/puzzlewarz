@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -48,7 +48,7 @@ interface Puzzle {
   category: { name: string } | null;
 }
 
-export default function SearchPage() {
+function SearchPageInner() {
   const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -273,5 +273,13 @@ export default function SearchPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense>
+      <SearchPageInner />
+    </Suspense>
   );
 }
