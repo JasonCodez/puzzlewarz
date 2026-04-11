@@ -18,6 +18,7 @@ export async function awardSeasonXp(userId: string, xpGain: number) {
 
   if (!userPass) return;
 
+  const oldTier = userPass.currentTier;
   const newSeasonXp = userPass.seasonXp + xpGain;
 
   // Calculate new current tier
@@ -34,4 +35,24 @@ export async function awardSeasonXp(userId: string, xpGain: number) {
     where: { id: userPass.id },
     data: { seasonXp: newSeasonXp, currentTier: newTier },
   });
+
+  // Nudge free users when they cross into a tier that has an unlocked premium reward
+  if (newTier > oldTier && !userPass.isPremium) {
+    const crossed = userPass.season.tiers.find((t) => t.tierNumber === newTier);
+    if (crossed?.premRewardType) {
+      try {
+        const { createNotification } = await import("@/lib/notification-service");
+        await createNotification({
+          userId,
+          type: "system",
+          title: `🏅 Tier ${newTier} unlocked!`,
+          message: `You just hit Season Tier ${newTier}. There's a premium reward waiting — upgrade to Season Pass for $4.99 to claim it.`,
+          icon: "🏅",
+          relatedId: "/season-pass",
+        });
+      } catch {
+        // non-fatal
+      }
+    }
+  }
 }

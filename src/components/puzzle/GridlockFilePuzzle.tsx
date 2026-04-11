@@ -858,9 +858,13 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
       elapsedSeconds,
     );
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      }
     } catch { /* ignore */ }
   }, [serverState, submitResult]);
 

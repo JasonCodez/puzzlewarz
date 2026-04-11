@@ -693,11 +693,35 @@ export default function DailyPage() {
               )}
             </div>
 
+            {/* Share result */}
+            <div className="mt-5 pw-counter" style={{ animationDelay: "0.85s" }}>
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col gap-0.5">
+                  {guesses.map((g, i) => (
+                    <div key={i} className="flex justify-center" style={{ gap: 2 }}>
+                      {evaluate(g, word).map((s, j) => (
+                        <span key={j} style={{ fontSize: 17, lineHeight: 1 }}>
+                          {EMOJI[s as keyof typeof EMOJI] ?? "\u2B1B"}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={share}
+                  className="mt-1 px-6 py-2 rounded-xl font-bold text-sm hover:opacity-80 transition-opacity"
+                  style={{ background: "#38D399", color: "#020202" }}
+                >
+                  {copied ? "Copied ✓" : "Share ⚔️"}
+                </button>
+              </div>
+            </div>
+
             {/* Dismiss */}
             <button
               onClick={() => setShowRewardModal(false)}
-              className="mt-6 px-6 py-2.5 rounded-xl font-bold text-sm hover:opacity-80 transition-opacity"
-              style={{ background: "#38D399", color: "#020202" }}
+              className="mt-4 px-6 py-2 rounded-xl font-bold text-sm hover:opacity-80 transition-opacity"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#888" }}
             >
               Continue
             </button>

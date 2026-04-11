@@ -515,6 +515,43 @@ export function generateStoreSaleEmail(
 }
 
 // ---------------------------------------------------------------------------
+// 9. Streak Expiry Warning
+// ---------------------------------------------------------------------------
+export function generateStreakExpiryEmail(
+  userName: string,
+  streak: number,
+  playUrl: string,
+): string {
+  const safeName = userName || "there";
+  return emailWrapper({
+    title: "Your streak expires tonight!",
+    preheader: `Don't break your ${streak}-day streak — play today's puzzle before midnight.`,
+    heading: `Your ${streak}-Day Streak Is At Risk!`,
+    headingEmoji: "🔥",
+    baseUrl: extractOrigin(playUrl),
+    content: `
+      <div style="${bodyFont}">
+        <p style="margin:0 0 12px 0;">Hi <strong>${safeName}</strong>,</p>
+        <p style="margin:0 0 12px 0;">
+          You've built an impressive <strong style="color:#FDE74C;">${streak}-day streak</strong> on Puzzle Warz.
+          Today's puzzle resets at midnight UTC &mdash; don't let it burn out tonight.
+        </p>
+      </div>
+      ${infoBox(
+        "#FDE74C",
+        `<div style="font-family:Arial,sans-serif;font-size:30px;font-weight:900;color:#FDE74C;text-align:center;margin:0 0 4px 0;">🔥 ${streak} days</div>
+        <div style="font-family:Arial,sans-serif;font-size:12px;color:#AB9F9D;text-align:center;margin:0;">One solve keeps the fire alive.</div>`
+      )}
+      ${ctaButton(playUrl, "Play Today's Puzzle →", "#FDE74C")}
+      <div style="${mutedFont}margin-top:18px;">
+        Miss today and your streak resets to zero. Streak Shields from the store can protect you if you ever need a day off.
+      </div>
+      ${footerNote()}
+    `,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 export function getDifficultyColor(difficulty: string): string {

@@ -12,6 +12,7 @@ export {
   generateLeaderboardEmail,
   generateWarzChallengeEmail,
   generateStoreSaleEmail,
+  generateStreakExpiryEmail,
   getDifficultyColor,
 } from "./email-templates";
 export type { StoreSaleItem } from "./email-templates";
