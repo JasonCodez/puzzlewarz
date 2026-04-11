@@ -79,10 +79,9 @@ export default function AnagramBlitz({
   }
 
   const [scrambledWords] = useState<string[]>(() => words.map(scramble));
-  const [currentIdx, setCurrentIdx] = useState(0);
+  const [queue, setQueue] = useState<string[]>(() => [...words]);
   const [input, setInput] = useState("");
   const [solvedWords, setSolvedWords] = useState<string[]>([]);
-  const [skippedWords, setSkippedWords] = useState<string[]>([]);
   const [timeLeft, setTimeLeft] = useState(totalTime);
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
@@ -91,11 +90,25 @@ export default function AnagramBlitz({
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Refs so the timer callback can read latest state without stale closure
+  const queueRef = useRef<string[]>(queue);
+  const solvedWordsRef = useRef<string[]>(solvedWords);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { solvedWordsRef.current = solvedWords; }, [solvedWords]);
 
-  const allDone = solvedWords.length + skippedWords.length === words.length;
+  function handleReset() {
+    setQueue([...words]);
+    setInput("");
+    setSolvedWords([]);
+    setTimeLeft(totalTime);
+    setStarted(false);
+    setFinished(false);
+    setFlash(null);
+    setShake(false);
+  }
 
   const endGame = useCallback(
-    async (solved: string[], skipped: string[]) => {
+    async (solved: string[]) => {
       setFinished(true);
       if (timerRef.current) clearInterval(timerRef.current);
 
@@ -129,13 +142,7 @@ export default function AnagramBlitz({
       setTimeLeft((t) => {
         if (t <= 1) {
           clearInterval(timerRef.current!);
-          // mark remaining as skipped
-          setSkippedWords((prev) => {
-            const remaining = words.slice(solvedWords.length + prev.length);
-            const newSkipped = [...prev, ...remaining];
-            endGame(solvedWords, newSkipped);
-            return newSkipped;
-          });
+          endGame(solvedWordsRef.current);
           return 0;
         }
         return t - 1;
@@ -147,7 +154,7 @@ export default function AnagramBlitz({
 
   useEffect(() => {
     if (started && !finished) inputRef.current?.focus();
-  }, [started, finished, currentIdx]);
+  }, [started, finished, queue]);
 
   function handleStart() {
     setStarted(true);
@@ -158,19 +165,18 @@ export default function AnagramBlitz({
     e.preventDefault();
     if (!started || finished) return;
     const guess = input.trim().toUpperCase();
-    const correct = words[currentIdx];
+    const currentWord = queue[0];
 
-    if (guess === correct) {
+    if (guess === currentWord) {
       setFlash("correct");
       setTimeout(() => setFlash(null), 500);
-      const newSolved = [...solvedWords, correct];
+      const newSolved = [...solvedWords, currentWord];
       setSolvedWords(newSolved);
+      const newQueue = queue.slice(1);
+      setQueue(newQueue);
       setInput("");
-      const next = currentIdx + 1;
-      if (next >= words.length) {
-        endGame(newSolved, skippedWords);
-      } else {
-        setCurrentIdx(next);
+      if (newQueue.length === 0) {
+        endGame(newSolved);
       }
     } else {
       setFlash("wrong");
@@ -183,16 +189,10 @@ export default function AnagramBlitz({
   }
 
   function handleSkip() {
-    if (!started || finished) return;
-    const newSkipped = [...skippedWords, words[currentIdx]];
-    setSkippedWords(newSkipped);
+    if (!started || finished || queue.length <= 1) return;
+    // Move current word to the back of the queue
+    setQueue(q => [...q.slice(1), q[0]]);
     setInput("");
-    const next = currentIdx + 1;
-    if (next >= words.length) {
-      endGame(solvedWords, newSkipped);
-    } else {
-      setCurrentIdx(next);
-    }
   }
 
   const timerPct = totalTime > 0 ? (timeLeft / totalTime) * 100 : 0;
@@ -274,7 +274,16 @@ export default function AnagramBlitz({
         {perfect ? (
           <p className="text-green-400 font-semibold">You unscrambled every word in time!</p>
         ) : (
-          <p className="text-gray-400">Better luck next time — keep practicing!</p>
+          <>
+            <p className="text-gray-400">Better luck next time — keep practicing!</p>
+            <button
+              onClick={handleReset}
+              className="mt-1 px-8 py-3 rounded-xl font-bold text-base text-black transition-transform hover:scale-105 active:scale-95"
+              style={{ background: skin.btnBg }}
+            >
+              🔄 Try Again
+            </button>
+          </>
         )}
 
         <div className="mt-2 w-full max-w-xs flex flex-col gap-2">
@@ -306,8 +315,8 @@ export default function AnagramBlitz({
   }
 
   // ── Active game ──
-  const currentWord = words[currentIdx];
-  const currentScrambled = scrambledWords[currentIdx];
+  const currentWord = queue[0] ?? words[0];
+  const currentScrambled = scrambledWords[words.indexOf(currentWord)];
 
   return skinWrap(
     <div
@@ -321,7 +330,7 @@ export default function AnagramBlitz({
       {/* Header row */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
-          Word {currentIdx + 1} / {words.length}
+          ✓ {solvedWords.length} / {words.length} · {queue.length} left
         </span>
         <span
           className="text-lg font-extrabold tabular-nums"
@@ -343,8 +352,7 @@ export default function AnagramBlitz({
       <div className="flex gap-2 flex-wrap">
         {words.map((w, i) => {
           const solved = solvedWords.includes(w);
-          const skipped = skippedWords.includes(w);
-          const active = i === currentIdx;
+          const active = !solved && queue[0] === w;
           return (
             <div
               key={i}
@@ -352,8 +360,6 @@ export default function AnagramBlitz({
               style={{
                 background: solved
                   ? "#4ade80"
-                  : skipped
-                  ? "#f87171"
                   : active
                   ? "#FDE74C"
                   : "rgba(255,255,255,0.15)",
@@ -435,9 +441,10 @@ export default function AnagramBlitz({
       {/* Skip */}
       <button
         onClick={handleSkip}
-        className="text-sm text-gray-500 hover:text-gray-300 transition-colors text-center"
+        disabled={queue.length <= 1}
+        className="text-sm text-gray-500 hover:text-gray-300 transition-colors text-center disabled:opacity-30 disabled:cursor-not-allowed"
       >
-        Skip this word →
+        Skip — come back later →
       </button>
     </div>
   );

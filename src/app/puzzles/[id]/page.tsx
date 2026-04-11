@@ -1841,6 +1841,7 @@ export default function PuzzleDetailPage() {
                         setSuccess(true);
                         recordCompletionAndShowModal();
                       }}
+                      onFailed={() => recordCompletionAndShowModal()}
                     />
                   </div>
                 );
