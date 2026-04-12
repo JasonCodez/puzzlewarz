@@ -16,7 +16,9 @@ config({ path: path.resolve(process.cwd(), ".env") });
 
 const prisma = new PrismaClient();
 
-const FORCE = process.argv.includes("--force"); ───────────────────────────────────────────────────────────────
+const FORCE = process.argv.includes("--force");
+
+// --- Constants ---------------------------------------------------------------
 const TOTAL_BOTS = 1358;
 
 // ─── Username generation ─────────────────────────────────────────────────────
