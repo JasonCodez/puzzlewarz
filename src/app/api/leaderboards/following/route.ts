@@ -50,24 +50,20 @@ export async function GET() {
       select: { id: true, name: true, image: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 
-    const entries = await Promise.all(
-      users.map(async (user) => {
-        const puzzlesSolved = await prisma.userPuzzleProgress.count({
-          where: { userId: user.id, solved: true },
-        });
-        const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
-        return {
-          userId: user.id,
-          userName: user.name,
-          userImage: user.image,
-          activeFlair: resolveFlair(user.activeFlair),
-          puzzlesSolved,
-          totalPoints: earnedPoints,
-          rank: 0,
-          isCurrentUser: user.id === currentUser.id,
-        };
-      })
-    );
+    const entries = users.map((user) => {
+      const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
+      const puzzlesSolved = Math.floor(earnedPoints / 100);
+      return {
+        userId: user.id,
+        userName: user.name,
+        userImage: user.image,
+        activeFlair: resolveFlair(user.activeFlair),
+        puzzlesSolved,
+        totalPoints: earnedPoints,
+        rank: 0,
+        isCurrentUser: user.id === currentUser.id,
+      };
+    });
 
     entries.sort((a, b) => b.totalPoints - a.totalPoints);
     entries.forEach((entry, index) => {

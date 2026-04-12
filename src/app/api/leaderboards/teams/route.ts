@@ -29,13 +29,14 @@ export async function GET(request: NextRequest) {
         // Get team members with their persistent point totals
         const members = await prisma.teamMember.findMany({
           where: { teamId: team.id },
-          select: { userId: true, user: { select: { totalPoints: true, teamBannerColor: true, activeFlair: true } } },
+          select: { userId: true, user: { select: { totalPoints: true, purchasedPoints: true, teamBannerColor: true, activeFlair: true } } },
         });
 
-        const memberIds = members.map((m: { userId: string }) => m.userId);
-        const puzzlesSolved = await prisma.userPuzzleProgress.count({
-          where: { userId: { in: memberIds }, solved: true },
-        });
+        const puzzlesSolved = members.reduce(
+          (sum: number, m: { user?: { totalPoints?: number | null; purchasedPoints?: number | null } }) =>
+            sum + Math.floor(((m.user?.totalPoints ?? 0) - (m.user?.purchasedPoints ?? 0)) / 100),
+          0
+        );
 
         // Use the first member's banner color as the team banner (or "none" if not set)
         const bannerColor = members.find((m: any) => m.user?.teamBannerColor && m.user.teamBannerColor !== "none")?.user?.teamBannerColor ?? "none";
