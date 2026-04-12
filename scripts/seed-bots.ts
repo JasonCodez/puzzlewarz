@@ -97,12 +97,25 @@ function randFloat(min: number, max: number): number {
 
 // ─── Avatar URLs (DiceBear — free, public, no auth) ──────────────────────────
 // ~25% of bots get a custom avatar, others use null (default avatar on site)
-const AVATAR_STYLES = ["adventurer","bottts","pixel-art","lorelei","micah","notionists","personas","shapes","identicon"];
+// ─── Avatar URLs ─────────────────────────────────────────────────────────────
+// randomuser.me hosts 100 male + 100 female portrait photos at predictable
+// static URLs — 200 unique real human faces, no API key required.
+// Each portrait is used at most once. Once exhausted, remaining bots get null.
+const PORTRAIT_URLS: string[] = [];
+for (let i = 0; i < 100; i++) PORTRAIT_URLS.push(`https://randomuser.me/api/portraits/men/${i}.jpg`);
+for (let i = 0; i < 100; i++) PORTRAIT_URLS.push(`https://randomuser.me/api/portraits/women/${i}.jpg`);
 
-function maybeAvatar(username: string, index: number): string | null {
-  if (index % 4 !== 0) return null; // 25% get one
-  const style = pickRand(AVATAR_STYLES);
-  return `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(username)}`;
+// Track which portraits have been assigned so each is used exactly once
+const usedPortraitIndices = new Set<number>();
+
+function maybeAvatar(_username: string, index: number): string | null {
+  // Assign portrait by index — but only if that slot hasn't been taken yet
+  const portraitIndex = index % PORTRAIT_URLS.length;
+  if (usedPortraitIndices.has(portraitIndex)) return null;
+  // 40% of bots get no avatar regardless (realistic: many users never upload)
+  if (index % 10 < 4) return null;
+  usedPortraitIndices.add(portraitIndex);
+  return PORTRAIT_URLS[portraitIndex];
 }
 
 // ─── Cosmetics ────────────────────────────────────────────────────────────────
@@ -880,40 +893,66 @@ async function main() {
 
   if (existingBotTeamCount === 0) {
     // Team name pools
-    const TEAM_PREFIXES = [
-      "Team","Squad","Crew","Unit","Order","Guild","Cipher","Vault","Shadow","Nova",
-      "Iron","Apex","Neon","Storm","Echo","Rogue","Ghost","Blaze","Frost","Omega",
-      "Delta","Sigma","Prism","Nexus","Quantum","Cobalt","Azure","Lunar","Solar",
+    // Team names: mix of formats so they feel organic, not templated
+    const TEAM_NAMES_POOL = [
+      // Single word / stylised
+      "Cryptonite", "Vaultbreakers", "Nullpointers", "Hexbound", "Overclocked",
+      "Unhinged", "Glitchcore", "Redacted", "404Found", "Rekt",
+      "Brainfog", "Hardcoded", "Unsolved", "Patched", "Decompiled",
+      "Blacksite", "Greyhat", "Mainframe", "Deadlock", "Overflow",
+      "Lowlife", "Noclip", "Speedrun", "Throwaway", "Endgame",
+      "Burnout", "Raidable", "Untouchable", "Backlog", "Respawn",
+      // Two-word combos — varied structure
+      "Null Island", "Silent Keys", "Wrong Answer", "Last Attempt", "No Hints",
+      "Blind Solve", "Cold Start", "Final Flag", "Broken Loop", "Dark Mode",
+      "Hard Reset", "Lag Switch", "Zero Days", "Code Red", "Stack Trace",
+      "Brain Trust", "Chaos Theory", "False Flag", "Logic Bomb", "Dead Drop",
+      "Slow Burn", "Wild Guess", "Pure RNG", "First Blood", "Alt Account",
+      "Ctrl Alt Delete", "Mind Palace", "Rabbit Hole", "Cut Corner", "Carry Me",
+      // Quirky / personality-driven
+      "We Tried", "Skill Issue", "Just Vibes", "No Cap", "Touch Grass",
+      "Git Gud", "Uninstalled", "Cope & Seethe", "Low Expectations",
+      "Accidentally Top 10", "Don't Ask", "Absolutely Not", "Certified Nerds",
+      "Caffeine Dependent", "Chronically Online", "Puzzle brain rot",
+      "Send Help", "The Doomscrollers", "Barely Functional", "Average Enjoyers",
+      "Needs More Coffee", "Technically Correct", "Wrong On Purpose",
+      "Professional Guessers", "We Don't Sleep", "Big Brain Energy",
+      "Pretty OK At This", "Currently Spiraling", "One More Puzzle",
     ];
-    const TEAM_SUFFIXES = [
-      "Wolves","Hackers","Solvers","Breakers","Phantoms","Hunters","Legion","Force",
-      "Collective","Alliance","Protocol","Division","Syndicate","Network","Agency",
-      "Corps","Squad","Wardens","Strikers","Seekers","Ciphers","Crypts","Vanguard",
-      "Outlaws","Reapers","Sentinels","Renegades","Enforcers","Architects","Analysts",
-    ];
+
     const TEAM_THEMES = ["default","default","default","gold","neon","crimson"];
 
     const TEAM_DESCRIPTIONS = [
-      "We solve fast and ask questions later.",
-      "Daily grinders. Top leaderboard or bust.",
-      "Casual team looking for new members. All skill levels welcome!",
-      "Competitive puzzle cracking team. We don't lose.",
-      "Just a group of friends who got too serious about puzzles.",
-      "Dedicated to cracking every cipher on this platform.",
-      "Speed runs, high scores, and relentless grinding.",
-      "We live for the hard difficulty puzzles.",
-      "Community-first team. We help each other improve.",
-      "Former solo players who realized teamwork hits different.",
-      "Working our way to the top of every leaderboard.",
-      "No casuals. Elite puzzle solvers only.",
-      "Founded by veterans. Open to dedicated newcomers.",
-      "We crack codes, break ciphers, and dominate Warz.",
-      "The grind never stops for us.",
-      "Top 10 leaderboard is our minimum standard.",
-      "Solving puzzles since day one of this platform.",
-      "United by our love of logic and pattern recognition.",
-      "A tight-knit crew of puzzle obsessives.",
-      "We turn hard puzzles into warm-up exercises.",
+      // Casual / relatable
+      "started as 3 friends who couldn't stop playing. now there's like 9 of us and none of us talk about anything else anymore",
+      "we made this team after losing a warz challenge and refusing to accept it. the grudge match is still ongoing",
+      "honestly we just wanted a team name. stayed for the gridlock arc grind",
+      "met in the forum complaining about the same puzzle. decided to just start solving together",
+      "my friend bet me I couldn't crack the daily streak record. I made a team to prove a point. he joined later",
+      "we don't have a strategy. we just send it and hope for the best",
+      "came for the puzzles, stayed because we accidentally got into the top 20 and now we have to stay there",
+      "none of us are that good individually but together we're somehow unstoppable... usually",
+      "we call ourselves casual but we're literally on here every day so",
+      "team chat is mostly just memes and the occasional 'oh wait I got it'",
+      // Mid-competitive
+      "daily puzzle streak is non-negotiable. if you skip, you explain yourself in the group chat",
+      "we rotate who does the gridlock each day so no one person carries the streak. it works surprisingly well",
+      "our rule: no hints before you've tried for at least 20 minutes. yes we enforce this",
+      "lost the weekly leaderboard by 4 points once. it haunts us. we do not talk about it",
+      "the detective puzzles are our bread and butter. everything else we're figuring out as we go",
+      "took us 6 months to crack our first escape room as a team. we are now escape room obsessed",
+      "three of us are ex-competitive gamers who redirected the energy here. results have been mixed",
+      "we keep a shared doc of every puzzle we've failed. it's a long doc",
+      // Competitive / edge
+      "leaderboard or nothing. if we're not climbing we're regrouping",
+      "we time everything. every solve, every hint, every attempt. data doesn't lie",
+      "some teams treat this like a hobby. we treat it like a sport",
+      "our team founder has completed every puzzle on this site at least once. we have not. they carry us",
+      "we are extremely normal about puzzles and definitely don't dream about cipher keys",
+      // Open / welcoming
+      "all skill levels welcome, the only requirement is you show up",
+      "we give hints freely and celebrate every solve no matter how long it took",
+      "new to the platform? this is a good first team. we'll get you up to speed",
     ];
 
     // ~45% of bots with enough activity join a team (tiers 2–5)
@@ -960,11 +999,10 @@ async function main() {
 
       if (members.length === 0) continue;
 
-      const prefix = pickRand(TEAM_PREFIXES);
-      const suffix = pickRand(TEAM_SUFFIXES);
-      // Avoid duplicate names by appending a number if needed
-      const nameNum = t > 0 && t % 20 === 0 ? ` ${Math.floor(t / 20) + 1}` : "";
-      const name = `${prefix} ${suffix}${nameNum}`;
+      // Pull a name from the pool; if exhausted, fall back to a numbered variant
+      const name = t < TEAM_NAMES_POOL.length
+        ? TEAM_NAMES_POOL[t]
+        : `${TEAM_NAMES_POOL[t % TEAM_NAMES_POOL.length]} ${Math.floor(t / TEAM_NAMES_POOL.length) + 1}`;
       const description = pickRand(TEAM_DESCRIPTIONS);
       const theme = pickRand(TEAM_THEMES);
       const createdBy = members[0].userId;
