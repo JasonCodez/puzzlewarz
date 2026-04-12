@@ -3,8 +3,8 @@
  * Creates 1358 realistic bot/fake users to populate leaderboards, puzzle stats,
  * Warz lobby, Gridlock solves, forum posts, and activity feeds.
  *
- * Run:  npx ts-node --project tsconfig.json -e "require('dotenv').config({path:'.env.local'})" scripts/seed-bots.ts
- * Or:   npx tsx scripts/seed-bots.ts
+ * Run:         npx tsx scripts/seed-bots.ts
+ * Force wipe:  npx tsx scripts/seed-bots.ts --force
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -16,7 +16,7 @@ config({ path: path.resolve(process.cwd(), ".env") });
 
 const prisma = new PrismaClient();
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+const FORCE = process.argv.includes("--force"); ───────────────────────────────────────────────────────────────
 const TOTAL_BOTS = 1358;
 
 // ─── Username generation ─────────────────────────────────────────────────────
@@ -100,22 +100,20 @@ function randFloat(min: number, max: number): number {
 // ─── Avatar URLs ─────────────────────────────────────────────────────────────
 // randomuser.me hosts 100 male + 100 female portrait photos at predictable
 // static URLs — 200 unique real human faces, no API key required.
-// Each portrait is used at most once. Once exhausted, remaining bots get null.
+// Sequential counter ensures each portrait is used exactly once, with no modulo
+// collisions. After 200 are assigned, remaining bots get null (site default).
 const PORTRAIT_URLS: string[] = [];
 for (let i = 0; i < 100; i++) PORTRAIT_URLS.push(`https://randomuser.me/api/portraits/men/${i}.jpg`);
 for (let i = 0; i < 100; i++) PORTRAIT_URLS.push(`https://randomuser.me/api/portraits/women/${i}.jpg`);
 
-// Track which portraits have been assigned so each is used exactly once
-const usedPortraitIndices = new Set<number>();
+let _avatarCounter = 0;
 
-function maybeAvatar(_username: string, index: number): string | null {
-  // Assign portrait by index — but only if that slot hasn't been taken yet
-  const portraitIndex = index % PORTRAIT_URLS.length;
-  if (usedPortraitIndices.has(portraitIndex)) return null;
-  // 40% of bots get no avatar regardless (realistic: many users never upload)
-  if (index % 10 < 4) return null;
-  usedPortraitIndices.add(portraitIndex);
-  return PORTRAIT_URLS[portraitIndex];
+function maybeAvatar(_username: string, _index: number): string | null {
+  // 40% of bots get no avatar (realistic: many users never upload one)
+  if (Math.random() < 0.4) return null;
+  // All 200 unique portraits exhausted — rest get site default
+  if (_avatarCounter >= PORTRAIT_URLS.length) return null;
+  return PORTRAIT_URLS[_avatarCounter++];
 }
 
 // ─── Cosmetics ────────────────────────────────────────────────────────────────
@@ -286,6 +284,33 @@ const FORUM_COMMENTS = [
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
+  if (FORCE) {
+    console.log("🗑️  --force: wiping all existing bot data...");
+    const botIds = await prisma.user.findMany({ where: { isBot: true }, select: { id: true } }).then(r => r.map(u => u.id));
+    if (botIds.length > 0) {
+      // Delete in dependency order
+      await prisma.activity.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.dailyWordRecord.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.follow.deleteMany({ where: { OR: [{ followerId: { in: botIds } }, { followingId: { in: botIds } }] } });
+      await prisma.forumComment.deleteMany({ where: { authorId: { in: botIds } } });
+      await prisma.forumPost.deleteMany({ where: { authorId: { in: botIds } } });
+      await prisma.userAchievement.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.userStreak.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.puzzleRating.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.userPuzzleProgress.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.gridlockSolve.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.puzzleWarzChallenge.deleteMany({ where: { OR: [{ challengerId: { in: botIds } }, { opponentId: { in: botIds } }] } });
+      // Teams created by bots (cascade deletes members)
+      await prisma.team.deleteMany({ where: { createdBy: { in: botIds } } });
+      await prisma.teamMember.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.globalLeaderboard.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.user.deleteMany({ where: { isBot: true } });
+      console.log(`  ✓ Wiped ${botIds.length} bots and all related data`);
+    } else {
+      console.log("  ℹ  No existing bots to wipe");
+    }
+  }
+
   console.log("🤖 Starting bot seed — fetching existing data...");
 
   // 1. Fetch real puzzles
