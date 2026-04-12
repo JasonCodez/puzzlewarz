@@ -671,6 +671,7 @@ function DocumentFireCanvas({ active }: { active: boolean }) {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const safeCtx = ctx;
 
     const W = canvas.offsetWidth  || 600;
     const H = canvas.offsetHeight || 400;
@@ -683,20 +684,20 @@ function DocumentFireCanvas({ active }: { active: boolean }) {
 
     function tick(now: number) {
       const elapsed = (now - start) / 1000;
-      ctx.clearRect(0, 0, W, H);
+      safeCtx.clearRect(0, 0, W, H);
 
       // ── Char layer: dark ash that rises from the bottom up ──────────────────
       const charFrac = Math.min(elapsed / 2.8, 1.0);
       const charH    = H * charFrac * charFrac * 0.95;
       if (charH > 0) {
-        const g = ctx.createLinearGradient(0, H, 0, H - charH);
+        const g = safeCtx.createLinearGradient(0, H, 0, H - charH);
         g.addColorStop(0.00, "rgba(3,1,0,0.96)");
         g.addColorStop(0.50, "rgba(8,2,0,0.80)");
         g.addColorStop(0.85, "rgba(20,4,0,0.42)");
         g.addColorStop(1.00, "rgba(0,0,0,0)");
-        ctx.globalCompositeOperation = "source-over";
-        ctx.fillStyle = g;
-        ctx.fillRect(0, H - charH, W, charH);
+        safeCtx.globalCompositeOperation = "source-over";
+        safeCtx.fillStyle = g;
+        safeCtx.fillRect(0, H - charH, W, charH);
       }
 
       // ── Spawn particles — front rises from bottom to top over ~2.2s ─────────
@@ -718,7 +719,7 @@ function DocumentFireCanvas({ active }: { active: boolean }) {
       }
 
       // ── Fire particles — additive blending so overlaps become intensely bright
-      ctx.globalCompositeOperation = "lighter";
+      safeCtx.globalCompositeOperation = "lighter";
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.life += p.decay;
@@ -744,14 +745,14 @@ function DocumentFireCanvas({ active }: { active: boolean }) {
           rc = Math.round(255 - t * 110); gc = 20; bc = 0; a = 0.6 - t * 0.6;
         }
 
-        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+        const grd = safeCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
         grd.addColorStop(0,    `rgba(${rc},${gc},${bc},${a.toFixed(3)})`);
         grd.addColorStop(0.45, `rgba(${rc},${gc},${bc},${(a * 0.55).toFixed(3)})`);
         grd.addColorStop(1,    "rgba(0,0,0,0)");
-        ctx.fillStyle = grd;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        ctx.fill();
+        safeCtx.fillStyle = grd;
+        safeCtx.beginPath();
+        safeCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        safeCtx.fill();
       }
 
       rafRef.current = requestAnimationFrame(tick);
