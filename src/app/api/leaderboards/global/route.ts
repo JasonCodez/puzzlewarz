@@ -33,25 +33,22 @@ export async function GET(request: NextRequest) {
       select: { id: true, name: true, image: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 
-    // Calculate rankings with progress data
-    // earnedPoints = totalPoints - purchasedPoints so bought points never affect rank
-    const entries = await Promise.all(
-      users.map(async (user) => {
-        const puzzlesSolved = await prisma.userPuzzleProgress.count({
-          where: { userId: user.id, solved: true },
-        });
-        const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
-        return {
-              userId: user.id,
-              userName: user.name,
-              userImage: user.image,
-              activeFlair: resolveFlair(user.activeFlair),
-              puzzlesSolved,
-              totalPoints: earnedPoints,
-              rank: 0,
-            };
-      })
-    );
+    // earnedPoints = totalPoints - purchasedPoints so bought points never affect rank.
+    // puzzlesSolved = Math.floor(earnedPoints / 100) — every solve awards exactly 100 pts,
+    // so this recovers the exact solve count without a per-user DB query or a puzzle-count cap.
+    const entries = users.map((user) => {
+      const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
+      const puzzlesSolved = Math.floor(earnedPoints / 100);
+      return {
+        userId: user.id,
+        userName: user.name,
+        userImage: user.image,
+        activeFlair: resolveFlair(user.activeFlair),
+        puzzlesSolved,
+        totalPoints: earnedPoints,
+        rank: 0,
+      };
+    });
 
     // Sort by earned points descending
     entries.sort((a, b) => b.totalPoints - a.totalPoints);
