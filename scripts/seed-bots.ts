@@ -146,13 +146,17 @@ function calcLevel(xp: number): { level: number; title: string } {
 // Returns { solveCount, pointsPerSolve, xpPerSolve, streakCurrent }
 // Tier 0=lurker, 1=casual, 2=regular, 3=dedicated, 4=hardcore, 5=legend
 function tierProfile(tier: number) {
+  // ppS = points per solve. Base is always 100 (matching /api/puzzles/[id]/*/submit).
+  // Higher tiers may have slightly more due to streak bonuses (streakBonusPoints = streak * 50)
+  // accumulated over time — so their average per-solve is a bit above 100.
+  // xpS = xp per solve. Real default is 50 (xpReward default), gridlock is 100.
   switch (tier) {
     case 0: return { solveCount: 0,    ppS: 0,   xpS: 0,   streak: 0 };
-    case 1: return { solveCount: randInt(1, 8),    ppS: randInt(80,180),  xpS: randInt(25,75),  streak: randInt(0,5) };
-    case 2: return { solveCount: randInt(9, 25),   ppS: randInt(100,200), xpS: randInt(40,90),  streak: randInt(0,15) };
-    case 3: return { solveCount: randInt(26, 75),  ppS: randInt(120,220), xpS: randInt(50,100), streak: randInt(1,30) };
-    case 4: return { solveCount: randInt(76, 180), ppS: randInt(130,250), xpS: randInt(60,110), streak: randInt(3,60) };
-    case 5: return { solveCount: randInt(181, 400),ppS: randInt(150,300), xpS: randInt(70,130), streak: randInt(10,120) };
+    case 1: return { solveCount: randInt(1, 8),    ppS: 100,              xpS: randInt(45,75),  streak: randInt(0,5) };
+    case 2: return { solveCount: randInt(9, 25),   ppS: 100,              xpS: randInt(50,80),  streak: randInt(0,15) };
+    case 3: return { solveCount: randInt(26, 75),  ppS: randInt(100,120), xpS: randInt(55,85),  streak: randInt(1,30) };
+    case 4: return { solveCount: randInt(76, 180), ppS: randInt(100,140), xpS: randInt(60,95),  streak: randInt(3,60) };
+    case 5: return { solveCount: randInt(181, 400),ppS: randInt(100,175), xpS: randInt(65,100), streak: randInt(10,120) };
     default: return { solveCount: 1, ppS: 100, xpS: 50, streak: 0 };
   }
 }
@@ -376,8 +380,8 @@ async function main() {
     const FLUSH = 2000;
 
     for (const bot of allBots) {
-      // Derive solve count from totalPoints
-      const avgPtsPerSolve = 150;
+      // Derive solve count from totalPoints — base is 100 pts/solve, matching actual submit routes
+      const avgPtsPerSolve = 100;
       const solveCount = Math.min(
         Math.floor(bot.totalPoints / avgPtsPerSolve),
         eligibleForProgress.length
@@ -403,7 +407,7 @@ async function main() {
           attempts: randInt(1, 4),
           successfulAttempts: 1,
           failedAttempts: 0,
-          pointsEarned: Math.round(randFloat(80, 250)),
+          pointsEarned: 100,
           completionPercentage: 100,
           viewedAt: new Date(solvedAt.getTime() - randInt(60, 600) * 1000),
           updatedAt: solvedAt,
@@ -435,7 +439,7 @@ async function main() {
     const streakRows: any[] = [];
     for (const bot of allBots) {
       if (bot.totalPoints < 100) continue; // lurkers have no streak
-      const solves = Math.floor(bot.totalPoints / 150);
+      const solves = Math.floor(bot.totalPoints / 100);
       const currentStreak = randInt(0, Math.min(solves, 60));
       const longestStreak = currentStreak + randInt(0, 30);
       const lastSolveDate = currentStreak > 0
@@ -470,7 +474,7 @@ async function main() {
     const FLUSH = 3000;
 
     for (const bot of allBots) {
-      const solves = Math.floor(bot.totalPoints / 150);
+      const solves = Math.floor(bot.totalPoints / 100);
       const earnedNames = achievementsForSolves(solves);
       for (const name of earnedNames) {
         const id = achievementMap.get(name);
@@ -504,7 +508,7 @@ async function main() {
     const raterBots = allBots.filter(b => b.totalPoints > 500).slice(0, 350);
 
     for (const bot of raterBots) {
-      const solves = Math.floor(bot.totalPoints / 150);
+      const solves = Math.floor(bot.totalPoints / 100);
       const numToRate = Math.min(randInt(1, Math.max(1, Math.floor(solves * 0.3))), 20);
       const puzzleSubset = [...eligibleForProgress]
         .sort(() => Math.random() - 0.5)
@@ -564,7 +568,8 @@ async function main() {
             rank,
             elapsedSeconds: elapsed,
             submissionCount: randInt(1, rank === "S" ? 2 : rank === "A" ? 3 : 5),
-            solvedAt: new Date(Date.now() - randInt(0, 90) * 86400000),
+            // Weight toward recent: ~35% within last 2 days so they appear in today's standings
+            solvedAt: new Date(Date.now() - (Math.random() < 0.35 ? randInt(0, 1) : randInt(2, 90)) * 86400000),
           });
         }
       }
@@ -721,14 +726,34 @@ async function main() {
   });
 
   if (existingFollowCount === 0) {
-    // Only active bots (tier 2+) follow others
-    const activeBots = allBots.filter(b => b.totalPoints > 500);
+    // All bots that have any points participate in the social graph.
+    // Following counts scale with tier/activity so more active bots follow & get followed more.
+    // Tier approximation from totalPoints:
+    //   <100  → lurker  (0 following)
+    //   100–899 → casual  (5–15 following)
+    //   900–2499 → regular  (12–30 following)
+    //   2500–7499 → dedicated (25–60 following)
+    //   7500–17999 → hardcore (50–100 following)
+    //   18000+  → legend  (80–200 following)
+    function followingRange(pts: number): [number, number] {
+      if (pts < 100)   return [0, 0];
+      if (pts < 900)   return [5, 15];
+      if (pts < 2500)  return [12, 30];
+      if (pts < 7500)  return [25, 60];
+      if (pts < 18000) return [50, 100];
+      return [80, 200];
+    }
+
+    const socialBots = allBots.filter(b => b.totalPoints >= 100);
     const followRows: any[] = [];
     const seen = new Set<string>();
 
-    for (const bot of activeBots.slice(0, 400)) {
-      const numFollowing = randInt(1, 8);
-      const others = activeBots
+    for (const bot of socialBots) {
+      const [minF, maxF] = followingRange(bot.totalPoints);
+      if (maxF === 0) continue;
+      const numFollowing = randInt(minF, maxF);
+      // Pull candidates from the full socialBots pool so even smaller bots get followers
+      const others = socialBots
         .filter(b => b.id !== bot.id)
         .sort(() => Math.random() - 0.5)
         .slice(0, numFollowing);
@@ -740,7 +765,7 @@ async function main() {
         followRows.push({
           followerId: bot.id,
           followingId: other.id,
-          createdAt: new Date(Date.now() - randInt(1, 180) * 86400000),
+          createdAt: new Date(Date.now() - randInt(1, 365) * 86400000),
         });
       }
     }
@@ -766,7 +791,7 @@ async function main() {
     let activityRows: any[] = [];
 
     for (const bot of activityBots) {
-      const solves = Math.floor(bot.totalPoints / 150);
+      const solves = Math.floor(bot.totalPoints / 100);
       const numActivities = Math.min(solves, randInt(2, 8));
 
       for (let a = 0; a < numActivities; a++) {
@@ -846,16 +871,153 @@ async function main() {
     console.log("  ⏭  Daily word records already exist, skipping.");
   }
 
+  // ── STEP 12: Teams ─────────────────────────────────────────────────────────────
+  console.log("\n🛡️  Seeding bot teams...");
+
+  const existingBotTeamCount = await prisma.team.count({
+    where: { createdBy: { in: allBots.map(b => b.id) } },
+  });
+
+  if (existingBotTeamCount === 0) {
+    // Team name pools
+    const TEAM_PREFIXES = [
+      "Team","Squad","Crew","Unit","Order","Guild","Cipher","Vault","Shadow","Nova",
+      "Iron","Apex","Neon","Storm","Echo","Rogue","Ghost","Blaze","Frost","Omega",
+      "Delta","Sigma","Prism","Nexus","Quantum","Cobalt","Azure","Lunar","Solar",
+    ];
+    const TEAM_SUFFIXES = [
+      "Wolves","Hackers","Solvers","Breakers","Phantoms","Hunters","Legion","Force",
+      "Collective","Alliance","Protocol","Division","Syndicate","Network","Agency",
+      "Corps","Squad","Wardens","Strikers","Seekers","Ciphers","Crypts","Vanguard",
+      "Outlaws","Reapers","Sentinels","Renegades","Enforcers","Architects","Analysts",
+    ];
+    const TEAM_THEMES = ["default","default","default","gold","neon","crimson"];
+
+    const TEAM_DESCRIPTIONS = [
+      "We solve fast and ask questions later.",
+      "Daily grinders. Top leaderboard or bust.",
+      "Casual team looking for new members. All skill levels welcome!",
+      "Competitive puzzle cracking team. We don't lose.",
+      "Just a group of friends who got too serious about puzzles.",
+      "Dedicated to cracking every cipher on this platform.",
+      "Speed runs, high scores, and relentless grinding.",
+      "We live for the hard difficulty puzzles.",
+      "Community-first team. We help each other improve.",
+      "Former solo players who realized teamwork hits different.",
+      "Working our way to the top of every leaderboard.",
+      "No casuals. Elite puzzle solvers only.",
+      "Founded by veterans. Open to dedicated newcomers.",
+      "We crack codes, break ciphers, and dominate Warz.",
+      "The grind never stops for us.",
+      "Top 10 leaderboard is our minimum standard.",
+      "Solving puzzles since day one of this platform.",
+      "United by our love of logic and pattern recognition.",
+      "A tight-knit crew of puzzle obsessives.",
+      "We turn hard puzzles into warm-up exercises.",
+    ];
+
+    // ~45% of bots with enough activity join a team (tiers 2–5)
+    // Eligible = bots with 900+ points (regular tier and above)
+    const eligibleForTeams = allBots
+      .filter(b => b.totalPoints >= 900)
+      .sort(() => Math.random() - 0.5);
+
+    // How many teams to create: aim for avg 4–8 members per team
+    // 45% of eligible bots → pool size / avg team size
+    const teamPoolSize = Math.floor(eligibleForTeams.length * 0.45);
+    const avgTeamSize = 6;
+    const numTeams = Math.max(10, Math.floor(teamPoolSize / avgTeamSize));
+
+    console.log(`  ℹ  Creating ${numTeams} teams from ${teamPoolSize} eligible bots...`);
+
+    // Assign bots to teams — each bot max 1 team
+    const usedBotIds = new Set<string>();
+    const teamDefs: Array<{ name: string; description: string; theme: string; createdBy: string; members: Array<{ userId: string; role: string; joinedAt: Date }> }> = [];
+
+    // Shuffle eligible bots and carve out slices
+    const teamPool = eligibleForTeams.slice(0, teamPoolSize);
+    let poolIndex = 0;
+
+    for (let t = 0; t < numTeams && poolIndex < teamPool.length; t++) {
+      // Team size: weighted toward 4–8, occasionally up to 15
+      const sizeRoll = Math.random();
+      const teamSize = sizeRoll < 0.15 ? randInt(2, 3)    // small (15%)
+                     : sizeRoll < 0.70 ? randInt(4, 8)    // standard (55%)
+                     : sizeRoll < 0.92 ? randInt(9, 12)   // large (22%)
+                     : randInt(13, 20);                    // max (8%)
+
+      const members: Array<{ userId: string; role: string; joinedAt: Date }> = [];
+
+      // Pick members sequentially from shuffled pool (no duplicates guaranteed)
+      for (let m = 0; m < teamSize && poolIndex < teamPool.length; m++) {
+        const bot = teamPool[poolIndex++];
+        if (usedBotIds.has(bot.id)) continue;
+        usedBotIds.add(bot.id);
+        const role = m === 0 ? "admin" : m <= 1 && Math.random() < 0.3 ? "moderator" : "member";
+        const joinedAt = new Date(Date.now() - randInt(1, 365) * 86400000);
+        members.push({ userId: bot.id, role, joinedAt });
+      }
+
+      if (members.length === 0) continue;
+
+      const prefix = pickRand(TEAM_PREFIXES);
+      const suffix = pickRand(TEAM_SUFFIXES);
+      // Avoid duplicate names by appending a number if needed
+      const nameNum = t > 0 && t % 20 === 0 ? ` ${Math.floor(t / 20) + 1}` : "";
+      const name = `${prefix} ${suffix}${nameNum}`;
+      const description = pickRand(TEAM_DESCRIPTIONS);
+      const theme = pickRand(TEAM_THEMES);
+      const createdBy = members[0].userId;
+
+      teamDefs.push({ name, description, theme, createdBy, members });
+    }
+
+    // Insert teams and members in batches
+    let teamCount = 0;
+    let memberCount = 0;
+    for (const td of teamDefs) {
+      try {
+        const team = await prisma.team.create({
+          data: {
+            name: td.name,
+            description: td.description,
+            createdBy: td.createdBy,
+            isPublic: Math.random() < 0.80, // 80% public
+            activeTheme: td.theme,
+            createdAt: td.members[0].joinedAt,
+            updatedAt: td.members[0].joinedAt,
+          },
+        });
+        const memberRows = td.members.map(m => ({
+          teamId: team.id,
+          userId: m.userId,
+          role: m.role,
+          joinedAt: m.joinedAt,
+        }));
+        await prisma.teamMember.createMany({ data: memberRows, skipDuplicates: true });
+        teamCount++;
+        memberCount += memberRows.length;
+      } catch {
+        // skip on rare name collision
+      }
+    }
+    console.log(`  ✓ Created ${teamCount} teams with ${memberCount} total members`);
+  } else {
+    console.log(`  ⏭  Bot teams already exist (${existingBotTeamCount}), skipping.`);
+  }
+
   console.log("\n🎉 Bot seed complete!");
   console.log("   Breakdown:");
   const finalCount = await prisma.user.count({ where: { isBot: true } });
   const finalProgress = await prisma.userPuzzleProgress.count({ where: { userId: { in: allBots.map(b => b.id) } } });
   const finalWarz = await prisma.puzzleWarzChallenge.count({ where: { challengerId: { in: allBots.map(b => b.id) } } });
   const finalGridlock = await prisma.gridlockSolve.count({ where: { userId: { in: allBots.map(b => b.id) } } });
+  const finalTeams = await prisma.team.count({ where: { createdBy: { in: allBots.map(b => b.id) } } });
   console.log(`   👤 ${finalCount} bot users`);
   console.log(`   🧩 ${finalProgress} puzzle progress records`);
   console.log(`   ⚔️  ${finalWarz} warz challenges`);
   console.log(`   🔒 ${finalGridlock} gridlock solves`);
+  console.log(`   🛡️  ${finalTeams} bot teams`);
 }
 
 main()
