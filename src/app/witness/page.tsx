@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -89,23 +90,24 @@ function percentileLabel(p: number, score: number): string {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const BG = "#020202";
-const SURFACE = "rgba(255,255,255,0.03)";
-const BORDER = "rgba(255,255,255,0.07)";
-const PURPLE = "#7C3AED";
+const BG      = "#080810";
+const SURFACE = "rgba(255,255,255,0.035)";
+const BORDER  = "rgba(255,255,255,0.08)";
+const PURPLE  = "#7C3AED";
 const PURPLE_LIGHT = "#a78bfa";
-const GOLD = "#FDE74C";
-const TEAL = "#3891A6";
-const DANGER = "#EF4444";
+const GOLD    = "#FDE74C";
+const TEAL    = "#3891A6";
+const DANGER  = "#EF4444";
 const SUCCESS = "#38D399";
-const MUTED = "#6B7280";
-const TEXT = "#E5E7EB";
+const MUTED   = "#6B7280";
+const TEXT    = "#E5E7EB";
+const DOC_BG  = "#0d0d14";
 
 const cardStyle: React.CSSProperties = {
   backgroundColor: SURFACE,
   border: `1px solid ${BORDER}`,
-  borderRadius: 16,
-  padding: "32px",
+  borderRadius: 12,
+  padding: "28px",
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -187,15 +189,18 @@ function TimerBar({ secondsLeft, total }: { secondsLeft: number; total: number }
 
 function OptionButton({
   label,
+  index,
   state,
   onClick,
   disabled,
 }: {
   label: string;
+  index: number;
   state: "idle" | "correct" | "wrong" | "reveal";
   onClick: () => void;
   disabled: boolean;
 }) {
+  const LABELS = ["A", "B", "C", "D"];
   const bg =
     state === "correct"
       ? `${SUCCESS}22`
@@ -203,7 +208,7 @@ function OptionButton({
       ? `${DANGER}22`
       : state === "reveal"
       ? `${GOLD}18`
-      : "rgba(255,255,255,0.04)";
+      : "rgba(255,255,255,0.03)";
   const border =
     state === "correct"
       ? `${SUCCESS}70`
@@ -211,9 +216,19 @@ function OptionButton({
       ? `${DANGER}70`
       : state === "reveal"
       ? `${GOLD}55`
-      : "rgba(255,255,255,0.09)";
+      : "rgba(255,255,255,0.08)";
   const color =
     state === "correct" ? SUCCESS : state === "wrong" ? DANGER : state === "reveal" ? GOLD : TEXT;
+  const labelBg =
+    state === "correct"
+      ? `${SUCCESS}35`
+      : state === "wrong"
+      ? `${DANGER}35`
+      : state === "reveal"
+      ? `${GOLD}25`
+      : "rgba(255,255,255,0.07)";
+  const labelColor =
+    state === "correct" ? SUCCESS : state === "wrong" ? DANGER : state === "reveal" ? GOLD : MUTED;
 
   return (
     <button
@@ -222,23 +237,37 @@ function OptionButton({
       style={{
         width: "100%",
         textAlign: "left",
-        padding: "14px 18px",
-        borderRadius: 10,
+        padding: "13px 16px",
+        borderRadius: 9,
         border: `1px solid ${border}`,
         backgroundColor: bg,
         color,
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: 500,
         cursor: disabled ? "default" : "pointer",
         transition: "background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.15s",
         transform: state === "correct" ? "scale(1.01)" : "scale(1)",
         display: "flex",
         alignItems: "center",
-        gap: 10,
+        gap: 12,
       }}
     >
-      <span style={{ fontSize: 14 }}>
-        {state === "correct" ? "✓" : state === "wrong" ? "✗" : state === "reveal" ? "→" : "○"}
+      <span style={{
+        flexShrink: 0,
+        width: 26,
+        height: 26,
+        borderRadius: 6,
+        backgroundColor: labelBg,
+        color: labelColor,
+        fontSize: 12,
+        fontWeight: 700,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        letterSpacing: "0.04em",
+        transition: "background-color 0.2s, color 0.2s",
+      }}>
+        {state === "correct" ? "✓" : state === "wrong" ? "✗" : state === "reveal" ? "→" : LABELS[index] ?? "○"}
       </span>
       {label}
     </button>
@@ -410,7 +439,7 @@ function WitnessComparisonModal({
   // populated, even on day 1. Seed distribution skews toward 3-4 (realistic).
   const FAKE_BASE_DIST = [12, 28, 89, 184, 143, 61]; // indices 0-5
   const FAKE_BASE_TOTAL = FAKE_BASE_DIST.reduce((a, b) => a + b, 0); // 517
-  const blendedDist = submitResult.scoreDist.map((v, i) => v + FAKE_BASE_DIST[i]);
+  const blendedDist = (submitResult.scoreDist ?? [0, 0, 0, 0, 0, 0]).map((v, i) => v + FAKE_BASE_DIST[i]);
   const blendedTotal = submitResult.totalPlays + FAKE_BASE_TOTAL;
   // Recalculate percentile against blended pool
   const beatCount = blendedDist.slice(0, score).reduce((s, c) => s + c, 0);
@@ -630,6 +659,124 @@ function WitnessComparisonModal({
   );
 }
 
+// ── Document fire canvas ──────────────────────────────────────────────────────
+
+function DocumentFireCanvas({ active }: { active: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef<number>(0);
+
+  useEffect(() => {
+    if (!active) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const W = canvas.offsetWidth  || 600;
+    const H = canvas.offsetHeight || 400;
+    canvas.width  = W;
+    canvas.height = H;
+
+    type P = { x: number; y: number; vx: number; vy: number; radius: number; life: number; decay: number; wobble: number; };
+    const particles: P[] = [];
+    const start = performance.now();
+
+    function tick(now: number) {
+      const elapsed = (now - start) / 1000;
+      ctx.clearRect(0, 0, W, H);
+
+      // ── Char layer: dark ash that rises from the bottom up ──────────────────
+      const charFrac = Math.min(elapsed / 2.8, 1.0);
+      const charH    = H * charFrac * charFrac * 0.95;
+      if (charH > 0) {
+        const g = ctx.createLinearGradient(0, H, 0, H - charH);
+        g.addColorStop(0.00, "rgba(3,1,0,0.96)");
+        g.addColorStop(0.50, "rgba(8,2,0,0.80)");
+        g.addColorStop(0.85, "rgba(20,4,0,0.42)");
+        g.addColorStop(1.00, "rgba(0,0,0,0)");
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = g;
+        ctx.fillRect(0, H - charH, W, charH);
+      }
+
+      // ── Spawn particles — front rises from bottom to top over ~2.2s ─────────
+      const spreadFrac = Math.min(elapsed / 2.2, 1.0);
+      const frontY = H * (1.0 - spreadFrac * spreadFrac * 0.96);
+      const count  = elapsed < 0.15 ? 1 : elapsed < 0.6 ? 4 : 7;
+      for (let i = 0; i < count; i++) {
+        const spawnY = frontY + (H - frontY) * Math.random() * 0.4;
+        particles.push({
+          x:      Math.random() * W,
+          y:      spawnY,
+          vx:     (Math.random() - 0.5) * 0.9,
+          vy:     -(0.9 + Math.random() * 2.0),
+          radius: 14 + Math.random() * 26,
+          life:   0,
+          decay:  0.007 + Math.random() * 0.009,
+          wobble: Math.random() * Math.PI * 2,
+        });
+      }
+
+      // ── Fire particles — additive blending so overlaps become intensely bright
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life += p.decay;
+        if (p.life >= 1) { particles.splice(i, 1); continue; }
+        p.x  += p.vx + Math.sin(now * 0.0022 + p.wobble) * 0.45;
+        p.y  += p.vy;
+        p.vy *= 0.987;
+        const r = p.radius * (1 - p.life * 0.55);
+
+        // Color: white-yellow core → orange → red → transparent
+        let rc: number, gc: number, bc: number, a: number;
+        if (p.life < 0.18) {
+          const t = p.life / 0.18;
+          rc = 255; gc = 245; bc = Math.round(200 - t * 80); a = t * 0.85;
+        } else if (p.life < 0.42) {
+          const t = (p.life - 0.18) / 0.24;
+          rc = 255; gc = Math.round(245 - t * 100); bc = Math.round(120 - t * 120); a = 0.85;
+        } else if (p.life < 0.68) {
+          const t = (p.life - 0.42) / 0.26;
+          rc = 255; gc = Math.round(145 - t * 125); bc = 0; a = 0.85 - t * 0.25;
+        } else {
+          const t = (p.life - 0.68) / 0.32;
+          rc = Math.round(255 - t * 110); gc = 20; bc = 0; a = 0.6 - t * 0.6;
+        }
+
+        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+        grd.addColorStop(0,    `rgba(${rc},${gc},${bc},${a.toFixed(3)})`);
+        grd.addColorStop(0.45, `rgba(${rc},${gc},${bc},${(a * 0.55).toFixed(3)})`);
+        grd.addColorStop(1,    "rgba(0,0,0,0)");
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [active]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        borderRadius: "inherit",
+        pointerEvents: "none",
+        zIndex: 3,
+      }}
+    />
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function WitnessPage() {
@@ -713,13 +860,13 @@ export default function WitnessPage() {
       setSecondsLeft((s) => {
         if (s <= 1) {
           clearInterval(timerRef.current!);
-          // auto-advance
+          // auto-advance after the full fire animation completes (~4s)
           setTimeout(() => {
             setStage("witness-questions");
             setCurrentQ(0);
             setOptionState(Array(4).fill("idle"));
             fadeIn();
-          }, 800);
+          }, 5000);
           return 0;
         }
         return s - 1;
@@ -1000,6 +1147,8 @@ export default function WitnessPage() {
           from { opacity: 0; transform: scale(0.8) translateY(8px); }
           to   { opacity: 1; transform: scale(1) translateY(0); }
         }
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
+        * { font-family: 'Inter', system-ui, sans-serif; }
         .clue-input:focus { outline: none; box-shadow: 0 0 0 2px ${PURPLE}60; }
       `}</style>
 
@@ -1018,107 +1167,154 @@ export default function WitnessPage() {
           {/* ── WITNESS INTRO ─────────────────────────────────────────── */}
           {stage === "witness-intro" && (
             <div style={fadeStyle}>
-              <div style={{ textAlign: "center", marginBottom: 48 }}>
+              {/* Hero */}
+              <div style={{ textAlign: "center", marginBottom: 40 }}>
                 <Badge color={PURPLE_LIGHT}>
                   <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: PURPLE_LIGHT }} />
-                  Clearance Test — Stage 1 of 2
+                  Clearance Test
                 </Badge>
+
+                {/* Dossier icon */}
+                <div style={{ margin: "28px auto 0", width: 72, height: 72, position: "relative" }}>
+                  <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 72, height: 72 }}>
+                    <rect x="8" y="12" width="46" height="54" rx="3" fill="#1a1a2e" stroke="rgba(124,58,237,0.45)" strokeWidth="1.5"/>
+                    <rect x="14" y="14" width="46" height="54" rx="3" fill="#141422" stroke="rgba(124,58,237,0.25)" strokeWidth="1"/>
+                    <rect x="20" y="28" width="28" height="2" rx="1" fill="rgba(239,68,68,0.7)"/>
+                    <rect x="20" y="34" width="22" height="1.5" rx="0.75" fill="rgba(255,255,255,0.18)"/>
+                    <rect x="20" y="38" width="25" height="1.5" rx="0.75" fill="rgba(255,255,255,0.18)"/>
+                    <rect x="20" y="42" width="18" height="1.5" rx="0.75" fill="rgba(255,255,255,0.18)"/>
+                    <rect x="20" y="20" width="12" height="5" rx="1" fill="rgba(239,68,68,0.15)" stroke="rgba(239,68,68,0.5)" strokeWidth="0.75"/>
+                    <text x="21" y="24.5" fontSize="4" fill="rgba(239,68,68,0.9)" fontFamily="monospace" fontWeight="700">CLASSF</text>
+                  </svg>
+                </div>
+
                 <h1
                   style={{
-                    fontSize: "clamp(34px, 5vw, 54px)",
+                    fontSize: "clamp(40px, 6vw, 62px)",
                     fontWeight: 900,
                     color: "#fff",
-                    letterSpacing: "-0.03em",
+                    letterSpacing: "-0.035em",
                     marginTop: 20,
-                    marginBottom: 12,
-                    lineHeight: 1.08,
+                    marginBottom: 14,
+                    lineHeight: 1.0,
                   }}
                 >
                   The Witness
                 </h1>
-                <p style={{ color: MUTED, fontSize: 16, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 32px" }}>
-                  You have {READ_SECONDS} seconds to read an incident report.
-                  Then it disappears. Five questions follow.
-                  Every detail matters.
+                <p style={{ color: MUTED, fontSize: 15, lineHeight: 1.75, maxWidth: 400, margin: "0 auto 0" }}>
+                  You have <strong style={{ color: TEXT }}>{READ_SECONDS} seconds</strong> to read a classified incident report.
+                  It disappears. Then five questions follow.
                 </p>
               </div>
 
-              {/* File envelope visual */}
+              {/* Dossier preview card */}
               <div
                 style={{
-                  ...cardStyle,
-                  borderColor: "rgba(124,58,237,0.3)",
-                  textAlign: "center",
-                  position: "relative",
+                  backgroundColor: DOC_BG,
+                  border: `1px solid rgba(124,58,237,0.22)`,
+                  borderRadius: 12,
                   overflow: "hidden",
-                  marginBottom: 32,
+                  marginBottom: 28,
+                  boxShadow: "0 0 60px rgba(124,58,237,0.06), 0 20px 40px rgba(0,0,0,0.5)",
                 }}
               >
-                {/* scan line */}
-                <div
-                  aria-hidden
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "30%",
-                    background: "linear-gradient(to bottom, transparent, rgba(124,58,237,0.06), transparent)",
-                    animation: "scan-line 4s ease-in-out infinite",
-                    pointerEvents: "none",
-                  }}
-                />
-                <div style={{ fontSize: 52, marginBottom: 16 }}>📁</div>
-                {scenario && (
-                  <>
-                    <div
-                      style={{
-                        display: "inline-block",
-                        padding: "6px 14px",
-                        borderRadius: 4,
-                        backgroundColor: `${DANGER}15`,
-                        border: `1px solid ${DANGER}40`,
-                        color: DANGER,
-                        fontSize: 11,
-                        fontWeight: 800,
-                        letterSpacing: "0.2em",
-                        textTransform: "uppercase",
-                        marginBottom: 14,
-                        animation: "flicker 6s infinite",
-                      }}
-                    >
-                      {scenario.classification}
-                    </div>
-                    <p style={{ color: MUTED, fontSize: 13, marginBottom: 4 }}>
-                      Incident Report #{scenario.caseNumber}
-                    </p>
-                    <p style={{ color: `${MUTED}88`, fontSize: 12 }}>{scenario.dateTime}</p>
-                  </>
-                )}
+                {/* Classification bar */}
+                <div style={{
+                  background: `linear-gradient(90deg, ${DANGER}dd, ${DANGER}99)`,
+                  padding: "6px 20px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", color: "#fff" }}>
+                    {scenario ? scenario.classification : "CLASSIFIED"}
+                  </span>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "rgba(255,255,255,0.65)", letterSpacing: "0.1em" }}>
+                    EYES ONLY
+                  </span>
+                </div>
 
-                {stats && (
-                  <p style={{ color: `${MUTED}80`, fontSize: 12, marginTop: 18 }}>
-                    {(stats.totalPlays + 517).toLocaleString()} investigators have taken the test
-                  </p>
-                )}
+                {/* Body */}
+                <div style={{ padding: "24px 28px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+                    <div>
+                      {scenario && (
+                        <>
+                          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: MUTED, marginBottom: 4, letterSpacing: "0.05em" }}>
+                            INCIDENT REPORT
+                          </p>
+                          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: "0.02em", marginBottom: 2 }}>
+                            #{scenario.caseNumber}
+                          </p>
+                          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: `${MUTED}99`, letterSpacing: "0.03em" }}>
+                            {scenario.dateTime}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    {/* Redacted stamp */}
+                    <div style={{
+                      padding: "8px 14px",
+                      border: `2px solid ${DANGER}55`,
+                      borderRadius: 4,
+                      transform: "rotate(6deg)",
+                    }}>
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 700, color: `${DANGER}90`, letterSpacing: "0.15em" }}>SEALED</span>
+                    </div>
+                  </div>
+
+                  {/* Redacted preview lines */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {["78%", "100%", "88%", "60%", "92%"].map((w, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <div style={{ width: w, height: 10, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.06)" }} />
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {["30%", "25%", "35%"].map((w, i) => (
+                        <div key={i} style={{ width: w, height: 10, borderRadius: 2, backgroundColor: `${DANGER}18` }} />
+                      ))}
+                    </div>
+                    {["85%", "70%"].map((w, i) => (
+                      <div key={i} style={{ width: w, height: 10, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.06)" }} />
+                    ))}
+                  </div>
+
+                  {stats && (
+                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: `${MUTED}70`, marginTop: 20, letterSpacing: "0.04em" }}>
+                      {(stats.totalPlays + 517).toLocaleString()} investigators cleared
+                    </p>
+                  )}
+                </div>
+
+                {/* Bottom classification bar */}
+                <div style={{
+                  background: `linear-gradient(90deg, ${DANGER}dd, ${DANGER}99)`,
+                  padding: "5px 20px",
+                  textAlign: "center",
+                }}>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 700, letterSpacing: "0.22em", color: "rgba(255,255,255,0.85)" }}>
+                    {scenario ? scenario.classification : "CLASSIFIED"} — AUTHORISED ACCESS ONLY
+                  </span>
+                </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {alreadyRead ? (
                   <div style={{ textAlign: "center" }}>
                     <div
                       style={{
-                        padding: "16px",
+                        padding: "16px 20px",
                         borderRadius: 10,
-                        border: `1px solid ${DANGER}40`,
-                        backgroundColor: `${DANGER}10`,
+                        border: `1px solid ${DANGER}35`,
+                        backgroundColor: `${DANGER}0a`,
                         marginBottom: 12,
                       }}
                     >
-                      <p style={{ color: DANGER, fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-                        🔥 Document Destroyed
+                      <p style={{ color: DANGER, fontWeight: 700, fontSize: 13, marginBottom: 4, letterSpacing: "0.04em" }}>
+                        Document Destroyed
                       </p>
-                      <p style={{ color: MUTED, fontSize: 13 }}>
+                      <p style={{ color: MUTED, fontSize: 13, lineHeight: 1.5 }}>
                         {alreadyRead === "complete"
                           ? "You've already completed this test in this session. Come back tomorrow."
                           : "You already opened this report. The reading window has closed — answer from memory."}
@@ -1134,7 +1330,7 @@ export default function WitnessPage() {
                         }}
                         style={{
                           width: "100%",
-                          padding: "14px",
+                          padding: "15px",
                           borderRadius: 10,
                           fontWeight: 700,
                           fontSize: 15,
@@ -1142,6 +1338,7 @@ export default function WitnessPage() {
                           backgroundColor: PURPLE,
                           border: "none",
                           cursor: "pointer",
+                          letterSpacing: "0.02em",
                         }}
                       >
                         Answer from memory →
@@ -1149,27 +1346,24 @@ export default function WitnessPage() {
                     )}
                   </div>
                 ) : (
-                  <>
-                    <button
-                      onClick={goReading}
-                      style={{
-                        width: "100%",
-                        padding: "16px",
-                        borderRadius: 10,
-                        fontWeight: 800,
-                        fontSize: 16,
-                        color: "#fff",
-                        backgroundColor: PURPLE,
-                        border: "none",
-                        cursor: "pointer",
-                        boxShadow: `0 0 32px ${PURPLE}55`,
-                        animation: "pulse-border 2.5s infinite",
-                        letterSpacing: "0.03em",
-                      }}
-                    >
-                      Open the File →
-                    </button>
-                  </>
+                  <button
+                    onClick={goReading}
+                    style={{
+                      width: "100%",
+                      padding: "17px",
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      fontSize: 16,
+                      color: "#fff",
+                      backgroundColor: PURPLE,
+                      border: "none",
+                      cursor: "pointer",
+                      boxShadow: `0 0 40px ${PURPLE}50`,
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    Open the File →
+                  </button>
                 )}
               </div>
             </div>
@@ -1182,14 +1376,37 @@ export default function WitnessPage() {
 
               <div
                 style={{
-                  ...cardStyle,
-                  borderColor: secondsLeft <= 8 ? `${DANGER}50` : BORDER,
-                  transition: "border-color 0.5s",
-                  position: "relative",
+                  backgroundColor: DOC_BG,
+                  border: `1px solid ${secondsLeft <= 8 ? DANGER + "55" : "rgba(255,255,255,0.1)"}`,
+                  borderRadius: 12,
                   overflow: "hidden",
+                  position: "relative",
+                  boxShadow: secondsLeft <= 8
+                    ? `0 0 40px ${DANGER}22`
+                    : "0 20px 50px rgba(0,0,0,0.6)",
+                  transition: "border-color 0.5s, box-shadow 0.5s",
                 }}
               >
-                {/* scan line animation over text */}
+                {/* Classification bar */}
+                <div style={{
+                  background: `linear-gradient(90deg, ${DANGER}dd, ${DANGER}aa)`,
+                  padding: "7px 22px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.8)", animation: secondsLeft > 0 ? "flicker 3s infinite" : "none" }} />
+                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", color: "#fff" }}>
+                      {scenario.classification}
+                    </span>
+                  </div>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.7)", letterSpacing: "0.12em" }}>
+                    INCIDENT REPORT #{scenario.caseNumber}
+                  </span>
+                </div>
+
+                {/* scan line animation */}
                 {secondsLeft > 0 && (
                   <div
                     aria-hidden
@@ -1198,63 +1415,118 @@ export default function WitnessPage() {
                       top: 0,
                       left: 0,
                       width: "100%",
-                      height: "15%",
-                      background: "linear-gradient(to bottom, transparent, rgba(56,145,166,0.04), transparent)",
-                      animation: "scan-line 3s ease-in-out infinite",
+                      height: "12%",
+                      background: "linear-gradient(to bottom, transparent, rgba(56,145,166,0.05), transparent)",
+                      animation: "scan-line 3.5s ease-in-out infinite",
                       pointerEvents: "none",
+                      zIndex: 1,
                     }}
                   />
                 )}
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-                  <div>
-                    <Badge color={DANGER}>
-                      <span style={{ animation: "flicker 3s infinite" }}>⬤</span>
-                      {scenario.classification}
-                    </Badge>
-                    <p style={{ color: MUTED, fontSize: 12, marginTop: 6 }}>
-                      Incident Report #{scenario.caseNumber} &nbsp;·&nbsp; {scenario.dateTime}
-                    </p>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    color: TEXT,
-                    fontSize: 15,
-                    lineHeight: 1.85,
-                    whiteSpace: "pre-line",
-                    fontFamily: "'Courier New', monospace",
-                    letterSpacing: "0.01em",
-                    opacity: secondsLeft === 0 ? 0 : 1,
-                    transition: "opacity 0.8s ease",
-                    userSelect: "none",
-                    WebkitUserSelect: "none",
-                  }}
-                >
-                  {scenario.report.replace(/ /g, " \u200B")}
-                </div>
-
-                {secondsLeft === 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor: "rgba(2,2,2,0.92)",
-                      borderRadius: 16,
-                    }}
-                  >
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 48, marginBottom: 12 }}>🔥</div>
-                      <p style={{ color: DANGER, fontWeight: 800, fontSize: 18, letterSpacing: "0.1em" }}>
-                        DOCUMENT DESTROYED
-                      </p>
+                {/* Document body */}
+                <div style={{ padding: "28px 30px 24px" }}>
+                  {/* Header row */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, paddingBottom: 18, borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div>
+                      <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: MUTED, letterSpacing: "0.1em", marginBottom: 4 }}>DATE / TIME</p>
+                      <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: TEXT, letterSpacing: "0.03em" }}>{scenario.dateTime}</p>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: MUTED, letterSpacing: "0.1em", marginBottom: 4 }}>CASE REF</p>
+                      <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: TEXT, letterSpacing: "0.03em" }}>#{scenario.caseNumber}</p>
                     </div>
                   </div>
-                )}
+
+                  {/* Report text */}
+                  <div
+                    style={{
+                      color: "rgba(220,220,230,0.92)",
+                      fontSize: 14,
+                      lineHeight: 1.95,
+                      whiteSpace: "pre-line",
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      letterSpacing: "0.015em",
+                      opacity: secondsLeft === 0 ? 0 : 1,
+                      transition: "opacity 1.8s ease 1.0s",
+                      userSelect: "none",
+                      WebkitUserSelect: "none",
+                    }}
+                  >
+                    {scenario.report.replace(/ /g, " \u200B")}
+                  </div>
+                </div>
+
+                {/* Bottom classification bar */}
+                <div style={{
+                  background: `linear-gradient(90deg, ${DANGER}dd, ${DANGER}aa)`,
+                  padding: "5px 22px",
+                  textAlign: "center",
+                }}>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 700, letterSpacing: "0.22em", color: "rgba(255,255,255,0.8)" }}>
+                    {scenario.classification} — AUTHORISED ACCESS ONLY
+                  </span>
+                </div>
+
+                <AnimatePresence>
+                  {secondsLeft === 0 && (
+                    <motion.div
+                      key="burn-overlay"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        zIndex: 5,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <DocumentFireCanvas active />
+
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.6, delay: 3.3 }}
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          zIndex: 10,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0.55) 0%, transparent 70%)",
+                        }}
+                      >
+                        <p style={{
+                          color: "#fff",
+                          fontWeight: 800,
+                          fontSize: 16,
+                          letterSpacing: "0.22em",
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          textTransform: "uppercase",
+                          margin: 0,
+                          textShadow: "0 0 28px rgba(251,146,60,0.55), 0 0 55px rgba(239,68,68,0.2)",
+                        }}>
+                          DOCUMENT DESTROYED
+                        </p>
+                        <p style={{
+                          color: "rgba(255,255,255,0.35)",
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: 10,
+                          letterSpacing: "0.14em",
+                          margin: "14px 0 0",
+                          textTransform: "uppercase",
+                        }}>
+                          ANSWER FROM MEMORY
+                        </p>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {secondsLeft > 5 && (
@@ -1267,10 +1539,10 @@ export default function WitnessPage() {
                       setCurrentQ(0);
                       setOptionState(Array(4).fill("idle"));
                       fadeIn();
-                    }, 800);
+                    }, 5000);
                   }}
                   style={{
-                    marginTop: 16,
+                    marginTop: 14,
                     width: "100%",
                     padding: "12px",
                     borderRadius: 10,
@@ -1314,23 +1586,20 @@ export default function WitnessPage() {
                 </div>
               )}
 
-              <div style={{ marginBottom: 28 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <Badge color={PURPLE_LIGHT}>Question {currentQ + 1} of {scenario.questions.length}</Badge>
-                  <span style={{ fontSize: 12, color: MUTED }}>
-                    {answers.length} answered
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: MUTED, letterSpacing: "0.05em" }}>
+                    Question {currentQ + 1} <span style={{ color: `${MUTED}60` }}>/ {scenario.questions.length}</span>
                   </span>
-                </div>
-                <div style={{ height: 3, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.06)" }}>
-                  <div
-                    style={{
-                      height: "100%",
-                      width: `${(currentQ / scenario.questions.length) * 100}%`,
-                      backgroundColor: PURPLE,
-                      borderRadius: 999,
-                      transition: "width 0.4s ease",
-                    }}
-                  />
+                  <div style={{ display: "flex", gap: 5 }}>
+                    {scenario.questions.map((_, qi) => (
+                      <div key={qi} style={{
+                        width: 28, height: 4, borderRadius: 2,
+                        backgroundColor: qi < currentQ ? PURPLE : qi === currentQ ? PURPLE_LIGHT : "rgba(255,255,255,0.08)",
+                        transition: "background-color 0.3s",
+                      }} />
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -1365,15 +1634,16 @@ export default function WitnessPage() {
                 </div>
               </div>
 
-              <div style={{ ...cardStyle, marginBottom: 20 }}>
-                <p style={{ color: TEXT, fontSize: 18, fontWeight: 700, lineHeight: 1.5, marginBottom: 24 }}>
+              <div style={{ ...cardStyle, marginBottom: 18, backgroundColor: "rgba(255,255,255,0.025)" }}>
+                <p style={{ color: TEXT, fontSize: 17, fontWeight: 600, lineHeight: 1.55, marginBottom: 22 }}>
                   {scenario.questions[currentQ].question}
                 </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                   {scenario.questions[currentQ].options.map((opt, i) => (
                     <OptionButton
                       key={i}
                       label={opt}
+                      index={i}
                       state={optionState[i] || "idle"}
                       onClick={() => handleOptionClick(i)}
                       disabled={answerLocked}
@@ -1382,7 +1652,7 @@ export default function WitnessPage() {
                 </div>
               </div>
 
-              <p style={{ textAlign: "center", color: `${MUTED}70`, fontSize: 12 }}>
+              <p style={{ textAlign: "center", color: `${MUTED}55`, fontSize: 11, letterSpacing: "0.06em", fontFamily: "'IBM Plex Mono', monospace", textTransform: "uppercase" }}>
                 The report is gone. Trust your memory.
               </p>
             </div>
@@ -1393,7 +1663,8 @@ export default function WitnessPage() {
             <div style={fadeStyle}>
               {(() => {
                 const FAKE_BASE_DIST = [12, 28, 89, 184, 143, 61];
-                const blendedDist = submitResult.scoreDist.map((v, i) => v + FAKE_BASE_DIST[i]);
+                const scoreDist = submitResult.scoreDist ?? [0, 0, 0, 0, 0, 0];
+                const blendedDist = scoreDist.map((v, i) => v + FAKE_BASE_DIST[i]);
                 const blendedTotal = submitResult.totalPlays + 517;
                 const beatCount = blendedDist.slice(0, submitResult.score).reduce((s, c) => s + c, 0);
                 const blendedPercentile = blendedTotal > 1 ? Math.round((beatCount / (blendedTotal - 1)) * 100) : 100;
@@ -1401,23 +1672,23 @@ export default function WitnessPage() {
                 const su = encodeURIComponent("https://puzzlewarz.com/witness");
                 return (
                   <>
-              <div style={{ textAlign: "center", marginBottom: 40 }}>
-                <div
-                  style={{
-                    fontSize: 72,
+              <div style={{ textAlign: "center", marginBottom: 36 }}>
+                <div style={{ display: "inline-flex", alignItems: "baseline", gap: 4, marginBottom: 10 }}>
+                  <span style={{
+                    fontSize: 88,
                     fontWeight: 900,
                     color: submitResult.score >= 4 ? SUCCESS : submitResult.score >= 2 ? GOLD : DANGER,
                     lineHeight: 1,
-                    marginBottom: 8,
-                    transition: "color 0.5s",
-                  }}
-                >
-                  {submitResult.score}/5
+                    letterSpacing: "-0.04em",
+                  }}>
+                    {submitResult.score}
+                  </span>
+                  <span style={{ fontSize: 32, fontWeight: 700, color: `${MUTED}80`, letterSpacing: "-0.02em" }}>/5</span>
                 </div>
-                <p style={{ color: TEXT, fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+                <p style={{ color: TEXT, fontSize: 19, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.01em" }}>
                   {scoreLabel(submitResult.score)}
                 </p>
-                <p style={{ color: MUTED, fontSize: 14 }}>
+                <p style={{ color: MUTED, fontSize: 13 }}>
                   {percentileLabel(blendedPercentile, submitResult.score)}
                 </p>
               </div>
@@ -1727,7 +1998,7 @@ export default function WitnessPage() {
                       fontWeight: 800,
                       letterSpacing: "0.12em",
                       color: clueStates[i] === "correct" ? SUCCESS : `${MUTED}50`,
-                      fontFamily: "'Courier New', monospace",
+                      fontFamily: "'IBM Plex Mono', monospace",
                       transition: "all 0.3s",
                       animation:
                         clueStates[i] === "correct" ? "word-appear 0.4s ease forwards" : "none",
@@ -1829,7 +2100,7 @@ export default function WitnessPage() {
                         fontSize: 20,
                         fontWeight: 900,
                         letterSpacing: "0.14em",
-                        fontFamily: "'Courier New', monospace",
+                        fontFamily: "'IBM Plex Mono', monospace",
                         animation: `word-appear 0.4s ease ${i * 0.15}s both`,
                       }}
                     >

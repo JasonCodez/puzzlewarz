@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getTodaysScenario, getTodaysDeadDrop, getTodaysQuestionIndices } from "@/lib/witness-content";
 
 // GET /api/witness/today — return today's scenario (without correct answers) + stats
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as { id?: string } | undefined)?.id ?? null;
     const scenario = getTodaysScenario();
     const deadDrop = getTodaysDeadDrop();
 
@@ -19,6 +23,14 @@ export async function GET() {
     // Build scoreDist: index = score (0-5), value = count
     const scoreDist = Array(6).fill(0) as number[];
     for (const r of results) scoreDist[r.score] = r._count.score;
+
+    // Has the current user already completed today's witness?
+    const completed = userId
+      ? !!(await prisma.witnessResult.findFirst({
+          where: { scenarioId: scenario.id, userId },
+          select: { id: true },
+        }))
+      : false;
 
     // Dead drop solve rate
     const ddTotal = await prisma.deadDropResult.count({
@@ -60,6 +72,7 @@ export async function GET() {
         ddSolved,
         ddSolveRate: ddTotal > 0 ? Math.round((ddSolved / ddTotal) * 100) : 31,
       },
+      completed,
     });
   } catch {
     return NextResponse.json({ error: "Failed to load" }, { status: 500 });

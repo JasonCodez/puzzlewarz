@@ -88,6 +88,7 @@ interface WitnessTeaser {
   caseNumber: number;
   classification: string;
   totalPlays: number;
+  completed: boolean;
 }
 function FeaturedBanner({ visible }: { visible: boolean }) {
   const [teaser, setTeaser] = useState<WitnessTeaser | null>(null);
@@ -103,10 +104,14 @@ function FeaturedBanner({ visible }: { visible: boolean }) {
           caseNumber: data.caseNumber ?? data.scenario?.caseNumber ?? 0,
           classification: data.classification ?? data.scenario?.classification ?? 'CLASSIFIED',
           totalPlays: plays,
+          completed: !!data.completed,
         });
       })
       .catch(() => {});
   }, []);
+
+  // Don't show until we know the completion state; hide once completed
+  if (teaser?.completed) return null;
 
   return (
     <Link

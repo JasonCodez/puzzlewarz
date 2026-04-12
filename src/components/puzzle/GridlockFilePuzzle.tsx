@@ -184,7 +184,7 @@ function GridDisplay({
   let missingIdx = 0;
 
   return (
-    <div ref={containerRef} style={{ width: '100%' }}>
+    <div ref={containerRef} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
     <div
       style={{
         display: 'inline-grid',
@@ -661,9 +661,6 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
 
   // Answer inputs — one entry per missing cell
   const [answers, setAnswers] = useState<string[]>([]);
-  // Law Declaration (optional)
-  const [declaredFamily, setDeclaredFamily] = useState<RuleFamily | ''>('');
-  const [declaredAxis, setDeclaredAxis] = useState<RuleAxis | ''>('');
   // Hints revealed client-side
   const [usedHintIds, setUsedHintIds] = useState<Set<string>>(new Set());
 
@@ -791,8 +788,6 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           answers: answers.map(a => a.trim()),
-          declaredFamily: declaredFamily || undefined,
-          declaredAxis: declaredAxis || undefined,
           elapsedSeconds,
           ...(guestMode && { submissionCount: nextGuestCount, anonId: getAnonId() }),
         }),
@@ -864,7 +859,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
     } finally {
       setSubmitting(false);
     }
-  }, [answers, declaredFamily, declaredAxis, puzzleId, submitting, onSolved, guestMode, guestSubmissionCount, elapsedSeconds, streak, stopTimer]);
+  }, [answers, puzzleId, submitting, onSolved, guestMode, guestSubmissionCount, elapsedSeconds, streak, stopTimer]);
 
   // ── Copy share card ─────────────────────────────────────────────────────────
   const handleShare = useCallback(async () => {
@@ -1117,15 +1112,28 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
             hintTokens={guestMode ? undefined : (serverState.hintTokens ?? 0)}
           />
 
-          {/* Law Declaration (optional) */}
-          <LawDeclarationPanel
-            declaredFamily={declaredFamily}
-            declaredAxis={declaredAxis}
-            onFamily={setDeclaredFamily}
-            onAxis={setDeclaredAxis}
-            lawResult={submitResult?.lawResult ?? 'not-declared'}
-            disabled={solved}
-          />
+          {/* Rule explanation panel */}
+          {puzzle.ruleExplanation && (
+            <div style={{
+              borderRadius: 10,
+              border: '1px solid rgba(255,208,0,0.22)',
+              background: 'rgba(255,208,0,0.04)',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 16px',
+                borderBottom: '1px solid rgba(255,208,0,0.1)',
+              }}>
+                <span style={{ fontSize: 10, fontFamily: 'inherit', color: '#fbbf24', letterSpacing: '0.14em', fontWeight: 700 }}>🔑 RULE</span>
+              </div>
+              <p style={{ margin: 0, padding: '10px 16px', fontSize: 13, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#fcd34d', lineHeight: 1.65 }}>
+                {puzzle.ruleExplanation}
+              </p>
+            </div>
+          )}
 
           {/* Submit */}
           <button

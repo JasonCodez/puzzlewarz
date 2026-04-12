@@ -16,30 +16,46 @@ export async function GET(
     const playerRank = (searchParams.get('rank') ?? '') as GridlockRank;
     const playerSeconds = parseInt(searchParams.get('elapsedSeconds') ?? '0', 10);
 
-    // Aggregate solve counts per rank for this puzzle
+    const SOCIAL_PROOF_BASELINE = 653;
+    // Distribute baseline across tiers at a realistic proportion (sums to 653).
+    // These represent the "ghost" solvers that inflate the counter for social proof.
+    const BASELINE_TIERS: Record<GridlockRank, number> = { S: 52, A: 144, B: 229, C: 163, F: 65 };
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+
+    // Aggregate solve counts per rank — today only (matches the "cracked today" counter)
     const groups = await prisma.gridlockSolve.groupBy({
       by: ['rank'],
-      where: { puzzleId },
+      where: { puzzleId, solvedAt: { gte: todayStart } },
       _count: { rank: true },
     });
 
     const RANK_ORDER: GridlockRank[] = ['S', 'A', 'B', 'C', 'F'];
     const rankIndex = Object.fromEntries(RANK_ORDER.map((r, i) => [r, i]));
 
-    // Build tier map with counts
+    // Build tier map with real counts, then add baseline ghost solvers
     const tierCounts: Record<GridlockRank, number> = { S: 0, A: 0, B: 0, C: 0, F: 0 };
     for (const g of groups) {
       const r = g.rank as GridlockRank;
       if (r in tierCounts) tierCounts[r] = g._count.rank;
     }
+    const realTotalSolves = Object.values(tierCounts).reduce((a, b) => a + b, 0);
 
-    const totalSolves = Object.values(tierCounts).reduce((a, b) => a + b, 0);
+    // Blended tier counts shown to the user (real + baseline)
+    const blendedTierCounts: Record<GridlockRank, number> = {
+      S: tierCounts.S + BASELINE_TIERS.S,
+      A: tierCounts.A + BASELINE_TIERS.A,
+      B: tierCounts.B + BASELINE_TIERS.B,
+      C: tierCounts.C + BASELINE_TIERS.C,
+      F: tierCounts.F + BASELINE_TIERS.F,
+    };
+    const totalSolves = realTotalSolves + SOCIAL_PROOF_BASELINE;
 
     // Percentile: how many solvers the player beats
     // "Beats" = solvers with a worse rank tier + solvers in same tier but slower
     let beaten = 0;
 
-    if (totalSolves > 0 && playerRank in rankIndex) {
+    if (realTotalSolves > 0 && playerRank in rankIndex) {
       const playerTierIndex = rankIndex[playerRank];
 
       // All solvers in worse tiers (higher index = worse rank)
@@ -49,12 +65,13 @@ export async function GET(
         }
       }
 
-      // Within same tier: count solvers who were slower
+      // Within same tier: count solvers today who were slower
       if (playerSeconds > 0) {
         const slowerInSameTier = await prisma.gridlockSolve.count({
           where: {
             puzzleId,
             rank: playerRank,
+            solvedAt: { gte: todayStart },
             elapsedSeconds: { gt: playerSeconds },
           },
         });
@@ -63,10 +80,10 @@ export async function GET(
     }
 
     const percentile =
-      totalSolves > 0 ? Math.round((beaten / totalSolves) * 100) : null;
+      realTotalSolves > 0 ? Math.round((beaten / realTotalSolves) * 100) : null;
 
     return NextResponse.json({
-      tierCounts,
+      tierCounts: blendedTierCounts,
       totalSolves,
       percentile,
     });
