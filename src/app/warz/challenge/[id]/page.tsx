@@ -336,10 +336,6 @@ export default function WarzChallengePage() {
           <div className="text-white font-bold mb-1">{challenge.puzzle.title}</div>
           <div className="flex gap-2 flex-wrap">
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
-              style={{ backgroundColor: "rgba(253,231,76,0.15)", color: "#FDE74C" }}>
-              {challenge.puzzle.difficulty.toUpperCase()}
-            </span>
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
               style={{ backgroundColor: "rgba(255,184,107,0.15)", color: "#FFB86B" }}>
               {getPuzzleTypeLabel(challenge.puzzle.puzzleType)}
             </span>

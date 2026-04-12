@@ -38,6 +38,7 @@ export async function GET(
         level: true,
         xpTitle: true,
         totalPoints: true,
+        purchasedPoints: true,
         activeFlair: true,
         activeFrame: true,
         activeTheme: true,
@@ -83,9 +84,9 @@ export async function GET(
     }
 
     // Get user stats
-    const solvedPuzzles = await prisma.userPuzzleProgress.count({
-      where: { userId, solved: true },
-    });
+    // Derived from earned points (100 pts/solve) — consistent with leaderboard display
+    const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
+    const solvedPuzzles = Math.floor(earnedPoints / 100);
 
     // Get follower counts
     const followerCount = await prisma.follow.count({
@@ -120,7 +121,7 @@ export async function GET(
     const { level, title, currentXp, nextLevelXp, progress } = calcLevel(user.xp ?? 0);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { isHidden: _hidden, ...publicUser } = user as typeof user & { isHidden: boolean };
+    const { isHidden: _hidden, purchasedPoints: _pp, ...publicUser } = user as typeof user & { isHidden: boolean; purchasedPoints: number | null };
 
     return NextResponse.json({
       ...publicUser,
@@ -129,7 +130,7 @@ export async function GET(
       xpTitle: title,
       stats: {
         puzzlesSolved: solvedPuzzles,
-        totalPoints: user.totalPoints ?? 0,
+        totalPoints: earnedPoints,
         achievementsCount: user.achievements.length,
         teamsCount: user.teams.length,
       },

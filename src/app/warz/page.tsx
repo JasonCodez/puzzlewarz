@@ -169,12 +169,6 @@ function PuzzlePickerModal({
                   <div className="flex gap-1.5 shrink-0 ml-2">
                     <span
                       className="px-1.5 py-0.5 rounded text-xs font-bold leading-none"
-                      style={{ color: DIFFICULTY_COLORS[puzzle.difficulty] ?? "#9ca3af", backgroundColor: "rgba(255,255,255,0.05)" }}
-                    >
-                      {puzzle.difficulty.toUpperCase()}
-                    </span>
-                    <span
-                      className="px-1.5 py-0.5 rounded text-xs font-bold leading-none"
                       style={{ color: "#FFB86B", backgroundColor: "rgba(255,184,107,0.08)" }}
                     >
                       {getPuzzleTypeLabel(puzzle.puzzleType)}
@@ -236,12 +230,6 @@ function ChallengeCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-white font-bold text-sm truncate">{challenge.puzzle.title}</span>
-            <span
-              className="px-1.5 py-0.5 rounded text-xs font-bold"
-              style={{ color: DIFFICULTY_COLORS[challenge.puzzle.difficulty] ?? "#9ca3af", backgroundColor: "rgba(255,255,255,0.05)" }}
-            >
-              {challenge.puzzle.difficulty.toUpperCase()}
-            </span>
             <span className="px-1.5 py-0.5 rounded text-xs font-bold" style={{ color: "#FFB86B", backgroundColor: "rgba(255,184,107,0.07)" }}>
               {getPuzzleTypeLabel(challenge.puzzle.puzzleType)}
             </span>
@@ -585,12 +573,6 @@ function WarzLobbyInner() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-white font-bold text-sm">{c.puzzle.title}</span>
-                          <span
-                            className="px-1.5 py-0.5 rounded text-xs font-bold"
-                            style={{ color: DIFFICULTY_COLORS[c.puzzle.difficulty] ?? "#9ca3af", backgroundColor: "rgba(255,255,255,0.05)" }}
-                          >
-                            {c.puzzle.difficulty.toUpperCase()}
-                          </span>
                           <span className="px-1.5 py-0.5 rounded text-xs font-bold" style={{ color: "#FFB86B", backgroundColor: "rgba(255,184,107,0.07)" }}>
                             {getPuzzleTypeLabel(c.puzzle.puzzleType)}
                           </span>
