@@ -23,6 +23,7 @@ body {
   background: #020202;
   color: var(--foreground);
   font-family: var(--font-geist-sans, Arial, sans-serif);
+  overflow-x: hidden;
 }
 
 /* ── Custom scrollbar ─────────────────────────────────────────── */
@@ -31,6 +32,10 @@ body {
 ::-webkit-scrollbar-thumb { background: #3891A6; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #4aafc0; }
 * { scrollbar-width: thin; scrollbar-color: #3891A6 #080808; }
+
+/* ── Utility: hide scrollbar but keep scrollability ──────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Override user preferences for specific rarity colors */
 .rarity-text-common {

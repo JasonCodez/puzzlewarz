@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ["card"],
       line_items: [{ price: bundle.priceId, quantity: 1 }],
       mode: "payment",
-      success_url: `${baseUrl}/store?purchase=success&bundle=${bundleKey}`,
+      success_url: `${baseUrl}/store?purchase=success&bundle=${bundleKey}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/store?purchase=cancelled`,
       metadata: {
         userId: currentUser.id,

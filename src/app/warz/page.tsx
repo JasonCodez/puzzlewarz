@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { getPuzzleTypeLabel } from "@/lib/puzzleTypeLabels";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface EligiblePuzzle {
@@ -51,19 +52,7 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   expert: "#ef4444",
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  sudoku: "Sudoku",
-  word_crack: "Word Crack",
-  word_search: "Word Search",
-  jigsaw: "Jigsaw",
-  anagram_blitz: "Anagram Blitz",
-  crack_safe: "Crack the Safe",
-  escape_room: "Escape Room",
-  code_master: "Code Master",
-  detective_case: "Detective Case",
-  arg: "ARG",
-  general: "General",
-};
+
 
 function timeLeft(expiresAt: string) {
   const diff = new Date(expiresAt).getTime() - Date.now();
@@ -148,7 +137,7 @@ function PuzzlePickerModal({
                   color: typeFilter === t ? "#FDE74C" : "#9ca3af",
                 }}
               >
-                {t === "all" ? "All" : TYPE_LABELS[t]}
+                {t === "all" ? "All" : getPuzzleTypeLabel(t)}
               </button>
             ))}
           </div>
@@ -188,7 +177,7 @@ function PuzzlePickerModal({
                       className="px-1.5 py-0.5 rounded text-xs font-bold leading-none"
                       style={{ color: "#FFB86B", backgroundColor: "rgba(255,184,107,0.08)" }}
                     >
-                      {TYPE_LABELS[puzzle.puzzleType] ?? puzzle.puzzleType}
+                      {getPuzzleTypeLabel(puzzle.puzzleType)}
                     </span>
                   </div>
                 </div>
@@ -254,7 +243,7 @@ function ChallengeCard({
               {challenge.puzzle.difficulty.toUpperCase()}
             </span>
             <span className="px-1.5 py-0.5 rounded text-xs font-bold" style={{ color: "#FFB86B", backgroundColor: "rgba(255,184,107,0.07)" }}>
-              {TYPE_LABELS[challenge.puzzle.puzzleType] ?? challenge.puzzle.puzzleType}
+              {getPuzzleTypeLabel(challenge.puzzle.puzzleType)}
             </span>
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -603,7 +592,7 @@ function WarzLobbyInner() {
                             {c.puzzle.difficulty.toUpperCase()}
                           </span>
                           <span className="px-1.5 py-0.5 rounded text-xs font-bold" style={{ color: "#FFB86B", backgroundColor: "rgba(255,184,107,0.07)" }}>
-                            {TYPE_LABELS[c.puzzle.puzzleType] ?? c.puzzle.puzzleType}
+                            {getPuzzleTypeLabel(c.puzzle.puzzleType)}
                           </span>
                         </div>
                         <div className="flex items-center gap-3 mt-1 flex-wrap">

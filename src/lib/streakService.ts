@@ -37,6 +37,7 @@ export async function incrementStreak(userId: string): Promise<StreakResult> {
       };
     }
 
+    const breaking = lastKey !== yesterdayKey && lastKey !== null;
     const newStreak = lastKey === yesterdayKey ? existing.currentStreak + 1 : 1;
     const newLongest = Math.max(newStreak, existing.longestStreak);
     const now = new Date();
@@ -49,6 +50,8 @@ export async function incrementStreak(userId: string): Promise<StreakResult> {
         lastSolveDate: now,
         streakStartDate:
           newStreak === 1 ? now : existing.streakStartDate ?? now,
+        // Save the streak that just broke so streak recovery can restore it
+        ...(breaking ? { lastStreakBeforeBreak: existing.currentStreak } : {}),
       },
     });
 

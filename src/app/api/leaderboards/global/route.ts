@@ -27,8 +27,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get all users
+    // Get all non-hidden, non-bot users
     const users = await prisma.user.findMany({
+      where: { isHidden: false, isBot: false },
       select: { id: true, name: true, image: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 

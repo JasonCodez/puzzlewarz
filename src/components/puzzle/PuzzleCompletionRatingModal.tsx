@@ -8,15 +8,32 @@ import { useRegisterModal } from "@/hooks/useRegisterModal";
 interface PuzzleCompletionRatingModalProps {
   puzzleId: string;
   puzzleTitle: string;
+  difficulty?: string;
   onClose: () => void;
   onSubmit?: () => void;
   initialAwardedPoints?: number | null;
   completionSeconds?: number | null;
 }
 
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const s = (seconds % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+function buildShareText(puzzleTitle: string, puzzleId: string, completionSeconds: number | null, difficulty?: string): string {
+  const url = `https://puzzlewarz.com/puzzles/${puzzleId}`;
+  const lines = [`🧩 I just cracked "${puzzleTitle}" on Puzzle Warz!`];
+  if (typeof completionSeconds === "number") lines.push(`⏱️ Time: ${formatTime(completionSeconds)}`);
+  if (difficulty) lines.push(`🔥 Difficulty: ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}`);
+  lines.push(`Think you can beat it? → ${url}`);
+  return lines.join("\n");
+}
+
 export default function PuzzleCompletionRatingModal({
   puzzleId,
   puzzleTitle,
+  difficulty,
   onClose,
   onSubmit,
   initialAwardedPoints = null,
@@ -25,14 +42,41 @@ export default function PuzzleCompletionRatingModal({
   useRegisterModal('puzzle-rating-modal');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [awardedPoints, setAwardedPoints] = useState<number | null>(initialAwardedPoints ?? null);
+  const [copied, setCopied] = useState(false);
 
   const handleRatingSubmitted = () => {
     setIsSubmitted(true);
-    // Auto-close after 2 seconds
-    setTimeout(() => {
-      onClose();
-      onSubmit?.();
-    }, 2000);
+  };
+
+  const handleCopy = async () => {
+    const text = buildShareText(puzzleTitle, puzzleId, completionSeconds, difficulty);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // fallback for older browsers
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const handleTwitterShare = () => {
+    const text = buildShareText(puzzleTitle, puzzleId, completionSeconds, difficulty);
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  };
+
+  const handleWhatsAppShare = () => {
+    const text = buildShareText(puzzleTitle, puzzleId, completionSeconds, difficulty);
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -75,12 +119,7 @@ export default function PuzzleCompletionRatingModal({
                 </div>
               ) : null}
             </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors text-2xl leading-none"
-            >
-              ✕
-            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors text-2xl leading-none">✕</button>
           </div>
 
           {/* Success Message */}
@@ -111,6 +150,16 @@ export default function PuzzleCompletionRatingModal({
           {/* Rating Input Component */}
           {!isSubmitted && (
             <div>
+              {/* Bonus incentive */}
+              <div
+                className="mb-4 flex items-center justify-center gap-2 p-3 rounded-xl"
+                style={{ background: 'rgba(253,231,76,0.08)', border: '1px solid rgba(253,231,76,0.25)' }}
+              >
+                <span style={{ fontSize: 18 }}>🌟</span>
+                <p className="text-sm font-semibold" style={{ color: '#FDE74C' }}>
+                  Leave a rating and earn <strong>+10 bonus points!</strong>
+                </p>
+              </div>
               <p
                 className="text-center mb-4 text-sm"
                 style={{ color: "#DDDBF1" }}
@@ -129,10 +178,47 @@ export default function PuzzleCompletionRatingModal({
             </div>
           )}
 
-          {/* Close Button (if already submitted) */}
+          {/* Share section — always visible */}
+          <div className="mt-5 pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-xs text-center mb-3" style={{ color: "#6b7280" }}>Challenge your friends</p>
+            <div className="flex items-center gap-2">
+              {/* Copy button */}
+              <button
+                onClick={handleCopy}
+                className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all"
+                style={{
+                  backgroundColor: copied ? "rgba(56,211,153,0.15)" : "rgba(255,255,255,0.06)",
+                  border: `1px solid ${copied ? "#38D399" : "rgba(255,255,255,0.12)"}`,
+                  color: copied ? "#38D399" : "#DDDBF1",
+                }}
+              >
+                {copied ? "✓ Copied!" : "📋 Copy Result"}
+              </button>
+              {/* Twitter/X */}
+              <button
+                onClick={handleTwitterShare}
+                title="Share on X"
+                className="flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
+                style={{ backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", fontSize: 16 }}
+              >
+                𝕏
+              </button>
+              {/* WhatsApp */}
+              <button
+                onClick={handleWhatsAppShare}
+                title="Share on WhatsApp"
+                className="flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-lg"
+                style={{ backgroundColor: "rgba(37,211,102,0.1)", border: "1px solid rgba(37,211,102,0.3)", color: "#25D366" }}
+              >
+                💬
+              </button>
+            </div>
+          </div>
+
+          {/* Close Button */}
           {isSubmitted && (
             <button
-              onClick={onClose}
+              onClick={() => { onClose(); onSubmit?.(); }}
               className="w-full mt-4 px-4 py-2 rounded-lg font-semibold transition-colors"
               style={{
                 backgroundColor: "#FDE74C",

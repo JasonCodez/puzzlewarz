@@ -140,13 +140,6 @@ export function RatingInput({
       {/* Buttons */}
       <div className="flex gap-3 justify-end">
         <button
-          onClick={onCancel}
-          disabled={isSubmitting}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
           onClick={handleSubmit}
           disabled={isSubmitting || selectedRating === 0}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"

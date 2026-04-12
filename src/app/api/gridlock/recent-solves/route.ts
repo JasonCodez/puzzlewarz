@@ -10,6 +10,7 @@ export async function GET() {
       where: {
         // Only show solves with a linked user (auth or ghost) for display names
         userId: { not: null },
+        user: { isHidden: false },
       },
       orderBy: { solvedAt: "desc" },
       take: 20,

@@ -4,6 +4,7 @@ import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 import { calcLevel } from "@/lib/levels";
 import { awardSeasonXp } from "@/lib/seasonXp";
+import { getXpMultiplier } from "@/lib/getXpMultiplier";
 
 export async function POST(
   request: NextRequest,
@@ -134,7 +135,9 @@ export async function POST(
             });
           }
 
-          const xpGain = puzzle.xpReward ?? 50;
+          const baseXpWs = puzzle.xpReward ?? 50;
+          const xpMultiplierWs = await getXpMultiplier(currentUser.id);
+          const xpGain = baseXpWs * xpMultiplierWs;
           const freshUser = await prisma.user.findUnique({
             where: { id: currentUser.id },
             select: { xp: true },

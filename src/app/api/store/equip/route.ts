@@ -23,11 +23,13 @@ export async function POST(request: NextRequest) {
 
     // Allow unequip shortcuts
     const UNEQUIP_KEYS: Record<string, Record<string, string>> = {
-      theme:  { activeTheme: "default" },
-      frame:  { activeFrame: "none" },
-      skin:   { activeSkin: "default" },
-      flair:  { activeFlair: "none" },
-      banner: { teamBannerColor: "none" },
+      theme:      { activeTheme: "default" },
+      frame:      { activeFrame: "none" },
+      skin:       { activeSkin: "default" },
+      flair:      { activeFlair: "none" },
+      banner:     { teamBannerColor: "none" },
+      name_color: { activeNameColor: "none" },
+      anim:       { activeCompletionAnimation: "default" },
     };
 
     for (const [subcat, update] of Object.entries(UNEQUIP_KEYS)) {
@@ -41,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
     // Only cosmetic items can be equipped
-    const EQUIPPABLE = ["theme", "frame", "skin", "flair", "banner"];
+    const EQUIPPABLE = ["theme", "frame", "skin", "flair", "banner", "name_color", "anim"];
     if (!EQUIPPABLE.includes(item.subcategory)) {
       return NextResponse.json({ error: "This item cannot be equipped" }, { status: 400 });
     }
@@ -62,11 +64,13 @@ export async function POST(request: NextRequest) {
       : (meta?.value ?? item.key);
 
     const fieldMap: Record<string, string> = {
-      theme:  "activeTheme",
-      frame:  "activeFrame",
-      skin:   "activeSkin",
-      flair:  "activeFlair",
-      banner: "teamBannerColor",
+      theme:      "activeTheme",
+      frame:      "activeFrame",
+      skin:       "activeSkin",
+      flair:      "activeFlair",
+      banner:     "teamBannerColor",
+      name_color: "activeNameColor",
+      anim:       "activeCompletionAnimation",
     };
 
     await prisma.user.update({

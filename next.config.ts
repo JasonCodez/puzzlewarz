@@ -1,8 +1,11 @@
 import type { NextConfig } from "next";
 
+const isDev = process.env.NODE_ENV === "development";
+
 const nextConfig: NextConfig = {
   /* config options here */
-  reactCompiler: true,
+  // React Compiler is a prod-only optimization — disable in dev to skip per-file Babel transforms
+  reactCompiler: !isDev,
   poweredByHeader: false,
   experimental: {
   },

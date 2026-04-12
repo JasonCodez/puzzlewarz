@@ -10,6 +10,7 @@ import {
   calcGridlockRank,
 } from '@/lib/gridlockFile';
 import type { GridCellValue, RuleFamily, RuleAxis } from '@/lib/gridlockFile';
+import { getXpMultiplier } from '@/lib/getXpMultiplier';
 
 export async function POST(
   req: NextRequest,
@@ -148,7 +149,7 @@ export async function POST(
       const streakBonusPoints = newStreakCount * 50;
       const streakBonusXp = newStreakCount * 25;
 
-      const totalXp = baseXp + arcXpBonus + streakBonusXp;
+      const totalXp = (baseXp + arcXpBonus + streakBonusXp) * (await getXpMultiplier(user.id));
 
       await prisma.$transaction(async (tx) => {
         await tx.puzzleSubmission.create({

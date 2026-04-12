@@ -160,21 +160,21 @@ export default function CategoriesPage() {
   return (
     <div style={{ backgroundColor: '#020202' }} className="min-h-screen">
       {/* Header */}
-      <div className="pt-24 pb-16 px-4" style={{ backgroundImage: 'linear-gradient(135deg, rgba(56, 145, 166, 0.1) 0%, rgba(253, 231, 76, 0.05) 100%)' }}>
+      <div className="pt-24 pb-10 sm:pb-16 px-4" style={{ backgroundImage: 'linear-gradient(135deg, rgba(56, 145, 166, 0.1) 0%, rgba(253, 231, 76, 0.05) 100%)' }}>
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-5xl font-bold text-white mb-4">Puzzle Categories</h1>
-          <p style={{ color: '#DDDBF1' }}>Explore our collection of puzzles organized by category. Choose a category to get started!</p>
+          <h1 className="text-3xl sm:text-5xl font-bold text-white mb-2 sm:mb-4">Puzzle Categories</h1>
+          <p className="text-sm sm:text-base" style={{ color: '#DDDBF1' }}>Choose a category to start playing!</p>
         </div>
       </div>
 
       {/* Content */}
-      <div className="px-4 py-12 max-w-7xl mx-auto">
+      <div className="px-4 py-6 sm:py-12 max-w-7xl mx-auto">
         {categories.length === 0 ? (
           <div className="text-center py-20">
             <p style={{ color: '#DDDBF1' }} className="text-lg">No categories available yet.</p>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
             {categories.filter((c) => !['escape', 'mystery'].includes(c.name.toLowerCase())).map((category) => {
               const color = category.color || '#3891A6';
               return (
@@ -190,7 +190,7 @@ export default function CategoriesPage() {
               >
                 {/* Puzzle count badge */}
                 <div
-                  className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
+                  className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
                   style={{
                     color: color,
                     backgroundColor: `${color}14`,
@@ -203,20 +203,22 @@ export default function CategoriesPage() {
 
                 {/* Icon Header */}
                 <div
-                  className="h-24 flex items-center justify-center text-6xl transition-all group-hover:scale-110"
+                  className="h-14 sm:h-24 flex items-center justify-center text-4xl sm:text-6xl transition-all group-hover:scale-110"
                   style={{ backgroundColor: `${color}12` }}
                 >
                   {getCategoryIcon(category)}
                 </div>
 
                 {/* Content */}
-                <div className="p-6 flex flex-col flex-1">
-                  <h3 className="text-2xl font-bold text-white mb-2">{formatCategoryName(category.name)}</h3>
-                  <p style={{ color: '#DDDBF1' }} className="text-sm mb-4 flex-1">
+                <div className="p-3 sm:p-6 flex flex-col flex-1">
+                  <h3 className="text-sm sm:text-2xl font-bold text-white mb-1 sm:mb-2 leading-tight">{formatCategoryName(category.name)}</h3>
+                  <p style={{ color: '#DDDBF1' }} className="hidden sm:block text-sm mb-4 flex-1">
                     {getCategoryDescription(category)}
                   </p>
+                  {/* Mobile: show puzzle count inline instead of badge */}
+                  <p className="sm:hidden text-[11px] font-medium mt-0.5" style={{ color: color }}>{category.puzzleCount} puzzle{category.puzzleCount !== 1 ? 's' : ''}</p>
 
-                  <div className="pt-4" style={{ borderTopColor: `${color}20`, borderTopWidth: '1px' }}>
+                  <div className="hidden sm:block pt-4" style={{ borderTopColor: `${color}20`, borderTopWidth: '1px' }}>
                     <div className="flex justify-between items-center">
                       <span style={{ color: color }} className="text-sm font-semibold">
                         Browse puzzles
@@ -249,7 +251,7 @@ export default function CategoriesPage() {
               >
                 {/* Coming Soon badge */}
                 <div
-                  className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
+                  className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
                   style={{
                     color: cs.color,
                     backgroundColor: `${cs.color}14`,
@@ -262,20 +264,20 @@ export default function CategoriesPage() {
 
                 {/* Icon Header */}
                 <div
-                  className="h-24 flex items-center justify-center text-6xl relative"
+                  className="h-14 sm:h-24 flex items-center justify-center text-4xl sm:text-6xl relative"
                   style={{ backgroundColor: `${cs.color}12` }}
                 >
                   <span style={{ opacity: 0.7 }}>{cs.icon}</span>
-                  {/* Lock overlay */}
-                  <span className="absolute text-2xl" style={{ opacity: 0.3 }}>🔒</span>
+                  <span className="absolute text-xl sm:text-2xl" style={{ opacity: 0.3 }}>🔒</span>
                 </div>
 
                 {/* Content */}
-                <div className="p-6 flex flex-col flex-1">
-                  <h3 className="text-2xl font-bold text-white mb-2">{cs.name}</h3>
-                  <p style={{ color: '#DDDBF1' }} className="text-sm mb-4 flex-1">{cs.description}</p>
+                <div className="p-3 sm:p-6 flex flex-col flex-1">
+                  <h3 className="text-sm sm:text-2xl font-bold text-white mb-1 sm:mb-2 leading-tight">{cs.name}</h3>
+                  <p style={{ color: '#DDDBF1' }} className="hidden sm:block text-sm mb-4 flex-1">{cs.description}</p>
+                  <p className="sm:hidden text-[11px] font-medium mt-0.5" style={{ color: cs.color }}>Coming soon</p>
 
-                  <div className="pt-4" style={{ borderTopColor: `${cs.color}20`, borderTopWidth: '1px' }}>
+                  <div className="hidden sm:block pt-4" style={{ borderTopColor: `${cs.color}20`, borderTopWidth: '1px' }}>
                     <div className="flex justify-between items-center">
                       <span style={{ color: cs.color }} className="text-sm font-semibold">
                         Launching soon

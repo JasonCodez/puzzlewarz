@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import WarzPlayBoard from "@/components/puzzle/WarzPlayBoard";
+import { getPuzzleTypeLabel } from "@/lib/puzzleTypeLabels";
 
 interface WarzPuzzle {
   id: string;
@@ -237,7 +238,7 @@ export default function WarzPlayPage() {
               </span>
               <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
                 style={{ backgroundColor: "rgba(255,184,107,0.15)", color: "#FFB86B" }}>
-                {puzzle.puzzleType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                {getPuzzleTypeLabel(puzzle.puzzleType)}
               </span>
             </div>
           </div>

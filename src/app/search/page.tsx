@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import { getPuzzleTypeLabel } from "@/lib/puzzleTypeLabels";
 
 const PUZZLE_TYPES: { value: string; label: string }[] = [
   { value: "", label: "All Types" },
@@ -248,7 +249,7 @@ function SearchPageInner() {
                           {puzzle.difficulty}
                         </span>
                         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.06)", color: "#6b7280" }}>
-                          {puzzle.puzzleType?.replace(/_/g, " ").toUpperCase()}
+                          {getPuzzleTypeLabel(puzzle.puzzleType ?? "")}
                         </span>
                         {puzzle.category && (
                           <span className="text-xs" style={{ color: "#6b7280" }}>

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",
+    "dev:turbo": "next dev --turbopack",
     "build": "next build",
     "start": "next start -p $PORT",
     "lint": "eslint",

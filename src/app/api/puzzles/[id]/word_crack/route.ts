@@ -4,7 +4,10 @@ import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 import { calcLevel } from "@/lib/levels";
 import { awardSeasonXp } from "@/lib/seasonXp";
-import { getAttemptStatus, MAX_PUZZLE_ATTEMPTS } from "@/lib/attemptLimit";
+import { getXpMultiplier } from "@/lib/getXpMultiplier";
+// Word Crack uses a stricter 2-game limit independent of the global MAX_PUZZLE_ATTEMPTS.
+// First failure: can retry with halved XP/points. Second failure: permanently locked.
+const WORD_CRACK_MAX_ATTEMPTS = 2;
 
 export async function POST(
   request: NextRequest,
@@ -37,15 +40,19 @@ export async function POST(
     const wordleData = (puzzle.data ?? {}) as Record<string, unknown>;
     const word = String(wordleData.word ?? "").toUpperCase().trim();
 
-    // Check 3-attempt limit (each full failed game = 1 attempt)
+    // Check 2-attempt limit for Word Crack (each full failed game = 1 attempt)
     if (!warzMode) {
-      const attemptStatus = await getAttemptStatus(currentUser.id, puzzleId);
-      if (attemptStatus.locked) {
+      const progress = await prisma.userPuzzleProgress.findUnique({
+        where: { userId_puzzleId: { userId: currentUser.id, puzzleId } },
+        select: { solved: true, failedAttempts: true },
+      });
+      const isLocked = !progress?.solved && (progress?.failedAttempts ?? 0) >= WORD_CRACK_MAX_ATTEMPTS;
+      if (isLocked) {
         return NextResponse.json(
           {
             locked: true,
-            attemptsUsed: attemptStatus.failedAttempts,
-            maxAttempts: MAX_PUZZLE_ATTEMPTS,
+            attemptsUsed: progress?.failedAttempts ?? WORD_CRACK_MAX_ATTEMPTS,
+            maxAttempts: WORD_CRACK_MAX_ATTEMPTS,
             revealWord: word,
           },
           { status: 403 }
@@ -144,8 +151,24 @@ export async function POST(
         });
 
         if (solved) {
-          // Award points
-          const awardPoints = puzzle.solutions?.[0]?.points ?? 100;
+          // Halve rewards if the player is on their second (retry) attempt
+          const penaltyApplied = (progress.failedAttempts ?? 0) >= 1;
+          const basePoints = puzzle.solutions?.[0]?.points ?? 100;
+          const baseXp = puzzle.xpReward ?? 50;
+          const xpMultiplier = await getXpMultiplier(currentUser.id);
+          // Triple-or-Nothing: 3x if this is the first attempt and the token is active
+          const wcUser = await prisma.user.findUnique({
+            where: { id: currentUser.id },
+            select: { tripleOrNothingActive: true },
+          });
+          const wcTripleActive = wcUser?.tripleOrNothingActive && (progress.failedAttempts ?? 0) === 0;
+          if (wcTripleActive) {
+            await prisma.user.update({ where: { id: currentUser.id }, data: { tripleOrNothingActive: false } });
+          }
+          const tripleMultiplier = wcTripleActive ? 3 : 1;
+          const awardPoints = (penaltyApplied ? Math.floor(basePoints / 2) : basePoints) * tripleMultiplier;
+          const xpGain = (penaltyApplied ? Math.floor(baseXp / 2) : baseXp) * xpMultiplier * tripleMultiplier;
+
           await prisma.userPuzzleProgress.update({
             where: { id: progress.id },
             data: { pointsEarned: { increment: awardPoints } },
@@ -170,7 +193,6 @@ export async function POST(
           }
 
           // Award XP
-          const xpGain = puzzle.xpReward ?? 50;
           const freshUser = await prisma.user.findUnique({
             where: { id: currentUser.id },
             select: { xp: true },
@@ -183,6 +205,14 @@ export async function POST(
           });
           // Season pass XP
           await awardSeasonXp(currentUser.id, xpGain);
+
+          return NextResponse.json({
+            result,
+            solved,
+            wordLength: word.length,
+            xpGained: xpGain,
+            penaltyApplied,
+          });
         }
       }
     } catch (persistErr) {

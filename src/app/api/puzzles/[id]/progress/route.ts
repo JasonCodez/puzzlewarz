@@ -9,6 +9,7 @@ import { validateSameOrigin } from "@/lib/requestSecurity";
 import { calcLevel } from "@/lib/levels";
 import { awardSeasonXp } from "@/lib/seasonXp";
 import { incrementStreak } from "@/lib/streakService";
+import { getXpMultiplier } from "@/lib/getXpMultiplier";
 
 // GET /api/puzzles/[id]/progress - Fetch user's progress for puzzle
 export async function GET(
@@ -447,6 +448,19 @@ export async function POST(
           });
         }
 
+          // Check Triple-or-Nothing token (3× rewards on first attempt)
+          let tripleActive = false;
+          try {
+            const tripleUser = await prisma.user.findUnique({
+              where: { id: user.id },
+              select: { tripleOrNothingActive: true },
+            });
+            tripleActive = !!(tripleUser?.tripleOrNothingActive && progress.attempts === 0);
+            if (tripleActive) {
+              await prisma.user.update({ where: { id: user.id }, data: { tripleOrNothingActive: false } });
+            }
+          } catch { /* non-critical */ }
+
           // Award points for solving the puzzle
           try {
             let awardPoints = 100;
@@ -461,6 +475,8 @@ export async function POST(
                 ) || awardPoints;
               }
             }
+
+            if (tripleActive) awardPoints *= 3;
 
             // Update user's progress points
             await prisma.userPuzzleProgress.update({
@@ -490,7 +506,9 @@ export async function POST(
 
           // ── Award XP and recalculate level/title ──────────────────────
           try {
-            const xpGain = puzzleRecord?.xpReward ?? 50;
+            const baseXp = puzzleRecord?.xpReward ?? 50;
+            const xpMultiplier = await getXpMultiplier(user.id);
+            const xpGain = baseXp * xpMultiplier * (tripleActive ? 3 : 1);
             const freshUser = await prisma.user.findUnique({
               where: { id: user.id },
               select: { xp: true },
@@ -578,6 +596,11 @@ export async function POST(
           await prisma.userPuzzleProgress.update({
             where: { id: progress.id },
             data: { failedAttempts: { increment: 1 }, lastAttemptAt: new Date() },
+          });
+          // Consume any active Triple-or-Nothing token (wasted on failure)
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { tripleOrNothingActive: false },
           });
         }
         break;

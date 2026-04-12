@@ -7,6 +7,8 @@ import { useRegisterModal } from "@/hooks/useRegisterModal";
 
 export interface PuzzleXpModalProps {
   xpGained: number;
+  /** Points (coins/score) awarded for this solve — shown alongside XP. */
+  pointsEarned?: number;
   oldLevel: number;
   newLevel: number;
   newTitle: string;
@@ -14,6 +16,8 @@ export interface PuzzleXpModalProps {
   oldProgress: number;
   /** Progress percentage (0-100) within the NEW level, after XP was added. */
   newProgress: number;
+  /** Level-up reward granted by the server, if any. */
+  levelReward?: { points?: number; hintTokens?: number; skipTokens?: number; label: string } | null;
   onDismiss: () => void;
 }
 
@@ -22,6 +26,7 @@ const COUNTER_DURATION = 1400; // ms
 // ─── Sub-component: standard puzzle-complete modal ────────────────────────────
 function NormalModal({
   xpGained,
+  pointsEarned,
   newLevel,
   newTitle,
   newProgress,
@@ -29,9 +34,12 @@ function NormalModal({
   onDismiss,
 }: Omit<PuzzleXpModalProps, "oldLevel">) {
   const [displayXp, setDisplayXp] = useState(0);
+  const [displayPts, setDisplayPts] = useState(0);
   const [barWidth, setBarWidth] = useState(oldProgress);
   const rafRef = useRef<number | null>(null);
+  const ptsRafRef = useRef<number | null>(null);
   const startRef = useRef<number | null>(null);
+  const ptsStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     startRef.current = null;
@@ -44,6 +52,19 @@ function NormalModal({
     rafRef.current = requestAnimationFrame(animate);
     return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
   }, [xpGained]);
+
+  useEffect(() => {
+    if (!pointsEarned) return;
+    ptsStartRef.current = null;
+    const animate = (ts: number) => {
+      if (ptsStartRef.current === null) ptsStartRef.current = ts;
+      const t = Math.min((ts - ptsStartRef.current) / COUNTER_DURATION, 1);
+      setDisplayPts(Math.round((1 - Math.pow(1 - t, 3)) * pointsEarned));
+      if (t < 1) ptsRafRef.current = requestAnimationFrame(animate);
+    };
+    ptsRafRef.current = requestAnimationFrame(animate);
+    return () => { if (ptsRafRef.current !== null) cancelAnimationFrame(ptsRafRef.current); };
+  }, [pointsEarned]);
 
   useEffect(() => {
     const t = setTimeout(() => setBarWidth(newProgress), 350);
@@ -69,13 +90,31 @@ function NormalModal({
         <h2 className="text-2xl font-extrabold text-white mb-2">Puzzle Complete!</h2>
         <p className="text-sm mb-5" style={{ color: "#DDDBF1" }}>Lv.{newLevel} · {newTitle}</p>
 
-        <div className="mb-5">
-          <span className="text-5xl font-extrabold tabular-nums" style={{ color: "#FDE74C" }}>
-            +{displayXp}
-          </span>
-          <span className="text-2xl font-bold ml-1" style={{ color: "#FFB86B" }}>XP</span>
+        {/* XP + Points counters side by side */}
+        <div className="flex items-end justify-center gap-6 mb-5">
+          <div className="text-center">
+            <div>
+              <span className="text-5xl font-extrabold tabular-nums" style={{ color: "#FDE74C" }}>
+                +{displayXp}
+              </span>
+              <span className="text-2xl font-bold ml-1" style={{ color: "#FFB86B" }}>XP</span>
+            </div>
+            <div className="text-xs mt-1" style={{ color: "#6b7280" }}>Experience</div>
+          </div>
+          {(pointsEarned ?? 0) > 0 && (
+            <div className="text-center">
+              <div>
+                <span className="text-5xl font-extrabold tabular-nums" style={{ color: "#38D399" }}>
+                  +{displayPts}
+                </span>
+                <span className="text-2xl font-bold ml-1" style={{ color: "#6EE7B7" }}>pts</span>
+              </div>
+              <div className="text-xs mt-1" style={{ color: "#6b7280" }}>Points</div>
+            </div>
+          )}
         </div>
 
+        {/* XP progress bar */}
         <div className="mb-4">
           <div className="flex justify-between text-xs mb-1.5" style={{ color: "#AB9F9D" }}>
             <span>Level {newLevel}</span>
@@ -108,13 +147,16 @@ function NormalModal({
 // ─── Sub-component: LEVEL-UP celebration modal ────────────────────────────────
 function LevelUpModal({
   xpGained,
+  pointsEarned,
   oldLevel,
   newLevel,
   newTitle,
   newProgress,
+  levelReward,
   onDismiss,
 }: Omit<PuzzleXpModalProps, "oldProgress">) {
   const [displayXp, setDisplayXp] = useState(0);
+  const [displayPts, setDisplayPts] = useState(0);
   const [barWidth, setBarWidth] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
   const rafRef = useRef<number | null>(null);
@@ -165,6 +207,20 @@ function LevelUpModal({
     rafRef.current = requestAnimationFrame(animate);
     return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
   }, [xpGained]);
+
+  // Points counter
+  useEffect(() => {
+    if (!pointsEarned) return;
+    const ptsRef = { id: 0, start: null as number | null };
+    const animate = (ts: number) => {
+      if (ptsRef.start === null) ptsRef.start = ts;
+      const t = Math.min((ts - ptsRef.start) / COUNTER_DURATION, 1);
+      setDisplayPts(Math.round((1 - Math.pow(1 - t, 3)) * pointsEarned));
+      if (t < 1) ptsRef.id = requestAnimationFrame(animate);
+    };
+    ptsRef.id = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(ptsRef.id);
+  }, [pointsEarned]);
 
   // XP bar — starts at 0 (bar just filled!) then animates to newProgress
   useEffect(() => {
@@ -271,17 +327,33 @@ function LevelUpModal({
           )}
         </AnimatePresence>
 
-        {/* XP gained */}
+        {/* XP + Points counters */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.45 }}
-          className="mb-5"
+          className="flex items-end justify-center gap-6 mb-5"
         >
-          <span className="text-3xl font-extrabold tabular-nums" style={{ color: "#FFB86B" }}>
-            +{displayXp}
-          </span>
-          <span className="text-xl font-bold ml-1" style={{ color: "#AB9F9D" }}>XP</span>
+          <div className="text-center">
+            <div>
+              <span className="text-3xl font-extrabold tabular-nums" style={{ color: "#FFB86B" }}>
+                +{displayXp}
+              </span>
+              <span className="text-xl font-bold ml-1" style={{ color: "#AB9F9D" }}>XP</span>
+            </div>
+            <div className="text-xs mt-1" style={{ color: "#6b7280" }}>Experience</div>
+          </div>
+          {(pointsEarned ?? 0) > 0 && (
+            <div className="text-center">
+              <div>
+                <span className="text-3xl font-extrabold tabular-nums" style={{ color: "#38D399" }}>
+                  +{displayPts}
+                </span>
+                <span className="text-xl font-bold ml-1" style={{ color: "#6EE7B7" }}>pts</span>
+              </div>
+              <div className="text-xs mt-1" style={{ color: "#6b7280" }}>Points</div>
+            </div>
+          )}
         </motion.div>
 
         {/* XP progress bar for new level */}
@@ -305,6 +377,50 @@ function LevelUpModal({
             />
           </div>
         </motion.div>
+
+        {/* Level-up reward banner */}
+        {levelReward && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.9, type: "spring", stiffness: 220, damping: 20 }}
+            className="mb-5 rounded-xl border px-4 py-3 text-left"
+            style={{ borderColor: "#38D399", backgroundColor: "rgba(56,211,153,0.08)" }}
+          >
+            <div
+              className="text-xs font-black tracking-widest uppercase mb-1.5"
+              style={{ color: "#38D399" }}
+            >
+              🎁 Level-Up Reward
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(levelReward.points ?? 0) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold"
+                  style={{ backgroundColor: "rgba(56,211,153,0.15)", color: "#6EE7B7" }}
+                >
+                  +{(levelReward.points!).toLocaleString()} pts
+                </span>
+              )}
+              {(levelReward.hintTokens ?? 0) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold"
+                  style={{ backgroundColor: "rgba(253,231,76,0.12)", color: "#FDE74C" }}
+                >
+                  💡 {levelReward.hintTokens} Hint Token{levelReward.hintTokens !== 1 ? "s" : ""}
+                </span>
+              )}
+              {(levelReward.skipTokens ?? 0) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold"
+                  style={{ backgroundColor: "rgba(167,139,250,0.15)", color: "#C4B5FD" }}
+                >
+                  ⏭ {levelReward.skipTokens} Skip Token{levelReward.skipTokens !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         <button
           onClick={onDismiss}

@@ -32,8 +32,8 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".next/types/**/*.ts",
     "**/*.mts",
     ".next/dev/types/**/*.ts"
@@ -41,6 +41,10 @@
   "exclude": [
     "node_modules",
     ".next",
-    "kryptyk_labs_arg.git"
+    "kryptyk_labs_arg.git",
+    "scripts",
+    "tests",
+    "cleanup",
+    "playwright.config.ts"
   ]
 }

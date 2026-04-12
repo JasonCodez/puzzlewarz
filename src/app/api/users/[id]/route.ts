@@ -42,6 +42,7 @@ export async function GET(
         activeFrame: true,
         activeTheme: true,
         activeSkin: true,
+        isHidden: true,
         achievements: {
           include: {
             achievement: {
@@ -73,6 +74,11 @@ export async function GET(
     });
 
     if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Hide stealth admin accounts from public profile lookups
+    if ((user as any).isHidden) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -113,8 +119,11 @@ export async function GET(
 
     const { level, title, currentXp, nextLevelXp, progress } = calcLevel(user.xp ?? 0);
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { isHidden: _hidden, ...publicUser } = user as typeof user & { isHidden: boolean };
+
     return NextResponse.json({
-      ...user,
+      ...publicUser,
       activeFlair: resolveFlair(user.activeFlair),
       level,
       xpTitle: title,

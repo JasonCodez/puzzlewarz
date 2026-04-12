@@ -157,19 +157,39 @@ function GridDisplay({
   illuminated: boolean;
 }) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const cols = grid[0]?.length ?? 1;
 
-  const cellSize = cols <= 3 ? 84 : cols <= 5 ? 68 : 54;
-  const fontSize = cols <= 3 ? '1.6rem' : cols <= 5 ? '1.3rem' : '1.05rem';
+  // Measure available container width so cells never overflow on mobile
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      setContainerWidth(entries[0]?.contentRect.width ?? 0);
+    });
+    ro.observe(el);
+    setContainerWidth(el.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, []);
+
+  // Ideal sizes per column count; clamp to available width
+  const idealCellSize = cols <= 3 ? 84 : cols <= 5 ? 68 : 54;
+  const gap = 8;
+  const cellSize = containerWidth > 0
+    ? Math.min(idealCellSize, Math.floor((containerWidth - gap * (cols - 1)) / cols))
+    : idealCellSize;
+  const fontSize = cellSize >= 70 ? '1.6rem' : cellSize >= 56 ? '1.3rem' : cellSize >= 44 ? '1.05rem' : '0.85rem';
 
   let missingIdx = 0;
 
   return (
+    <div ref={containerRef} style={{ width: '100%' }}>
     <div
       style={{
         display: 'inline-grid',
         gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`,
-        gap: 8,
+        gap,
       }}
     >
       {grid.map((row, ri) =>
@@ -260,6 +280,7 @@ function GridDisplay({
           );
         })
       )}
+    </div>
     </div>
   );
 }

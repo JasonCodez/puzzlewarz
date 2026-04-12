@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get("sortBy") || "name"; // "name", "puzzles", "points", "followers"
 
     const where: any = {
+      isHidden: false,
+      isBot: false,
       NOT: {
         email: null, // Exclude users without email (like system accounts)
       },

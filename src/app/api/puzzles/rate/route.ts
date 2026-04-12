@@ -82,12 +82,12 @@ export async function POST(req: NextRequest) {
       if (existingLeaderboard) {
         await prisma.globalLeaderboard.update({
           where: { id: existingLeaderboard.id },
-          data: { totalPoints: { increment: 5 } },
+          data: { totalPoints: { increment: 10 } },
         });
       } else {
-        await prisma.globalLeaderboard.create({ data: { userId: user.id, totalPoints: 5 } });
+        await prisma.globalLeaderboard.create({ data: { userId: user.id, totalPoints: 10 } });
       }
-      pointsAwarded = 5;
+      pointsAwarded = 10;
 
       // Also increment or create the user's UserPuzzleProgress so profile totals reflect awarded points
       try {
@@ -103,14 +103,14 @@ export async function POST(req: NextRequest) {
         if (existingProgress) {
           await prisma.userPuzzleProgress.update({
             where: { id: existingProgress.id },
-            data: { pointsEarned: { increment: 5 } },
+            data: { pointsEarned: { increment: 10 } },
           });
         } else {
           await prisma.userPuzzleProgress.create({
             data: {
               userId: user.id,
               puzzleId,
-              pointsEarned: 5,
+              pointsEarned: 10,
             },
           });
         }

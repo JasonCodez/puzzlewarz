@@ -71,6 +71,10 @@ export async function GET(
             rotationEnabled: true,
           },
         },
+        solutions: {
+          select: { points: true },
+          take: 1,
+        },
       },
     });
 

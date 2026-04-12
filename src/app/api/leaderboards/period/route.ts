@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
       where: {
         solved: true,
         solvedAt: { gte: windowStart, lte: windowEnd },
+        user: { isHidden: false, isBot: false },
       },
       _sum: { pointsEarned: true },
       _count: { puzzleId: true },
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     const userIds = rawRows.map((r) => r.userId);
     const users = await prisma.user.findMany({
-      where: { id: { in: userIds } },
+      where: { id: { in: userIds }, isHidden: false, isBot: false },
       select: { id: true, name: true, image: true, activeFlair: true },
     });
 

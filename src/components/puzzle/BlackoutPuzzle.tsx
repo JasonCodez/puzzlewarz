@@ -537,7 +537,7 @@ export default function BlackoutPuzzle({
                     <span style={redactionStyle(idx, barPx, 0.9)} />
                     <span style={{ display: "flex", flexWrap: "wrap", gap: "3px", lineHeight: 1 }}>
                       {opts.map((opt: string, oi: number) => (
-                        <button key={oi} type="button" onClick={() => checkAnswer(idx, opt)}
+                        <button key={oi} type="button" onClick={e => { e.stopPropagation(); checkAnswer(idx, opt); }}
                           style={{
                             padding: "2px 8px", fontSize: "10px", fontFamily: FONT,
                             background: wrong[idx] ? "#fff0ec" : "#fff8f0",
@@ -565,7 +565,7 @@ export default function BlackoutPuzzle({
               return (
                 <span key={i}
                   style={{ display: "inline", whiteSpace: "nowrap", cursor: "pointer" }}
-                  onClick={scrollToTerminal}
+                  onClick={e => { e.stopPropagation(); scrollToTerminal(); }}
                   title={`[${refBadge}] — see DECODE TERMINAL below`}
                 >
                   <span style={redactionStyle(idx, barPx, 0.85)} /><sup style={{

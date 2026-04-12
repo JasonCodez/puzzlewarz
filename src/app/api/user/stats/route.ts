@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
 
     // Get user's global rank (based on earned points, excluding purchased)
     const allUsers = await prisma.user.findMany({
+      where: { isHidden: false, isBot: false },
       select: { id: true, totalPoints: true, purchasedPoints: true },
     });
     const sorted = allUsers

@@ -57,17 +57,19 @@ export async function GET(
       userHistory: hint.history,
     }));
 
-    // Include user's hint token balance so the UI can show it
+    // Include user's hint + skip token balances so the UI can show them
     let hintTokens = 0;
+    let skipTokens = 0;
     if (session?.user?.email) {
       const user = await prisma.user.findUnique({
         where: { email: session.user.email },
-        select: { hintTokens: true },
+        select: { hintTokens: true, skipTokens: true },
       });
       hintTokens = user?.hintTokens ?? 0;
+      skipTokens = user?.skipTokens ?? 0;
     }
 
-    return NextResponse.json({ hints: hintsWithStats, hintTokens });
+    return NextResponse.json({ hints: hintsWithStats, hintTokens, skipTokens });
   } catch (error) {
     console.error("Failed to fetch hints:", error);
     return NextResponse.json(

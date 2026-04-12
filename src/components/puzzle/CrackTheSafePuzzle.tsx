@@ -182,7 +182,8 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
         } finally {
           setRecording(false);
         }
-        onSolved?.();
+        // Delay the parent modal so the player can see the open safe first
+        setTimeout(() => onSolved?.(), 3500);
       } else if (next.length >= maxAttempts) {
         setStatus("lost");
         if (!gameLossRecorded.current) {
@@ -265,6 +266,14 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
           0%,100% { box-shadow: 2px 4px 16px rgba(0,0,0,0.75); }
           50%      { box-shadow: 2px 4px 28px rgba(200,220,255,0.55); }
         }
+        @keyframes safe-ambient-pulse {
+          0%,100% { opacity: 0.55; }
+          50%      { opacity: 0.85; }
+        }
+        @keyframes lcd-blink {
+          0%,100% { opacity: 1; }
+          48%,52% { opacity: 0.3; }
+        }
         .safe-door-open   { animation: safe-door-open 0.9s cubic-bezier(0.4,0,0.2,1) forwards; transform-origin: right center; }
         .safe-contents    { animation: safe-contents-appear 0.5s ease 0.6s both; }
         .safe-shimmer     { animation: safe-shimmer 1.8s ease-in-out infinite; }
@@ -274,6 +283,8 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
         .safe-handle-ready { animation: handle-pulse 2s ease-in-out infinite; }
         .safe-handle:hover { filter: brightness(1.25) drop-shadow(0 0 8px rgba(200,220,240,0.6)); }
         .safe-handle:active { filter: brightness(0.82); }
+        .safe-ambient     { animation: safe-ambient-pulse 3s ease-in-out infinite; }
+        .safe-lcd-idle    { animation: lcd-blink 4s ease-in-out infinite; }
       `}</style>
 
       <div className="w-full max-w-md mx-auto select-none">
@@ -316,16 +327,28 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
             <div className={shaking ? "safe-shake" : ""}
                  style={{ position: "relative", width: 420, height: 430, display: "inline-block" }}>
 
+              {/* ── Ambient glow halo behind the safe ── */}
+              <div className="safe-ambient" style={{
+                position: "absolute", inset: -18,
+                borderRadius: 28,
+                background: status === "won"
+                  ? "radial-gradient(ellipse at 50% 50%, rgba(56,211,153,0.22) 0%, transparent 72%)"
+                  : status === "lost"
+                  ? "radial-gradient(ellipse at 50% 50%, rgba(239,68,68,0.18) 0%, transparent 72%)"
+                  : "radial-gradient(ellipse at 50% 50%, rgba(56,145,166,0.14) 0%, transparent 72%)",
+                pointerEvents: "none",
+              }} />
+
               {/* ── Outer casing ── */}
               <div style={{
                 position: "absolute", left: 0, right: 0, top: 0, height: 418,
                 borderRadius: 10,
                 background: "linear-gradient(155deg, #585d63 0%, #404448 25%, #2e3238 55%, #3c4048 100%)",
                 boxShadow: status === "won"
-                  ? "0 0 0 2px #38D399, 0 24px 60px rgba(0,0,0,0.85), 0 8px 20px rgba(0,0,0,0.5)"
+                  ? "0 0 0 2px #38D399, 0 0 40px rgba(56,211,153,0.35), 0 24px 60px rgba(0,0,0,0.85), 0 8px 20px rgba(0,0,0,0.5)"
                   : status === "lost"
-                  ? "0 0 0 2px #ef4444, 0 24px 60px rgba(0,0,0,0.85)"
-                  : "0 24px 60px rgba(0,0,0,0.85), 0 8px 20px rgba(0,0,0,0.5)",
+                  ? "0 0 0 2px #ef4444, 0 0 30px rgba(239,68,68,0.3), 0 24px 60px rgba(0,0,0,0.85)"
+                  : "0 0 0 1px rgba(255,255,255,0.08), 0 24px 60px rgba(0,0,0,0.85), 0 8px 20px rgba(0,0,0,0.5)",
                 overflow: "hidden",
               }}>
                 {/* Subtle horizontal texture */}
@@ -343,6 +366,62 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
                   background: "linear-gradient(180deg, rgba(255,255,255,0.09), transparent)",
                   borderRadius: "10px 10px 0 0", pointerEvents: "none",
                 }} />
+
+                {/* ── Brand nameplate (top center) ── */}
+                <div style={{
+                  position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
+                  background: "linear-gradient(180deg, #8a8e96 0%, #6a6e76 50%, #7e8288 100%)",
+                  borderRadius: 4, padding: "3px 16px",
+                  border: "1px solid rgba(0,0,0,0.4)",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.22)",
+                  pointerEvents: "none", zIndex: 5,
+                }}>
+                  <span style={{ fontSize: 8, letterSpacing: "0.32em", color: "rgba(0,0,0,0.7)", fontFamily: "monospace", fontWeight: 900 }}>VAULT-X SERIES II</span>
+                </div>
+
+                {/* ── Corner reinforcement plates ── */}
+                {[
+                  { top: 0,   left: 0,   borderRadius: "10px 0 8px 0" },
+                  { top: 0,   right: 0,  borderRadius: "0 10px 0 8px" },
+                  { bottom: 12, left: 0, borderRadius: "0 8px 0 10px" },
+                  { bottom: 12, right: 0,borderRadius: "8px 0 10px 0" },
+                ].map((pos, idx) => (
+                  <div key={idx} style={{
+                    position: "absolute", ...pos,
+                    width: 42, height: 42,
+                    background: "linear-gradient(135deg, #6e7278 0%, #52565c 55%, #484c52 100%)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.25)",
+                    pointerEvents: "none", zIndex: 3,
+                  }}>
+                    {/* Rivet */}
+                    <div style={{
+                      position: "absolute", top: "50%", left: "50%",
+                      transform: "translate(-50%,-50%)",
+                      width: 10, height: 10, borderRadius: "50%",
+                      background: "radial-gradient(circle at 36% 32%, #9ca0a6, #3a3e44)",
+                      boxShadow: "inset 0 1px 3px rgba(0,0,0,0.6), 0 1px 1px rgba(255,255,255,0.1)",
+                    }}>
+                      <div style={{ position: "absolute", top: "50%", left: 2, right: 2, height: 1.5, background: "rgba(0,0,0,0.45)", transform: "translateY(-50%)" }} />
+                    </div>
+                  </div>
+                ))}
+
+                {/* ── Warning / caution stripe at bottom ── */}
+                <div style={{
+                  position: "absolute", bottom: 12, left: 10, right: 10, height: 18,
+                  borderRadius: "0 0 6px 6px",
+                  overflow: "hidden", pointerEvents: "none", zIndex: 4,
+                  boxShadow: "inset 0 1px 0 rgba(0,0,0,0.3)",
+                }}>
+                  {Array.from({ length: 22 }).map((_, i) => (
+                    <div key={i} style={{
+                      position: "absolute", top: 0, bottom: 0,
+                      left: i * 19 - 4, width: 10,
+                      background: i % 2 === 0 ? "rgba(253,231,76,0.55)" : "rgba(0,0,0,0.45)",
+                      transform: "skewX(-22deg)",
+                    }} />
+                  ))}
+                </div>
                 {/* Vault interior — left half, revealed when door swings open to left */}
                 {status === "won" && (
                   <div style={{
@@ -412,6 +491,12 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
                     pointerEvents: "none",
                   }} />
                 ))}
+                {/* Scanline overlay */}
+                <div style={{
+                  position: "absolute", inset: 0, borderRadius: 7,
+                  backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.07) 0px, rgba(0,0,0,0.07) 1px, transparent 1px, transparent 3px)",
+                  pointerEvents: "none", zIndex: 1,
+                }} />
                 {/* Left edge visible highlight */}
                 <div style={{
                   position: "absolute", top: 0, left: 0, bottom: 0, width: 2,
@@ -554,6 +639,10 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
                           <span style={{ color: "#7BEA7B", fontSize: 9, letterSpacing: "0.18em", fontFamily: "monospace" }}>✓ UNLOCKED</span>
                         ) : status === "lost" ? (
                           <span style={{ color: "#EA7B7B", fontSize: 9, letterSpacing: "0.18em", fontFamily: "monospace" }}>✗ LOCKED OUT</span>
+                        ) : curr.every(d => d === "") ? (
+                          <span className="safe-lcd-idle" style={{ color: "rgba(80,170,80,0.65)", fontSize: 10, fontFamily: "monospace", letterSpacing: 2 }}>
+                            {"▮ ".repeat(digits).trim()}
+                          </span>
                         ) : (
                           <span style={{ color: "rgba(80,170,80,0.38)", fontSize: 12, fontFamily: "monospace", letterSpacing: 2 }}>
                             {"_ ".repeat(digits).trim()}
@@ -714,32 +803,57 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
               {[50, 280].map(top => (
                 <div key={top} style={{
                   position: "absolute", right: 0, top, zIndex: 10,
-                  width: 20, height: 54,
-                  background: "linear-gradient(270deg, #1e2226, #8a8e94 50%, #5a5e64)",
-                  borderRadius: "5px 0 0 5px",
-                  boxShadow: "-3px 0 8px rgba(0,0,0,0.6), inset -1px 0 0 rgba(255,255,255,0.07)",
+                  width: 22, height: 54,
+                  background: "linear-gradient(270deg, #1e2226, #9a9ea6 48%, #6a6e74)",
+                  borderRadius: "6px 0 0 6px",
+                  boxShadow: "-3px 0 10px rgba(0,0,0,0.65), inset -1px 0 0 rgba(255,255,255,0.1)",
                   pointerEvents: "none",
                 }}>
+                  {/* Hinge pin */}
                   <div style={{
                     position: "absolute", top: "50%", left: "50%",
                     transform: "translate(-50%,-50%)",
-                    width: 9, height: 9, borderRadius: "50%",
-                    background: "radial-gradient(circle at 35% 35%, #ccc, #555)",
+                    width: 11, height: 11, borderRadius: "50%",
+                    background: "radial-gradient(circle at 35% 30%, #d4d8de, #555)",
+                    boxShadow: "inset 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(255,255,255,0.15)",
+                  }}>
+                    <div style={{ position: "absolute", top: "50%", left: 2, right: 2, height: 1.5, background: "rgba(0,0,0,0.4)", transform: "translateY(-50%)" }} />
+                  </div>
+                  {/* Hinge top/bottom grooves */}
+                  <div style={{ position: "absolute", top: 4, left: 3, right: 3, height: 1, background: "rgba(0,0,0,0.3)" }} />
+                  <div style={{ position: "absolute", bottom: 4, left: 3, right: 3, height: 1, background: "rgba(0,0,0,0.3)" }} />
+                </div>
+              ))}
+
+              {/* ── Rubber feet with floor shadow ── */}
+              {[28, 332].map(left => (
+                <div key={left} style={{ position: "absolute", bottom: 0, left, pointerEvents: "none" }}>
+                  <div style={{
+                    width: 34, height: 14,
+                    borderRadius: "0 0 8px 8px",
+                    background: "linear-gradient(180deg, #2a2a2a, #141414)",
+                    boxShadow: "0 5px 10px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)",
+                  }} />
+                  {/* Foot shadow on floor */}
+                  <div style={{
+                    position: "absolute", bottom: -6, left: "50%",
+                    transform: "translateX(-50%)",
+                    width: 30, height: 6,
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,0.35)",
+                    filter: "blur(3px)",
                   }} />
                 </div>
               ))}
 
-              {/* ── Rubber feet ── */}
-              {[28, 332].map(left => (
-                <div key={left} style={{
-                  position: "absolute", bottom: 0, left,
-                  width: 34, height: 12,
-                  borderRadius: "0 0 7px 7px",
-                  background: "linear-gradient(180deg, #252525, #181818)",
-                  boxShadow: "0 4px 8px rgba(0,0,0,0.5)",
-                  pointerEvents: "none",
-                }} />
-              ))}
+              {/* ── Full ground shadow beneath whole safe ── */}
+              <div style={{
+                position: "absolute", bottom: -10, left: "10%", right: "10%",
+                height: 18, borderRadius: "50%",
+                background: "rgba(0,0,0,0.45)",
+                filter: "blur(10px)",
+                pointerEvents: "none", zIndex: 0,
+              }} />
             </div>
             </div>
             </div>

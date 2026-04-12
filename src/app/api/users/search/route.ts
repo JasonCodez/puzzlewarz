@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
       where: {
         AND: [
           { id: { not: currentUser.id } },
+          { isHidden: false },
           {
             OR: [
               { name: { contains: q, mode: "insensitive" } },

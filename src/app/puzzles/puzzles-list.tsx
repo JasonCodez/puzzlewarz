@@ -528,10 +528,11 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
           {/* Category Filters */}
           <div className="mt-6 mb-8">
             <h3 className="text-xs font-bold tracking-widest mb-3 uppercase" style={{ color: '#6baabb' }}>Categories</h3>
-            <div className="flex gap-2 flex-wrap">
+            <div className="-mx-4 px-4 sm:mx-0 sm:px-0">
+              <div className="flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:overflow-x-visible sm:pb-0 no-scrollbar">
               <button
                 onClick={() => setSelectedCategory("all")}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                className={`flex-none px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-medium transition-all ${
                   selectedCategory === "all"
                     ? "scale-105"
                     : "opacity-70 hover:opacity-100"
@@ -541,13 +542,13 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   color: selectedCategory === "all" ? "#020202" : "#DDDBF1",
                 }}
               >
-                All Categories
+                All
               </button>
               {categories.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  className={`flex-none px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-medium transition-all ${
                     selectedCategory === cat.id
                       ? "scale-105"
                       : "opacity-70 hover:opacity-100"
@@ -555,12 +556,14 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   style={{
                     backgroundColor: selectedCategory === cat.id ? (cat.color || "#3891A6") : "rgba(56, 145, 166, 0.2)",
                     color: selectedCategory === cat.id ? "#020202" : "#DDDBF1",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  <span className="mr-2">{cat.icon || CATEGORY_ICONS[cat.name.toLowerCase()] || '🧩'}</span>
+                  <span className="mr-1.5">{cat.icon || CATEGORY_ICONS[cat.name.toLowerCase()] || '🧩'}</span>
                   {cat.name}
                 </button>
               ))}
+              </div>
             </div>
           </div>
 

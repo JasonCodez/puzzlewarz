@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import WarzPlayBoard from "@/components/puzzle/WarzPlayBoard";
+import { getPuzzleTypeLabel } from "@/lib/puzzleTypeLabels";
 
 interface WarzChallenge {
   id: string;
@@ -147,12 +148,7 @@ export default function WarzChallengePage() {
     const myFormatted = formatTime(result.myTime);
     const theirFormatted = result.challengerTime != null ? formatTime(result.challengerTime) : "DNF";
     const opponent = challenge.challenger.name ?? challenge.challenger.username;
-    const puzzleLabels: Record<string, string> = {
-      sudoku: "Sudoku", jigsaw: "Jigsaw", word_crack: "Word Crack",
-      word_search: "Word Search", anagram_blitz: "Anagram Blitz",
-      crack_safe: "Crack the Safe", general: "Puzzle", riddle: "Riddle",
-    };
-    const puzzleLabel = puzzleLabels[challenge.puzzle.puzzleType] ?? challenge.puzzle.puzzleType.replace(/_/g, " ");
+    const puzzleLabel = getPuzzleTypeLabel(challenge.puzzle.puzzleType);
 
     let text: string;
     if (result.tie) {
@@ -345,7 +341,7 @@ export default function WarzChallengePage() {
             </span>
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
               style={{ backgroundColor: "rgba(255,184,107,0.15)", color: "#FFB86B" }}>
-              {challenge.puzzle.puzzleType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+              {getPuzzleTypeLabel(challenge.puzzle.puzzleType)}
             </span>
           </div>
         </div>

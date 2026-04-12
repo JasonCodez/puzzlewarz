@@ -26,6 +26,7 @@ model User {
   xp                     Int                        @default(0)
   level                  Int                        @default(1)
   xpTitle                String                     @default("Newcomer")
+  levelRewardClaimed     Int                        @default(0)
   totalPoints            Int                        @default(0)
   purchasedPoints        Int                        @default(0)
   accounts               Account[]
@@ -84,12 +85,19 @@ model User {
   warzChallengeSlots     Int                        @default(3)
   warzRematchTokens      Int                        @default(0)
 
+  // Point Store — consumables with active state
+  xpBoostExpiresAt          DateTime?
+  tripleOrNothingTokens     Int                        @default(0)
+  tripleOrNothingActive     Boolean                    @default(false)
+
   // Point Store — active cosmetics
   activeTheme            String                     @default("default")
   activeFrame            String                     @default("none")
   activeSkin             String                     @default("default")
   activeFlair            String                     @default("none")
   teamBannerColor        String                     @default("none")
+  activeNameColor        String                     @default("none")
+  activeCompletionAnimation String                  @default("default")
 
   // Point Store — inventory
   inventory              UserInventory[]
@@ -108,6 +116,8 @@ model User {
 
   // Ghost / seeded bot accounts for cold-start social proof
   isBot                  Boolean                    @default(false)
+  // Admin stealth — hidden from all public lists, leaderboards, feeds, search
+  isHidden               Boolean                    @default(false)
 
   @@map("users")
 }
@@ -957,12 +967,13 @@ model UserAchievement {
 }
 
 model UserStreak {
-  id              String    @id @default(cuid())
-  userId          String    @unique
-  currentStreak   Int       @default(0)
-  longestStreak   Int       @default(0)
-  lastSolveDate   DateTime?
-  streakStartDate DateTime?
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  currentStreak        Int       @default(0)
+  longestStreak        Int       @default(0)
+  lastSolveDate        DateTime?
+  streakStartDate      DateTime?
+  lastStreakBeforeBreak Int       @default(0)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)

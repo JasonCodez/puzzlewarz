@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -22,11 +22,15 @@ interface GuessResult {
 interface Props {
   puzzleId: string;
   wordCrackData: Record<string, unknown>;
-  onSolved?: () => void;
+  onSolved?: (xpGained?: number) => void;
   onFailed?: () => void;
   alreadySolved?: boolean;
   warzMode?: boolean;
   failedAttempts?: number;
+  hintTokens?: number;
+  onHintUsed?: () => Promise<boolean>;
+  xpReward?: number;
+  pointsReward?: number;
 }
 
 // â”€â”€â”€ Keyboard layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -157,12 +161,12 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
 
 // â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onFailed, alreadySolved, warzMode, failedAttempts: initialFailedAttempts = 0 }: Props) {
+export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onFailed, alreadySolved, warzMode, failedAttempts: initialFailedAttempts = 0, hintTokens = 0, onHintUsed, xpReward = 50, pointsReward = 100 }: Props) {
   const skin = usePuzzleSkin();
   const wordLength = Math.max(3, Math.min(10, Number(wordCrackData.wordLength ?? 5)));
   const maxGuesses = Math.max(1, Math.min(10, Number(wordCrackData.maxGuesses ?? 6)));
   const hint = String(wordCrackData.hint ?? "");
-  const MAX_ATTEMPTS = 3;
+  const MAX_ATTEMPTS = 2;
 
   const [showInstructions, setShowInstructions] = useState(!alreadySolved);
   const [guesses, setGuesses] = useState<GuessResult[][]>([]);
@@ -180,11 +184,15 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   const [hintLevel, setHintLevel] = useState(0);
   const [hintReveal, setHintReveal] = useState<{ position: number; letter: string } | null>(null);
   const [hintLoading, setHintLoading] = useState(false);
-  // 3-attempt system
+  // 2-attempt system
   const [failedAttempts, setFailedAttempts] = useState(initialFailedAttempts);
   const [revealedWord, setRevealedWord] = useState<string | null>(null);
   const attemptsLocked = !alreadySolved && failedAttempts >= MAX_ATTEMPTS;
+  const [showRetryModal, setShowRetryModal] = useState(false);
   const gameLossRecorded = useRef(false);
+  // Responsive tile sizing — measured from the actual board container
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [tileSize, setTileSize] = useState(52);
 
   /** Reset game state for a fresh attempt (same word, new board). */
   const resetForNewAttempt = () => {
@@ -312,7 +320,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           setBounceWin(true);
           if (!onSolvedFired.current) {
             onSolvedFired.current = true;
-            setTimeout(() => onSolved?.(), 1800);
+            setTimeout(() => onSolved?.(data.xpGained), 1800);
           }
         }, revealTotal);
       } else if (newGuesses.length >= maxGuesses) {
@@ -342,6 +350,22 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
       setSubmitting(false);
     }
   }, [isPlaying, submitting, currentInput, wordLength, puzzleId, guesses, maxGuesses, onSolved]);
+
+  // -- Board resize observer ----------------------------------------
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const update = () => {
+      const inner = el.clientWidth - 40;
+      const gaps = (wordLength - 1) * 3;
+      const size = Math.max(26, Math.min(56, Math.floor((inner - gaps) / wordLength)));
+      setTileSize(size);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [wordLength]);
 
   // â”€â”€ Physical keyboard handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
@@ -388,31 +412,33 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     )
   );
 
-  // Hint handler
+  // Hint handler — single stage: reveal a letter (costs 1 token)
   const useHint = useCallback(async () => {
-    if (hintLevel === 0) {
-      setHintLevel(1);
-    } else if (hintLevel === 1) {
-      setHintLoading(true);
-      try {
-        const resp = await fetch(`/api/puzzles/${puzzleId}/word_crack/hint`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ revealedPositions }),
-          credentials: "same-origin",
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          setHintReveal({ position: data.position, letter: data.letter });
-          setHintLevel(2);
-        }
-      } catch {
-        // silently ignore
-      } finally {
-        setHintLoading(false);
+    if (hintLevel >= 1) return;
+    if (hintTokens < 1) return;
+    setHintLoading(true);
+    try {
+      if (onHintUsed) {
+        const ok = await onHintUsed();
+        if (!ok) { setHintLoading(false); return; }
       }
+      const resp = await fetch(`/api/puzzles/${puzzleId}/word_crack/hint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revealedPositions }),
+        credentials: "same-origin",
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        setHintReveal({ position: data.position, letter: data.letter });
+        setHintLevel(1);
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setHintLoading(false);
     }
-  }, [hintLevel, puzzleId, revealedPositions]);
+  }, [hintLevel, hintTokens, onHintUsed, puzzleId, revealedPositions]);
 
   // â”€â”€ Build grid rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Only render rows that have been played + the current active row (no ghost rows below)
@@ -445,13 +471,13 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   };
   const grade = getGrade(guesses.length, maxGuesses);
 
-  // Locked overlay — all 3 games used up
+  // Locked overlay — both games used up
   if (attemptsLocked) {
     return (
       <div className="flex flex-col items-center gap-6 p-8 text-center">
         <div className="text-5xl">🔒</div>
-        <h3 className="font-black text-2xl" style={{ color: "#ef4444" }}>PUZZLE LOCKED</h3>
-        <p style={{ color: "#9ca3af" }}>You&apos;ve used all {MAX_ATTEMPTS} attempts on this puzzle.</p>
+        <h3 className="font-black text-2xl" style={{ color: "#ef4444" }}>PUZZLE FAILED</h3>
+        <p style={{ color: "#9ca3af" }}>You&apos;ve used both attempts on this puzzle.</p>
         {revealedWord && (
           <div className="mt-2">
             <p className="text-sm mb-1" style={{ color: "#9ca3af" }}>The word was:</p>
@@ -519,8 +545,6 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           position: "relative",
           zIndex: 1,
           fontFamily: skin.tileFontFamily !== "inherit" ? skin.tileFontFamily : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif",
-          "--tile-sz": `clamp(26px, calc((100vw - 4rem - ${(wordLength - 1) * 4}px) / ${wordLength}), 56px)`,
-          "--tile-sz-sm": `clamp(26px, calc((100vw - 5rem - ${(wordLength - 1) * 8}px) / ${wordLength}), 56px)`,
           "--skin-tile-bg": skin.tileBg,
           "--skin-tile-border": skin.tileBorder,
           "--skin-tile-text": skin.tileText,
@@ -580,17 +604,12 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           >
             ?
           </button>
-          {hint && hintLevel >= 1 && (
-            <p className="text-sm mt-1" style={{ color: "#cbd5e1", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
-              💡 <span className="italic">{hint}</span>
-            </p>
-          )}
           <p className="text-xs mt-1 font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
             {wordLength} letters · {maxGuesses - guesses.length} attempt{maxGuesses - guesses.length !== 1 ? "s" : ""} remaining
           </p>
           {!warzMode && gameStatus === "playing" && MAX_ATTEMPTS > 0 && (
-            <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>
-              Game {failedAttempts + 1} of {MAX_ATTEMPTS}
+            <p className="text-xs mt-0.5" style={{ color: failedAttempts >= 1 ? "#f97316" : "#9ca3af" }}>
+              {failedAttempts >= 1 ? "⚠️ Final attempt — rewards halved" : `Attempt ${failedAttempts + 1} of ${MAX_ATTEMPTS}`}
             </p>
           )}
         </div>
@@ -679,20 +698,20 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             <div className="font-black" style={{ color: "#f87171" }}>CODE NOT CRACKED</div>
             {!warzMode && failedAttempts < MAX_ATTEMPTS && (
               <>
-                <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>
-                  {MAX_ATTEMPTS - failedAttempts} game{MAX_ATTEMPTS - failedAttempts !== 1 ? "s" : ""} remaining
+                <div className="text-sm mt-1" style={{ color: "#f97316" }}>
+                  ⚠️ 1 retry remaining — rewards will be halved
                 </div>
                 <button
-                  onClick={resetForNewAttempt}
+                  onClick={() => setShowRetryModal(true)}
                   className="mt-3 px-5 py-2 rounded-xl font-black text-sm tracking-wider transition-all hover:scale-105 active:scale-95"
                   style={{ background: "#FDE74C", color: "#020202" }}
                 >
-                  PLAY AGAIN
+                  TRY AGAIN
                 </button>
               </>
             )}
             {!warzMode && failedAttempts >= MAX_ATTEMPTS && (
-              <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>No attempts remaining — puzzle locked</div>
+              <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>Both attempts used — puzzle failed</div>
             )}
             {warzMode && (
               <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>Better intel next time!</div>
@@ -700,10 +719,85 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           </div>
         )}
 
+        {/* ── Retry confirmation modal ── */}
+        {showRetryModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.75)" }}
+          >
+            <div
+              className="w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4"
+              style={{
+                background: "rgba(15,18,25,0.98)",
+                border: "1px solid rgba(239,68,68,0.4)",
+                boxShadow: "0 0 40px rgba(239,68,68,0.2)",
+              }}
+            >
+              <div className="text-center">
+                <div className="text-4xl mb-2">⚠️</div>
+                <h3 className="font-black text-xl mb-1" style={{ color: "#f87171" }}>Last Chance</h3>
+                <p className="text-sm" style={{ color: "#9ca3af" }}>
+                  You can retry this puzzle once, but your rewards will be halved.
+                </p>
+              </div>
+
+              {/* Reward comparison */}
+              <div
+                className="rounded-xl p-4 flex flex-col gap-3"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <div className="text-xs font-bold tracking-widest text-center" style={{ color: "#6b7280" }}>REWARDS IF YOU SOLVE</div>
+                <div className="flex justify-around">
+                  <div className="text-center">
+                    <div className="text-xs mb-1" style={{ color: "#6b7280" }}>XP</div>
+                    <div className="flex items-center gap-2 justify-center">
+                      <span className="font-bold line-through text-sm" style={{ color: "#6b7280" }}>{xpReward}</span>
+                      <span className="font-black text-lg" style={{ color: "#FDE74C" }}>{Math.floor(xpReward / 2)}</span>
+                    </div>
+                  </div>
+                  <div className="w-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+                  <div className="text-center">
+                    <div className="text-xs mb-1" style={{ color: "#6b7280" }}>Points</div>
+                    <div className="flex items-center gap-2 justify-center">
+                      <span className="font-bold line-through text-sm" style={{ color: "#6b7280" }}>{pointsReward}</span>
+                      <span className="font-black text-lg" style={{ color: "#FDE74C" }}>{Math.floor(pointsReward / 2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowRetryModal(false);
+                    resetForNewAttempt();
+                  }}
+                  className="flex-1 py-2.5 rounded-xl font-black text-sm tracking-wider transition-all hover:scale-105 active:scale-95"
+                  style={{ background: "#FDE74C", color: "#020202" }}
+                >
+                  TRY AGAIN
+                </button>
+                <button
+                  onClick={() => setShowRetryModal(false)}
+                  className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all hover:opacity-80"
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    color: "#9ca3af",
+                  }}
+                >
+                  No Thanks
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Grid */}
         <div
           className="wc-board"
           data-skin={skin._key ?? "default"}
+          ref={boardRef}
           style={{
             background: skin.boardBg,
             border: `2px solid ${skin.boardBorder}`,
@@ -742,8 +836,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                         "--tile-border": c.border,
                         "--tile-glow": c.glow,
                         "--flip-delay": `${revealDelay}ms`,
-                        width: "var(--tile-sz)",
-                        height: "var(--tile-sz)",
+                        width: tileSize,
+                        height: tileSize,
                       } as React.CSSProperties}
                     >
                       <div className="wc-tile-front" style={{ borderColor: tileColors[kind === "empty" || kind === "active" ? kind : "empty"].border }}>
@@ -762,9 +856,9 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         </div>
 
         {gameStatus === "playing" && (
-          <div className="flex flex-col items-center gap-1 sm:gap-1.5 mt-2 w-full max-w-[100vw] px-1 sm:px-0 sm:max-w-sm">
+          <div className="flex flex-col gap-1 sm:gap-1.5 mt-2 w-full px-1 max-w-sm mx-auto">
             {KEYBOARD_ROWS.map((row, ri) => (
-              <div key={ri} className="flex gap-[3px] sm:gap-1">
+              <div key={ri} className="flex gap-[3px] sm:gap-1 w-full">
                 {row.map((key) => {
                   const state = keyStates[key] ?? "unused";
                   const isWide = key === "ENTER" || key === "⌫";
@@ -775,13 +869,13 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                     <button
                       key={key}
                       onClick={() => handleKey(key)}
-                      className="rounded-lg font-bold text-white transition-all duration-150 active:scale-90"
+                      className="rounded-lg font-bold text-white transition-all duration-150 active:scale-90 min-w-0"
                       style={{
-                        width: isWide ? "clamp(40px, 12vw, 62px)" : "clamp(24px, 8vw, 36px)",
-                        height: "clamp(40px, 11vw, 54px)",
+                        flex: isWide ? "1.5 1 0" : "1 1 0",
+                        height: 44,
                         background: bg,
                         boxShadow: glow,
-                        fontSize: isWide ? "clamp(9px, 2.5vw, 11px)" : "clamp(11px, 3.5vw, 14px)",
+                        fontSize: isWide ? 11 : 13,
                         border: `1px solid ${skin.boardBorder}`,
                         color: skin.tileText,
                       }}
@@ -797,25 +891,43 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         )}
         {gameStatus === "playing" && (
           <div className="mt-3 flex flex-col items-center gap-2">
-            {hintLevel < 2 && (
-              <button
-                onClick={useHint}
-                disabled={hintLoading}
-                className="px-4 py-1.5 rounded-full text-sm font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                style={{ background: "rgba(56,145,166,0.2)", border: "1px solid rgba(56,145,166,0.5)", color: "#3891A6" }}
-              >
-                {hintLoading ? "..." : hintLevel === 0 ? "💡 Hint" : "🔤 Reveal a letter"}
-              </button>
+            {/* Token-gated letter reveal */}
+            {hintLevel === 0 && (
+              <>
+                <button
+                  onClick={useHint}
+                  disabled={hintLoading || hintTokens < 1}
+                  className="px-4 py-1.5 rounded-full text-sm font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: hintTokens < 1 ? "rgba(255,107,107,0.1)" : "rgba(56,145,166,0.15)",
+                    border: `1px solid ${hintTokens < 1 ? "rgba(255,107,107,0.5)" : "rgba(56,145,166,0.4)"}`,
+                    color: hintTokens < 1 ? "#FF6B6B" : "#3891A6",
+                  }}
+                  title={hintTokens < 1 ? "No hint tokens — purchase from the Store" : `Use 1 hint token (${hintTokens} remaining)`}
+                >
+                  {hintLoading ? "..." : hintTokens < 1 ? "🔤 No Hint Tokens" : `🔤 Reveal a Letter (${hintTokens} token${hintTokens !== 1 ? "s" : ""})`}
+                </button>
+                {hintTokens < 1 && (
+                  <a
+                    href="/store"
+                    className="text-xs font-semibold underline transition-opacity hover:opacity-80"
+                    style={{ color: "#FDE74C" }}
+                  >
+                    Buy tokens →
+                  </a>
+                )}
+              </>
             )}
-            {hintLevel === 2 && hintReveal && (
+            {/* Letter revealed */}
+            {hintLevel >= 1 && hintReveal && (
               <p className="text-sm" style={{ color: "#94a3b8" }}>
                 Letter at position{" "}
                 <span className="font-bold" style={{ color: "#3891A6" }}>{hintReveal.position + 1}</span>{" "}is{" "}
                 <span className="font-bold text-lg" style={{ color: "#ffffff" }}>{hintReveal.letter}</span>
               </p>
             )}
-            {hintLevel >= 2 && (
-              <p className="text-xs mt-1" style={{ color: "#64748b" }}>No more hints available</p>
+            {hintLevel >= 1 && (
+              <p className="text-xs" style={{ color: "#64748b" }}>No more hints available</p>
             )}
           </div>
         )}      </div>      </div>

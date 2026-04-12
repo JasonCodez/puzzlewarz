@@ -65,11 +65,16 @@ interface StoreUser {
   activeSkin: string;
   activeFlair: string;
   teamBannerColor: string;
+  activeNameColor: string;
+  activeCompletionAnimation: string;
   streakShields: number;
   hintTokens: number;
   skipTokens: number;
   warzChallengeSlots: number;
   warzRematchTokens: number;
+  tripleOrNothingTokens: number;
+  tripleOrNothingActive: boolean;
+  xpBoostExpiresAt: string | null;
 }
 
 const CATEGORIES = [
@@ -91,12 +96,15 @@ const POINT_BUNDLES = [
 const SUBCATEGORY_LABELS: Record<string, string> = {
   token: "Token",
   slot: "Slot Upgrade",
+  boost: "Boost",
   theme: "Profile Theme",
   team_theme: "Team Page Theme",
   frame: "Avatar Frame",
   skin: "Puzzle Style",
   flair: "Name Flair",
   banner: "Team Banner",
+  name_color: "Name Color",
+  anim: "Completion Animation",
 };
 
 function getActiveValue(item: StoreItem, user: StoreUser): string | null {
@@ -105,6 +113,8 @@ function getActiveValue(item: StoreItem, user: StoreUser): string | null {
   if (item.subcategory === "skin") return user.activeSkin;
   if (item.subcategory === "flair") return user.activeFlair;
   if (item.subcategory === "banner") return user.teamBannerColor;
+  if (item.subcategory === "name_color") return user.activeNameColor;
+  if (item.subcategory === "anim") return user.activeCompletionAnimation;
   return null;
 }
 
@@ -330,7 +340,7 @@ function FramePreviewContent({ frameKey }: { frameKey: string }) {
           animation: store-frame-counter-spin 3s linear infinite;
         }
         @keyframes store-frame-glow-pulse {
-          0%, 100% { opacity: 0.7; }
+          0%, 100% { opacity: 0.5; }
           50% { opacity: 1; }
         }
       `}</style>
@@ -572,6 +582,11 @@ function StorePageInner() {
   const [balancePoints, setBalancePoints] = useState(0);
   const [showGlow, setShowGlow] = useState(false);
   const [previewItem, setPreviewItem] = useState<StoreItem | null>(null);
+  const [activatingTriple, setActivatingTriple] = useState(false);
+  const [showGiftModal, setShowGiftModal] = useState(false);
+  const [giftUsername, setGiftUsername] = useState("");
+  const [giftAmount, setGiftAmount] = useState("");
+  const [sendingGift, setSendingGift] = useState(false);
 
   // Keep displayed balance in sync during normal browsing; freeze it while modal is open
   useEffect(() => {
@@ -604,13 +619,23 @@ function StorePageInner() {
   useEffect(() => {
     const purchase = searchParams.get("purchase");
     const bundle = searchParams.get("bundle");
+    const sessionId = searchParams.get("session_id");
     const BUNDLE_POINTS: Record<string, number> = {
       starter_pack: 500, value_pack: 1700, pro_pack: 4000, elite_pack: 9000,
     };
     if (purchase === "success") {
       setPurchaseSuccess({ points: BUNDLE_POINTS[bundle ?? ""] ?? 0, bundleKey: bundle ?? "" });
-      fetchStore();
       router.replace("/store");
+      // Verify + credit points idempotently (fallback if webhook fires late or not at all)
+      if (sessionId) {
+        fetch("/api/stripe/verify-purchase", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        }).finally(() => fetchStore());
+      } else {
+        fetchStore();
+      }
     } else if (purchase === "cancelled") {
       showToast("Purchase cancelled.", "error");
       router.replace("/store");
@@ -680,6 +705,56 @@ function StorePageInner() {
     }
   };
 
+  const handleActivateTriple = async () => {
+    if (activatingTriple) return;
+    setActivatingTriple(true);
+    try {
+      const res = await fetch("/api/store/use/triple-or-nothing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activate: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? "Failed to activate", "error"); return; }
+      showToast("🎲 Triple-or-Nothing activated! Solve your next puzzle on the first try for 3× rewards.");
+      fetchStore();
+    } finally {
+      setActivatingTriple(false);
+    }
+  };
+
+  const handleDeactivateTriple = async () => {
+    await fetch("/api/store/use/triple-or-nothing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activate: false }),
+    });
+    fetchStore();
+  };
+
+  const handleSendGift = async () => {
+    if (sendingGift) return;
+    const amount = parseInt(giftAmount, 10);
+    if (!giftUsername.trim() || !amount) { showToast("Enter a username and amount", "error"); return; }
+    setSendingGift(true);
+    try {
+      const res = await fetch("/api/social/gift-points", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toUsername: giftUsername.trim(), amount }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? "Failed to send gift", "error"); return; }
+      showToast(`🎁 Sent ${amount} pts to ${data.to}!`);
+      setGiftUsername("");
+      setGiftAmount("");
+      setShowGiftModal(false);
+      fetchStore();
+    } finally {
+      setSendingGift(false);
+    }
+  };
+
   const filtered = activeCategory === "all"
     ? items
     : items.filter((i) => i.category === activeCategory);
@@ -700,6 +775,53 @@ function StorePageInner() {
           <h1 className="text-4xl font-extrabold text-white mb-1">🛍️ Point Store</h1>
           <p style={{ color: "#AB9F9D" }}>Spend your hard-earned points on upgrades, cosmetics, and power-ups.</p>
         </div>
+
+        {/* Gift Points Modal */}
+        {showGiftModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowGiftModal(false)}>
+            <div className="bg-gray-900 rounded-2xl border p-6 w-full max-w-sm mx-4" style={{ borderColor: "rgba(253,231,76,0.3)", backgroundColor: "rgba(10,12,16,0.98)" }} onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-white">🎁 Gift Points</h3>
+                <button onClick={() => setShowGiftModal(false)} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+              </div>
+              <p className="text-sm mb-4" style={{ color: "#AB9F9D" }}>Send points to any player. Minimum 10 pts, maximum 5,000 pts.</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold mb-1 block" style={{ color: "#6b7280" }}>Username</label>
+                  <input
+                    type="text"
+                    value={giftUsername}
+                    onChange={e => setGiftUsername(e.target.value)}
+                    placeholder="Player username..."
+                    className="w-full px-3 py-2 rounded-lg text-sm text-white focus:outline-none"
+                    style={{ backgroundColor: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)" }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold mb-1 block" style={{ color: "#6b7280" }}>Amount (pts)</label>
+                  <input
+                    type="number"
+                    value={giftAmount}
+                    onChange={e => setGiftAmount(e.target.value)}
+                    placeholder="e.g. 100"
+                    min={10}
+                    max={5000}
+                    className="w-full px-3 py-2 rounded-lg text-sm text-white focus:outline-none"
+                    style={{ backgroundColor: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)" }}
+                  />
+                </div>
+                <button
+                  disabled={sendingGift}
+                  onClick={handleSendGift}
+                  className="w-full py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50"
+                  style={{ background: "linear-gradient(135deg, #FDE74C, #FFB86B)", color: "#1a1400" }}
+                >
+                  {sendingGift ? "Sending…" : "🎁 Send Gift"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Balance bar */}
         <motion.div
@@ -755,8 +877,34 @@ function StorePageInner() {
                   </span>
                 </Tooltip>
               )}
+              {user.xpBoostExpiresAt && new Date(user.xpBoostExpiresAt).getTime() > Date.now() && (
+                <Tooltip content={
+                  <><strong style={{ color: "#818cf8" }}>⚡ XP Boost Active</strong><br />All XP earned is doubled! Expires {new Date(user.xpBoostExpiresAt).toLocaleTimeString()}.</>
+                }>
+                  <span className="px-3 py-1 rounded-full font-semibold cursor-default" style={{ backgroundColor: "rgba(129,140,248,0.15)", color: "#818cf8" }}>
+                    ⚡ 2× XP Boost active
+                  </span>
+                </Tooltip>
+              )}
+              {user.tripleOrNothingTokens > 0 && (
+                <Tooltip content={
+                  <><strong style={{ color: "#fb923c" }}>🎲 Triple-or-Nothing</strong><br />Solve a puzzle on your first attempt for 3× rewards!{user.tripleOrNothingActive ? " 🔥 ACTIVE" : ""}</>
+                }>
+                  <span className="px-3 py-1 rounded-full font-semibold cursor-default" style={{ backgroundColor: "rgba(251,146,60,0.12)", color: "#fb923c" }}>
+                    🎲 {user.tripleOrNothingTokens} triple-or-nothing{user.tripleOrNothingActive ? " (active)" : ""}
+                  </span>
+                </Tooltip>
+              )}
             </div>
           )}
+          {/* Gift Points button */}
+          <button
+            onClick={() => setShowGiftModal(true)}
+            className="ml-auto px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+            style={{ backgroundColor: "rgba(253,231,76,0.1)", color: "#FDE74C", border: "1px solid rgba(253,231,76,0.25)" }}
+          >
+            🎁 Gift Points
+          </button>
         </motion.div>
 
         {/* Buy Points section */}
@@ -856,7 +1004,7 @@ function StorePageInner() {
               const owned = item.owned > 0;
               const equipped = user ? isEquipped(item, user) : false;
               const canAfford = (user?.totalPoints ?? 0) >= item.price;
-              const isCosmetic = ["theme", "frame", "skin", "flair", "banner", "team_theme"].includes(item.subcategory);
+              const isCosmetic = ["theme", "frame", "skin", "flair", "banner", "team_theme", "name_color", "anim"].includes(item.subcategory);
               const isTeamTheme = item.subcategory === "team_theme";
               const isBuying = purchasing === item.key;
               const isEquipping = equipping === item.key;
@@ -985,6 +1133,29 @@ function StorePageInner() {
                             style={{ backgroundColor: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}
                           >
                             {isEquipping ? "…" : "Equip"}
+                          </button>
+                        )
+                      )}
+
+                      {/* Activate/Deactivate for Triple-or-Nothing */}
+                      {item.key === "triple_or_nothing" && owned && user && (
+                        user.tripleOrNothingActive ? (
+                          <button
+                            disabled={activatingTriple}
+                            onClick={handleDeactivateTriple}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                            style={{ backgroundColor: "rgba(251,146,60,0.15)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" }}
+                          >
+                            🔥 Active — Cancel
+                          </button>
+                        ) : (
+                          <button
+                            disabled={activatingTriple}
+                            onClick={handleActivateTriple}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                            style={{ backgroundColor: "rgba(251,146,60,0.12)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.25)" }}
+                          >
+                            {activatingTriple ? "…" : "🎲 Activate"}
                           </button>
                         )
                       )}

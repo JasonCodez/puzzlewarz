@@ -33,6 +33,7 @@ import AnagramBlitz from "@/components/puzzle/AnagramBlitz";
 import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
 import BlackoutPuzzle from "@/components/puzzle/BlackoutPuzzle";
 import { getSkinTokens } from "@/lib/puzzleSkins";
+import { getPuzzleTypeLabel } from "@/lib/puzzleTypeLabels";
 
 interface XpModalData {
   xpGained: number;
@@ -41,6 +42,7 @@ interface XpModalData {
   newTitle: string;
   oldProgress: number;
   newProgress: number;
+  levelReward?: { points?: number; hintTokens?: number; skipTokens?: number; label: string } | null;
 }
 
 interface Puzzle {
@@ -51,6 +53,7 @@ interface Puzzle {
   difficulty: string;
   puzzleType?: string;
   xpReward?: number;
+  solutions?: Array<{ points: number | null }>;
   data?: Record<string, unknown>;
   escapeRoom?: {
     id: string;
@@ -199,25 +202,6 @@ const DIFFICULTY_BADGE_STYLE: Record<string, React.CSSProperties> = {
   EXPERT: { backgroundColor: "rgba(56,145,166,0.15)",  color: "#3891A6", border: "1px solid rgba(56,145,166,0.45)" },
 };
 
-const PUZZLE_TYPE_LABELS: Record<string, string> = {
-  riddle:          "Riddle",
-  jigsaw:          "Jigsaw",
-  sudoku:          "Sudoku",
-  word_search:     "Word Search",
-  escape_room:     "Escape Room",
-  detective_case:  "Detective",
-  crime_rpg:       "Crime Case",
-  parasite_code:   "Parasite Code",
-  gridlock_file:    "Gridlock File",
-  crack_safe:      "Safe Crack",
-  word_crack:      "Word Crack",
-  anagram_blitz:   "Anagram",
-  arg:             "ARG",
-  blackout:        "Declassify",
-  code_master:     "Code",
-  math:            "Math",
-};
-
 export default function PuzzleDetailPage() {
   // Modal state for Sudoku start overlay
   const [showSudokuStartModal, setShowSudokuStartModal] = useState(false);
@@ -293,6 +277,8 @@ export default function PuzzleDetailPage() {
   const [revealingHint, setRevealingHint] = useState<string | null>(null);
   const [usedHintIds, setUsedHintIds] = useState<string[]>([]);
   const [hintTokens, setHintTokens] = useState<number>(0);
+  const [skipTokens, setSkipTokens] = useState<number>(0);
+  const [isSkipping, setIsSkipping] = useState(false);
 
   type JigsawControlsApi = {
     reset: () => void;
@@ -545,6 +531,7 @@ export default function PuzzleDetailPage() {
         // Only set hints for non-sudoku puzzles; always set token balance
         if (puzzle?.puzzleType !== 'sudoku') setHints(hintsArr);
         if (data.hintTokens != null) setHintTokens(data.hintTokens);
+        if (data.skipTokens != null) setSkipTokens(data.skipTokens);
 
         // Auto-reveal hints the user has already used (they paid the token previously)
         const alreadyRevealed = new Set<string>();
@@ -844,10 +831,24 @@ export default function PuzzleDetailPage() {
     }
   };
 
-  const handlePuzzleSolved = (xpOverride?: number) => {
+  const handlePuzzleSolved = async (xpOverride?: number) => {
     const xp = xpOverride ?? (puzzle?.xpReward ?? 50);
     const before = calcLevel(userTotalXp);
     const after = calcLevel(userTotalXp + xp);
+
+    let levelReward: { points?: number; hintTokens?: number; skipTokens?: number; label: string } | null = null;
+    if (after.level > before.level) {
+      try {
+        const res = await fetch("/api/user/claim-level-reward", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          levelReward = data.reward ?? null;
+        }
+      } catch {
+        // non-critical — modal still shows without reward info
+      }
+    }
+
     setXpModalData({
       xpGained: xp,
       oldLevel: before.level,
@@ -855,21 +856,46 @@ export default function PuzzleDetailPage() {
       newTitle: after.title,
       oldProgress: before.progress,
       newProgress: after.progress,
+      levelReward,
     });
     setShowXpModal(true);
     // Notify the Navbar (and any other listener) that XP has changed
     window.dispatchEvent(new CustomEvent('puzzlewarz:xp-updated'));
     // Trigger an immediate achievement check instead of waiting for the 30-second poll
     window.dispatchEvent(new CustomEvent('puzzlewarz:puzzle-solved'));
-    const dismissDelay = after.level > before.level ? 5000 : 3000;
-    setTimeout(() => {
-      setShowXpModal(false);
-      setShowRatingModal(true);
-    }, dismissDelay);
+  };
+
+  const handleSkipPuzzle = async () => {
+    if (isSkipping || progress?.solved) return;
+    if (skipTokens < 1) return;
+    setIsSkipping(true);
+    try {
+      const res = await fetch(`/api/puzzles/${puzzleId}/skip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        addToast(data.error || "Failed to skip puzzle", "error");
+        return;
+      }
+      setSkipTokens(data.remainingTokens ?? 0);
+      // Refresh progress so the puzzle shows as solved
+      try {
+        const progressRes = await fetch(`/api/puzzles/${puzzleId}/progress`);
+        if (progressRes.ok) setProgress(await progressRes.json());
+      } catch { /* non-critical */ }
+      handlePuzzleSolved(data.xpGained);
+    } catch {
+      addToast("Failed to skip puzzle", "error");
+    } finally {
+      setIsSkipping(false);
+    }
   };
 
   // Used by non-sudoku puzzle types: computes elapsed, fetches updated points, then shows modals.
-  const recordCompletionAndShowModal = async (elapsedOverride?: number) => {
+  const recordCompletionAndShowModal = async (elapsedOverride?: number, xpOverride?: number) => {
     const prevPoints = progress?.pointsEarned || 0;
     const elapsed = elapsedOverride ?? (sessionStartRef.current ? Math.round((Date.now() - sessionStartRef.current.getTime()) / 1000) : null);
     setCompletionSeconds(elapsed);
@@ -884,7 +910,7 @@ export default function PuzzleDetailPage() {
     } catch (err) {
       console.error("Failed to refresh progress for completion modal:", err);
     }
-    handlePuzzleSolved();
+    handlePuzzleSolved(xpOverride);
   };
 
   const handleSudokuSubmit = async (submittedGrid: number[][]) => {
@@ -1343,7 +1369,7 @@ export default function PuzzleDetailPage() {
                       border: "1px solid rgba(56,145,166,0.35)",
                     }}
                   >
-                    {PUZZLE_TYPE_LABELS[puzzle.puzzleType] ?? puzzle.puzzleType}
+                    {getPuzzleTypeLabel(puzzle.puzzleType)}
                   </span>
                 )}
                 {/* XP reward */}
@@ -1541,11 +1567,13 @@ export default function PuzzleDetailPage() {
             {showXpModal && xpModalData && (
               <PuzzleXpModal
                 xpGained={xpModalData.xpGained}
+                pointsEarned={justAwardedPoints ?? 0}
                 oldLevel={xpModalData.oldLevel}
                 newLevel={xpModalData.newLevel}
                 newTitle={xpModalData.newTitle}
                 oldProgress={xpModalData.oldProgress}
                 newProgress={xpModalData.newProgress}
+                levelReward={xpModalData.levelReward}
                 onDismiss={() => {
                   setShowXpModal(false);
                   setShowRatingModal(true);
@@ -1557,6 +1585,7 @@ export default function PuzzleDetailPage() {
               <PuzzleCompletionRatingModal
                 puzzleId={puzzleId}
                 puzzleTitle={puzzle.title}
+                difficulty={puzzle.difficulty}
                   onClose={() => {
                     setShowRatingModal(false);
                     router.push("/puzzles");
@@ -1791,9 +1820,13 @@ export default function PuzzleDetailPage() {
                       wordCrackData={(puzzle.data ?? {}) as Record<string, unknown>}
                       alreadySolved={progress?.solved ?? false}
                       failedAttempts={progress?.failedAttempts ?? 0}
-                      onSolved={() => {
+                      hintTokens={hintTokens}
+                      xpReward={puzzle.xpReward ?? 50}
+                      pointsReward={puzzle.solutions?.[0]?.points ?? 100}
+                      onHintUsed={handleSudokuHintUsed}
+                      onSolved={(xpGained) => {
                         setSuccess(true);
-                        recordCompletionAndShowModal();
+                        recordCompletionAndShowModal(undefined, xpGained);
                       }}
                     />
                   </div>
@@ -2185,6 +2218,49 @@ export default function PuzzleDetailPage() {
                   : { borderTopColor: "#3891A6", borderTopWidth: "1px", paddingTop: "2rem" }
               }
             >
+
+              {/* ── Skip Token Button ─────────────────────────────────── */}
+              {!progress?.solved && !teamIdParam && (
+                <div className="mb-6 flex flex-col items-center gap-2">
+                  {skipTokens > 0 ? (
+                    <button
+                      onClick={handleSkipPuzzle}
+                      disabled={isSkipping}
+                      className="px-5 py-2.5 rounded-xl font-semibold text-sm transition-opacity hover:opacity-80 disabled:opacity-40"
+                      style={{
+                        backgroundColor: "rgba(139,92,246,0.15)",
+                        border: "1px solid rgba(139,92,246,0.4)",
+                        color: "#a78bfa",
+                      }}
+                    >
+                      {isSkipping
+                        ? "Skipping…"
+                        : `⏭️ Skip Puzzle (${skipTokens} token${skipTokens !== 1 ? "s" : ""})`}
+                    </button>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1">
+                      <button
+                        disabled
+                        className="px-5 py-2.5 rounded-xl font-semibold text-sm opacity-40 cursor-not-allowed"
+                        style={{
+                          backgroundColor: "rgba(139,92,246,0.1)",
+                          border: "1px solid rgba(139,92,246,0.3)",
+                          color: "#a78bfa",
+                        }}
+                      >
+                        ⏭️ Skip Puzzle — No Tokens
+                      </button>
+                      <a
+                        href="/store"
+                        className="text-xs font-semibold underline transition-opacity hover:opacity-80"
+                        style={{ color: "#FDE74C" }}
+                      >
+                        Buy skip tokens →
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Progress Section */}
               {progress && showProgress && progress.partProgress && progress.partProgress.length > 1 && (
                 <div className="mb-8 space-y-4">

@@ -74,6 +74,17 @@ export async function POST(request: NextRequest) {
     else if (itemKey === "skip_token") userUpdate.skipTokens = { increment: 1 };
     else if (itemKey === "warz_slot") userUpdate.warzChallengeSlots = { increment: 1 };
     else if (itemKey === "warz_rematch") userUpdate.warzRematchTokens = { increment: 1 };
+    else if (itemKey === "xp_boost_24h") {
+      // Stack: if boost already active, extend from current expiry; otherwise start from now
+      const now = Date.now();
+      const freshUser = await prisma.user.findUnique({ where: { id: currentUser.id }, select: { xpBoostExpiresAt: true } });
+      const base = freshUser?.xpBoostExpiresAt && freshUser.xpBoostExpiresAt.getTime() > now
+        ? freshUser.xpBoostExpiresAt.getTime()
+        : now;
+      userUpdate.xpBoostExpiresAt = new Date(base + 24 * 60 * 60 * 1000);
+    }
+    else if (itemKey === "streak_recovery") { /* inventory record is enough; consumed via /api/store/use/streak-recovery */ }
+    else if (itemKey === "triple_or_nothing") userUpdate.tripleOrNothingTokens = { increment: 1 };
 
     await prisma.$transaction([
       // Deduct points + update counters
