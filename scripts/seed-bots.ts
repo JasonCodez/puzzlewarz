@@ -192,11 +192,11 @@ function randPow(min: number, max: number, exp: number = 1.8): number {
 function tierProfile(tier: number) {
   switch (tier) {
     case 0: return { solveCount: 0,                         xpS: 0,              streak: 0 };
-    case 1: return { solveCount: randPow(1,   18,  2.0),    xpS: randInt(40, 70),  streak: randInt(0, 4) };
-    case 2: return { solveCount: randPow(8,   60,  1.8),    xpS: randInt(45, 80),  streak: randInt(0, 14) };
-    case 3: return { solveCount: randPow(25, 130,  1.6),    xpS: randInt(50, 90),  streak: randInt(1, 28) };
-    case 4: return { solveCount: randPow(70, 300,  1.5),    xpS: randInt(55, 100), streak: randInt(3, 60) };
-    case 5: return { solveCount: randPow(180, 600, 1.3),    xpS: randInt(60, 110), streak: randInt(8, 140) };
+    case 1: return { solveCount: randPow(1,   8,   2.0),    xpS: randInt(40, 70),  streak: randInt(0, 4) };
+    case 2: return { solveCount: randPow(5,   20,  1.8),    xpS: randInt(45, 80),  streak: randInt(0, 14) };
+    case 3: return { solveCount: randPow(12,  35,  1.6),    xpS: randInt(50, 90),  streak: randInt(1, 28) };
+    case 4: return { solveCount: randPow(22,  48,  1.5),    xpS: randInt(55, 100), streak: randInt(3, 60) };
+    case 5: return { solveCount: randPow(35,  54,  1.3),    xpS: randInt(60, 110), streak: randInt(8, 140) };
     default: return { solveCount: 1, xpS: 50, streak: 0 };
   }
 }
