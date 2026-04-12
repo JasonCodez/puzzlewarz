@@ -18,22 +18,22 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(50, parseInt(searchParams.get("limit") || "20"));
     const skip = (page - 1) * limit;
 
-    // Expire stale OPEN challenges on read (best-effort, no cron needed)
+    // Expire stale OPEN and IN_PROGRESS challenges on read (best-effort, no cron needed)
     await prisma.puzzleWarzChallenge.updateMany({
       where: {
-        status: "OPEN",
+        status: { in: ["OPEN", "IN_PROGRESS"] },
         expiresAt: { lt: new Date() },
       },
       data: { status: "EXPIRED" },
     });
 
-    // Refund challengers for newly-expired challenges that haven't been paid yet
+    // Refund both parties for newly-expired challenges that haven't been paid yet
     const justExpired = await prisma.puzzleWarzChallenge.findMany({
       where: { status: "EXPIRED", potPaid: false },
-      select: { id: true, challengerId: true, challengerWager: true },
+      select: { id: true, challengerId: true, opponentId: true, challengerWager: true },
     });
     for (const c of justExpired) {
-      await prisma.$transaction([
+      const refundOps: Parameters<typeof prisma.$transaction>[0] = [
         prisma.user.update({
           where: { id: c.challengerId },
           data: { totalPoints: { increment: c.challengerWager } },
@@ -42,7 +42,17 @@ export async function GET(request: NextRequest) {
           where: { id: c.id },
           data: { potPaid: true },
         }),
-      ]);
+      ];
+      // Also refund the opponent if they already accepted (IN_PROGRESS was expired)
+      if (c.opponentId) {
+        refundOps.push(
+          prisma.user.update({
+            where: { id: c.opponentId },
+            data: { totalPoints: { increment: c.challengerWager } },
+          })
+        );
+      }
+      await prisma.$transaction(refundOps);
     }
 
     const where: Record<string, unknown> =

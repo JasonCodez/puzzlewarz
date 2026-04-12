@@ -149,9 +149,9 @@ export async function GET(request: NextRequest) {
     // Fetch completion and attempt counts separately
     const puzzleStats = await Promise.all(
       puzzles.map(async (p: { id: string }) => {
-        const totalAttempts = await prisma.userPuzzleProgress.count({ where: { puzzleId: p.id } });
+        const totalAttempts = await prisma.userPuzzleProgress.count({ where: { puzzleId: p.id, user: { isBot: false } } });
         const completedCount = await prisma.userPuzzleProgress.count({
-          where: { puzzleId: p.id, solved: true },
+          where: { puzzleId: p.id, solved: true, user: { isBot: false } },
         });
         return {
           puzzleId: p.id,
