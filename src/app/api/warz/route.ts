@@ -33,26 +33,19 @@ export async function GET(request: NextRequest) {
       select: { id: true, challengerId: true, opponentId: true, challengerWager: true },
     });
     for (const c of justExpired) {
-      const refundOps: Parameters<typeof prisma.$transaction>[0] = [
-        prisma.user.update({
-          where: { id: c.challengerId },
-          data: { totalPoints: { increment: c.challengerWager } },
-        }),
-        prisma.puzzleWarzChallenge.update({
-          where: { id: c.id },
-          data: { potPaid: true },
-        }),
-      ];
       // Also refund the opponent if they already accepted (IN_PROGRESS was expired)
       if (c.opponentId) {
-        refundOps.push(
-          prisma.user.update({
-            where: { id: c.opponentId },
-            data: { totalPoints: { increment: c.challengerWager } },
-          })
-        );
+        await prisma.$transaction([
+          prisma.user.update({ where: { id: c.challengerId }, data: { totalPoints: { increment: c.challengerWager } } }),
+          prisma.user.update({ where: { id: c.opponentId }, data: { totalPoints: { increment: c.challengerWager } } }),
+          prisma.puzzleWarzChallenge.update({ where: { id: c.id }, data: { potPaid: true } }),
+        ]);
+      } else {
+        await prisma.$transaction([
+          prisma.user.update({ where: { id: c.challengerId }, data: { totalPoints: { increment: c.challengerWager } } }),
+          prisma.puzzleWarzChallenge.update({ where: { id: c.id }, data: { potPaid: true } }),
+        ]);
       }
-      await prisma.$transaction(refundOps);
     }
 
     const where: Record<string, unknown> =
