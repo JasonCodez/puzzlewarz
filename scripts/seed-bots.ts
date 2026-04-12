@@ -9,7 +9,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { config } from "dotenv";
-import path from "path";
+import * as path from "path";
 
 config({ path: path.resolve(process.cwd(), ".env.local") });
 config({ path: path.resolve(process.cwd(), ".env") });
@@ -31,6 +31,8 @@ const WORDS_A = [
   "Zenith","Apex","Onyx","Shard","Flare","Prism","Quantum","Azure","Crimson",
   "Lunar","Solar","Astral","Omega","Delta","Alpha","Sigma","Zephyr","Thorn",
   "Blade","Viper","Cobra","Talon","Rift","Haze","Pulse","Flux","Drift","Phase",
+  "Wraith","Koda","Lyric","Zane","Cruz","Aria","Mira","Jett","Kairo","Lexa",
+  "Ryker","Soren","Vael","Tara","Kyra","Draven","Nyx","Orion","Pax","Cael",
 ];
 const WORDS_B = [
   "Mind","Wolf","Fox","Hawk","Blade","Claw","Fang","Code","Vault","Lock",
@@ -39,50 +41,67 @@ const WORDS_B = [
   "Forger","Caster","Bender","Walker","Specter","Wraith","Shade","Knight","Mage",
   "Spike","Ridge","Forge","Crypt","Maze","Peak","Core","Monk","Ninja","Scout",
   "Spawn","Agent","Titan","Beast","Force","Edge","Drone","Clone","Guard","Sniper",
+  "Crow","Pike","Vale","Stone","Drift","Spark","Lynx","Rook","Vex","March",
+  "Cross","Wick","Flint","Holt","Burns","Chase","Reed","Quinn","Ward","Nash",
 ];
 const SPECIAL_PREFIXES = [
   "x","X","i","o","v","The","Itz","Real","Pro","OG","Not","Dark","Ultra","Hyper","Super","Mega",
 ];
 const SUFFIX_WORDS = ["Pro","GG","WZ","Ace","Rex","Max","OG","Jr","II","III","HD","XD"];
+const NUM_SUFFIXES = ["2","3","7","9","11","13","21","42","47","69","77","88","99","100","404","1337","07"];
 
 function pickByIndex<T>(arr: T[], seed: number): T {
   return arr[((seed % arr.length) + arr.length) % arr.length];
 }
 
-function generateUsername(index: number): string {
-  const pattern = index % 8;
-  let name: string;
-  const mixLower = index % 7 === 0;
+// Tracks names already given out so we can avoid exact duplicates.
+const _usedUsernames = new Set<string>();
 
-  if (pattern === 0) {
-    name = pickByIndex(WORDS_A, index * 7) + pickByIndex(WORDS_B, index * 13);
-  } else if (pattern === 1) {
-    name = pickByIndex(WORDS_A, index * 11) + pickByIndex(WORDS_B, index * 17) +
-           pickByIndex(["2","3","7","9","21","42","69","77","99","100","404","777"], index * 3);
-  } else if (pattern === 2) {
-    name = pickByIndex([...WORDS_A, ...WORDS_B], index * 19) +
-           pickByIndex(["7","9","11","42","69","77","99","100","404","1337"], index * 5);
-  } else if (pattern === 3) {
-    const pre = pickByIndex(SPECIAL_PREFIXES, index * 23);
-    name = pre + pickByIndex(WORDS_A, index * 29) + pickByIndex(WORDS_B, index * 31);
-  } else if (pattern === 4) {
-    name = pickByIndex(WORDS_A, index * 37) + pickByIndex(WORDS_B, index * 41) +
-           pickByIndex(SUFFIX_WORDS, index * 43);
-  } else if (pattern === 5) {
-    name = pickByIndex(WORDS_A, index * 47) + pickByIndex(WORDS_A, index * 53);
-    if (mixLower) name = name.toLowerCase();
-  } else if (pattern === 6) {
-    name = (pickByIndex(WORDS_A, index * 59) + pickByIndex(WORDS_B, index * 61)).toLowerCase() +
-           pickByIndex(["","","7","9","77","99","42","404"], index * 67);
-  } else {
-    name = pickByIndex([...WORDS_A, ...WORDS_B], index * 71) + pickByIndex(SUFFIX_WORDS, index * 73);
+function generateUsername(index: number): string {
+  const r = <T>(seed: number, arr: T[]): T => pickByIndex(arr, seed);
+
+  const A   = r(index * 7,  WORDS_A);
+  const B   = r(index * 13, WORDS_B);
+  const A2  = r(index * 37, WORDS_A);
+  const B2  = r(index * 41, WORDS_B);
+  const pre = r(index * 23, SPECIAL_PREFIXES);
+  const suf = r(index * 43, SUFFIX_WORDS);
+  const num = r(index * 3,  NUM_SUFFIXES);
+
+  let base: string;
+  switch (index % 14) {
+    case 0:  base = A + B;                                             break; // ShadowWolf
+    case 1:  base = A.toLowerCase() + "_" + B.toLowerCase();          break; // shadow_wolf
+    case 2:  base = A + B + num;                                       break; // ShadowWolf42
+    case 3:  base = pre + A + B;                                       break; // xShadowWolf / ProShadowWolf
+    case 4:  base = A.toLowerCase() + num;                             break; // shadow42
+    case 5:  base = A + "_" + B2.toLowerCase();                        break; // Shadow_forge
+    case 6:  base = (A + B).toLowerCase();                             break; // shadowwolf
+    case 7:  base = A + suf;                                           break; // ShadowPro
+    case 8:  base = pre.toLowerCase() + A.toLowerCase() + num;         break; // xshadow99
+    case 9:  base = A2.toLowerCase() + B.toLowerCase() +
+                    r(index * 67, ["","","","7","42","99","404"]);      break; // echorift / echorift7
+    case 10: base = pre + A + num;                                     break; // TheBlaze77
+    case 11: base = A2 + B2;                                           break; // PhantomForge
+    case 12: base = (A2 + B2).toLowerCase() + num;                    break; // phantomforge42
+    case 13: base = A.toLowerCase() + B2.toLowerCase() + "_" +
+                    r(index * 71, ["gg","og","v2","xd","hd","99","404"]); break; // shadowforge_gg
+    default: base = A + B;
   }
 
-  // Strip any accidental underscores
-  name = name.replace(/_/g, "");
-
-  // Append index only as last-resort disambiguation (very short)
-  return name + "_b" + index;
+  // Resolve duplicates by appending a short number — much cleaner than _b{index}
+  if (!_usedUsernames.has(base)) {
+    _usedUsernames.add(base);
+    return base;
+  }
+  for (let n = 2; n <= 9999; n++) {
+    const candidate = base + n;
+    if (!_usedUsernames.has(candidate)) {
+      _usedUsernames.add(candidate);
+      return candidate;
+    }
+  }
+  return base + index; // absolute last resort
 }
 
 
@@ -164,14 +183,20 @@ function calcLevel(xp: number): { level: number; title: string } {
 //
 // xpS = xp per solve. Real default is 50 (xpReward), gridlock is 100.
 // Ranges are wide and overlapping so bot levels spread naturally across the curve.
+// Power-law distribution skewed toward lower values within a range.
+// exp > 1 means most results land near `min`; use 1.0 for uniform (=randInt).
+function randPow(min: number, max: number, exp: number = 1.8): number {
+  return Math.floor(min + Math.pow(Math.random(), exp) * (max - min + 1));
+}
+
 function tierProfile(tier: number) {
   switch (tier) {
-    case 0: return { solveCount: 0,                  xpS: 0,              streak: 0 };
-    case 1: return { solveCount: randInt(1,  15),     xpS: randInt(40, 70),  streak: randInt(0, 4) };
-    case 2: return { solveCount: randInt(8,  45),     xpS: randInt(45, 80),  streak: randInt(0, 14) };
-    case 3: return { solveCount: randInt(30, 100),    xpS: randInt(50, 90),  streak: randInt(1, 28) };
-    case 4: return { solveCount: randInt(80, 250),    xpS: randInt(55, 100), streak: randInt(3, 60) };
-    case 5: return { solveCount: randInt(200, 520),   xpS: randInt(60, 110), streak: randInt(8, 140) };
+    case 0: return { solveCount: 0,                         xpS: 0,              streak: 0 };
+    case 1: return { solveCount: randPow(1,   18,  2.0),    xpS: randInt(40, 70),  streak: randInt(0, 4) };
+    case 2: return { solveCount: randPow(8,   60,  1.8),    xpS: randInt(45, 80),  streak: randInt(0, 14) };
+    case 3: return { solveCount: randPow(25, 130,  1.6),    xpS: randInt(50, 90),  streak: randInt(1, 28) };
+    case 4: return { solveCount: randPow(70, 300,  1.5),    xpS: randInt(55, 100), streak: randInt(3, 60) };
+    case 5: return { solveCount: randPow(180, 600, 1.3),    xpS: randInt(60, 110), streak: randInt(8, 140) };
     default: return { solveCount: 1, xpS: 50, streak: 0 };
   }
 }
@@ -438,11 +463,21 @@ async function main() {
       const toSolve = shuffled.slice(0, solveCount);
 
       const joinedAt = bot.createdAt;
+      const daysActive = Math.max(1, Math.floor((Date.now() - joinedAt.getTime()) / 86400000));
 
       for (const puzzle of toSolve) {
-        // Spread solve dates between join date and now
-        const solveOffset = randInt(0, Math.min(540, Math.floor((Date.now() - joinedAt.getTime()) / 86400000)));
-        const solvedAt = new Date(joinedAt.getTime() + solveOffset * 86400000);
+        // Weight solve dates toward the recent past so bots appear on weekly/monthly leaderboards.
+        // ~35% of solves land in last 30 days, ~25% in last 31-90 days, rest spread over history.
+        let solveOffset: number;
+        const r = Math.random();
+        if (r < 0.35) {
+          solveOffset = daysActive - randInt(0, Math.min(29, daysActive - 1));
+        } else if (r < 0.60) {
+          solveOffset = daysActive - randInt(30, Math.min(90, daysActive - 1));
+        } else {
+          solveOffset = randInt(0, Math.min(daysActive - 1, 540));
+        }
+        const solvedAt = new Date(joinedAt.getTime() + Math.max(0, solveOffset) * 86400000);
 
         progressRows.push({
           userId: bot.id,
@@ -780,14 +815,14 @@ async function main() {
     //   2500–7499 → dedicated (25–60 following)
     //   7500–17999 → hardcore (50–100 following)
     //   18000+  → legend  (80–200 following)
-    function followingRange(pts: number): [number, number] {
+    const followingRange = (pts: number): [number, number] => {
       if (pts < 100)   return [0, 0];
       if (pts < 900)   return [5, 15];
       if (pts < 2500)  return [12, 30];
       if (pts < 7500)  return [25, 60];
       if (pts < 18000) return [50, 100];
       return [80, 200];
-    }
+    };
 
     const socialBots = allBots.filter(b => b.totalPoints >= 100);
     const followRows: any[] = [];
@@ -966,25 +1001,30 @@ async function main() {
       "none of us are that good individually but together we're somehow unstoppable... usually",
       "we call ourselves casual but we're literally on here every day so",
       "team chat is mostly just memes and the occasional 'oh wait I got it'",
+      "formed because we kept running into each other on the leaderboard and figured we should just team up",
+      "we grind the daily word puzzle together and compare streaks every morning like normal people",
       // Mid-competitive
       "daily puzzle streak is non-negotiable. if you skip, you explain yourself in the group chat",
       "we rotate who does the gridlock each day so no one person carries the streak. it works surprisingly well",
       "our rule: no hints before you've tried for at least 20 minutes. yes we enforce this",
       "lost the weekly leaderboard by 4 points once. it haunts us. we do not talk about it",
-      "the detective puzzles are our bread and butter. everything else we're figuring out as we go",
-      "took us 6 months to crack our first escape room as a team. we are now escape room obsessed",
       "three of us are ex-competitive gamers who redirected the energy here. results have been mixed",
       "we keep a shared doc of every puzzle we've failed. it's a long doc",
+      "warz challenges are our main thing. we rarely turn one down",
+      "we share hints in the group chat but only after everyone has given it a real shot first",
+      "monthly leaderboard is the only one that matters to us. weekly is just warmup",
       // Competitive / edge
       "leaderboard or nothing. if we're not climbing we're regrouping",
       "we time everything. every solve, every hint, every attempt. data doesn't lie",
       "some teams treat this like a hobby. we treat it like a sport",
       "our team founder has completed every puzzle on this site at least once. we have not. they carry us",
       "we are extremely normal about puzzles and definitely don't dream about cipher keys",
+      "top of the weekly leaderboard three times in a row. we do not accept fourth place",
       // Open / welcoming
       "all skill levels welcome, the only requirement is you show up",
-      "we give hints freely and celebrate every solve no matter how long it took",
+      "we celebrate every solve no matter how long it took",
       "new to the platform? this is a good first team. we'll get you up to speed",
+      "no pressure, no drama, just puzzles and good vibes",
     ];
 
     // ~45% of bots with enough activity join a team (tiers 2–5)
