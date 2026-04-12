@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
     const where: any = {
       isHidden: false,
-      isBot: false,
+      role: { not: "admin" },
       NOT: {
         email: null, // Exclude users without email (like system accounts)
       },

@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const count = await prisma.user.count({ where: { isHidden: false, isBot: false } });
+    const count = await prisma.user.count({ where: { isHidden: false, role: { not: "admin" } } });
     return NextResponse.json({ count });
   } catch (error) {
     console.error("Failed to fetch user count:", error);

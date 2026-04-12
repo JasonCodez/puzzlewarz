@@ -27,9 +27,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get all non-hidden, non-bot users
+    // Get all non-hidden, non-admin users (bots included for social proof)
     const users = await prisma.user.findMany({
-      where: { isHidden: false, isBot: false },
+      where: { isHidden: false, role: { not: "admin" } },
       select: { id: true, name: true, image: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 
