@@ -156,21 +156,23 @@ function calcLevel(xp: number): { level: number; title: string } {
 }
 
 // ─── Tier helpers ─────────────────────────────────────────────────────────────
-// Returns { solveCount, pointsPerSolve, xpPerSolve, streakCurrent }
 // Tier 0=lurker, 1=casual, 2=regular, 3=dedicated, 4=hardcore, 5=legend
+//
+// ppS is GONE. Every puzzle solve is flat 100 pts (matching all submit routes).
+// totalPoints = solveCount * 100 + randInt(0, 99)  ← the +noise keeps every bot
+// unique while guaranteeing Math.floor(totalPoints / 100) === solveCount exactly.
+//
+// xpS = xp per solve. Real default is 50 (xpReward), gridlock is 100.
+// Ranges are wide and overlapping so bot levels spread naturally across the curve.
 function tierProfile(tier: number) {
-  // ppS = points per solve. Base is always 100 (matching /api/puzzles/[id]/*/submit).
-  // Higher tiers may have slightly more due to streak bonuses (streakBonusPoints = streak * 50)
-  // accumulated over time — so their average per-solve is a bit above 100.
-  // xpS = xp per solve. Real default is 50 (xpReward default), gridlock is 100.
   switch (tier) {
-    case 0: return { solveCount: 0,    ppS: 0,   xpS: 0,   streak: 0 };
-    case 1: return { solveCount: randInt(1, 8),    ppS: 100,              xpS: randInt(45,75),  streak: randInt(0,5) };
-    case 2: return { solveCount: randInt(9, 25),   ppS: 100,              xpS: randInt(50,80),  streak: randInt(0,15) };
-    case 3: return { solveCount: randInt(26, 75),  ppS: randInt(100,120), xpS: randInt(55,85),  streak: randInt(1,30) };
-    case 4: return { solveCount: randInt(76, 180), ppS: randInt(100,140), xpS: randInt(60,95),  streak: randInt(3,60) };
-    case 5: return { solveCount: randInt(181, 400),ppS: randInt(100,175), xpS: randInt(65,100), streak: randInt(10,120) };
-    default: return { solveCount: 1, ppS: 100, xpS: 50, streak: 0 };
+    case 0: return { solveCount: 0,                  xpS: 0,              streak: 0 };
+    case 1: return { solveCount: randInt(1,  15),     xpS: randInt(40, 70),  streak: randInt(0, 4) };
+    case 2: return { solveCount: randInt(8,  45),     xpS: randInt(45, 80),  streak: randInt(0, 14) };
+    case 3: return { solveCount: randInt(30, 100),    xpS: randInt(50, 90),  streak: randInt(1, 28) };
+    case 4: return { solveCount: randInt(80, 250),    xpS: randInt(55, 100), streak: randInt(3, 60) };
+    case 5: return { solveCount: randInt(200, 520),   xpS: randInt(60, 110), streak: randInt(8, 140) };
+    default: return { solveCount: 1, xpS: 50, streak: 0 };
   }
 }
 
@@ -336,8 +338,11 @@ async function main() {
         const globalIndex = existingBotCount + i;
         const username = generateUsername(globalIndex);
         const tier = assignTier(globalIndex);
-        const { solveCount, ppS, xpS, streak } = tierProfile(tier);
-        const totalPts = solveCount * ppS;
+        const { solveCount, xpS, streak } = tierProfile(tier);
+        // Base: 100 pts/solve (flat, matching all submit routes)
+        // + 0-99 noise so no two bots land on the same total, and
+        //   Math.floor(totalPts / 100) === solveCount is always exact.
+        const totalPts = solveCount > 0 ? solveCount * 100 + randInt(0, 99) : 0;
         const totalXp  = solveCount * xpS;
         const { level, title } = calcLevel(totalXp);
 
