@@ -8,6 +8,7 @@ import PuzzleTypeFields from "@/components/admin/PuzzleTypeFields";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import SudokuGenerator from "@/components/puzzle/SudokuGenerator";
 import { createDefaultGridlockFileData, getGridlockFileData } from "@/lib/gridlockFile";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 interface HintEntry {
   text: string;
@@ -990,11 +991,7 @@ export default function AdminPuzzlesPage() {
   };
 
   if (status === "loading" || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#020202' }}>
-        <p style={{ color: '#FDE74C' }} className="text-lg">Loading...</p>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!isAdmin) {

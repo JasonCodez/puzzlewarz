@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion, type Variants } from "framer-motion";
 import AchievementNotification from "@/components/AchievementNotification";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Rarity, rarityColors } from "@/lib/rarity";
 
 interface Achievement {
@@ -164,13 +165,7 @@ export default function AchievementsPage() {
   };
 
   if (status === "loading" || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#020202" }}>
-        <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }}>
-          <p className="text-lg font-semibold" style={{ color: "#3891A6" }}>Loading achievements…</p>
-        </motion.div>
-      </div>
-    );
+    return <LoadingSpinner label="Loading achievements…" />;
   }
 
   if (!session?.user || !data) return null;

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { getPuzzleTypeLabel } from "@/lib/puzzleTypeLabels";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface EligiblePuzzle {
@@ -146,7 +147,9 @@ function PuzzlePickerModal({
         {/* List */}
         <div className="overflow-y-auto flex-1 p-4 space-y-2">
           {loading ? (
-            <p className="text-center text-sm py-8" style={{ color: "#6b7280" }}>Loading eligible puzzles…</p>
+            <div className="flex justify-center py-8">
+              <img src="/images/puzzle_warz_logo.png" alt="Loading…" width={40} height={40} style={{ animation: "pw-logo-spin 1.1s linear infinite", objectFit: "contain" }} />
+            </div>
           ) : filtered.length === 0 ? (
             <p className="text-center text-sm py-8" style={{ color: "#6b7280" }}>
               {puzzles.length === 0
@@ -646,10 +649,7 @@ function WarzLobbyInner() {
 
         {/* ── Challenge list ── */}
         {loading ? (
-          <div className="text-center py-16">
-            <div className="text-4xl mb-3">⚔️</div>
-            <p className="text-sm" style={{ color: "#6b7280" }}>Loading challenges…</p>
-          </div>
+          <LoadingSpinner label="Loading challenges…" />
         ) : displayChallenges.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-4xl mb-3">{tab === "open" ? "🏜️" : tab === "mine" ? "🤷" : "📜"}</div>

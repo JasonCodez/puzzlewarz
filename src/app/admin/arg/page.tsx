@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import ARGPuzzleBuilder from '@/components/ARGPuzzleBuilder';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 interface ARGPhase {
   id: string;
@@ -105,11 +106,7 @@ export default function AdminARGPage() {
   };
 
   if (loading) {
-    return (
-      <main style={{ backgroundColor: '#020202' }} className="min-h-screen p-8">
-        <div className="text-center text-white">Loading...</div>
-      </main>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!isAdmin) {

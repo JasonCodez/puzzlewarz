@@ -26,6 +26,12 @@ body {
   overflow-x: hidden;
 }
 
+/* ── Logo spin (used by LoadingSpinner and inline loaders) ───── */
+@keyframes pw-logo-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* ── Custom scrollbar ─────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: #080808; }

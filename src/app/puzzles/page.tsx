@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import PuzzlesWrapper from "./puzzles-wrapper";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export const metadata: Metadata = {
   title: "All Puzzles",
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
 
 export default function PuzzlesPage() {
   return (
-    <Suspense fallback={<div style={{ backgroundColor: '#020202' }} className="min-h-screen flex items-center justify-center"><p style={{ color: '#FDE74C' }}>Loading puzzles...</p></div>}>
+    <Suspense fallback={<LoadingSpinner label="Loading puzzles…" />}>
       <PuzzlesWrapper />
     </Suspense>
   );

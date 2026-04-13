@@ -1197,29 +1197,6 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
             hintTokens={guestMode ? undefined : (serverState.hintTokens ?? 0)}
           />
 
-          {/* Rule explanation panel */}
-          {puzzle.ruleExplanation && (
-            <div style={{
-              borderRadius: 10,
-              border: '1px solid rgba(255,208,0,0.22)',
-              background: 'rgba(255,208,0,0.04)',
-              overflow: 'hidden',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 16px',
-                borderBottom: '1px solid rgba(255,208,0,0.1)',
-              }}>
-                <span style={{ fontSize: 10, fontFamily: 'inherit', color: '#fbbf24', letterSpacing: '0.14em', fontWeight: 700 }}>🔑 RULE</span>
-              </div>
-              <p style={{ margin: 0, padding: '10px 16px', fontSize: 13, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#fcd34d', lineHeight: 1.65 }}>
-                {puzzle.ruleExplanation}
-              </p>
-            </div>
-          )}
-
           {/* Submit */}
           <button
             onClick={handleSubmit}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import Navbar from "@/components/Navbar";
 
@@ -12,20 +12,37 @@ const KB_ROWS = [
   ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
   ["ENTER", "Z", "X", "C", "V", "B", "N", "M", "⌫"],
 ];
-const WIN_MSGS = ["Genius! 🧠", "Magnificent! 🌟", "Impressive! 💪", "Splendid! ✨", "Great! 🎉", "Phew! 😅"];
+const WIN_MSGS = ["⚡ LEGENDARY!", "🔓 MASTERCRACK!", "💥 IMPRESSIVE!", "👏 NICE WORK!", "😅 BARELY CRACKED!", "😤 BY A THREAD!"];
 const EMOJI = { correct: "🟩", present: "🟨", absent: "⬛" } as const;
 
 type TileState = "correct" | "present" | "absent" | "tbd" | "empty";
+
+// ── Colours (matching new WordCrack style) ───────────────────────────────────
+const COLORS = {
+  correct: { bg: "#38D399", border: "#10b981", glow: "rgba(56,211,153,0.65)" },
+  present: { bg: "#FDE74C", border: "#d97706", glow: "rgba(253,231,76,0.65)" },
+  absent:  { bg: "rgba(56,145,166,0.22)", border: "rgba(56,145,166,0.5)", glow: "none" },
+  empty:   { bg: "transparent", border: "#374151", glow: "none" },
+  active:  { bg: "rgba(253,231,76,0.08)", border: "#FDE74C", glow: "rgba(253,231,76,0.3)" },
+} as const;
+
+// ── Confetti ─────────────────────────────────────────────────────────────────
+interface Particle { id: number; x: number; color: string; delay: number; duration: number; size: number }
+function makeConfetti(): Particle[] {
+  const palette = ["#38D399","#FDE74C","#3891A6","#f472b6","#818cf8","#fb923c"];
+  return Array.from({ length: 60 }, (_, i) => ({
+    id: i, x: Math.random() * 100, color: palette[i % palette.length],
+    delay: Math.random() * 0.6, duration: 0.8 + Math.random() * 0.8, size: 6 + Math.random() * 8,
+  }));
+}
 
 // ── Game logic ────────────────────────────────────────────────────────────────
 function evaluate(guess: string, target: string): TileState[] {
   const result: TileState[] = Array(WORD_LEN).fill("absent");
   const pool = target.split("");
-  // Pass 1 – exact matches
   guess.split("").forEach((c, i) => {
     if (c === pool[i]) { result[i] = "correct"; pool[i] = "#"; }
   });
-  // Pass 2 – wrong position
   guess.split("").forEach((c, i) => {
     if (result[i] !== "absent") return;
     const idx = pool.indexOf(c);
@@ -46,20 +63,20 @@ function buildKeyMap(guesses: string[], target: string): Record<string, TileStat
   return map;
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-function tileColors(st: TileState): { bg: string; border: string; color: string } {
-  if (st === "correct") return { bg: "#38D399", border: "#38D399", color: "#020202" };
-  if (st === "present") return { bg: "#FDE74C", border: "#FDE74C", color: "#020202" };
-  if (st === "absent")  return { bg: "#252525", border: "#252525", color: "#666" };
-  if (st === "tbd")     return { bg: "transparent", border: "#3891A6", color: "#FFF" };
-  return { bg: "transparent", border: "#2A2A2A", color: "#FFF" };
+function getTileStyle(st: TileState, isActive = false): { bg: string; border: string; color: string; glow: string } {
+  if (st === "correct") return { ...COLORS.correct, color: "#020202" };
+  if (st === "present") return { ...COLORS.present, color: "#020202" };
+  if (st === "absent")  return { ...COLORS.absent,  color: "#9ca3af" };
+  if (isActive)         return { ...COLORS.active,  color: "#FFF" };
+  return { ...COLORS.empty, color: "#FFF" };
 }
 
-function keyColors(st?: TileState): { bg: string; color: string } {
-  if (st === "correct") return { bg: "#38D399", color: "#020202" };
-  if (st === "present") return { bg: "#FDE74C", color: "#020202" };
-  if (st === "absent")  return { bg: "#1C1C1C", color: "#555" };
-  return { bg: "#3A3A3A", color: "#EEE" };
+function getGrade(count: number): { grade: string; color: string } {
+  if (count === 1) return { grade: "S", color: "#38D399" };
+  if (count === 2) return { grade: "A", color: "#a3e635" };
+  if (count <= Math.ceil(MAX_ROWS * 0.5)) return { grade: "B", color: "#FDE74C" };
+  if (count <= Math.ceil(MAX_ROWS * 0.75)) return { grade: "C", color: "#f97316" };
+  return { grade: "D", color: "#ef4444" };
 }
 
 // ── Countdown util ────────────────────────────────────────────────────────────
@@ -74,6 +91,53 @@ function getCountdown(): string {
   return `${hh}:${mm}:${ss}`;
 }
 
+// ── Instructions modal ───────────────────────────────────────────────────────
+function InstructionsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.88)" }}>
+      <div className="relative w-full max-w-md rounded-2xl p-6 text-white"
+           style={{ background: "linear-gradient(135deg,#040e0a 0%,#0c1a14 100%)", border: "1px solid rgba(56,211,153,0.3)", boxShadow: "0 0 40px rgba(56,211,153,0.15),0 25px 50px rgba(0,0,0,0.6)" }}>
+        <div className="text-center mb-5">
+          <div className="text-4xl mb-2">⚡</div>
+          <h2 className="text-2xl font-black tracking-widest" style={{ color: "#38D399" }}>HOW TO CRACK IT</h2>
+          <p className="text-sm mt-1" style={{ color: "#9ca3af" }}>Decode the hidden 5-letter word.</p>
+        </div>
+        <ul className="space-y-3 text-sm mb-6">
+          <li className="flex items-start gap-3"><span className="text-lg">🎯</span><span>You have <strong className="text-white">{MAX_ROWS} attempts</strong> to crack the word.</span></li>
+          <li className="flex items-start gap-3"><span className="text-lg">⌨️</span><span>Type a word and press <strong className="text-white">ENTER</strong>. Each tile flips to reveal intel.</span></li>
+          <li className="flex items-start gap-3"><span className="text-lg">📊</span><span>Crack faster for a better <strong className="text-white">grade</strong> — S, A, B, C, or D.</span></li>
+        </ul>
+        <div className="space-y-3 mb-6">
+          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#9ca3af" }}>Tile intel codes:</p>
+          {([
+            { st: "correct", label: "CRACKED", desc: "right letter, right position", letter: "C" },
+            { st: "present", label: "CLOSE",   desc: "letter exists, wrong position", letter: "P" },
+            { st: "absent",  label: "COLD",    desc: "letter not in word", letter: "X" },
+          ] as const).map(({ st, label, desc, letter }) => {
+            const c = COLORS[st];
+            return (
+              <div key={st} className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg"
+                     style={{ background: c.bg, boxShadow: `0 0 12px ${c.glow}`, color: st === "absent" ? "#9ca3af" : "#020202" }}>
+                  {letter}
+                </div>
+                <span className="text-sm">
+                  <strong className="text-white">{label}</strong>
+                  <span style={{ color: "#9ca3af" }}> — {desc}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={onClose} className="w-full py-3 rounded-xl font-black text-lg tracking-widest active:scale-95 transition-all"
+                style={{ background: "linear-gradient(135deg,#10b981,#38D399)", boxShadow: "0 0 20px rgba(56,211,153,0.4)", color: "#020202" }}>
+          START CRACKING ⚡
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 export default function DailyPage() {
   const { data: session } = useSession();
@@ -86,8 +150,8 @@ export default function DailyPage() {
   const [keyMap, setKeyMap]       = useState<Record<string, TileState>>({});
   const [msg, setMsg]             = useState("");
   const [shaking, setShaking]     = useState(false);
-  const [revealing, setRevealing] = useState<number | null>(null); // row index being revealed
-  const [revealedCols, setRevealedCols] = useState(0); // how many tiles have finished mid-flip
+  const [revealing, setRevealing] = useState<number | null>(null);
+  const [revealedCols, setRevealedCols] = useState(0);
   const [countdown, setCountdown] = useState(getCountdown());
   const [copied, setCopied]       = useState(false);
   const [loading, setLoading]     = useState(true);
@@ -100,13 +164,19 @@ export default function DailyPage() {
   const [earnedReward, setEarnedReward] = useState<{ points: number; xp: number; streakDay: number } | null>(null);
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [showUpgradeOffer, setShowUpgradeOffer] = useState(false);
+  // New WordCrack-style state
+  const [confetti, setConfetti]     = useState<Particle[]>([]);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [popCol, setPopCol]         = useState<number | null>(null);
+  const boardRef                    = useRef<HTMLDivElement>(null);
+  const [tileSize, setTileSize]     = useState(58);
 
   const dateKey  = new Date().toISOString().slice(0, 10);
   const storeKey = sessionUid ? `pw_daily_${dateKey}_${sessionUid}` : `pw_daily_${dateKey}`;
+  const instrKey = "pw_daily_htp_seen";
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Reset state when user changes
     setGuesses([]);
     setCurr("");
     setStatus("playing");
@@ -127,12 +197,14 @@ export default function DailyPage() {
             setStatus(saved.status ?? "playing");
             setKeyMap(buildKeyMap(saved.guesses, d.word));
           }
+          // Show instructions only the very first time
+          const seen = localStorage.getItem(instrKey);
+          if (!seen && !saved?.guesses) setShowInstructions(true);
         } catch { /* ignore */ }
         setLoading(false);
       })
       .catch(() => setLoading(false));
 
-    // Fetch daily streak + token counts
     fetch("/api/daily/complete")
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -143,9 +215,25 @@ export default function DailyPage() {
           if (d.nextReward) setNextReward(d.nextReward);
         }
       })
-      .catch(() => {/* ignore – not logged in */});
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeKey]);
+
+  // ── Board-responsive tile sizing ─────────────────────────────────────────
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const update = () => {
+      const inner = el.clientWidth - 32;
+      const gaps = (WORD_LEN - 1) * 4;
+      const size = Math.max(38, Math.min(64, Math.floor((inner - gaps) / WORD_LEN)));
+      setTileSize(size);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading]);
 
   // ── Countdown ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -224,6 +312,8 @@ export default function DailyPage() {
   // ── Input ─────────────────────────────────────────────────────────────────
   const type = useCallback((letter: string) => {
     if (status !== "playing" || curr.length >= WORD_LEN) return;
+    setPopCol(curr.length);
+    setTimeout(() => setPopCol(null), 120);
     setCurr(c => c + letter);
   }, [status, curr.length]);
 
@@ -264,7 +354,11 @@ export default function DailyPage() {
     if (curr === word) {
       const gs = "won";
       save(next, gs);
-      setTimeout(() => { setStatus(gs); flash(WIN_MSGS[Math.min(guesses.length, 5)], 3_000); }, WORD_LEN * 120 + 600);
+      setTimeout(() => {
+        setStatus(gs);
+        setConfetti(makeConfetti());
+        flash(WIN_MSGS[Math.min(guesses.length, 5)], 3_000);
+      }, WORD_LEN * 120 + 600);
       setTimeout(() => recordCompletion(true, next.length), WORD_LEN * 120 + 700);
     } else if (next.length >= MAX_ROWS) {
       const gs = "lost";
@@ -314,7 +408,9 @@ export default function DailyPage() {
   };
 
   // ── Build grid ────────────────────────────────────────────────────────────
-  const grid = Array.from({ length: MAX_ROWS }, (_, r): { l: string; st: TileState }[] => {
+  // Only show played rows + current active row (no blank ghost rows below)
+  const displayRowCount = status === "playing" ? guesses.length + 1 : guesses.length;
+  const grid = Array.from({ length: Math.min(displayRowCount, MAX_ROWS) }, (_, r): { l: string; st: TileState }[] => {
     if (r < guesses.length) {
       const ev = evaluate(guesses[r], word);
       return Array.from({ length: WORD_LEN }, (_, c) => ({ l: guesses[r][c], st: ev[c] }));
@@ -328,25 +424,43 @@ export default function DailyPage() {
     return Array.from({ length: WORD_LEN }, () => ({ l: "", st: "empty" as TileState }));
   });
 
+  const grade = status === "won" ? getGrade(guesses.length) : null;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ backgroundColor: "#020202", minHeight: "100vh" }}>
       <Navbar />
 
+      {/* Instructions modal */}
+      {showInstructions && (
+        <InstructionsModal onClose={() => {
+          try { localStorage.setItem(instrKey, "1"); } catch { /* ignore */ }
+          setShowInstructions(false);
+        }} />
+      )}
+
+      {/* Confetti */}
+      {confetti.length > 0 && (
+        <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden">
+          {confetti.map(p => (
+            <div key={p.id} className="absolute rounded-sm"
+                 style={{ left: `${p.x}%`, top: "-10px", width: p.size, height: p.size * 0.6,
+                          background: p.color,
+                          animation: `wc-fall ${p.duration}s ${p.delay}s ease-in forwards` }} />
+          ))}
+        </div>
+      )}
+
       {/* Animations */}
       <style>{`
         @keyframes pw-shake {
           0%,100%{transform:translateX(0)}
-          15%{transform:translateX(-8px)}
-          30%{transform:translateX(8px)}
-          45%{transform:translateX(-5px)}
-          60%{transform:translateX(5px)}
-          75%{transform:translateX(-3px)}
-          90%{transform:translateX(3px)}
+          15%{transform:translateX(-8px)}30%{transform:translateX(8px)}
+          45%{transform:translateX(-5px)}60%{transform:translateX(5px)}
+          75%{transform:translateX(-3px)}90%{transform:translateX(3px)}
         }
         @keyframes pw-pop {
-          0%,100%{transform:scale(1)}
-          50%{transform:scale(1.12)}
+          0%,100%{transform:scale(1)}50%{transform:scale(1.13)}
         }
         @keyframes pw-reveal {
           0%{transform:rotateX(0deg)}
@@ -359,54 +473,58 @@ export default function DailyPage() {
           to{opacity:1;transform:translateY(0)}
         }
         @keyframes pw-bounce {
-          0%,100%{transform:translateY(0)}
-          33%{transform:translateY(-18px)}
-          66%{transform:translateY(-8px)}
+          0%,100%{transform:translateY(0)}33%{transform:translateY(-18px)}66%{transform:translateY(-8px)}
         }
-        .pw-shake { animation: pw-shake 0.6s ease; }
-        .pw-pop   { animation: pw-pop 0.12s ease; }
-        .pw-fadein{ animation: pw-fadein 0.25s ease; }
-        .pw-bounce{ animation: pw-bounce 0.7s ease; }
+        @keyframes wc-fall {
+          to{transform:translateY(110vh) rotate(720deg);opacity:0}
+        }
         @keyframes pw-modal-in {
-          from{opacity:0;transform:scale(0.82)}
-          to{opacity:1;transform:scale(1)}
+          from{opacity:0;transform:scale(0.82)}to{opacity:1;transform:scale(1)}
         }
         @keyframes pw-counter {
-          from{opacity:0;transform:translateY(12px)}
-          to{opacity:1;transform:translateY(0)}
+          from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}
         }
         @keyframes pw-glow {
-          0%,100%{box-shadow:0 0 20px rgba(253,231,76,0.15)}
-          50%{box-shadow:0 0 40px rgba(253,231,76,0.35)}
+          0%,100%{box-shadow:0 0 20px rgba(253,231,76,0.15)}50%{box-shadow:0 0 40px rgba(253,231,76,0.35)}
         }
-        .pw-modal-in{ animation: pw-modal-in 0.4s cubic-bezier(0.34,1.56,0.64,1); }
-        .pw-counter{ animation: pw-counter 0.5s ease both; }
-        .pw-glow{ animation: pw-glow 2s ease-in-out infinite; }
+        .pw-shake  { animation: pw-shake  0.6s ease; }
+        .pw-pop    { animation: pw-pop    0.12s ease; }
+        .pw-fadein { animation: pw-fadein 0.25s ease; }
+        .pw-bounce { animation: pw-bounce 0.7s ease; }
+        .pw-modal-in  { animation: pw-modal-in  0.4s cubic-bezier(0.34,1.56,0.64,1); }
+        .pw-counter   { animation: pw-counter   0.5s ease both; }
+        .pw-glow      { animation: pw-glow      2s ease-in-out infinite; }
       `}</style>
 
       <main className="pt-24 pb-16 flex flex-col items-center px-2">
 
         {/* ── Header ── */}
-        <div className="w-full max-w-xs mt-6 mb-5 text-center pb-4"
-             style={{ borderBottom: "1px solid #1C1C1C" }}>
+        <div className="w-full max-w-xs mt-6 mb-4 text-center pb-4" style={{ borderBottom: "1px solid #1C1C1C" }}>
           <div className="flex justify-between items-center mb-2">
             <span className="text-xs font-bold tracking-widest" style={{ color: "#3891A6" }}>PUZZLE WARZ</span>
-            <span className="text-xs font-mono" style={{ color: "#444" }}>#{dayNum}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono" style={{ color: "#444" }}>#{dayNum}</span>
+              <button onClick={() => setShowInstructions(true)}
+                      className="text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(56,211,153,0.15)", border: "1px solid rgba(56,211,153,0.3)", color: "#38D399" }}>
+                ?
+              </button>
+            </div>
           </div>
           <h1 className="text-3xl font-black tracking-[0.25em] text-white">DAILY</h1>
-          <p className="text-xs mt-1.5" style={{ color: "#555" }}>
-            Guess the 5-letter word in 6 tries
-          </p>
+          <p className="text-xs mt-1" style={{ color: "#555" }}>Crack the 5-letter word in 6 tries</p>
+
           {/* Streak badge */}
           {dailyStreak > 0 && (
             <div className="flex justify-center mt-2">
-              <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(56,145,166,0.15)', border: '1px solid rgba(56,145,166,0.3)', color: '#3891A6' }}>
+              <span className="text-xs font-bold px-3 py-1 rounded-full"
+                    style={{ backgroundColor: "rgba(56,145,166,0.15)", border: "1px solid rgba(56,145,166,0.3)", color: "#3891A6" }}>
                 🔥 {dailyStreak} day streak
               </span>
             </div>
           )}
 
-          {/* ── Streak progress (7-day cycle) ── */}
+          {/* Streak progress */}
           {status === "playing" && nextReward && (
             <div className="mt-3 flex flex-col items-center gap-1.5">
               <div className="flex gap-1">
@@ -415,47 +533,28 @@ export default function DailyPage() {
                   const filled = dayIdx < streakDay;
                   const current = dayIdx === streakDay;
                   return (
-                    <div
-                      key={i}
-                      className="flex items-center justify-center rounded-sm text-[9px] font-bold"
-                      style={{
-                        width: 28, height: 20,
-                        background: filled ? '#38D399' : current ? 'rgba(56,145,166,0.3)' : '#1A1A1A',
-                        border: current ? '1px solid #3891A6' : '1px solid #2A2A2A',
-                        color: filled ? '#020202' : current ? '#3891A6' : '#444',
-                      }}
-                    >
+                    <div key={i} className="flex items-center justify-center rounded-sm text-[9px] font-bold"
+                         style={{ width: 28, height: 20,
+                                  background: filled ? "#38D399" : current ? "rgba(56,145,166,0.3)" : "#1A1A1A",
+                                  border: current ? "1px solid #3891A6" : "1px solid #2A2A2A",
+                                  color: filled ? "#020202" : current ? "#3891A6" : "#444" }}>
                       {dayIdx}
                     </div>
                   );
                 })}
               </div>
-              <span className="text-[10px]" style={{ color: '#666' }}>
-                Win today: <span style={{ color: '#38D399' }}>+{nextReward.points}pts</span>{' '}
-                <span style={{ color: '#3891A6' }}>+{nextReward.xp}xp</span>
+              <span className="text-[10px]" style={{ color: "#666" }}>
+                Win today: <span style={{ color: "#38D399" }}>+{nextReward.points}pts</span>{" "}
+                <span style={{ color: "#3891A6" }}>+{nextReward.xp}xp</span>
               </span>
             </div>
           )}
-
-          {/* ── Color legend ── */}
-          <div className="flex justify-center gap-4 mt-3">
-            {([
-              { bg: "#38D399", label: "Correct spot" },
-              { bg: "#FDE74C", label: "Wrong spot" },
-              { bg: "#252525", label: "Not in word" },
-            ] as const).map(({ bg, label }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: 3, background: bg, flexShrink: 0 }} />
-                <span className="text-xs" style={{ color: "#888" }}>{label}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
-        {/* ── Message toast ── */}
+        {/* ── Toast ── */}
         {msg && (
-          <div className="mb-3 px-5 py-2 rounded-xl font-bold text-sm text-black pw-fadein"
-               style={{ background: "#FFF", boxShadow: "0 4px 24px rgba(0,0,0,0.6)", zIndex: 10 }}>
+          <div className="mb-3 px-5 py-2 rounded-xl font-bold text-sm pw-fadein"
+               style={{ background: "#FFF", color: "#020202", boxShadow: "0 4px 24px rgba(0,0,0,0.6)", zIndex: 10 }}>
             {msg}
           </div>
         )}
@@ -463,7 +562,7 @@ export default function DailyPage() {
         {/* ── Shield notice ── */}
         {shieldNotice && (
           <div className="mb-3 px-5 py-2 rounded-xl font-bold text-sm pw-fadein flex items-center gap-2"
-               style={{ background: 'rgba(56,145,166,0.15)', border: '1px solid #3891A6', color: '#3891A6' }}>
+               style={{ background: "rgba(56,145,166,0.15)", border: "1px solid #3891A6", color: "#3891A6" }}>
             🛡️ Streak shield used! Your streak was protected.
             <button onClick={() => setShieldNotice(false)} className="ml-auto text-xs opacity-60 hover:opacity-100">✕</button>
           </div>
@@ -477,41 +576,36 @@ export default function DailyPage() {
         ) : (
           <>
             {/* ── Grid ── */}
-            <div className="flex flex-col gap-1.5 mb-5">
+            <div ref={boardRef} className="flex flex-col gap-1 mb-5 w-full" style={{ maxWidth: 340 }}>
               {grid.map((row, ri) => {
                 const isShaking   = shaking && ri === guesses.length;
                 const isRevealing = revealing === ri;
                 const isWinRow    = status === "won" && ri === guesses.length - 1;
 
                 return (
-                  <div
-                    key={ri}
-                    className={`flex gap-1.5${isShaking ? " pw-shake" : ""}`}
-                  >
+                  <div key={ri} className={`flex gap-1 justify-center${isShaking ? " pw-shake" : ""}`}>
                     {row.map((tile, ci) => {
-                      // During reveal, keep tiles as 'tbd' until their flip midpoint
                       const displaySt = (isRevealing && ci >= revealedCols) ? "tbd" : tile.st;
-                      const { bg, border, color } = tileColors(displaySt);
-                      const isCurrTile = ri === guesses.length && ci === curr.length - 1 && status === "playing";
-                      const revDelay   = isRevealing ? `${ci * 0.12}s` : undefined;
-                      const bounceDelay = isWinRow ? `${ci * 0.07}s` : undefined;
+                      const isActive  = ri === guesses.length && status === "playing";
+                      const { bg, border, color, glow } = getTileStyle(displaySt, isActive && tile.st === "tbd");
+                      const isPop     = isActive && ci === curr.length - 1 && popCol === ci;
+                      const revDelay  = isRevealing ? `${ci * 0.12}s` : undefined;
+                      const bnDelay   = isWinRow ? `${ci * 0.07}s` : undefined;
 
                       return (
-                        <div
-                          key={ci}
-                          className={`flex items-center justify-center font-black uppercase select-none${isCurrTile ? " pw-pop" : ""}${isRevealing ? " pw-reveal" : ""}${isWinRow && status === "won" ? " pw-bounce" : ""}`}
-                          style={{
-                            width:  "clamp(48px, 13vw, 62px)",
-                            height: "clamp(48px, 13vw, 62px)",
-                            fontSize: "clamp(1.1rem, 4vw, 1.5rem)",
-                            background:   bg,
-                            border:       `2px solid ${border}`,
-                            color,
-                            borderRadius: 4,
-                            ...(isRevealing && { animationDelay: revDelay }),
-                            ...(isWinRow    && { animationDelay: bounceDelay }),
-                          }}
-                        >
+                        <div key={ci}
+                             className={`flex items-center justify-center font-black uppercase select-none rounded-lg${isPop ? " pw-pop" : ""}${isRevealing ? " pw-reveal" : ""}${isWinRow ? " pw-bounce" : ""}`}
+                             style={{
+                               width: tileSize, height: tileSize,
+                               fontSize: Math.round(tileSize * 0.44),
+                               background: bg,
+                               border: `2px solid ${border}`,
+                               boxShadow: glow !== "none" ? `0 0 12px ${glow}` : undefined,
+                               color,
+                               transition: "background 0.05s, border-color 0.05s",
+                               ...(isRevealing && { animationDelay: revDelay }),
+                               ...(isWinRow && { animationDelay: bnDelay }),
+                             }}>
                           {tile.l}
                         </div>
                       );
@@ -524,28 +618,34 @@ export default function DailyPage() {
             {/* ── Game Over panel ── */}
             {status !== "playing" && (
               <div className="w-full max-w-xs mb-5 p-5 rounded-xl text-center pw-fadein"
-                   style={{ border: "1px solid rgba(56,145,166,0.2)", background: "rgba(56,145,166,0.06)" }}>
+                   style={{ border: "1px solid rgba(56,211,153,0.2)", background: "rgba(56,211,153,0.04)" }}>
                 {status === "won" ? (
-                  <p className="font-black text-xl mb-3" style={{ color: "#38D399" }}>
-                    {WIN_MSGS[Math.min(guesses.length - 1, 5)]}
-                  </p>
+                  <>
+                    <p className="font-black text-xl mb-1" style={{ color: "#38D399" }}>
+                      {WIN_MSGS[Math.min(guesses.length - 1, 5)]}
+                    </p>
+                    {grade && (
+                      <div className="flex items-center justify-center gap-2 mb-3">
+                        <span className="text-xs font-bold" style={{ color: "#9ca3af" }}>GRADE</span>
+                        <span className="text-3xl font-black" style={{ color: grade.color }}>{grade.grade}</span>
+                        <span className="text-xs font-bold" style={{ color: "#9ca3af" }}>{guesses.length}/{MAX_ROWS}</span>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <>
                     <p className="text-xs mb-1" style={{ color: "#666" }}>The word was</p>
                     <p className="text-3xl font-black tracking-[0.3em] text-white mb-3">{word}</p>
                   </>
                 )}
-
                 <div className="flex items-center justify-center gap-6">
                   <div className="text-center">
                     <p className="text-xs mb-0.5" style={{ color: "#555" }}>Next puzzle</p>
                     <p className="text-2xl font-mono font-bold" style={{ color: "#FDE74C" }}>{countdown}</p>
                   </div>
-                  <button
-                    onClick={share}
-                    className="px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-80 transition-opacity"
-                    style={{ background: "#38D399", color: "#020202" }}
-                  >
+                  <button onClick={share}
+                          className="px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-80 transition-opacity"
+                          style={{ background: "#38D399", color: "#020202" }}>
                     {copied ? "Copied ✓" : "Share 🔗"}
                   </button>
                 </div>
@@ -553,30 +653,33 @@ export default function DailyPage() {
             )}
 
             {/* ── Keyboard ── */}
-            <div className="flex flex-col gap-1.5 w-full" style={{ maxWidth: 360 }}>
+            <div className="flex flex-col gap-1.5 w-full" style={{ maxWidth: 380 }}>
               {KB_ROWS.map((row, ri) => (
-                <div key={ri} className="flex justify-center gap-1">
+                <div key={ri} className="flex justify-center gap-1.5">
                   {row.map(key => {
-                    const { bg, color } = keyColors(keyMap[key]);
+                    const st = keyMap[key];
+                    let bg = "rgba(56,145,166,0.18)";
+                    let color = "#fff";
+                    if (st === "correct") { bg = "#10b981"; color = "#020202"; }
+                    else if (st === "present") { bg = "#d97706"; color = "#020202"; }
+                    else if (st === "absent")  { bg = "rgba(56,145,166,0.22)"; color = "#374151"; }
                     const wide = key === "ENTER" || key === "⌫";
                     return (
-                      <button
-                        key={key}
-                        onClick={() => {
-                          if (key === "ENTER")  submit();
-                          else if (key === "⌫") del();
-                          else                  type(key);
-                        }}
-                        className="rounded font-bold hover:opacity-80 active:scale-95 transition-transform select-none"
-                        style={{
-                          background: bg,
-                          color,
-                          height:   "clamp(44px, 12vw, 58px)",
-                          width:    wide ? "clamp(52px, 14vw, 66px)" : "clamp(28px, 8.5vw, 43px)",
-                          fontSize: key === "ENTER" ? "0.6rem" : "0.875rem",
-                          flexShrink: 0,
-                        }}
-                      >
+                      <button key={key}
+                              onClick={() => {
+                                if (key === "ENTER") submit();
+                                else if (key === "⌫") del();
+                                else type(key);
+                              }}
+                              className="rounded-lg font-bold hover:opacity-80 active:scale-95 transition-transform select-none"
+                              style={{
+                                background: bg, color,
+                                height:   "clamp(42px, 11vw, 56px)",
+                                width:    wide ? "clamp(50px, 13vw, 64px)" : "clamp(28px, 8.5vw, 42px)",
+                                fontSize: key === "ENTER" ? "0.58rem" : "0.875rem",
+                                flexShrink: 0,
+                                border: "1px solid rgba(255,255,255,0.08)",
+                              }}>
                         {key}
                       </button>
                     );
@@ -588,23 +691,20 @@ export default function DailyPage() {
             {/* ── Skip token button ── */}
             {status === "playing" && skipTokens > 0 && (
               <div className="mt-4 flex justify-center">
-                <button
-                  onClick={handleSkip}
-                  disabled={skipping}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
-                  style={{ backgroundColor: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.3)', color: '#3891A6' }}
-                >
+                <button onClick={handleSkip} disabled={skipping}
+                        className="px-4 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
+                        style={{ backgroundColor: "rgba(56,145,166,0.1)", border: "1px solid rgba(56,145,166,0.3)", color: "#3891A6" }}>
                   {skipping ? "Skipping..." : `🎫 Skip today (${skipTokens} token${skipTokens !== 1 ? "s" : ""})`}
                 </button>
               </div>
             )}
 
-            {/* ── Stats strip (past attempts) ── */}
+            {/* ── Stats strip ── */}
             {status !== "playing" && (
-              <div className="w-full max-w-xs mt-5 flex justify-center gap-6 pw-fadein">
+              <div className="w-full max-w-xs mt-4 flex justify-center gap-6 pw-fadein">
                 {[
                   { label: "Guesses", value: status === "won" ? `${guesses.length}/${MAX_ROWS}` : `X/${MAX_ROWS}` },
-                  { label: "Puzzle", value: `#${dayNum}` },
+                  { label: "Puzzle",  value: `#${dayNum}` },
                 ].map(({ label, value }) => (
                   <div key={label} className="text-center">
                     <p className="text-2xl font-black text-white">{value}</p>

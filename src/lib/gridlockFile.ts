@@ -108,7 +108,7 @@ export type GridlockFileData = {
 
 export type GridlockFileClientData = Omit<
   GridlockFileData,
-  'correctAnswers' | 'shadowRuleNote' | 'seasonKeyIndex'
+  'correctAnswers' | 'shadowRuleNote' | 'seasonKeyIndex' | 'ruleExplanation'
 >;
 
 export const DEFAULT_GRIDLOCK_FILE_TEMPLATE: GridlockFileData = {
@@ -189,7 +189,7 @@ export function getGridlockFileData(puzzleData: unknown): GridlockFileData | nul
 
 export function sanitizeGridlockForClient(data: GridlockFileData): GridlockFileClientData {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { correctAnswers: _ca, shadowRuleNote: _sn, seasonKeyIndex: _ski, ...rest } = data;
+  const { correctAnswers: _ca, shadowRuleNote: _sn, seasonKeyIndex: _ski, ruleExplanation: _re, ...rest } = data;
   return rest;
 }
 

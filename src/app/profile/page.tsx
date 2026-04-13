@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Rarity, rarityColors } from '@/lib/rarity';
 import { THEME_CONFIGS, FRAME_CONFIGS, type ThemeConfig } from '@/lib/profileThemes';
 import AvatarFrame from '@/components/AvatarFrame';
+import LoadingSpinner from '@/components/LoadingSpinner';
 import './profile-actions.css';
 
 interface UserProfile {
@@ -322,11 +323,7 @@ export default function ProfilePage() {
   };
 
   if (status === 'loading' || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#020202' }}>
-        <div className="text-white text-xl">Loading...</div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!session?.user) {

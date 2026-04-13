@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import Link from "next/link";
 
 interface User {
@@ -147,14 +148,7 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
   };
 
   if (loading) {
-    return (
-      <>
-        <Navbar />
-        <div style={{ backgroundColor: '#020202' }} className="min-h-screen pt-16 flex items-center justify-center">
-          <div style={{ color: '#FDE74C' }} className="text-lg">Loading...</div>
-        </div>
-      </>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!post) {

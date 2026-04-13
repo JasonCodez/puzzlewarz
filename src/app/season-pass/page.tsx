@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 interface SeasonTier {
   id: string;
@@ -844,11 +845,7 @@ export default function SeasonPassPage() {
   };
 
   if (status === "loading" || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#020202" }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-yellow-400 border-t-transparent" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!season) {
