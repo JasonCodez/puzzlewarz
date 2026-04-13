@@ -28,22 +28,22 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Puzzle Warz — Solve Challenges, Compete & Win",
+    default: "Puzzle Warz — Daily Puzzles, Leaderboards & Multiplayer Challenges",
     template: "%s | Puzzle Warz",
   },
   description:
-    "Daily logic puzzles. Find the hidden rule, crack the grid, see how you rank. Free to play — Puzzle Warz.",
+    "Crack the daily Gridlock File, race the clock on word puzzles, and challenge rivals in Warz mode. Earn points, climb leaderboards, and unlock achievements — free to play.",
   keywords: [
-    "puzzle platform",
-    "online puzzles",
-    "ARG puzzles",
+    "daily puzzle",
+    "logic puzzles online",
+    "word puzzle game",
     "multiplayer puzzle game",
     "team puzzles",
     "puzzle competition",
-    "escape room online",
-    "logic puzzles",
-    "cryptic challenges",
     "leaderboard puzzles",
+    "brain teasers online",
+    "gridlock puzzle",
+    "puzzle battle",
   ],
   authors: [{ name: "Puzzle Warz", url: siteUrl }],
   creator: "Puzzle Warz",
@@ -59,15 +59,15 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: "Puzzle Warz",
-    title: "Puzzle Warz — Crack Today's Gridlock File",
+    title: "Puzzle Warz — Daily Puzzles, Leaderboards & Multiplayer Challenges",
     description:
-      "Daily logic puzzles. Find the hidden rule, crack the grid, see how you rank. Free to play.",
+      "Crack the daily Gridlock File, race the clock on word puzzles, and challenge rivals in Warz mode. Earn points, climb leaderboards, and unlock achievements.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Puzzle Warz — Crack Today's Gridlock File",
+    title: "Puzzle Warz — Daily Puzzles, Leaderboards & Multiplayer Challenges",
     description:
-      "Daily logic puzzles. Find the hidden rule, crack the grid, see how you rank. Free to play.",
+      "Crack the daily Gridlock File, race the clock on word puzzles, and challenge rivals in Warz mode. Earn points, climb leaderboards, and unlock achievements.",
   },
   icons: {
     icon: "/images/puzzle_warz_logo.png",
@@ -83,7 +83,7 @@ const jsonLd = {
       "@id": `${siteUrl}/#website`,
       name: "Puzzle Warz",
       url: siteUrl,
-      description: "The ultimate multiplayer puzzle platform for ARG-style challenges.",
+      description: "Daily logic puzzles, word challenges, and multiplayer battles. Compete for the top spot on Puzzle Warz.",
       potentialAction: {
         "@type": "SearchAction",
         target: { "@type": "EntryPoint", urlTemplate: `${siteUrl}/puzzles?q={search_term_string}` },

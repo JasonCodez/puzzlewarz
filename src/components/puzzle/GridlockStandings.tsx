@@ -9,6 +9,7 @@ type StandingsData = {
   tierCounts: Record<GridlockRank, number>;
   totalSolves: number;
   percentile: number | null;
+  tierRank: number | null;
 };
 
 const RANK_ORDER: GridlockRank[] = ['S', 'A', 'B', 'C', 'F'];
@@ -50,7 +51,7 @@ export default function GridlockStandings({
     );
   }
 
-  const { tierCounts, totalSolves, percentile } = data;
+  const { tierCounts, totalSolves, percentile, tierRank } = data;
   const maxCount = Math.max(...Object.values(tierCounts), 1);
 
   // Choose percentile badge phrasing
@@ -142,6 +143,12 @@ export default function GridlockStandings({
             <span className="text-gray-600"> · {formatTime(elapsedSeconds)}</span>
           )}
         </div>
+
+        {tierRank !== null && tierCounts[playerRank] > 1 && (
+          <div className="text-xs font-mono" style={{ color: GRIDLOCK_RANK_COLORS[playerRank] }}>
+            #{tierRank} fastest {playerRank}-rank solve today
+          </div>
+        )}
 
         {percentileLabel && (
           <div

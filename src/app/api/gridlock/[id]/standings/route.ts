@@ -93,10 +93,26 @@ export async function GET(
       ? Math.min(99, Math.round((beaten / totalSolves) * 100))
       : null;
 
+    // Speed rank within the player's own tier (1 = fastest today)
+    // Only computed when the player has a valid time
+    let tierRank: number | null = null;
+    if (playerTierIndex >= 0 && playerSeconds > 0) {
+      const fasterInSameTier = await prisma.gridlockSolve.count({
+        where: {
+          puzzleId,
+          rank: playerRank,
+          solvedAt: { gte: todayStart },
+          elapsedSeconds: { lt: playerSeconds },
+        },
+      });
+      tierRank = fasterInSameTier + 1;
+    }
+
     return NextResponse.json({
       tierCounts: blendedTierCounts,
       totalSolves,
       percentile,
+      tierRank,
     });
   } catch (e) {
     console.error('[gridlock/standings]', e);

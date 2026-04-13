@@ -261,22 +261,13 @@ export type GridlockRank = 'S' | 'A' | 'B' | 'C' | 'F';
 export function calcGridlockRank(
   attemptCount: number,
   hintsUsed: number,
-  lawDeclaredCorrectly: boolean,
 ): GridlockRank {
-  // Base rank from attempts
-  let base: GridlockRank;
-  if (attemptCount === 1 && hintsUsed === 0) base = 'S';
-  else if (attemptCount === 1) base = 'A';
-  else if (attemptCount === 2) base = 'A';
-  else if (attemptCount <= 4) base = 'B';
-  else if (attemptCount <= 7) base = 'C';
-  else base = 'F';
-
-  // Law Declaration bonus: S-rank requires correct law declaration
-  // But we never DEMOTE for wrong law — only the S→A upgrade requires it
-  if (base === 'S' && !lawDeclaredCorrectly) return 'A';
-
-  return base;
+  if (attemptCount === 1 && hintsUsed === 0) return 'S';
+  if (attemptCount === 1) return 'A';
+  if (attemptCount === 2) return 'A';
+  if (attemptCount <= 4) return 'B';
+  if (attemptCount <= 7) return 'C';
+  return 'F';
 }
 
 export const GRIDLOCK_RANK_LABELS: Record<GridlockRank, string> = {

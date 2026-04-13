@@ -63,7 +63,7 @@ export async function GET(
       select: { feedback: true },
     });
 
-    let lawDeclaredCorrectly = false;
+    let lawDeclaredCorrectly = false; // retained for future use
     if (lastBadSubmission?.feedback) {
       try {
         const fb = JSON.parse(lastBadSubmission.feedback);
@@ -71,7 +71,7 @@ export async function GET(
       } catch { /* ignore */ }
     }
 
-    const rank = calcGridlockRank(submissionCount, hintsUsed, lawDeclaredCorrectly);
+    const rank = calcGridlockRank(submissionCount, hintsUsed);
     const clientData = sanitizeGridlockForClient(fileData);
 
     return NextResponse.json({
