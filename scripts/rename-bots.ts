@@ -138,35 +138,10 @@ function buildNamePool(count: number): string[] {
     const patternIdx = i % patterns.length;
     let name = patterns[patternIdx](i);
 
-    // If colliding, append a short disambiguator number
-    if (used.has(name.toLowerCase())) {
-      const disambig = (names.length % 89) + 2; // 2-90
-      name = name + disambig;
-    }
-
-    if (!used.has(name.toLowerCase()) && name.length >= 4 && name.length <= 24) {
-      used.add(name.toLowerCase());
-      names.push(name);
-    }
-
-    i++;
-    attempts++;
-  }
-
-  return names;
-}
-
-  let i = 0;
-  let attempts = 0;
-
-  while (names.length < count && attempts < count * 20) {
-    const patternIdx = i % patterns.length;
-    let name = patterns[patternIdx](i);
-
     // Trim stray underscores (belt + suspenders)
     name = name.replace(/_/g, "");
 
-    // If still colliding, append a short disambiguator number
+    // If colliding, append a short disambiguator number
     if (used.has(name.toLowerCase())) {
       const disambig = (names.length % 89) + 2; // 2-90
       name = name + disambig;
