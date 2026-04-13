@@ -54,8 +54,8 @@ export async function POST(
       lawResult = validateLawDeclaration(fileData, declaredFamily, declaredAxis);
     }
 
-    const lawCorrect = lawResult === 'confirmed' || lawResult === 'alternate';
-    const rank = calcGridlockRank(submissionCount, 0, lawCorrect);
+    const lawCorrect = lawResult === 'confirmed' || lawResult === 'alternate'; // retained for future use
+    const rank = calcGridlockRank(submissionCount, 0);
 
     const partialHint =
       answerResult.totalMissing > 1 && !answerResult.correct

@@ -90,8 +90,8 @@ export async function POST(
     });
 
     const submissionCount = prevAttempts + 1;
-    const lawCorrect = lawResult === 'confirmed' || lawResult === 'alternate';
-    const rank = calcGridlockRank(submissionCount, hintsUsed, lawCorrect);
+    const lawCorrect = lawResult === 'confirmed' || lawResult === 'alternate'; // retained for future use
+    const rank = calcGridlockRank(submissionCount, hintsUsed);
 
     const feedbackJson = JSON.stringify({
       answerResult,
