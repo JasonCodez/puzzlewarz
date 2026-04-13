@@ -236,6 +236,22 @@ function CosmeticPreview({ item }: { item: StoreItem }) {
     );
   }
 
+  if (sub === "name_color") {
+    const val = meta?.value ?? "";
+    const isRainbow = val === "rainbow";
+    return (
+      <div className="h-16 flex items-center justify-center mb-3 rounded-xl overflow-hidden"
+        style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))", border: "1px solid rgba(255,255,255,0.07)" }}>
+        <p
+          className={`font-extrabold text-lg tracking-wide${isRainbow ? " rainbow-name" : ""}`}
+          style={!isRainbow && val ? { color: val } : undefined}
+        >
+          PlayerName
+        </p>
+      </div>
+    );
+  }
+
   if (sub === "banner") {
     const color = meta?.color ?? "#FDE74C";
     return (
@@ -503,6 +519,49 @@ function SkinPreviewContent({ skinKey }: { skinKey: string }) {
   );
 }
 
+function NameColorPreviewContent({ value }: { value: string }) {
+  const isRainbow = value === "rainbow";
+  const sampleNames = ["PlayerName", "Warlord42", "CrypticAce"];
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      {/* Profile header mock */}
+      <div className="px-5 py-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))" }}>
+        <p className="text-xs font-semibold mb-3" style={{ color: "#6b7280" }}>Profile header</p>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl" style={{ backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>👤</div>
+          <div>
+            <p
+              className={`text-2xl font-extrabold leading-tight${isRainbow ? " rainbow-name" : ""}`}
+              style={!isRainbow && value ? { color: value } : undefined}
+            >
+              PlayerName
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "#6b7280" }}>LVL 42 · Veteran</p>
+          </div>
+        </div>
+      </div>
+      {/* Leaderboard mock */}
+      <div className="px-5 py-4 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <p className="text-xs font-semibold mb-3" style={{ color: "#6b7280" }}>Leaderboard</p>
+        <div className="space-y-2">
+          {sampleNames.map((name, i) => (
+            <div key={name} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ backgroundColor: i === 0 ? "rgba(255,255,255,0.05)" : "transparent" }}>
+              <span className="text-xs font-bold w-5 text-center" style={{ color: "#6b7280" }}>#{i + 1}</span>
+              <p
+                className={`text-sm font-bold flex-1${i === 0 && isRainbow ? " rainbow-name" : ""}`}
+                style={i === 0 && !isRainbow && value ? { color: value } : { color: i === 0 ? "#fff" : "#9ca3af" }}
+              >
+                {name}
+              </p>
+              <span className="text-xs" style={{ color: "#6b7280" }}>1,240 pts</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CosmeticPreviewModal({ item, onClose }: { item: StoreItem; onClose: () => void }) {
   const meta = item.metadata as Record<string, string> | null;
   const sub = item.subcategory;
@@ -521,6 +580,9 @@ function CosmeticPreviewModal({ item, onClose }: { item: StoreItem; onClose: () 
   } else if (sub === "skin") {
     title = item.name;
     content = <SkinPreviewContent skinKey={value || "default"} />;
+  } else if (sub === "name_color") {
+    title = item.name;
+    content = <NameColorPreviewContent value={value} />;
   }
 
   if (!content) return null;
@@ -1091,8 +1153,8 @@ function StorePageInner() {
                     </span>
 
                     <div className="flex gap-1.5">
-                      {/* Preview button for themes, frames, skins */}
-                      {["theme", "frame", "skin"].includes(item.subcategory) && (
+                      {/* Preview button for themes, frames, skins, name colors */}
+                      {["theme", "frame", "skin", "name_color"].includes(item.subcategory) && (
                         <button
                           onClick={() => setPreviewItem(item)}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"

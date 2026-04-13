@@ -367,18 +367,6 @@ export default function SudokuGrid({ puzzle, givens, onSubmit, onChange, disable
             )}
           </>
         )}
-        <button
-          type="button"
-          onClick={() => {
-            if (disabled) return;
-            if (typeof onRequestGiveUp === 'function') onRequestGiveUp();
-            else if (typeof onGiveUp === 'function') onGiveUp();
-          }}
-          disabled={disabled}
-          className="ml-3 px-4 py-2 rounded bg-red-600 text-white hover:brightness-95 disabled:opacity-50"
-        >
-          I Give Up!
-        </button>
       </div>
       {submitMessage && (
         <div className={`mt-2 text-sm ${submitMessage.type === 'error' ? 'text-red-400' : submitMessage.type === 'success' ? 'text-green-400' : 'text-yellow-300'}`}>

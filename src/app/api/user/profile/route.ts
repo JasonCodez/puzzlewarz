@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
         activeFrame: true,
         activeSkin: true,
         activeFlair: true,
+        activeNameColor: true,
         totalPoints: true,
         purchasedPoints: true,
       },

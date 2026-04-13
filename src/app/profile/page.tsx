@@ -28,6 +28,7 @@ interface UserProfile {
   activeFrame: string;
   activeSkin: string;
   activeFlair: string;
+  activeNameColor: string;
 }
 
 // ─── Cosmetics Drawer ─────────────────────────────────────────────────────────
@@ -83,6 +84,21 @@ function DrawerItemPreview({ item }: { item: DrawerItem }) {
       </div>
     );
   }
+  if (sub === 'name_color') {
+    const val = meta?.value ?? '';
+    const isRainbow = val === 'rainbow';
+    return (
+      <div className="h-10 flex items-center justify-center mb-3 rounded-lg px-3"
+        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <span
+          className={isRainbow ? 'text-sm font-extrabold rainbow-name' : 'text-sm font-extrabold'}
+          style={!isRainbow && val ? { color: val } : undefined}
+        >
+          PlayerName
+        </span>
+      </div>
+    );
+  }
   if (sub === 'skin') {
     type SkinDef = { bg: string; border: string; cell: string; cellGlow: string; alt: string; label: string; shadow: string };
     const skinDefs: Record<string, SkinDef> = {
@@ -133,7 +149,7 @@ export default function ProfilePage() {
   const [showCosmeticsDrawer, setShowCosmeticsDrawer] = useState(false);
   const [drawerItems, setDrawerItems] = useState<DrawerItem[]>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'theme' | 'frame' | 'skin' | 'flair' | 'exclusive'>('theme');
+  const [drawerTab, setDrawerTab] = useState<'theme' | 'frame' | 'skin' | 'flair' | 'name_color' | 'exclusive'>('theme');
   const [drawerEquipping, setDrawerEquipping] = useState<string | null>(null);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
 
@@ -294,7 +310,7 @@ export default function ProfilePage() {
       const exclusiveData = exclusiveRes.ok ? await exclusiveRes.json() : { items: [] };
 
       const regularItems = (storeData.items ?? []).filter(
-        (i: DrawerItem) => ['theme', 'frame', 'skin', 'flair'].includes(i.subcategory) && i.owned > 0
+        (i: DrawerItem) => ['theme', 'frame', 'skin', 'flair', 'name_color'].includes(i.subcategory) && i.owned > 0
       );
       const exclusiveItems = (exclusiveData.items ?? []).map((i: DrawerItem) => ({ ...i, isExclusive: true }));
       setDrawerItems([...regularItems, ...exclusiveItems]);
@@ -370,7 +386,10 @@ export default function ProfilePage() {
             </div>
             <div className="flex-1 flex items-start justify-between gap-3">
               <div>
-                <h1 className="text-4xl font-extrabold text-white mb-1">{profile?.name || 'Player'}{flair}</h1>
+                <h1
+                  className={`text-4xl font-extrabold mb-1${profile?.activeNameColor === 'rainbow' ? ' rainbow-name' : ''}`}
+                  style={profile?.activeNameColor && profile.activeNameColor !== 'none' && profile.activeNameColor !== 'rainbow' ? { color: profile.activeNameColor } : undefined}
+                >{profile?.name || 'Player'}{flair}</h1>
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="text-sm font-semibold px-3 py-1 rounded-full" style={{ backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primary}`, boxShadow: `0 0 8px ${t.avatarGlow}` }}>
                     LVL {profile?.level ?? 1} &middot; {profile?.xpTitle ?? 'Newcomer'}
@@ -700,8 +719,8 @@ export default function ProfilePage() {
 
             {/* Tabs */}
             <div className="flex gap-1 px-4 pt-3 pb-2 shrink-0 flex-wrap">
-              {(['theme', 'frame', 'skin', 'flair', 'exclusive'] as const).map((tab) => {
-                const icons: Record<string, string> = { theme: '🎨', frame: '🖼️', skin: '🎮', flair: '✨', exclusive: '⭐' };
+              {(['theme', 'frame', 'skin', 'flair', 'name_color', 'exclusive'] as const).map((tab) => {
+                const icons: Record<string, string> = { theme: '🎨', frame: '🖼️', skin: '🎮', flair: '✨', name_color: '🌈', exclusive: '⭐' };
                 const count = tab === 'exclusive'
                   ? drawerItems.filter(i => i.isExclusive).length
                   : drawerItems.filter(i => i.subcategory === tab && !i.isExclusive).length;
@@ -761,6 +780,7 @@ export default function ProfilePage() {
                   if (item.subcategory === 'frame') return profile.activeFrame === value;
                   if (item.subcategory === 'skin')  return profile.activeSkin  === value;
                   if (item.subcategory === 'flair') return profile.activeFlair === value;
+                  if (item.subcategory === 'name_color') return profile.activeNameColor === value;
                   return false;
                 })();
                 return (

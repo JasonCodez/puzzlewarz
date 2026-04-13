@@ -19,6 +19,22 @@
   }
 }
 
+@keyframes rainbow-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.rainbow-name {
+  background: linear-gradient(90deg, #ff0000, #ff7700, #ffdd00, #00ff00, #00ddff, #0000ff, #ff00ff, #ff0000);
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: rainbow-shift 3s linear infinite;
+}
+
 body {
   background: #020202;
   color: var(--foreground);
