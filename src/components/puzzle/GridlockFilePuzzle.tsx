@@ -669,6 +669,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
   const [illuminated, setIlluminated] = useState(false);
   const [copied, setCopied] = useState(false);
   const [shieldConsumed, setShieldConsumed] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // ── Guest-mode tracking ─────────────────────────────────────────────────────────
   const [guestSubmissionCount, setGuestSubmissionCount] = useState(0);
@@ -906,6 +907,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
 
   return (
     <div style={{ fontFamily: 'var(--font-geist-sans, system-ui, sans-serif)' }} className="space-y-6">
+      {showHelp && <HowToPlayModal onClose={() => setShowHelp(false)} />}
       {/* Arc complete overlay */}
       <AnimatePresence>
         {arcCompleteVisible && streak && (
@@ -990,6 +992,15 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
           )}
           {serverState.submissionCount > 0 && (
             <RankBadge rank={serverState.rank} />
+          )}
+          {!solved && (
+            <button
+              onClick={() => setShowHelp(true)}
+              className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-80"
+              style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C" }}
+            >
+              ? How to play
+            </button>
           )}
         </div>
       </div>

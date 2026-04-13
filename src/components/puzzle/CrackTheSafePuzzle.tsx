@@ -29,6 +29,33 @@ interface Props {
   failedAttempts?: number;
 }
 
+function HowToPlayModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4" onClick={onClose}>
+      <div className="max-w-lg w-full rounded-xl p-6 shadow-2xl" style={{ background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.12)" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-4">
+          <h2 className="text-lg font-extrabold" style={{ color: "#FDE74C" }}>How to Play — Crack the Safe</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none ml-4">✕</button>
+        </div>
+        <div className="space-y-3 text-sm text-gray-300">
+          <p>🔐 <strong>Goal:</strong> Guess the secret combination to crack open the safe.</p>
+          <p>⌨️ <strong>Enter digits</strong> into the keypad inputs, then turn the handle (or press Enter) to submit your guess.</p>
+          <p>After each guess you get feedback:</p>
+          <ul className="list-none space-y-1 pl-2">
+            <li>🟢 <strong>Bulls</strong> — correct digit in the correct position</li>
+            <li>🟡 <strong>Cows</strong> — correct digit in the wrong position</li>
+          </ul>
+          <p>Use the feedback to narrow down the code before you run out of attempts.</p>
+          <p>💡 <strong>Tip:</strong> Start with digits spread across 0–9 to eliminate possibilities quickly.</p>
+        </div>
+        <div className="mt-5 text-right">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-bold transition-all hover:opacity-80" style={{ background: "#FDE74C", color: "#000" }}>Got it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alreadySolved = false, failedAttempts: initialFailedAttempts = 0 }: Props) {
   const digits = Math.max(4, Math.min(8, safeData.digits ?? (safeData.safecode?.length ?? 6)));
   const maxAttempts = safeData.maxAttempts ?? 10;
@@ -66,6 +93,7 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
   const safeContainerRef = useRef<HTMLDivElement>(null);
   const [safeScale, setSafeScale] = useState(1);
   const skin = usePuzzleSkin();
+  const [showHelp, setShowHelp] = useState(false);
 
   const attemptsLeft = maxAttempts - history.length;
   const isPlaying = status === "playing";
@@ -229,6 +257,7 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
 
   return (
     <>
+      {showHelp && <HowToPlayModal onClose={() => setShowHelp(false)} />}
       {/* Inline animations */}
       <style>{`
         @keyframes safe-door-open {
@@ -873,10 +902,13 @@ export default function CrackTheSafePuzzle({ puzzleId, safeData, onSolved, alrea
           <span className="text-xs font-mono" style={{ color: "#555" }}>
             {digits}-digit combination
           </span>
-          <span className="text-xs font-bold"
-                style={{ color: attemptsLeft <= 2 ? "#ef4444" : attemptsLeft <= 4 ? "#FDE74C" : "#888" }}>
-            {isPlaying ? `${attemptsLeft} attempt${attemptsLeft === 1 ? "" : "s"} left` : ""}
-          </span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setShowHelp(true)} className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-80" style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C" }}>? How to play</button>
+            <span className="text-xs font-bold"
+                  style={{ color: attemptsLeft <= 2 ? "#ef4444" : attemptsLeft <= 4 ? "#FDE74C" : "#888" }}>
+              {isPlaying ? `${attemptsLeft} attempt${attemptsLeft === 1 ? "" : "s"} left` : ""}
+            </span>
+          </div>
         </div>
 
         {/* ── Digit inputs (image-safe mode only — CSS safe has inputs on door) ── */}

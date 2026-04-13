@@ -17,43 +17,61 @@ const prisma = new PrismaClient();
 // ─── Name pools ───────────────────────────────────────────────────────────────
 
 const WORDS_A = [
+  // Gaming / tech vibe
   "Shadow","Cipher","Pixel","Neon","Glitch","Rogue","Frost","Void","Byte","Vex",
-  "Hex","Echo","Blaze","Phantom","Storm","Crypt","Sage","Myth","Iron","Ghost",
-  "Nova","Drax","Krypt","Syn","Arc","Nexus","Dark","Swift","Ash","Grim",
-  "Cobalt","Neural","Static","Vector","Toxic","Binary","Cinder","Spark","Dusk",
-  "Reaper","Wrath","Sable","Raven","Steel","Titan","Ember","Lux","Omen","Slate",
-  "Zenith","Apex","Onyx","Shard","Flare","Prism","Quantum","Azure","Crimson",
-  "Lunar","Solar","Astral","Omega","Delta","Alpha","Sigma","Zephyr","Thorn",
-  "Blade","Viper","Cobra","Talon","Rift","Haze","Pulse","Flux","Drift","Phase",
-  "Surge","Shift","Trace","Flash","Burn","Cryo","Shock","Blitz","Hyper","Ultra",
+  "Hex","Echo","Blaze","Phantom","Storm","Iron","Ghost","Nova","Arc","Nebula",
+  "Ember","Flux","Drift","Pulse","Prism","Static","Vector","Binary","Wraith","Raven",
+  // Personality / mood
+  "Lazy","Lucky","Silent","Golden","Wild","Cozy","Smooth","Sleepy","Salty","Bold",
+  "Sharp","Quick","Tiny","Fuzzy","Calm","Broken","Hidden","Lost","Ancient","Empty",
+  "Bright","Bitter","Hollow","Rusty","Cloudy","Crispy","Frozen","Dusty","Gloomy","Stray",
+  // Colour / nature
+  "Misty","Rainy","Arctic","Desert","Sunset","Starry","Amber","Cobalt","Indigo","Teal",
+  "Scarlet","Violet","Ivory","Sage","Dusk","Crimson","Azure","Lunar","Solar","Mossy",
+  // Punchy cool words
+  "Blitz","Surge","Cryo","Arcane","Neural","Quantum","Onyx","Apex","Zenith","Omega",
 ];
 
 const WORDS_B = [
-  "Mind","Wolf","Fox","Hawk","Blade","Claw","Fang","Code","Vault","Lock",
-  "Key","Node","Grid","Lane","Wire","Rune","Warden","Breaker","Hunter","Seeker",
-  "Solver","Cracker","King","Lord","Prowler","Shifter","Runner","Striker","Weaver",
-  "Forger","Caster","Bender","Walker","Specter","Wraith","Shade","Knight","Mage",
-  "Storm","Spike","Ridge","Forge","Forge","Crypt","Maze","Drift","Peak","Surge",
-  "Core","Byte","Monk","Sage","Ninja","Rogue","Pilot","Sniper","Scout","Guard",
-  "Spawn","Drone","Clone","Agent","Ghost","Cipher","Titan","Beast","Force","Edge",
+  // Animals — extremely common in real usernames
+  "Wolf","Fox","Hawk","Cat","Crow","Bear","Shark","Eagle","Panda","Raccoon",
+  "Turtle","Bunny","Moose","Seal","Crab","Otter","Lynx","Ferret","Moth","Swan",
+  "Gecko","Bison","Frog","Elk","Koi","Vole","Quail","Mink","Heron","Newt",
+  // Food — very popular in real player names
+  "Noodle","Taco","Muffin","Waffle","Ramen","Boba","Bagel","Pickle","Toast","Donut",
+  "Dumpling","Biscuit","Nacho","Sushi","Peach","Plum","Mango","Gummy","Pretzel","Chip",
+  // Everyday objects / vibes
+  "Brick","Lamp","Lens","Mug","Rock","Coin","Flag","Bolt","Cog","Cloud",
+  "Cactus","Pebble","Wrench","Dial","Sock","Knot","Loop","Snap","Bloom","Shard",
+  // Gaming roles (diverse)
+  "Hunter","Seeker","Knight","Scout","Ninja","Ranger","Wizard","Archer","Warden","Bard",
+  "Lancer","Paladin","Monk","Assassin","Duelist","Cleric","Druid","Rogue","Sniper","Pilot",
+  // Internet / player culture
+  "Grinder","Lurker","Tryhard","Casual","Clutch","Carry","Noob","Nerd","Geek","Smurf",
+];
+
+const FIRST_NAMES = [
+  "jake","tyler","mason","logan","ethan","liam","noah","aiden","caleb","lucas",
+  "ryan","dylan","cole","adam","sean","alex","jay","kai","drew","max",
+  "riley","morgan","jordan","casey","avery","taylor","reese","quinn","blake","sage",
+  "maya","aria","luna","zoe","mia","elena","nova","ivy","jade","ruby",
+  "sam","cam","ash","nick","ben","tom","lee","dan","rob","chris",
 ];
 
 const SHORT_NUMBERS = [
   "","","","","","","","","","", // 10 empty = ~40% get no number
   "2","3","7","9","11","13","21","23","27","33",
   "42","47","64","69","77","88","99","100","101",
-  "123","404","420","666","777","999","007","1337",
+  "123","404","420","777","999","007","1337",
 ];
 
 const SPECIAL_PREFIXES = [
-  "x","X","i","o","v","j","z",
-  "The","Itz","Its","Real","Pro","OG","xX","Xx",
-  "Not","Just","Only","Dark","Ultra","Hyper","Super","Mega",
+  "x","X","i","o","v","The","Itz","Its","Real","Not","Just","Dark","Ultra",
 ];
 
 const SUFFIX_WORDS = [
   "Pro","GG","WZ","PW","Ace","Rex","Max","OP","XL","OG",
-  "Jr","Sr","II","III","IV","V","HD","XD","FPS","RPG",
+  "Jr","Sr","II","III","IV","HD","XD","FPS","RPG",
 ];
 
 // ─── Deterministic pick ────────────────────────────────────────────────────────
@@ -71,40 +89,72 @@ function buildNamePool(count: number): string[] {
   const used = new Set<string>();
   const names: string[] = [];
 
-  // Pattern functions — each indexed so we cycle through all of them
   const patterns: ((i: number) => string)[] = [
-    // 0: Simple compound — "ShadowWolf"
+    // 0: Simple compound — "ShadowWolf" / "LazyFox" / "FrozenCrab"
     (i) => mixedCase(pick(WORDS_A, i * 7) + pick(WORDS_B, i * 13), i),
 
-    // 1: Compound + number — "CipherFox99"
+    // 1: Compound + number — "CipherFox99" / "FrozenCrab42"
     (i) => mixedCase(pick(WORDS_A, i * 11) + pick(WORDS_B, i * 17), i) + pick(SHORT_NUMBERS.filter(n => n !== ""), i * 3),
 
-    // 2: Single word + number — "Phantom42"
+    // 2: Single word + number — "Phantom42" / "Noodle99" / "Taco7"
     (i) => pick([...WORDS_A, ...WORDS_B], i * 19) + pick(["2","3","7","9","11","21","42","69","77","88","99","100","404","777"], i * 5),
 
-    // 3: Special prefix — "xVoidHunter" / "TheRealCipher"
-    (i) => {
-      const pre = pick(SPECIAL_PREFIXES, i * 23);
-      const word = pick(WORDS_A, i * 29);
-      const noun = pick(WORDS_B, i * 31);
-      // Shorter prefixes (single letters) → don't cap the next word
-      return pre.length === 1
-        ? pre + word + noun
-        : pre + word + noun;
-    },
+    // 3: First name + number — "jake42" / "riley2007" / "sam99"
+    (i) => pick(FIRST_NAMES, i * 23) + pick(["2","3","7","9","11","21","42","47","69","77","88","99","100","2004","2005","2006","2007","2008","2009","2010"], i * 29),
 
-    // 4: Compound + suffix word — "VaultPro" / "CipherGG"
+    // 4: Compound + suffix — "VoidWolfGG" / "SilentCatPro"
     (i) => pick(WORDS_A, i * 37) + pick(WORDS_B, i * 41) + pick(SUFFIX_WORDS, i * 43),
 
-    // 5: Two A words combined — "ShadowVoid"
+    // 5: Two A words — "ShadowVoid" / "LazyFrost" / "WildCrimson"
     (i) => mixedCase(pick(WORDS_A, i * 47) + pick(WORDS_A, i * 53), i),
 
-    // 6: Lowercase with number — "vaultbreaker99"
+    // 6: Lowercase A+B with optional number — "lazywolf" / "frozencrab99"
     (i) => (pick(WORDS_A, i * 59) + pick(WORDS_B, i * 61)).toLowerCase() + pick(["","","","7","9","77","99","42","100","404"], i * 67),
 
-    // 7: Word + suffix word — "PhantomPro" / "VoidAce"
-    (i) => pick([...WORDS_A, ...WORDS_B], i * 71) + pick(SUFFIX_WORDS, i * 73),
+    // 7: B word + suffix — "TacoGG" / "NoodleXD" / "WolfPro"
+    (i) => pick(WORDS_B, i * 71) + pick(SUFFIX_WORDS, i * 73),
+
+    // 8: "its" + first name — "itsryan" / "itsmorgan"
+    (i) => "its" + pick(FIRST_NAMES, i * 79),
+
+    // 9: first name + short tag — "jake_x" / "riley_gg" / "sam_pw"
+    (i) => pick(FIRST_NAMES, i * 83) + "_" + pick(["x","z","k","w","gg","pw","real","og","pro","ace"], i * 89),
+
+    // 10: A word + casual animal/noun — "lazycat" / "frozenpanda" / "wildblob"
+    (i) => mixedCase(pick(WORDS_A, i * 97) + pick(["cat","panda","fox","bee","kid","dude","guy","doge","blob","rat"], i * 101), i),
+
+    // 11: Special prefix + first name — "xjake" / "TheRiley" / "ItsNova"
+    (i) => {
+      const pre = pick(SPECIAL_PREFIXES, i * 103);
+      const fn  = pick(FIRST_NAMES, i * 107);
+      return pre.length === 1 ? pre + fn : pre + fn.charAt(0).toUpperCase() + fn.slice(1);
+    },
   ];
+
+  let i = 0;
+  let attempts = 0;
+
+  while (names.length < count && attempts < count * 20) {
+    const patternIdx = i % patterns.length;
+    let name = patterns[patternIdx](i);
+
+    // If colliding, append a short disambiguator number
+    if (used.has(name.toLowerCase())) {
+      const disambig = (names.length % 89) + 2; // 2-90
+      name = name + disambig;
+    }
+
+    if (!used.has(name.toLowerCase()) && name.length >= 4 && name.length <= 24) {
+      used.add(name.toLowerCase());
+      names.push(name);
+    }
+
+    i++;
+    attempts++;
+  }
+
+  return names;
+}
 
   let i = 0;
   let attempts = 0;

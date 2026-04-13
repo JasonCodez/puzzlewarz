@@ -2485,24 +2485,48 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
       const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       const g: string[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(''));
 
-      for (const word of cleaned) {
-        let placed = false;
-        for (let attempt = 0; attempt < 300 && !placed; attempt++) {
-          const [dr, dc] = DIRS[Math.floor(Math.random() * DIRS.length)];
-          const sr = Math.floor(Math.random() * gridSize);
-          const sc = Math.floor(Math.random() * gridSize);
-          const er = sr + dr * (word.length - 1);
-          const ec = sc + dc * (word.length - 1);
-          if (er < 0 || er >= gridSize || ec < 0 || ec >= gridSize) continue;
-          let ok = true;
-          for (let i = 0; i < word.length; i++) {
-            const cell = g[sr + dr * i][sc + dc * i];
-            if (cell !== '' && cell !== word[i]) { ok = false; break; }
-          }
-          if (!ok) continue;
-          for (let i = 0; i < word.length; i++) g[sr + dr * i][sc + dc * i] = word[i];
-          placed = true;
+      // Score a candidate placement: higher = more shared letters (encourages intersections)
+      function countShared(word: string, sr: number, sc: number, dr: number, dc: number): number {
+        let shared = 0;
+        for (let i = 0; i < word.length; i++) {
+          if (g[sr + dr * i]?.[sc + dc * i] === word[i]) shared++;
         }
+        return shared;
+      }
+
+      // Sort longest words first so they're easier to place and create more crossing opportunities
+      const sorted = [...cleaned].sort((a, b) => b.length - a.length);
+
+      for (const word of sorted) {
+        // Collect all valid placements, then pick the one with the most shared letters
+        type Placement = { sr: number; sc: number; dr: number; dc: number; shared: number };
+        const valid: Placement[] = [];
+
+        for (const [dr, dc] of DIRS) {
+          for (let sr = 0; sr < gridSize; sr++) {
+            for (let sc = 0; sc < gridSize; sc++) {
+              const er = sr + dr * (word.length - 1);
+              const ec = sc + dc * (word.length - 1);
+              if (er < 0 || er >= gridSize || ec < 0 || ec >= gridSize) continue;
+              let ok = true;
+              for (let i = 0; i < word.length; i++) {
+                const cell = g[sr + dr * i][sc + dc * i];
+                if (cell !== '' && cell !== word[i]) { ok = false; break; }
+              }
+              if (ok) valid.push({ sr, sc, dr, dc, shared: countShared(word, sr, sc, dr, dc) });
+            }
+          }
+        }
+
+        if (valid.length === 0) continue;
+
+        // Sort by shared descending, then pick randomly among the top tier
+        valid.sort((a, b) => b.shared - a.shared);
+        const topShared = valid[0].shared;
+        const topTier = valid.filter(p => p.shared === topShared);
+        const { sr, sc, dr, dc } = topTier[Math.floor(Math.random() * topTier.length)];
+
+        for (let i = 0; i < word.length; i++) g[sr + dr * i][sc + dc * i] = word[i];
       }
 
       for (let r = 0; r < gridSize; r++) {

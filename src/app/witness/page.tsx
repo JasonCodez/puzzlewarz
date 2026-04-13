@@ -824,6 +824,7 @@ export default function WitnessPage() {
 
   // Shared animation helper
   const [visible, setVisible] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const fadeIn = useCallback(() => {
     setVisible(false);
@@ -1126,6 +1127,7 @@ export default function WitnessPage() {
 
   return (
     <>
+      {showHelp && <WitnessHowToPlayModal onClose={() => setShowHelp(false)} />}
       <style>{`
         @keyframes scan-line {
           0%   { transform: translateY(-100%); }
@@ -1366,6 +1368,9 @@ export default function WitnessPage() {
                     Open the File →
                   </button>
                 )}
+                <div style={{ textAlign: "center", marginTop: 4 }}>
+                  <button onClick={() => setShowHelp(true)} style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C", fontSize: "12px", fontWeight: 700, padding: "6px 14px", borderRadius: "8px", cursor: "pointer", letterSpacing: "0.04em" }}>? How to play</button>
+                </div>
               </div>
             </div>
           )}

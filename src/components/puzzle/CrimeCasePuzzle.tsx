@@ -62,6 +62,31 @@ const stagger  = { show: { transition: { staggerChildren: 0.06 } } };
 const PUZZLE_TIME_SECONDS  = 1200; // 20 minutes
 const TIME_PENALTY_SECONDS = 120; // −2 min per wrong accusation
 
+// ─── How to play modal ───────────────────────────────────────────────────────
+function HowToPlayModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4" onClick={onClose}>
+      <div className="max-w-lg w-full rounded-xl p-6 shadow-2xl" style={{ background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.12)" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-4">
+          <h2 className="text-lg font-extrabold" style={{ color: "#FDE74C" }}>How to Play — Crime Case</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none ml-4">✕</button>
+        </div>
+        <div className="space-y-3 text-sm text-gray-300">
+          <p>🔦 <strong>Goal:</strong> Investigate the case files and identify the killer before time runs out.</p>
+          <p>🗂️ <strong>Tabs:</strong> Browse Evidence, Suspects, Timeline, Scene, Corkboard, and Notes to gather clues.</p>
+          <p>🔍 <strong>Examine evidence</strong> closely — some items have hidden layers that unlock when you combine them.</p>
+          <p>🗣️ <strong>Interrogate suspects</strong> on the Suspects tab to reveal their answers to key questions.</p>
+          <p>🎯 <strong>Make your accusation</strong> on the Accusation tab when you’re confident. Select a suspect, the method, and your key evidence.</p>
+          <p>⏰ <strong>Timer:</strong> You have 20 minutes. A wrong accusation costs 2 minutes.</p>
+        </div>
+        <div className="mt-5 text-right">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-bold transition-all hover:opacity-80" style={{ background: "#FDE74C", color: "#000" }}>Got it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleProps) {
   const [loading, setLoading]         = useState(true);
@@ -101,6 +126,9 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
 
   // briefing
   const [briefingDismissed, setBriefingDismissed] = useState(false);
+
+  // how to play
+  const [showHelp, setShowHelp] = useState(false);
 
   // timer
   const [timeLeft, setTimeLeft] = useState(PUZZLE_TIME_SECONDS);
@@ -306,6 +334,7 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
 
   return (
     <div style={{ fontFamily: 'ui-monospace, monospace' }}>
+      {showHelp && <HowToPlayModal onClose={() => setShowHelp(false)} />}
       {/* ambient grain overlay */}
       <div
         className="pointer-events-none fixed inset-0 z-0 opacity-[0.025]"
@@ -337,6 +366,9 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
             <TabBar activeTab={activeTab} setActiveTab={setActiveTab}
               hasTimeline={Boolean(puzzle.timeline?.length)}
               hasScene={Boolean(puzzle.sceneImageUrl)} />
+            <div className="flex justify-end px-1 py-1">
+              <button onClick={() => setShowHelp(true)} className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-80" style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C" }}>? How to play</button>
+            </div>
           </motion.div>
 
           <div className="min-h-[460px] relative">

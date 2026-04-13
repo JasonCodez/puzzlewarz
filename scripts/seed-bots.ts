@@ -23,31 +23,48 @@ const TOTAL_BOTS = 1358;
 
 // ─── Username generation ─────────────────────────────────────────────────────
 const WORDS_A = [
+  // Gaming / tech vibe
   "Shadow","Cipher","Pixel","Neon","Glitch","Rogue","Frost","Void","Byte","Vex",
-  "Hex","Echo","Blaze","Phantom","Storm","Crypt","Sage","Myth","Iron","Ghost",
-  "Nova","Drax","Krypt","Syn","Arc","Nexus","Dark","Swift","Ash","Grim",
-  "Cobalt","Neural","Static","Vector","Toxic","Binary","Cinder","Spark","Dusk",
-  "Reaper","Wrath","Sable","Raven","Steel","Titan","Ember","Lux","Omen","Slate",
-  "Zenith","Apex","Onyx","Shard","Flare","Prism","Quantum","Azure","Crimson",
-  "Lunar","Solar","Astral","Omega","Delta","Alpha","Sigma","Zephyr","Thorn",
-  "Blade","Viper","Cobra","Talon","Rift","Haze","Pulse","Flux","Drift","Phase",
-  "Wraith","Koda","Lyric","Zane","Cruz","Aria","Mira","Jett","Kairo","Lexa",
-  "Ryker","Soren","Vael","Tara","Kyra","Draven","Nyx","Orion","Pax","Cael",
+  "Hex","Echo","Blaze","Phantom","Storm","Iron","Ghost","Nova","Arc","Nebula",
+  "Ember","Flux","Drift","Pulse","Prism","Static","Vector","Binary","Wraith","Raven",
+  // Personality / mood
+  "Lazy","Lucky","Silent","Golden","Wild","Cozy","Smooth","Sleepy","Salty","Bold",
+  "Sharp","Quick","Tiny","Fuzzy","Calm","Broken","Hidden","Lost","Ancient","Empty",
+  "Bright","Bitter","Hollow","Rusty","Cloudy","Crispy","Frozen","Dusty","Gloomy","Stray",
+  // Colour / nature
+  "Misty","Rainy","Arctic","Desert","Sunset","Starry","Amber","Cobalt","Indigo","Teal",
+  "Scarlet","Violet","Ivory","Sage","Dusk","Crimson","Azure","Lunar","Solar","Mossy",
+  // Punchy cool words
+  "Blitz","Surge","Cryo","Arcane","Neural","Quantum","Onyx","Apex","Zenith","Omega",
 ];
 const WORDS_B = [
-  "Mind","Wolf","Fox","Hawk","Blade","Claw","Fang","Code","Vault","Lock",
-  "Key","Node","Grid","Lane","Wire","Rune","Warden","Breaker","Hunter","Seeker",
-  "Solver","Cracker","King","Lord","Prowler","Shifter","Runner","Striker","Weaver",
-  "Forger","Caster","Bender","Walker","Specter","Wraith","Shade","Knight","Mage",
-  "Spike","Ridge","Forge","Crypt","Maze","Peak","Core","Monk","Ninja","Scout",
-  "Spawn","Agent","Titan","Beast","Force","Edge","Drone","Clone","Guard","Sniper",
-  "Crow","Pike","Vale","Stone","Drift","Spark","Lynx","Rook","Vex","March",
-  "Cross","Wick","Flint","Holt","Burns","Chase","Reed","Quinn","Ward","Nash",
+  // Animals — extremely common in real usernames
+  "Wolf","Fox","Hawk","Cat","Crow","Bear","Shark","Eagle","Panda","Raccoon",
+  "Turtle","Bunny","Moose","Seal","Crab","Otter","Lynx","Ferret","Moth","Swan",
+  "Gecko","Bison","Frog","Elk","Koi","Vole","Quail","Mink","Heron","Newt",
+  // Food — very popular in real player names
+  "Noodle","Taco","Muffin","Waffle","Ramen","Boba","Bagel","Pickle","Toast","Donut",
+  "Dumpling","Biscuit","Nacho","Sushi","Peach","Plum","Mango","Gummy","Pretzel","Chip",
+  // Everyday objects / vibes
+  "Brick","Lamp","Lens","Mug","Rock","Coin","Flag","Bolt","Cog","Cloud",
+  "Cactus","Pebble","Wrench","Dial","Sock","Knot","Loop","Snap","Bloom","Shard",
+  // Gaming roles (diverse, not just compound-noun filler)
+  "Hunter","Seeker","Knight","Scout","Ninja","Ranger","Wizard","Archer","Warden","Bard",
+  "Lancer","Paladin","Monk","Assassin","Duelist","Cleric","Druid","Rogue","Sniper","Pilot",
+  // Internet / player culture vibes
+  "Grinder","Lurker","Tryhard","Casual","Clutch","Carry","Noob","Nerd","Geek","Smurf",
+];
+const FIRST_NAMES = [
+  "jake","tyler","mason","logan","ethan","liam","noah","aiden","caleb","lucas",
+  "ryan","dylan","cole","adam","sean","alex","jay","kai","drew","max",
+  "riley","morgan","jordan","casey","avery","taylor","reese","quinn","blake","sage",
+  "maya","aria","luna","zoe","mia","elena","nova","ivy","jade","ruby",
+  "sam","cam","ash","nick","ben","tom","lee","dan","rob","chris",
 ];
 const SPECIAL_PREFIXES = [
-  "x","X","i","o","v","The","Itz","Real","Pro","OG","Not","Dark","Ultra","Hyper","Super","Mega",
+  "x","X","i","o","v","The","Itz","Its","Real","Not","Just","Dark","Ultra",
 ];
-const SUFFIX_WORDS = ["Pro","GG","WZ","Ace","Rex","Max","OG","Jr","II","III","HD","XD"];
+const SUFFIX_WORDS = ["Pro","GG","WZ","Ace","Rex","Max","OG","Jr","XD","HD","OP","IV"];
 const NUM_SUFFIXES = ["2","3","7","9","11","13","21","42","47","69","77","88","99","100","404","1337","07"];
 
 function pickByIndex<T>(arr: T[], seed: number): T {
@@ -60,36 +77,43 @@ const _usedUsernames = new Set<string>();
 function generateUsername(index: number): string {
   const r = <T>(seed: number, arr: T[]): T => pickByIndex(arr, seed);
 
-  const A   = r(index * 7,  WORDS_A);
-  const B   = r(index * 13, WORDS_B);
-  const A2  = r(index * 37, WORDS_A);
-  const B2  = r(index * 41, WORDS_B);
-  const pre = r(index * 23, SPECIAL_PREFIXES);
-  const suf = r(index * 43, SUFFIX_WORDS);
-  const num = r(index * 3,  NUM_SUFFIXES);
+  const A    = r(index * 7,  WORDS_A);
+  const B    = r(index * 13, WORDS_B);
+  const A2   = r(index * 37, WORDS_A);
+  const B2   = r(index * 41, WORDS_B);
+  const name = r(index * 53, FIRST_NAMES);
+  const pre  = r(index * 23, SPECIAL_PREFIXES);
+  const suf  = r(index * 43, SUFFIX_WORDS);
+  const num  = r(index * 3,  NUM_SUFFIXES);
+  const yr   = r(index * 59, ["04","05","06","07","08","09","10","11","12","2004","2005","2006","2007","2008","2009","2010"]);
 
   let base: string;
-  switch (index % 14) {
-    case 0:  base = A + B;                                             break; // ShadowWolf
-    case 1:  base = A.toLowerCase() + "_" + B.toLowerCase();          break; // shadow_wolf
-    case 2:  base = A + B + num;                                       break; // ShadowWolf42
-    case 3:  base = pre + A + B;                                       break; // xShadowWolf / ProShadowWolf
-    case 4:  base = A.toLowerCase() + num;                             break; // shadow42
-    case 5:  base = A + "_" + B2.toLowerCase();                        break; // Shadow_forge
-    case 6:  base = (A + B).toLowerCase();                             break; // shadowwolf
-    case 7:  base = A + suf;                                           break; // ShadowPro
-    case 8:  base = pre.toLowerCase() + A.toLowerCase() + num;         break; // xshadow99
+  switch (index % 18) {
+    case 0:  base = A + B;                                              break; // ShadowWolf / LazyFox
+    case 1:  base = A.toLowerCase() + "_" + B.toLowerCase();           break; // shadow_wolf / lazy_fox
+    case 2:  base = A + B + num;                                        break; // ShadowWolf42
+    case 3:  base = pre + A + B;                                        break; // xShadowWolf
+    case 4:  base = A.toLowerCase() + num;                              break; // shadow42
+    case 5:  base = A2.toLowerCase() + B.toLowerCase() + suf.toLowerCase(); break; // phantomwolfgg
+    case 6:  base = (A + B).toLowerCase();                              break; // shadowwolf
+    case 7:  base = A + suf;                                            break; // ShadowPro
+    case 8:  base = name + num;                                         break; // jake42
     case 9:  base = A2.toLowerCase() + B.toLowerCase() +
-                    r(index * 67, ["","","","7","42","99","404"]);      break; // echorift / echorift7
-    case 10: base = pre + A + num;                                     break; // TheBlaze77
-    case 11: base = A2 + B2;                                           break; // PhantomForge
-    case 12: base = (A2 + B2).toLowerCase() + num;                    break; // phantomforge42
-    case 13: base = A.toLowerCase() + B2.toLowerCase() + "_" +
-                    r(index * 71, ["gg","og","v2","xd","hd","99","404"]); break; // shadowforge_gg
+                    r(index * 67, ["","","7","42","99","404"]);         break; // echocat / echocat7
+    case 10: base = name + yr;                                          break; // jake2007
+    case 11: base = A2 + B2;                                            break; // PhantomFox
+    case 12: base = (A2 + B2).toLowerCase() + num;                     break; // phantomfox42
+    case 13: base = "its" + name;                                       break; // itsryan
+    case 14: base = A.toLowerCase() + B2.toLowerCase() + "_" +
+                    r(index * 71, ["gg","og","v2","xd","hd","99","404"]); break; // shadowfox_gg
+    case 15: base = name + "_" +
+                    r(index * 79, ["x","z","k","w","gg","pw","real","og"]); break; // jake_x
+    case 16: base = B.toLowerCase() + num;                              break; // wolf42 / taco99
+    case 17: base = A.toLowerCase() + B2.toLowerCase();                 break; // lazywolf
     default: base = A + B;
   }
 
-  // Resolve duplicates by appending a short number — much cleaner than _b{index}
+  // Resolve duplicates by appending a short number
   if (!_usedUsernames.has(base)) {
     _usedUsernames.add(base);
     return base;

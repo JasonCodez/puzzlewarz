@@ -386,6 +386,11 @@ export default function BlackoutPuzzle({
           </div>
         )}
 
+        {/* how to play button */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px", maxWidth: "760px", margin: isMobile ? "0 0 8px" : "0 auto 8px" }}>
+          <button onClick={() => setShowIntro(true)} style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C", fontSize: "11px", fontWeight: 700, padding: "4px 10px", borderRadius: "6px", cursor: "pointer", letterSpacing: "0.04em", fontFamily: "inherit" }}>? How to play</button>
+        </div>
+
         {/* progress bar */}
         {!allSolved && redactions.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" }}>

@@ -78,6 +78,35 @@ function cellsInLine(from: CellCoord, to: CellCoord): CellCoord[] {
   }));
 }
 
+function HowToPlayModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-w-lg w-full rounded-xl p-6 shadow-2xl"
+        style={{ background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.12)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-4">
+          <h2 className="text-lg font-extrabold" style={{ color: "#FDE74C" }}>How to Play — Word Search</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none ml-4">✕</button>
+        </div>
+        <div className="space-y-3 text-sm text-gray-300">
+          <p>Find all the words listed to the side of the grid. Each word is hidden in the grid in a straight line.</p>
+          <p><strong className="text-white">How to select:</strong> Click and drag across the letters to highlight a word. Works in any direction — horizontal, vertical, or diagonal, and both forwards and backwards.</p>
+          <p><strong className="text-white">Finding a word:</strong> When you correctly select a word, it lights up in colour and is crossed off the list. Find all words to solve the puzzle.</p>
+          <p><strong className="text-white">Hints:</strong> Use a hint token to automatically reveal a random unfound word. Hint tokens can be purchased from the Store.</p>
+        </div>
+        <div className="mt-5 text-right">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "#FDE74C", color: "#000" }}>Got it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WordSearchPuzzle({
   puzzleId,
   wordSearchData,
@@ -129,6 +158,7 @@ export default function WordSearchPuzzle({
 
   const gridRef = useRef<HTMLDivElement>(null);
   const skin = usePuzzleSkin();
+  const [showHelp, setShowHelp] = useState(false);
 
   // Persist found words across page reloads
   useEffect(() => {
@@ -261,6 +291,7 @@ export default function WordSearchPuzzle({
 
   return (
     <>
+      {showHelp && <HowToPlayModal onClose={() => setShowHelp(false)} />}
       <div
         data-skin={skin._key ?? "default"}
         style={{
@@ -443,8 +474,15 @@ export default function WordSearchPuzzle({
                     Buy tokens →
                   </a>
                 )}
-              </>
+</>
             )}
+            <button
+              onClick={() => setShowHelp(true)}
+              className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
+              style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C" }}
+            >
+              ? How to play
+            </button>
           </div>
         </div>
       </div>

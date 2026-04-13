@@ -34,6 +34,35 @@ function scramble(word: string): string {
   return result;
 }
 
+function HowToPlayModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-w-lg w-full rounded-xl p-6 shadow-2xl"
+        style={{ background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.12)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-4">
+          <h2 className="text-lg font-extrabold" style={{ color: "#FDE74C" }}>How to Play — Anagram Blitz</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none ml-4">✕</button>
+        </div>
+        <div className="space-y-3 text-sm text-gray-300">
+          <p>Unscramble a series of words before the timer runs out. Each word is shown as a jumble of letters — figure out what word they spell.</p>
+          <p><strong className="text-white">Answering:</strong> Type the correct word and press Enter (or the ✓ button). If you&apos;re correct, it&apos;s marked off and the next word appears.</p>
+          <p><strong className="text-white">Skipping:</strong> If you&apos;re stuck, use the Skip button to move the current word to the back of the queue. Come back to it if time allows.</p>
+          <p><strong className="text-white">Winning:</strong> Unscramble every word before the clock hits zero to complete the puzzle.</p>
+        </div>
+        <div className="mt-5 text-right">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "#FDE74C", color: "#000" }}>Got it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AnagramBlitz({
   puzzleId,
   anagramData,
@@ -88,6 +117,7 @@ export default function AnagramBlitz({
   const [shake, setShake] = useState(false);
   const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Refs so the timer callback can read latest state without stale closure
@@ -327,6 +357,7 @@ export default function AnagramBlitz({
         borderRadius: skin.boardRadius,
       }}
     >
+      {showHelp && <HowToPlayModal onClose={() => setShowHelp(false)} />}
       {/* Header row */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
@@ -338,6 +369,13 @@ export default function AnagramBlitz({
         >
           ⏱️ {timeLeft}s
         </span>
+        <button
+          onClick={() => setShowHelp(true)}
+          className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-80"
+          style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C" }}
+        >
+          ? How to play
+        </button>
       </div>
 
       {/* Timer bar */}

@@ -500,8 +500,33 @@ function SolvedScreen({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main component
+// ─────────────────────────────────────────────────────────────────────────────// How to play modal
+// ─────────────────────────────────────────────────────────────────────────────────
+function HowToPlayModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4" onClick={onClose}>
+      <div className="max-w-lg w-full rounded-xl p-6 shadow-2xl" style={{ background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.12)" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-4">
+          <h2 className="text-lg font-extrabold" style={{ color: "#FDE74C" }}>How to Play — Parasite Code</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none ml-4">✕</button>
+        </div>
+        <div className="space-y-3 text-sm text-gray-300">
+          <p>🧫 <strong>Goal:</strong> Analyze the infected program and quarantine the lines that trigger the parasite.</p>
+          <p>📝 <strong>Read the program</strong> listing carefully. Use the Opcode Guide to understand each instruction.</p>
+          <p>🔍 <strong>Trace execution:</strong> Follow the test inputs through the program to see which lines activate the parasite condition.</p>
+          <p>🚩 <strong>Flag lines</strong> you believe are responsible by clicking them in the listing.</p>
+          <p>🚀 <strong>Submit</strong> your analysis when ready. Your score depends on how few attempts you need — fewer attempts = better rank.</p>
+          <p>📈 Ranks go from <strong>F</strong> (many attempts) up to <strong>S</strong> (first try).</p>
+        </div>
+        <div className="mt-5 text-right">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-bold transition-all hover:opacity-80" style={{ background: "#FDE74C", color: "#000" }}>Got it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────// Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodePuzzleProps) {
@@ -516,6 +541,7 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   // ── Load state ──────────────────────────────────────────────────────────────
   const loadState = useCallback(async () => {
@@ -656,6 +682,7 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
   // ── Analysis layout ─────────────────────────────────────────────────────────
   return (
     <div className="font-mono space-y-4">
+      {showHelp && <HowToPlayModal onClose={() => setShowHelp(false)} />}
       {/* Header bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-b border-gray-800">
         <div className="flex items-center gap-3">
@@ -671,6 +698,7 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
           <span className="text-xs text-gray-500">
             Attempts: {serverState.submissionCount}
           </span>
+          <button onClick={() => setShowHelp(true)} className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-80" style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C" }}>? How to play</button>
         </div>
       </div>
 
