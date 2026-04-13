@@ -649,6 +649,80 @@ function generateShareText(
   return lines.join('\n');
 }
 
+// ── How To Play modal ────────────────────────────────────────────────────────
+
+function HowToPlayModal({ onClose }: { onClose: () => void }) {
+  const steps = [
+    { icon: "🗂️", title: "Study the grid", body: "A number or word grid is displayed with some cells missing. Your goal is to figure out the hidden rule and fill in the blanks correctly." },
+    { icon: "🧠", title: "Declare the law (optional)", body: "Think you know the pattern? Declare the Rule Family and Axis for a rank bonus. Wrong declarations never penalise you." },
+    { icon: "📡", title: "Use signals wisely", body: "Signals (hints) cost tokens. Each one nudges you toward the pattern. You can earn more from the store." },
+    { icon: "🏆", title: "Earn your rank", body: "S = first try, no hints. Each extra attempt or hint lowers your rank. Fastest solvers top the standings." },
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        backgroundColor: "rgba(0,0,0,0.85)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "16px",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 460,
+          backgroundColor: "#0d1117",
+          border: "1px solid rgba(255,208,0,0.3)",
+          borderRadius: 16,
+          padding: "28px 24px",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#fbbf24", marginBottom: 6 }}>
+            How to play
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em", fontFamily: "var(--font-geist-mono, ui-monospace, monospace)" }}>
+            GRIDLOCK
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{
+              display: "flex", gap: 12, alignItems: "flex-start",
+              backgroundColor: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 10, padding: "12px 14px",
+            }}>
+              <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{s.icon}</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#e5e7eb", marginBottom: 3, fontFamily: "inherit" }}>{s.title}</div>
+                <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.6, fontFamily: "inherit" }}>{s.body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%", padding: "11px",
+            borderRadius: 9, border: "none",
+            backgroundColor: "#FFD700", color: "#000",
+            fontWeight: 800, fontSize: 13, cursor: "pointer",
+            letterSpacing: "0.06em", fontFamily: "inherit",
+          }}
+        >
+          GOT IT — START CRACKING
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
