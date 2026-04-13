@@ -78,8 +78,12 @@ export async function PUT(
     categoryRecord = await prisma.puzzleCategory.create({ data: { name: category } });
   }
 
-  const validDifficulties = ["easy", "medium", "hard", "extreme"];
-  const safeDifficulty = difficulty && validDifficulties.includes(difficulty) ? difficulty : "medium";
+  const validDifficulties = ["easy", "medium", "hard", "expert", "extreme"];
+  // For sudoku puzzles use sudokuDifficulty as the source of truth for the badge field.
+  const safeDifficulty =
+    puzzleType === 'sudoku' && sudokuDifficulty && validDifficulties.includes(sudokuDifficulty.toLowerCase())
+      ? sudokuDifficulty.toLowerCase()
+      : (difficulty && validDifficulties.includes(difficulty) ? difficulty : "medium");
 
   const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg", "gridlock_file", "parasite_code"].includes(puzzleType);
 

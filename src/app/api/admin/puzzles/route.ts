@@ -190,10 +190,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate difficulty value
-    const validDifficulties = ["easy", "medium", "hard", "extreme"];
-    const puzzleDifficulty = difficulty && validDifficulties.includes(difficulty.toLowerCase()) 
-      ? difficulty.toLowerCase() 
-      : "medium";
+    // For sudoku puzzles, the canonical difficulty comes from sudokuDifficulty (set in the
+    // generator), not the generic difficulty field which defaults to 'medium' in the form.
+    const validDifficulties = ["easy", "medium", "hard", "expert", "extreme"];
+    const puzzleDifficulty =
+      puzzleType === 'sudoku' && sudokuDifficulty && validDifficulties.includes(sudokuDifficulty.toLowerCase())
+        ? sudokuDifficulty.toLowerCase()
+        : (difficulty && validDifficulties.includes(difficulty.toLowerCase())
+          ? difficulty.toLowerCase()
+          : "medium");
 
     // Get or create category
     let categoryRecord = await prisma.puzzleCategory.findFirst({

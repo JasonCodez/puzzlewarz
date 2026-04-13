@@ -1175,7 +1175,18 @@ export default function AdminPuzzlesPage() {
                     <div className="mt-4">
                       <SudokuGenerator
                         difficulty={sudokuDifficulty}
-                        onDifficultyChange={setSudokuDifficulty}
+                        onDifficultyChange={(d) => {
+                          setSudokuDifficulty(d);
+                          const rewards: Record<string, { pts: number; xp: number }> = {
+                            easy:    { pts: 50,  xp: 25  },
+                            medium:  { pts: 100, xp: 50  },
+                            hard:    { pts: 150, xp: 75  },
+                            expert:  { pts: 200, xp: 100 },
+                            extreme: { pts: 200, xp: 100 },
+                          };
+                          const r = rewards[d] ?? rewards.medium;
+                          setFormData(prev => ({ ...prev, pointsReward: r.pts, xpReward: r.xp }));
+                        }}
                         onPuzzleGenerated={(puzzle, solution) => setSudokuPuzzle({ puzzle, solution })}
                       />
                       <div className="mt-3">
