@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
               },
             }
           : undefined,
-      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'gridlock_file' || puzzleType === 'parasite_code' ? undefined : {
+      solutions: isMultiPart || puzzleType === 'sudoku' || puzzleType === 'jigsaw' || puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'gridlock_file' || puzzleType === 'parasite_code' ? undefined : {
         create: [
           {
             answer: correctAnswer,
@@ -298,6 +298,15 @@ export async function POST(request: NextRequest) {
 
     if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search' || puzzleType === 'anagram_blitz' || puzzleType === 'arg' || puzzleType === 'blackout' || puzzleType === 'gridlock_file') && typeof puzzleData !== 'undefined') {
       createData.data = puzzleData;
+    }
+    // Persist jigsaw shape params (piece designer) into puzzle.data JSON
+    if (puzzleType === 'jigsaw' && puzzleData) {
+      const shapeData: Record<string, unknown> = {};
+      if (typeof puzzleData.pieceExtFrac       === 'number') shapeData.pieceExtFrac       = puzzleData.pieceExtFrac;
+      if (typeof puzzleData.pieceRFrac         === 'number') shapeData.pieceRFrac         = puzzleData.pieceRFrac;
+      if (typeof puzzleData.pieceNHalfFrac     === 'number') shapeData.pieceNHalfFrac     = puzzleData.pieceNHalfFrac;
+      if (typeof puzzleData.pieceShoulderStart === 'number') shapeData.pieceShoulderStart = puzzleData.pieceShoulderStart;
+      if (Object.keys(shapeData).length > 0) createData.data = shapeData;
     }
 
     // Detective cases are validated stage-by-stage; we still create a solution row to carry points.

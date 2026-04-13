@@ -99,20 +99,34 @@ export async function PUT(
 
   await prisma.$transaction(async (tx) => {
     // 1. Update core puzzle fields
+    const puzzleUpdateData: Record<string, unknown> = {
+      title: title || "Untitled Puzzle",
+      description: description || "",
+      content: content || "",
+      difficulty: safeDifficulty,
+      isWarzExclusive: isWarzExclusive === true,
+    };
+    if (categoryRecord) {
+      puzzleUpdateData.categoryId = categoryRecord.id;
+    }
+    if (!isSpecialType) {
+      puzzleUpdateData.riddleAnswer = correctAnswer;
+    }
+    if (["escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file"].includes(puzzleType) && puzzleData != null) {
+      puzzleUpdateData.data = puzzleData;
+    }
+    if (puzzleType === 'jigsaw' && puzzleData) {
+      const shapeData: Record<string, unknown> = {};
+      if (typeof puzzleData.pieceExtFrac       === 'number') shapeData.pieceExtFrac       = puzzleData.pieceExtFrac;
+      if (typeof puzzleData.pieceRFrac         === 'number') shapeData.pieceRFrac         = puzzleData.pieceRFrac;
+      if (typeof puzzleData.pieceNHalfFrac     === 'number') shapeData.pieceNHalfFrac     = puzzleData.pieceNHalfFrac;
+      if (typeof puzzleData.pieceShoulderStart === 'number') shapeData.pieceShoulderStart = puzzleData.pieceShoulderStart;
+      if (Object.keys(shapeData).length > 0) puzzleUpdateData.data = shapeData;
+    }
     await tx.puzzle.update({
       where: { id: puzzleId },
-      data: {
-        title: title || "Untitled Puzzle",
-        description: description || "",
-        content: content || "",
-        difficulty: safeDifficulty,
-        isWarzExclusive: isWarzExclusive === true,
-        ...(categoryRecord ? { categoryId: categoryRecord.id } : {}),
-        ...(!isSpecialType ? { riddleAnswer: correctAnswer } : {}),
-        ...(([ "escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file"].includes(puzzleType)) && puzzleData != null
-          ? { data: puzzleData }
-          : {}),
-      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: puzzleUpdateData as any,
     });
 
     // 2. Replace hints

@@ -106,7 +106,7 @@ export default function AdminARGPage() {
   };
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner size={180} />;
   }
 
   if (!isAdmin) {

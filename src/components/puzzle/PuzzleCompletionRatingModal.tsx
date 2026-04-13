@@ -13,6 +13,7 @@ interface PuzzleCompletionRatingModalProps {
   onSubmit?: () => void;
   initialAwardedPoints?: number | null;
   completionSeconds?: number | null;
+  funFact?: string;
 }
 
 function formatTime(seconds: number): string {
@@ -38,6 +39,7 @@ export default function PuzzleCompletionRatingModal({
   onSubmit,
   initialAwardedPoints = null,
   completionSeconds = null,
+  funFact,
 }: PuzzleCompletionRatingModalProps) {
   useRegisterModal('puzzle-rating-modal');
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -149,6 +151,17 @@ export default function PuzzleCompletionRatingModal({
               style={{ backgroundColor: 'rgba(253,231,76,0.06)', borderColor: '#FDE74C' }}
             >
               <div style={{ color: '#FDE74C', fontWeight: 700 }}>{`+${initialAwardedPoints ?? awardedPoints} points awarded`}</div>
+            </div>
+          )}
+
+          {/* Fun Fact */}
+          {funFact && (
+            <div
+              className="mb-4 p-4 rounded-lg border"
+              style={{ backgroundColor: 'rgba(56,145,166,0.08)', borderColor: 'rgba(56,145,166,0.35)' }}
+            >
+              <div style={{ color: '#9BD1D6', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>💡 Fun Fact</div>
+              <p style={{ color: '#DDDBF1', fontSize: 14, lineHeight: 1.6, margin: 0 }}>{funFact}</p>
             </div>
           )}
 

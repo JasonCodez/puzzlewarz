@@ -2,6 +2,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Designer from "../../Designer";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 function EscapeRoomDesignerEditPageContent() {
   const router = useRouter();
@@ -28,7 +29,7 @@ function EscapeRoomDesignerEditPageContent() {
   }, [id]);
 
   if (!id) return <div className="max-w-xl mx-auto py-8">Missing escape room id.</div>;
-  if (loading) return <div className="max-w-xl mx-auto py-8">Loading...</div>;
+  if (loading) return <LoadingSpinner size={180} />;
   if (error) return <div className="max-w-xl mx-auto py-8 text-red-600">{error}</div>;
 
   return <Designer initialData={initialData} editId={id} />;
@@ -36,7 +37,7 @@ function EscapeRoomDesignerEditPageContent() {
 
 export default function EscapeRoomDesignerEditPage() {
   return (
-    <Suspense fallback={<div className="max-w-xl mx-auto py-8">Loading...</div>}>
+    <Suspense fallback={<LoadingSpinner size={180} />}>
       <EscapeRoomDesignerEditPageContent />
     </Suspense>
   );

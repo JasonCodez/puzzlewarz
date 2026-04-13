@@ -165,7 +165,7 @@ export default function AchievementsPage() {
   };
 
   if (status === "loading" || loading) {
-    return <LoadingSpinner label="Loading achievements…" />;
+    return <LoadingSpinner label="Loading achievements…" size={180} />;
   }
 
   if (!session?.user || !data) return null;

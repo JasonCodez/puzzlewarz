@@ -51,6 +51,11 @@ type PathOpts = {
   featureSpan?: number; neckSpan?: number; headSpan?: number;
   tabDepth?: number; neckPinch?: number; shoulderDepth?: number;
   shoulderSpan?: number; cornerInset?: number; smooth?: number;
+  // Shape-designer controls (all as fractions of edge length L)
+  extFrac?: number;       // tab depth — default 0.270
+  rFrac?: number;         // knob radius — default 0.118
+  nHalfFrac?: number;     // neck half-width — default 0.100
+  shoulderStart?: number; // shoulder start offset — default 0.150
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,33 +140,52 @@ type EdgeCmd = ["L", number, number] | ["C", number, number, number, number, num
 function edgeProfile(L: number, dir: number, opts: PathOpts, sizeRef: number): EdgeCmd[] {
   if (dir === 0) return [["L", L, 0]];
   const sign = dir;
-  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+  const K    = 0.5523; // cubic bezier circle approximation constant
 
-  const featureSpan = Math.min(Math.max(0.42, Math.min(0.56, clamp01(opts.featureSpan ?? 0.5))) * sizeRef, L * 0.72);
-  const neckSpan    = Math.min(Math.max(0.12, Math.min(0.21, clamp01(opts.neckSpan    ?? 0.18))) * sizeRef, Math.min(featureSpan * 0.62, L * 0.42));
-  const rawHead     = Math.min(Math.max(0.22, Math.min(0.32, clamp01(opts.headSpan   ?? 0.27))) * sizeRef, Math.min(featureSpan * 0.84, L * 0.58));
-  const headSpan    = Math.max(rawHead, neckSpan * 1.34);
+  // ── Shape-designer params (fall back to reference-matched defaults) ───────
+  const ext   = L * (opts.extFrac       ?? 0.270);
+  const tabH  = sign * ext;
 
-  const mid = L / 2;
-  const a = mid - featureSpan / 2, b = mid - neckSpan / 2;
-  const c = mid + neckSpan / 2, d = mid + featureSpan / 2;
+  const r     = L * (opts.rFrac         ?? 0.118);
+  const kCYm  = Math.max(ext - r, r * 0.05); // keep centre above baseline
+  const kCY   = sign * kCYm;
 
-  const tabD     = sign * Math.min((opts.tabDepth ?? 0.22) * sizeRef, sizeRef * 0.3, L * 0.28);
-  const neckD    = Math.max(0.001 * sizeRef, (opts.neckPinch ?? 0) * sizeRef);
-  const neckY    = sign * neckD;
-  const shoulderY = sign * Math.max(0, (opts.shoulderDepth ?? 0) * sizeRef) * 0.14;
-  const headY    = tabD - sign * headSpan / 2;
-  const apex: [number, number] = [mid, tabD];
-  const ss      = Math.min(Math.max(0.08, Math.min(0.16, clamp01(opts.shoulderSpan ?? 0.12))) * sizeRef, L * 0.28);
+  const kL    = L * 0.5 - r;
+  const kR    = L * 0.5 + r;
+
+  const nHalf = L * (opts.nHalfFrac     ?? 0.100);
+  const nL    = L * 0.5 - nHalf;
+  const nR    = L * 0.5 + nHalf;
+  const nY    = -sign * L * 0.018;
+
+  const fL    = L * (opts.shoulderStart ?? 0.150);
+  const fR    = L - fL;
+  const sa    = (nL - fL) * 0.65;
+  const si    = (nL - fL) * 0.20;
+
+  const nRise = sign * (kCY - nY) * 0.35;
 
   return [
-    ["L", a, 0],
-    ["C", a + ss * 0.9, shoulderY,        b - ss * 0.08,  neckY * 0.96, b, neckY],
-    ["C", b + neckSpan * 0.16, neckY,     mid - headSpan * 0.5, headY + (tabD - headY) * 0.38, mid - headSpan * 0.35, headY + (tabD - headY) * 0.82],
-    ["C", mid - headSpan * 0.22, tabD - sign * headSpan * 0.025, mid - headSpan * 0.08, tabD - sign * headSpan * 0.01, ...apex],
-    ["C", mid + headSpan * 0.08, tabD - sign * headSpan * 0.01, mid + headSpan * 0.22, tabD - sign * headSpan * 0.025, mid + headSpan * 0.35, headY + (tabD - headY) * 0.82],
-    ["C", mid + headSpan * 0.5, headY + (tabD - headY) * 0.38, c - neckSpan * 0.16, neckY,  c, neckY],
-    ["C", c + ss * 0.08, neckY * 0.96,   d - ss * 0.9,  shoulderY,   d, 0],
+    ["L", fL, 0],
+
+    // Left shoulder — S-curve: faint outward lift then sweeps inward, arrives flat at neck
+    ["C", fL + sa, sign * L * 0.012,   nL - si, nY,   nL, nY],
+
+    // Neck rises to left equator of knob with a vertical (outward-only) tangent
+    ["C", nL, nY + (kCY - nY) * 0.42,   kL, kCY - nRise,   kL, kCY],
+
+    // Left half-arc: equator → apex  (K gives near-perfect circle)
+    ["C", kL, kCY + sign * r * K,   L * 0.5 - r * K, tabH,   L * 0.5, tabH],
+
+    // Right half-arc: apex → equator (mirror)
+    ["C", L * 0.5 + r * K, tabH,   kR, kCY + sign * r * K,   kR, kCY],
+
+    // Right equator descends to neck (mirror of rise)
+    ["C", kR, kCY - nRise,   nR, nY + (kCY - nY) * 0.42,   nR, nY],
+
+    // Right shoulder — mirror of left
+    ["C", nR + si, nY,   fR - sa, sign * L * 0.012,   fR, 0],
+
     ["L", L, 0],
   ];
 }
@@ -245,6 +269,11 @@ interface JigsawPuzzleProps {
   shoulderDepth?: number;
   cornerInset?: number;
   smooth?: number;
+  // Shape-designer controls
+  pieceExtFrac?: number;
+  pieceRFrac?: number;
+  pieceNHalfFrac?: number;
+  pieceShoulderStart?: number;
   containerStyle?: React.CSSProperties;
   onComplete?: (t?: number) => Promise<number | void> | number | void;
   onShowRatingModal?: () => void;
@@ -258,6 +287,7 @@ interface JigsawPuzzleProps {
   }) => void;
   puzzleId?: string;
   tableBackground?: string;
+  funFact?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -280,9 +310,10 @@ export default function JigsawPuzzleSVGWithTray({
   neckWidth = 0.22, neckDepth = 0.10,
   shoulderLen = 0.22, shoulderDepth = 0.08,
   cornerInset = 1, smooth = 0.55,
+  pieceExtFrac, pieceRFrac, pieceNHalfFrac, pieceShoulderStart,
   onComplete, onShowRatingModal,
   suppressInternalCongrats = false, onControlsReady,
-  puzzleId, tableBackground, containerStyle = {},
+  puzzleId, tableBackground, funFact, containerStyle = {},
 }: JigsawPuzzleProps) {
 
   // ── Refs ──────────────────────────────────────────────────────────────────
@@ -345,7 +376,11 @@ export default function JigsawPuzzleSVGWithTray({
     shoulderDepth:clamp(shoulderDepth * 0.02,        0.0006, 0.0025),
     cornerInset:  clamp(cornerInset * Math.min(pw, ph) * 0.06, 0, Math.min(pw, ph) * 0.08),
     smooth:       clamp(smooth, 0.72, 0.94),
-  }), [tabRadius, tabDepth, neckWidth, neckDepth, shoulderLen, shoulderDepth, cornerInset, smooth, pw, ph]);
+    extFrac:       pieceExtFrac,
+    rFrac:         pieceRFrac,
+    nHalfFrac:     pieceNHalfFrac,
+    shoulderStart: pieceShoulderStart,
+  }), [tabRadius, tabDepth, neckWidth, neckDepth, shoulderLen, shoulderDepth, cornerInset, smooth, pw, ph, pieceExtFrac, pieceRFrac, pieceNHalfFrac, pieceShoulderStart]);
 
   // Pieces state (live copy in ref for renderer, React state for UI)
   const piecesRef = useRef<Piece[]>([]);
@@ -369,8 +404,15 @@ export default function JigsawPuzzleSVGWithTray({
        anchorOff: { x: 0, y: 0 }, starts: new Map(), dx: 0, dy: 0 });
 
   // Snap spring  
-  type SnapAnim = { groupId: string; dx: number; dy: number; t0: number; dur: number };
+  type SnapAnim = { pieceIds: Set<string>; dx: number; dy: number; t0: number; dur: number };
   const snapRef = useRef<SnapAnim | null>(null);
+
+  // ── Per-piece animation state ────────────────────────────────────────────
+  const snapPopRef    = useRef<Map<string, { t0: number; dur: number }>>(new Map());
+  const snapGlowRef   = useRef<Map<string, { t0: number; dur: number }>>(new Map());
+  // Per-piece solve pop: each piece gets a random delay + random peak scale
+  const solveScaleRef = useRef<Map<string, { t0: number; dur: number; peak: number }>>(new Map());
+  const lastFrameRef  = useRef(0);
 
   // rAF
   const rafRef   = useRef<number | null>(null);
@@ -580,6 +622,13 @@ export default function JigsawPuzzleSVGWithTray({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, cols, imageUrl]);
 
+  // ── Rebuild path cache when shape opts change (slider adjustments) ───────
+  useEffect(() => {
+    if (!edgesMapRef.current.size) return; // not yet initialised
+    rebuildCache(edgesMapRef.current);
+    dirtyRef.current = true;
+  }, [rebuildCache]); // rebuildCache ref changes whenever pathOpts changes
+
   // ── Image loading ────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -602,7 +651,8 @@ export default function JigsawPuzzleSVGWithTray({
     };
     img.onerror = () => {
       if (cancelled) return;
-      if (!proxyTried && imageUrl) {
+      // blob: URLs are local and can't be proxied — skip straight to failure
+      if (!proxyTried && imageUrl && !effectiveUrl.startsWith("blob:")) {
         setProxyTried(true);
         setEffectiveUrl(`/api/image-proxy?url=${encodeURIComponent(imageUrl)}`);
       } else {
@@ -611,7 +661,11 @@ export default function JigsawPuzzleSVGWithTray({
         dirtyRef.current = true;
       }
     };
-    img.src = effectiveUrl + (effectiveUrl.includes("?") ? "&" : "?") + `_ck=${reloadKey}`;
+    // blob: URLs don't support query parameters — skip cache-busting for them
+    const isBlob = effectiveUrl.startsWith("blob:");
+    img.src = isBlob
+      ? effectiveUrl
+      : effectiveUrl + (effectiveUrl.includes("?") ? "&" : "?") + `_ck=${reloadKey}`;
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveUrl, reloadKey, proxyTried]);
@@ -623,15 +677,15 @@ export default function JigsawPuzzleSVGWithTray({
     if (!wrapper) return;
 
     const update = () => {
-      const availW = wrapper.clientWidth || boardWidth;
+      const availW = isFullscreen ? (window.innerWidth || window.screen.width) : (wrapper.clientWidth || boardWidth);
       // Scale the STAGE (not just the board) to fit the available area.
       // STAGE_SCALE > 1, so the board occupies the center and pieces scatter around it.
       const stageAspect = (boardWidth * STAGE_SCALE) / (boardHeight * STAGE_SCALE);
       const availH = isFullscreen
-        ? (window.innerHeight || 600) - TRAY_H - 56
+        ? (window.innerHeight || window.screen.height)
         : Math.min(window.innerHeight * 0.62, Math.max(320, availW / stageAspect));
 
-      // s: stage logical px → CSS px
+      // s: stage logical px → CSS px — always maintain aspect ratio
       const s = Math.min(availW / (boardWidth * STAGE_SCALE), availH / (boardHeight * STAGE_SCALE));
       const physW = Math.round(boardWidth * STAGE_SCALE * s);
       const physH = Math.round(boardHeight * STAGE_SCALE * s);
@@ -697,6 +751,18 @@ export default function JigsawPuzzleSVGWithTray({
         dirtyRef.current = true;
       }
 
+      // Keep render loop alive while snap/glow/solve-scale animations are running
+      lastFrameRef.current = now;
+      if (snapPopRef.current.size > 0 || snapGlowRef.current.size > 0) dirtyRef.current = true;
+      if (solveScaleRef.current.size > 0) {
+        let anyActive = false;
+        for (const [id, anim] of solveScaleRef.current) {
+          if ((now - anim.t0) < anim.dur) { anyActive = true; break; }
+          else solveScaleRef.current.delete(id);
+        }
+        if (anyActive) dirtyRef.current = true;
+      }
+
       if (!dirtyRef.current) return;
       dirtyRef.current = false;
 
@@ -731,21 +797,6 @@ export default function JigsawPuzzleSVGWithTray({
       if (!solved) {
         ctx.fillStyle = "#131720";
         ctx.fillRect(_bOffX, _bOffY, boardWidth, boardHeight);
-        if (imageOk && imgRef.current) {
-          ctx.globalAlpha = 0.10;
-          ctx.drawImage(imgRef.current, _bOffX, _bOffY, boardWidth, boardHeight);
-          ctx.globalAlpha = 1;
-        }
-        // Ghost slot outlines
-        ctx.strokeStyle = "rgba(255,255,255,0.07)";
-        ctx.lineWidth = 1 / s;
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const path = pathCacheRef.current.get(`${r}-${c}`);
-            if (!path) continue;
-            ctx.save(); ctx.translate(_bOffX + c * _pw, _bOffY + r * _ph); ctx.stroke(path); ctx.restore();
-          }
-        }
         // Board border
         ctx.strokeStyle = "rgba(255,255,255,0.22)";
         ctx.lineWidth = 1.5 / s;
@@ -769,31 +820,54 @@ export default function JigsawPuzzleSVGWithTray({
         // p.pos is in stage space (includes boardOff); Path2D starts at (0,0) in piece-local space
         let px = p.pos.x, py = p.pos.y;
         if (dragging) { px += drag.dx; py += drag.dy; }
-        if (snapRef.current && p.groupId === snapRef.current.groupId) {
+        if (snapRef.current && snapRef.current.pieceIds.has(p.id)) {
           px += snapRef.current.dx; py += snapRef.current.dy;
         }
 
         ctx.save();
         ctx.translate(px, py);
 
-        // Drop shadow while dragging
-        if (dragging) {
-          ctx.shadowColor = "rgba(0,0,0,0.60)";
-          ctx.shadowBlur  = 20 / s;
-          ctx.shadowOffsetX = 3 / s;
-          ctx.shadowOffsetY = 9 / s;
+        // Snap-pop spring
+        const snapPop = snapPopRef.current.get(p.id);
+        if (snapPop) {
+          const pt = Math.min(1, (now - snapPop.t0) / snapPop.dur);
+          if (pt >= 1) snapPopRef.current.delete(p.id);
+          else {
+            const fxScale = 1 + 0.09 * Math.sin(pt * Math.PI);
+            ctx.translate(_pw / 2, _ph / 2);
+            ctx.scale(fxScale, fxScale);
+            ctx.translate(-_pw / 2, -_ph / 2);
+          }
+        }
+
+        // Solve pop — per-piece random delay + scale
+        const solvePop = solveScaleRef.current.get(p.id);
+        if (solvePop) {
+          const st = (now - solvePop.t0) / solvePop.dur;
+          if (st >= 0 && st < 1) {
+            const fxScale = 1 + solvePop.peak * Math.sin(st * Math.PI);
+            ctx.translate(_pw / 2, _ph / 2);
+            ctx.scale(fxScale, fxScale);
+            ctx.translate(-_pw / 2, -_ph / 2);
+          } else if (st >= 1) {
+            solveScaleRef.current.delete(p.id);
+          }
+        }
+
+        // Drop shadow — snapped pieces get a grounded weight shadow
+        if (p.snapped) {
+          ctx.shadowColor = "rgba(0,0,0,0.38)";
+          ctx.shadowBlur  = 7 / s;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 4 / s;
         }
 
         // Clip + image
-        // After translate(px,py), piece-local (0,0) is at stage position (px,py).
-        // The correct board position for this piece is (boardOffX + col*pw, boardOffY + row*ph).
-        // We want slice (col*pw, row*ph) in image space to align at (0,0) in piece-local space.
-        // drawImage origin in piece-local = boardOffX - px + boardOffX... simplified:
-        // image top-left in piece-local = -(px - boardOffX) = boardOffX - px (since image starts at boardOffX in stage space)
-        // but we also need to offset the image by the piece's grid position:
-        // drawImage at (-( px - _bOffX ), -( py - _bOffY ), boardWidth, boardHeight)
-        const imgX = _bOffX - px;
-        const imgY = _bOffY - py;
+        // Each piece (row, col) must show slice [col*pw..(col+1)*pw, row*ph..(row+1)*ph] of the
+        // image, regardless of its current position in the stage.  Drawing the full image at
+        // (-col*pw, -row*ph) in piece-local space (after translate(px,py)) achieves exactly that.
+        const imgX = -(p.col * _pw);
+        const imgY = -(p.row * _ph);
         ctx.save();
         ctx.clip(path);
         if (imageOk && imgRef.current) {
@@ -819,6 +893,24 @@ export default function JigsawPuzzleSVGWithTray({
           : dragging ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.30)";
         ctx.lineWidth = dragging ? 1.6 / s : 1 / s;
         ctx.stroke(path);
+
+        // Snap glow — gold outline eases in and out on board placement
+        const snapGlow = snapGlowRef.current.get(p.id);
+        if (snapGlow) {
+          const gt = Math.min(1, (now - snapGlow.t0) / snapGlow.dur);
+          if (gt >= 1) {
+            snapGlowRef.current.delete(p.id);
+          } else {
+            const glowAlpha = Math.sin(gt * Math.PI);
+            ctx.shadowColor = `rgba(255,200,50,${glowAlpha * 0.85})`;
+            ctx.shadowBlur  = 14 / s;
+            ctx.strokeStyle = `rgba(255,215,0,${glowAlpha * 0.80})`;
+            ctx.lineWidth   = 2 / s;
+            ctx.stroke(path);
+            ctx.shadowBlur  = 0;
+            ctx.shadowColor = "transparent";
+          }
+        }
 
         ctx.restore();
       }
@@ -949,13 +1041,22 @@ export default function JigsawPuzzleSVGWithTray({
     next = s1.pieces;
     if (s1.snapped) lastSnapDelta = { dx: s1.dx, dy: s1.dy };
     next = snapMergeNeighbours(next, groupId, adjNeighbor);
+
     const s2 = snapToBoardIfClose(next, groupId, adjBoard);
     next = s2.pieces;
     if (s2.snapped) lastSnapDelta = { dx: s2.dx, dy: s2.dy };
 
+    // Snap-to-board → pop + gold glow (single piece only — not a multi-piece group)
+    if ((s1.snapped || s2.snapped) && starts.size === 1) {
+      const pieceId = [...starts.keys()][0];
+      snapPopRef.current.set(pieceId, { t0: performance.now(), dur: 380 });
+      snapGlowRef.current.set(pieceId, { t0: performance.now(), dur: 700 });
+    }
+
     if (lastSnapDelta && dist2(lastSnapDelta.dx, lastSnapDelta.dy) > 0.1) {
       snapRef.current = {
-        groupId, dx: -lastSnapDelta.dx, dy: -lastSnapDelta.dy,
+        pieceIds: new Set(starts.keys()),
+        dx: -lastSnapDelta.dx, dy: -lastSnapDelta.dy,
         t0: performance.now(), dur: 200,
       };
     }
@@ -963,11 +1064,26 @@ export default function JigsawPuzzleSVGWithTray({
     setPieces(next);
   }, [boardSnapTolerance, neighborSnapTolerance, snapMergeNeighbours, setPieces]);
 
+  const onPointerLeave = useCallback(() => {
+    dirtyRef.current = true;
+  }, []);
+
   // ── Completion effect ────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!isSolved || completedRef.current) return;
     completedRef.current = true;
+    // Smooth piece scale-up on solve
+    // Scatter each piece with a random delay (0–600 ms) and random peak scale (4–12%)
+    const now = performance.now();
+    for (const p of piecesRef.current) {
+      const delay = Math.random() * 600;
+      const dur   = 500 + Math.random() * 400;
+      const peak  = 0.04 + Math.random() * 0.08;
+      solveScaleRef.current.set(p.id, { t0: now + delay, dur, peak });
+    }
+    dirtyRef.current = true;
+    dirtyRef.current = true;
     clearJigsawProgress(storageKeyRef.current);
     const elapsed = Math.max(0, Math.round((Date.now() - startTimeRef.current) / 1000));
 
@@ -997,6 +1113,18 @@ export default function JigsawPuzzleSVGWithTray({
           tl.to(energyRingRef.current, { scale: 2.0, autoAlpha: 0, duration: 0.62, ease: "power3.out" }, `${label}+=0.02`);
         }
         if (shimmerOuterRef.current && shimmerInnerRef.current) {
+          // Constrain shimmer sweep to the board area only
+          if (canvasRef.current && shimmerOuterRef.current.parentElement) {
+            const canvasRect = canvasRef.current.getBoundingClientRect();
+            const parentRect = shimmerOuterRef.current.parentElement.getBoundingClientRect();
+            const sc = scaleRef.current;
+            const el = shimmerOuterRef.current;
+            el.style.inset  = '';
+            el.style.left   = `${canvasRect.left - parentRect.left + boardOffXRef.current * sc}px`;
+            el.style.top    = `${canvasRect.top  - parentRect.top  + boardOffYRef.current * sc}px`;
+            el.style.width  = `${boardWidth * sc}px`;
+            el.style.height = `${boardHeight * sc}px`;
+          }
           tl.set(shimmerOuterRef.current, { autoAlpha: 1 }, label);
           tl.set([shimmerInnerRef.current, shimmerInnerBRef.current, shimmerInnerCRef.current].filter(Boolean) as gsap.TweenTarget,
             { xPercent: -250, autoAlpha: 0 }, label);
@@ -1229,26 +1357,19 @@ export default function JigsawPuzzleSVGWithTray({
       }}
     >
       {/* ── Canvas area ──────────────────────────────── */}
-      <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-        {/* Table background image (drawn in canvas AND as HTML element for GSAP access) */}
-        {tableBackground && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img id="jigsaw-table-bg" src={tableBackground} alt=""
-               aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
-                                    objectFit: "cover", pointerEvents: "none" }} />
-        )}
-
+      <div style={{ position: "relative", flex: 1, minHeight: 0, ...(isFullscreen ? { display: "flex", alignItems: "center", justifyContent: "center" } : {}) }}>
         <canvas
           ref={canvasRef}
           width={canvasW} height={canvasH}
           style={{
-            display: "block", width: "100%", height: "100%",
+            display: "block", position: "relative",
             touchAction: "none", userSelect: "none", cursor: "default",
           }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onPointerLeave={onPointerLeave}
         />
 
         {/* Shimmer overlay */}
@@ -1297,6 +1418,12 @@ export default function JigsawPuzzleSVGWithTray({
               <span style={{ color: "#FDE74C", fontWeight: 800 }}>{awardedPoints ?? "..."}</span>{" "}
               points!
             </div>
+            {funFact && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.12)" }}>
+                <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5 }}>Fun Fact</div>
+                <div style={{ color: "#DDDBF1", fontSize: 14, lineHeight: 1.55 }}>{funFact}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1405,25 +1532,6 @@ export default function JigsawPuzzleSVGWithTray({
           )}
         </div>
       </div>
-
-      {/* ── Tray ─────────────────────────────────────── */}
-      {!isSolved && trayPieces.length > 0 && (
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.4)",
-                      backdropFilter: "blur(8px)" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.35)",
-                        letterSpacing: "0.1em", textTransform: "uppercase",
-                        padding: "6px 12px 2px", userSelect: "none" }}>
-            Pieces ({trayPieces.length} remaining)
-          </div>
-          <div style={{ display: "flex", gap: 8, padding: "8px 12px 12px",
-                        overflowX: "auto", overflowY: "hidden",
-                        height: TRAY_H, alignItems: "center",
-                        WebkitOverflowScrolling: "touch",
-                        scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>
-            {trayPieces.map(p => <TrayThumb key={p.id} piece={p} />)}
-          </div>
-        </div>
-      )}
     </div>
   );
 

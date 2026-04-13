@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type LobbyMember = {
   userId: string;
@@ -107,7 +108,7 @@ export default function EscapeRoomLobbyPage() {
   }, [view, lobby, puzzleId, fetchLobby, stopPolling, router]);
 
   if (sessionStatus === "loading") {
-    return <div className="flex items-center justify-center min-h-[60vh] text-gray-400">Loading…</div>;
+    return <LoadingSpinner size={180} />;
   }
   if (!session?.user) {
     return (

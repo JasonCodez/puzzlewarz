@@ -1183,7 +1183,94 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     onDataChange('validationRules', { ...existing, [key]: value });
   };
 
-  const renderJigsawFields = () => (
+  // ── Jigsaw shape preview — pure SVG, redraws on every React render ───────
+  function buildJigsawSVGPath(extFrac: number, rFrac: number, nHalfFrac: number, shoulderStart: number): string {
+    // Preview: 200×200, piece body 60→140 (80px each side, 30px margin for tabs)
+    const x0 = 60, y0 = 60, x1 = 140, y1 = 140;
+    const pw = 80, ph = 80;
+    const K = 0.5523;
+
+    function edgePts(L: number, dir: number): number[] {
+      const sign  = dir;
+      const ext   = L * extFrac;
+      const r     = L * rFrac;
+      const kCYm  = Math.max(ext - r, r * 0.05);
+      const kCY   = sign * kCYm;
+      const tabH  = sign * ext;
+      const kL    = L * 0.5 - r;
+      const kR    = L * 0.5 + r;
+      const nHalf = L * nHalfFrac;
+      const nL    = L * 0.5 - nHalf;
+      const nR    = L * 0.5 + nHalf;
+      const nY    = -sign * L * 0.018;
+      const fL2   = L * Math.min(shoulderStart, nL / L - 0.01);
+      const fR2   = L - fL2;
+      const sa    = (nL - fL2) * 0.65;
+      const si    = (nL - fL2) * 0.20;
+      const nRise = sign * (kCY - nY) * 0.35;
+      // Returns flat array: [along0,out0, cp1a,cp1o,cp2a,cp2o,ena,eno, ... × 6 beziers, L,0]
+      return [
+        fL2, 0,
+        fL2+sa, sign*L*0.012,   nL-si, nY,              nL, nY,
+        nL,     nY+(kCY-nY)*0.42, kL, kCY-nRise,        kL, kCY,
+        kL,     kCY+sign*r*K,   L*0.5-r*K, tabH,        L*0.5, tabH,
+        L*0.5+r*K, tabH,        kR, kCY+sign*r*K,        kR, kCY,
+        kR,     kCY-nRise,      nR, nY+(kCY-nY)*0.42,   nR, nY,
+        nR+si,  nY,             fR2-sa, sign*L*0.012,    fR2, 0,
+        L, 0,
+      ];
+    }
+
+    const f = (n: number) => Math.round(n * 100) / 100;
+
+    // Edge transformer helpers
+    // top:    world = (x0+along, y0-out)   dir=+1 → tab up
+    // right:  world = (x1+out,  y0+along)  dir=+1 → tab right
+    // bottom: world = (x1-along, y1+out)   dir=-1 → slot up (out is negative)
+    // left:   world = (x0-out,  y1-along)  dir=-1 → slot right (out is negative)
+    function pts2svg(pts: number[], edge: 'top'|'right'|'bottom'|'left'): string[] {
+      const p = (ai: number, oi: number): string => {
+        const a = pts[ai], o = pts[oi];
+        let wx = 0, wy = 0;
+        if (edge === 'top')    { wx = x0 + a; wy = y0 - o; }
+        if (edge === 'right')  { wx = x1 + o; wy = y0 + a; }
+        if (edge === 'bottom') { wx = x1 - a; wy = y1 + o; }
+        if (edge === 'left')   { wx = x0 - o; wy = y1 - a; }
+        return `${f(wx)},${f(wy)}`;
+      };
+      const cmds: string[] = [];
+      cmds.push(`L ${p(0, 1)}`);
+      for (let i = 0; i < 6; i++) {
+        const b = 2 + i * 6;
+        cmds.push(`C ${p(b,b+1)} ${p(b+2,b+3)} ${p(b+4,b+5)}`);
+      }
+      cmds.push(`L ${p(38, 39)}`);
+      return cmds;
+    }
+
+    const top    = edgePts(pw, +1);
+    const right  = edgePts(ph, +1);
+    const bottom = edgePts(pw, -1);
+    const left   = edgePts(ph, -1);
+
+    return [
+      `M ${x0},${y0}`,
+      ...pts2svg(top,    'top'),
+      ...pts2svg(right,  'right'),
+      ...pts2svg(bottom, 'bottom'),
+      ...pts2svg(left,   'left'),
+      'Z',
+    ].join(' ');
+  }
+
+  const renderJigsawFields = () => {
+    const extFrac       = Number(puzzleData.pieceExtFrac       ?? 0.270);
+    const rFrac         = Number(puzzleData.pieceRFrac         ?? 0.118);
+    const nHalfFrac     = Number(puzzleData.pieceNHalfFrac     ?? 0.100);
+    const shoulderStart = Number(puzzleData.pieceShoulderStart ?? 0.150);
+    const svgPath = buildJigsawSVGPath(extFrac, rFrac, nHalfFrac, shoulderStart);
+
+    return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -1231,8 +1318,89 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
         />
         Rotation Enabled
       </label>
+
+      {/* ── Piece Shape Designer ────────────────────────────────────────── */}
+      <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-sm font-semibold text-blue-300">🧩 Piece Shape Designer</span>
+          <span className="text-xs text-gray-400">— drag sliders to reshape pieces in real time</span>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-6 items-start">
+          {/* SVG preview — React re-renders this automatically on every slider change */}
+          <div className="flex-shrink-0">
+            <svg
+              viewBox="0 0 200 200"
+              width={200}
+              height={200}
+              className="rounded-lg bg-slate-800 border border-slate-600"
+            >
+              {/* faint body rect for reference */}
+              <rect x={60} y={60} width={80} height={80} fill="none" stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
+              <path d={svgPath} fill="rgba(96,165,250,0.10)" stroke="#60a5fa" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+            </svg>
+            <p className="text-xs text-gray-500 mt-1 text-center">Live preview</p>
+          </div>
+
+          {/* Sliders */}
+          <div className="flex-1 space-y-4 w-full">
+            {([
+              { key: 'pieceExtFrac',       label: 'Tab Depth',       value: extFrac,       min: 0.15, max: 0.40, step: 0.005, fmt: (v: number) => `${Math.round(v*100)}%` },
+              { key: 'pieceRFrac',         label: 'Knob Radius',     value: rFrac,         min: 0.06, max: 0.20, step: 0.002, fmt: (v: number) => `${Math.round(v*100)}%` },
+              { key: 'pieceNHalfFrac',     label: 'Neck Half-Width', value: nHalfFrac,     min: 0.04, max: 0.22, step: 0.002, fmt: (v: number) => `${Math.round(v*200)}% wide` },
+              { key: 'pieceShoulderStart', label: 'Shoulder Start',  value: shoulderStart, min: 0.05, max: 0.28, step: 0.005, fmt: (v: number) => `${Math.round(v*100)}% in` },
+            ] as Array<{ key: string; label: string; value: number; min: number; max: number; step: number; fmt: (v: number) => string }>).map(({ key, label, value, min, max, step, fmt }) => (
+              <div key={key}>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-medium text-gray-300">{label}</label>
+                  <span className="text-xs text-blue-300 font-mono">{fmt(value)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={min}
+                  max={max}
+                  step={step}
+                  value={value}
+                  onChange={(e) => {
+                    onDataChange(key, parseFloat(e.target.value));
+                  }}
+                  className="w-full h-2 rounded-full appearance-none bg-slate-600 accent-blue-400"
+                />
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => {
+                onDataChange('pieceExtFrac', 0.270);
+                onDataChange('pieceRFrac', 0.118);
+                onDataChange('pieceNHalfFrac', 0.100);
+                onDataChange('pieceShoulderStart', 0.150);
+              }}
+              className="text-xs px-3 py-1.5 rounded bg-slate-600 hover:bg-slate-500 text-gray-300"
+            >
+              Reset to defaults
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Fun Fact ────────────────────────────────────────────────────── */}
+      <div>
+        <label className="block text-sm font-semibold text-gray-300 mb-1">
+          Fun Fact <span className="text-xs font-normal text-gray-500">(shown after solve)</span>
+        </label>
+        <p className="text-xs text-gray-500 mb-2">Share an interesting fact about the subject of this puzzle image. Displayed to the player on completion.</p>
+        <textarea
+          value={asString(puzzleData.funFact, '')}
+          onChange={(e) => onDataChange('funFact', e.target.value)}
+          placeholder="e.g. The Eiffel Tower grows up to 15cm taller in summer due to thermal expansion of the iron."
+          className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-24 resize-y"
+        />
+      </div>
     </div>
-  );
+    );
+  };
 
   const renderCodeMasterFields = () => (
     <div className="space-y-4">

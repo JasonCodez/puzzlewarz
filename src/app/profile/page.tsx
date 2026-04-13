@@ -339,7 +339,7 @@ export default function ProfilePage() {
   };
 
   if (status === 'loading' || loading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner size={180} />;
   }
 
   if (!session?.user) {

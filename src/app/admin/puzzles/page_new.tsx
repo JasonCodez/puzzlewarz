@@ -236,6 +236,13 @@ export default function AdminPuzzlesPage() {
           gridCols: p.jigsaw.gridCols,
           snapTolerance: p.jigsaw.snapTolerance,
           rotationEnabled: p.jigsaw.rotationEnabled,
+          // Restore shape designer params from puzzle.data JSON if present
+          ...(p.data && typeof p.data === 'object' ? {
+            pieceExtFrac:       (p.data as Record<string, unknown>).pieceExtFrac,
+            pieceRFrac:         (p.data as Record<string, unknown>).pieceRFrac,
+            pieceNHalfFrac:     (p.data as Record<string, unknown>).pieceNHalfFrac,
+            pieceShoulderStart: (p.data as Record<string, unknown>).pieceShoulderStart,
+          } : {}),
         };
         if (p.jigsaw.imageUrl) {
           setJigsawImageUrl(p.jigsaw.imageUrl);
@@ -991,7 +998,7 @@ export default function AdminPuzzlesPage() {
   };
 
   if (status === "loading" || loading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner size={180} />;
   }
 
   if (!isAdmin) {
@@ -1213,49 +1220,68 @@ export default function AdminPuzzlesPage() {
                   {/* Jigsaw image upload and live preview (only for jigsaw puzzles) */}
                   {formData.puzzleType === 'jigsaw' && (
                     <div>
-                      <label className="block text-sm font-semibold text-gray-300 mb-2">Jigsaw Image {jigsawImagePreview ? <span className="text-xs text-green-300">(selected)</span> : <span className="text-xs text-gray-400">(required)</span>}</label>
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
-                          <div className="flex flex-col gap-2 w-full">
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleJigsawImageFileChange}
-                                className="flex-1 min-w-0 px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white"
-                              />
-                              <button
-                                type="button"
-                                disabled={!jigsawImageFile || !puzzleId || uploadingMedia}
-                                onClick={async () => {
-                                  setImportImageResult(null);
-                                  setImportImageError(null);
-                                  try {
-                                    if (!jigsawImageFile) throw new Error('No file selected');
-                                    if (!puzzleId) throw new Error('Save the puzzle first to upload');
-                                    await uploadJigsawFile(puzzleId, jigsawImageFile);
-                                  } catch (err) {
-                                    const msg = err instanceof Error ? err.message : String(err);
-                                    setImportImageError(msg);
-                                  }
-                                }}
-                                className="px-3 py-1 rounded bg-emerald-700 text-white text-sm"
-                              >
-                                Upload file
-                              </button>
-                            </div>
-                            <div className="text-xs text-gray-400">Or paste an external image URL:</div>
+                      <label className="block text-sm font-semibold text-gray-300 mb-3">
+                        Jigsaw Image{" "}
+                        {jigsawImagePreview
+                          ? <span className="text-xs text-green-300">(selected)</span>
+                          : <span className="text-xs text-gray-400">(required)</span>}
+                      </label>
+
+                      <div className="space-y-3">
+                        {/* ── Option 1: Upload a file ── */}
+                        <div className="rounded-lg border border-slate-600 bg-slate-700/30 p-3">
+                          <p className="text-xs font-semibold text-gray-300 mb-2">📁 Upload from file</p>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleJigsawImageFileChange}
+                              className="flex-1 min-w-0 px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white text-sm"
+                            />
+                            <button
+                              type="button"
+                              disabled={!jigsawImageFile || !puzzleId || uploadingMedia}
+                              onClick={async () => {
+                                setImportImageResult(null);
+                                setImportImageError(null);
+                                try {
+                                  if (!jigsawImageFile) throw new Error('No file selected');
+                                  if (!puzzleId) throw new Error('Save the puzzle first to upload');
+                                  await uploadJigsawFile(puzzleId, jigsawImageFile);
+                                } catch (err) {
+                                  const msg = err instanceof Error ? err.message : String(err);
+                                  setImportImageError(msg);
+                                }
+                              }}
+                              className="px-4 py-2 rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm font-semibold whitespace-nowrap"
+                            >
+                              {uploadingMedia ? 'Uploading…' : 'Upload file'}
+                            </button>
                           </div>
-                          <input
-                            type="text"
-                            placeholder="Paste an external image URL"
-                            value={jigsawImageUrl}
-                            onChange={handleJigsawImageUrlChange}
-                            className="flex-1 min-w-0 px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
-                          />
-                          <div className="flex gap-2 mt-2 sm:mt-0">
-                            <button type="button" onClick={handleUseJigsawUrl} className="px-3 py-1 rounded bg-blue-600 text-white text-sm">Use URL</button>
-                            
+                          {!puzzleId && jigsawImageFile && (
+                            <p className="text-xs text-amber-400 mt-1">Save the puzzle first, then upload the file.</p>
+                          )}
+                        </div>
+
+                        {/* ── Option 2: Use an image URL ── */}
+                        <div className="rounded-lg border border-slate-600 bg-slate-700/30 p-3">
+                          <p className="text-xs font-semibold text-gray-300 mb-2">🔗 Use an image URL</p>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="text"
+                              placeholder="https://example.com/image.jpg"
+                              value={jigsawImageUrl}
+                              onChange={handleJigsawImageUrlChange}
+                              className="flex-1 min-w-0 px-3 py-2 rounded bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 text-sm"
+                            />
+                            <button
+                              type="button"
+                              disabled={!jigsawImageUrl}
+                              onClick={handleUseJigsawUrl}
+                              className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-semibold whitespace-nowrap"
+                            >
+                              Use URL
+                            </button>
                             <button
                               type="button"
                               disabled={!jigsawImageUrl || !puzzleId || importingImage}
@@ -1266,25 +1292,18 @@ export default function AdminPuzzlesPage() {
                                 try {
                                   if (!jigsawImageUrl) throw new Error('No image URL provided');
                                   if (!puzzleId) throw new Error('Save the puzzle first to import image');
-
-                                  console.log('[ADMIN] importing image for puzzle', puzzleId, jigsawImageUrl);
                                   const res = await fetch('/api/admin/import-image', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ puzzleId, imageUrl: jigsawImageUrl }),
                                   }).catch((e) => { throw new Error(`Network error: ${e?.message || e}`); });
-
                                   let data: any = null;
                                   const txt = await res.text().catch(() => '');
-                                  try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = { raw: txt }; }
-
-                                  console.log('[ADMIN] import-image response', res.status, data);
-
+                                  try { data = txt ? JSON.parse(txt) : null; } catch { data = { raw: txt }; }
                                   if (!res.ok) {
                                     const errMsg = (data && (data.error || data.message)) || `Import failed (${res.status})`;
-                                    throw new Error(errMsg + (data && data.raw ? ` - ${String(data.raw).slice(0,200)}` : ''));
+                                    throw new Error(errMsg + (data?.raw ? ` - ${String(data.raw).slice(0, 200)}` : ''));
                                   }
-
                                   const imageUrlResp = (data && data.imageUrl) || null;
                                   setImportImageResult(imageUrlResp);
                                   if (imageUrlResp) {
@@ -1293,31 +1312,43 @@ export default function AdminPuzzlesPage() {
                                   }
                                 } catch (err) {
                                   const msg = err instanceof Error ? err.message : String(err);
-                                  console.error('[ADMIN] import-image error', msg);
                                   setImportImageError(msg);
                                 } finally {
                                   setImportingImage(false);
                                 }
                               }}
-                              className="px-3 py-1 rounded bg-amber-600 text-white text-sm"
+                              className="px-4 py-2 rounded bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-sm font-semibold whitespace-nowrap"
                             >
                               {importingImage ? 'Importing…' : 'Import to uploads'}
                             </button>
                           </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            <strong className="text-gray-400">Use URL</strong> — links directly to the external image.{" "}
+                            <strong className="text-gray-400">Import to uploads</strong> — copies the image to your own storage (save puzzle first).
+                          </p>
                         </div>
-                        {jigsawImagePreview && (
-                          <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                            <img src={jigsawImagePreview} alt="preview" className="max-h-20 max-w-[160px] object-contain bg-[#111] rounded" />
-                            <button type="button" onClick={() => { setJigsawImagePreview(''); }} className="px-3 py-1 rounded bg-red-700 text-white text-sm">Clear</button>
-                          </div>
-                        )}
+
+                        {/* ── Feedback & preview ── */}
                         {importImageResult && (
-                          <div className="mt-2 text-sm text-green-300">Imported: {importImageResult}</div>
+                          <p className="text-sm text-green-300">✓ Imported: {importImageResult}</p>
                         )}
                         {importImageError && (
-                          <div className="mt-2 text-sm text-red-400">Error: {importImageError}</div>
+                          <p className="text-sm text-red-400">⚠ {importImageError}</p>
+                        )}
+                        {jigsawImagePreview && (
+                          <div className="flex items-center gap-3">
+                            <img src={jigsawImagePreview} alt="preview" className="max-h-20 max-w-[160px] object-contain bg-[#111] rounded border border-slate-600" />
+                            <button
+                              type="button"
+                              onClick={() => setJigsawImagePreview('')}
+                              className="px-3 py-1 rounded bg-red-700 hover:bg-red-600 text-white text-sm"
+                            >
+                              Clear
+                            </button>
+                          </div>
                         )}
                       </div>
+
                       <p className="text-xs text-gray-400 mt-2">Recommended: landscape images around 800×600 for best results. The image is required when creating a jigsaw puzzle.</p>
  
                       {/* Live Jigsaw Puzzle Preview */}
@@ -1329,6 +1360,10 @@ export default function AdminPuzzlesPage() {
                               imageUrl={jigsawImagePreview}
                               rows={typeof formData.puzzleData.gridRows === 'number' && formData.puzzleData.gridRows > 1 ? formData.puzzleData.gridRows : 3}
                               cols={typeof formData.puzzleData.gridCols === 'number' && formData.puzzleData.gridCols > 1 ? formData.puzzleData.gridCols : 4}
+                              pieceExtFrac={typeof formData.puzzleData.pieceExtFrac === 'number' ? formData.puzzleData.pieceExtFrac : undefined}
+                              pieceRFrac={typeof formData.puzzleData.pieceRFrac === 'number' ? formData.puzzleData.pieceRFrac : undefined}
+                              pieceNHalfFrac={typeof formData.puzzleData.pieceNHalfFrac === 'number' ? formData.puzzleData.pieceNHalfFrac : undefined}
+                              pieceShoulderStart={typeof formData.puzzleData.pieceShoulderStart === 'number' ? formData.puzzleData.pieceShoulderStart : undefined}
                               onComplete={() => {}}
                             />
                           </div>

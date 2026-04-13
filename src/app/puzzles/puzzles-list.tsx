@@ -7,6 +7,7 @@ import Link from "next/link";
 import FilterBar from "@/components/puzzle/FilterBar";
 import { StarRating } from "@/components/puzzle/StarRating";
 import { detectWebGLSupport } from "@/lib/webglSupport";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 interface Puzzle {
   id: string;
@@ -102,6 +103,12 @@ const CATEGORY_ICONS: Record<string, string> = {
   adventure: "🗺️",
   stealth: "🕶️",
 };
+
+function formatCategoryName(name: string): string {
+  return name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 function getDisplayTitle(puzzle: any) {
   const puzzleTitle = typeof puzzle?.title === 'string' ? puzzle.title.trim() : '';
@@ -485,13 +492,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
   }
 
   if (status === "loading" || loading) {
-    return (
-      <main className="min-h-screen" style={{ backgroundColor: '#020202' }}>
-        <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-          <p style={{ color: '#FDE74C' }} className="text-lg">Loading puzzles...</p>
-        </div>
-      </main>
-    );
+    return <LoadingSpinner label="Loading puzzles…" size={180} />;
   }
 
   return (
@@ -560,7 +561,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   }}
                 >
                   <span className="mr-1.5">{cat.icon || CATEGORY_ICONS[cat.name.toLowerCase()] || '🧩'}</span>
-                  {cat.name}
+                  {formatCategoryName(cat.name)}
                 </button>
               ))}
               </div>

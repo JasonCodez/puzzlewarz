@@ -148,7 +148,7 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
   };
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner size={180} />;
   }
 
   if (!post) {

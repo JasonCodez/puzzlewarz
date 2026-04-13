@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Flag, CheckCircle, XCircle, Clock } from "lucide-react";
 
 interface Report {
@@ -70,7 +71,7 @@ export default function AdminReportsPage() {
     }
   }
 
-  if (status === "loading") return null;
+  if (status === "loading") return <LoadingSpinner size={180} />;
   if (!session) return null;
 
   return (

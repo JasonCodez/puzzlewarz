@@ -325,14 +325,22 @@ export default function PuzzleDetailPage() {
       imageUrl: puzzle.jigsaw.imageUrl,
       pieceCount,
       aspectRatio: 1,
-      data: {
-        imageUrl: puzzle.jigsaw.imageUrl,
-        pieceCount,
-        gridRows: puzzle.jigsaw.gridRows,
-        gridCols: puzzle.jigsaw.gridCols,
-        rotationEnabled: puzzle.jigsaw.rotationEnabled,
-        snapTolerance: puzzle.jigsaw.snapTolerance,
-      },
+      data: (() => {
+        const pData = (puzzle.data && typeof puzzle.data === 'object') ? (puzzle.data as Record<string, unknown>) : {};
+        return {
+          imageUrl: puzzle.jigsaw.imageUrl,
+          pieceCount,
+          gridRows: puzzle.jigsaw.gridRows,
+          gridCols: puzzle.jigsaw.gridCols,
+          rotationEnabled: puzzle.jigsaw.rotationEnabled,
+          snapTolerance: puzzle.jigsaw.snapTolerance,
+          ...(typeof pData.pieceExtFrac       === 'number' ? { pieceExtFrac:       pData.pieceExtFrac }       : {}),
+          ...(typeof pData.pieceRFrac         === 'number' ? { pieceRFrac:         pData.pieceRFrac }         : {}),
+          ...(typeof pData.pieceNHalfFrac     === 'number' ? { pieceNHalfFrac:     pData.pieceNHalfFrac }     : {}),
+          ...(typeof pData.pieceShoulderStart === 'number' ? { pieceShoulderStart: pData.pieceShoulderStart } : {}),
+          ...(typeof pData.funFact            === 'string' && pData.funFact ? { funFact: pData.funFact }     : {}),
+        };
+      })(),
     } as unknown as JigsawPuzzleType;
   })();
 
@@ -1586,6 +1594,7 @@ export default function PuzzleDetailPage() {
                 puzzleId={puzzleId}
                 puzzleTitle={puzzle.title}
                 difficulty={puzzle.difficulty}
+                funFact={puzzle.puzzleType === 'jigsaw' && jigsawPlayable ? (jigsawPlayable.data as any).funFact : undefined}
                   onClose={() => {
                     setShowRatingModal(false);
                     router.push("/puzzles");
@@ -1664,7 +1673,11 @@ export default function PuzzleDetailPage() {
                           imageUrl={jigsawPlayable.imageUrl}
                           rows={jigsawPlayable.data.gridRows}
                           cols={jigsawPlayable.data.gridCols}
-                          tableBackground="/images/table-bg.png"
+                          pieceExtFrac={typeof (jigsawPlayable.data as any).pieceExtFrac === 'number' ? (jigsawPlayable.data as any).pieceExtFrac : undefined}
+                          pieceRFrac={typeof (jigsawPlayable.data as any).pieceRFrac === 'number' ? (jigsawPlayable.data as any).pieceRFrac : undefined}
+                          pieceNHalfFrac={typeof (jigsawPlayable.data as any).pieceNHalfFrac === 'number' ? (jigsawPlayable.data as any).pieceNHalfFrac : undefined}
+                          pieceShoulderStart={typeof (jigsawPlayable.data as any).pieceShoulderStart === 'number' ? (jigsawPlayable.data as any).pieceShoulderStart : undefined}
+                          funFact={typeof (jigsawPlayable.data as any).funFact === 'string' ? (jigsawPlayable.data as any).funFact : undefined}
                           onControlsReady={(api) => setJigsawControls(api)}
                           suppressInternalCongrats={true}
                           onComplete={async (timeSpentSeconds?: number) => {
