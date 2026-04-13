@@ -986,70 +986,102 @@ async function main() {
     // Team name pools
     // Team names: mix of formats so they feel organic, not templated
     const TEAM_NAMES_POOL = [
-      // Single word / stylised
-      "Cryptonite", "Vaultbreakers", "Nullpointers", "Hexbound", "Overclocked",
-      "Unhinged", "Glitchcore", "Redacted", "404Found", "Rekt",
-      "Brainfog", "Hardcoded", "Unsolved", "Patched", "Decompiled",
-      "Blacksite", "Greyhat", "Mainframe", "Deadlock", "Overflow",
-      "Lowlife", "Noclip", "Speedrun", "Throwaway", "Endgame",
-      "Burnout", "Raidable", "Untouchable", "Backlog", "Respawn",
-      // Two-word combos — varied structure
-      "Null Island", "Silent Keys", "Wrong Answer", "Last Attempt", "No Hints",
-      "Blind Solve", "Cold Start", "Final Flag", "Broken Loop", "Dark Mode",
-      "Hard Reset", "Lag Switch", "Zero Days", "Code Red", "Stack Trace",
-      "Brain Trust", "Chaos Theory", "False Flag", "Logic Bomb", "Dead Drop",
-      "Slow Burn", "Wild Guess", "Pure RNG", "First Blood", "Alt Account",
-      "Ctrl Alt Delete", "Mind Palace", "Rabbit Hole", "Cut Corner", "Carry Me",
-      // Quirky / personality-driven
-      "We Tried", "Skill Issue", "Just Vibes", "No Cap", "Touch Grass",
-      "Git Gud", "Uninstalled", "Cope & Seethe", "Low Expectations",
-      "Accidentally Top 10", "Don't Ask", "Absolutely Not", "Certified Nerds",
-      "Caffeine Dependent", "Chronically Online", "Puzzle brain rot",
-      "Send Help", "The Doomscrollers", "Barely Functional", "Average Enjoyers",
-      "Needs More Coffee", "Technically Correct", "Wrong On Purpose",
-      "Professional Guessers", "We Don't Sleep", "Big Brain Energy",
-      "Pretty OK At This", "Currently Spiraling", "One More Puzzle",
+      // Self-deprecating / relatable
+      "We Tried", "Skill Issue", "Send Help", "Barely Functional", "Just Vibes",
+      "Currently Spiraling", "Low Expectations", "Don't Ask", "Absolutely Not",
+      "Still Loading", "Almost There", "Kind Of Trying", "Good Enough",
+      "Needs Improvement", "Average At Best", "Getting There", "Probably Fine",
+      "Room For Growth", "Not Our Best", "It Happens",
+      // Puzzle-specific humor
+      "One More Puzzle", "No Hints Needed", "Wrong Again", "Last Attempt",
+      "Blind Solve", "Going With Gut", "Overthought It", "The Overthinkers",
+      "Mind Palace", "Wrong Answer Gang", "Red Herring Hunters",
+      "Actually Read The Instructions", "The Decoders", "Pattern Spotters",
+      "The Backspacers", "Wild Guess", "Pure Instinct", "Slow Burn",
+      // Group / friend group vibe
+      "The Usual Suspects", "The Regulars", "Night Owls", "The Committee",
+      "Off The Clock", "Chaos Crew", "The Wanderers", "Plot Twist",
+      "Main Characters", "Side Quests", "The Newcomers", "Weekend Warriors",
+      "Midnight Crew", "The Skeptics", "Puzzle Club", "The Late Shift",
+      "Early Birds", "Making It Up", "The Think Tank", "Brain Trust",
+      "Certified Nerds", "The Analysts", "Running On Fumes", "Coffee Required",
+      "No Drama", "The Round Table", "The Stragglers",
+      // Competitive but grounded
+      "Not Last Place", "Solidly Mid", "The Point Chasers", "Streak Defenders",
+      "The Grind", "We've Been Practicing", "Genuinely Competitive",
+      "Clutch (Sometimes)", "Podium Or Bust", "The Real Finals",
+      "Top 10 Or Bust", "Extremely Normal About Points",
+      // Casual / fun
+      "Touch Grass", "Chronically Online", "Big Brain Energy",
+      "Technically Correct", "Professional Guessers", "We Don't Sleep",
+      "Needs More Coffee", "The Doomscrollers", "Rabbit Hole",
+      "Ctrl Alt Delete", "Mind The Gap", "Dead Drop", "Carry Me",
+      "First Blood", "Cold Start", "Null Island", "Silent Keys", "No Hints",
     ];
 
     const TEAM_THEMES = ["default","default","default","gold","neon","crimson"];
 
     const TEAM_DESCRIPTIONS = [
-      // Casual / relatable
+      // Casual / how we started
       "started as 3 friends who couldn't stop playing. now there's like 9 of us and none of us talk about anything else anymore",
       "we made this team after losing a warz challenge and refusing to accept it. the grudge match is still ongoing",
-      "honestly we just wanted a team name. stayed for the gridlock arc grind",
-      "met in the forum complaining about the same puzzle. decided to just start solving together",
+      "honestly we just wanted a team name. stayed for the gridlock grind",
+      "met in the forum complaining about the same puzzle. decided to just start solving together instead",
       "my friend bet me I couldn't crack the daily streak record. I made a team to prove a point. he joined later",
-      "we don't have a strategy. we just send it and hope for the best",
-      "came for the puzzles, stayed because we accidentally got into the top 20 and now we have to stay there",
-      "none of us are that good individually but together we're somehow unstoppable... usually",
-      "we call ourselves casual but we're literally on here every day so",
-      "team chat is mostly just memes and the occasional 'oh wait I got it'",
+      "we don't have a strategy. we just send it and hope for the best. so far so good",
+      "came for the puzzles, stayed because we accidentally got into the top 20 and now we can't leave",
+      "none of us are that good individually but together we're somehow unstoppable. usually",
+      "we call ourselves casual but we're literally on here every day so make of that what you will",
+      "team chat is mostly memes and the occasional 'oh wait I got it'",
       "formed because we kept running into each other on the leaderboard and figured we should just team up",
-      "we grind the daily word puzzle together and compare streaks every morning like normal people",
+      "we grind the daily puzzle together and compare streaks every morning like completely normal people",
+      "someone made the team as a joke and then six people joined in 24 hours. here we are",
+      "originally just two of us. then we started winning and people started asking to join",
+      "we bonded over both guessing the same wrong answer on frequency. it felt like fate",
+      "found each other through the leaderboard. turns out we were all working from the same coffee shop",
+      "this team started as a bet. the bet was whether we could stay in top 50. we are extremely invested now",
+      "we take the puzzles seriously and the team name not seriously at all",
       // Mid-competitive
       "daily puzzle streak is non-negotiable. if you skip, you explain yourself in the group chat",
-      "we rotate who does the gridlock each day so no one person carries the streak. it works surprisingly well",
+      "we rotate who does the gridlock each day so no one person carries the streak",
       "our rule: no hints before you've tried for at least 20 minutes. yes we enforce this",
       "lost the weekly leaderboard by 4 points once. it haunts us. we do not talk about it",
       "three of us are ex-competitive gamers who redirected the energy here. results have been mixed",
-      "we keep a shared doc of every puzzle we've failed. it's a long doc",
+      "we keep a running doc of every puzzle we've failed. it's a very long doc",
       "warz challenges are our main thing. we rarely turn one down",
-      "we share hints in the group chat but only after everyone has given it a real shot first",
+      "we share hints in the group chat but only after everyone has genuinely tried first",
       "monthly leaderboard is the only one that matters to us. weekly is just warmup",
+      "we have a whole spreadsheet tracking which puzzle types we're weakest at. yes really",
+      "we assign puzzles based on who's best at what. it works better than it sounds",
+      "we each have a specialty. one of us is suspiciously good at the witness puzzles. no one asks why",
+      "if you go three days without solving something you get a strongly worded message. it's a feature",
       // Competitive / edge
       "leaderboard or nothing. if we're not climbing we're regrouping",
       "we time everything. every solve, every hint, every attempt. data doesn't lie",
       "some teams treat this like a hobby. we treat it like a sport",
-      "our team founder has completed every puzzle on this site at least once. we have not. they carry us",
-      "we are extremely normal about puzzles and definitely don't dream about cipher keys",
-      "top of the weekly leaderboard three times in a row. we do not accept fourth place",
+      "our team founder has completed every puzzle on this site. we have not. they carry us with grace",
+      "we are extremely normal about points and definitely don't check the leaderboard at 2am",
+      "top of the weekly leaderboard three times running. we do not accept fourth place",
+      "we've been on a winning streak long enough that losing now would genuinely hurt",
+      "quietly competitive. we don't trash talk. we just win and say nothing",
       // Open / welcoming
-      "all skill levels welcome, the only requirement is you show up",
-      "we celebrate every solve no matter how long it took",
-      "new to the platform? this is a good first team. we'll get you up to speed",
-      "no pressure, no drama, just puzzles and good vibes",
+      "all skill levels welcome. the only requirement is you actually show up",
+      "we celebrate every solve no matter how long it took or how many hints were used",
+      "new to the platform? this is a good first team. we'll walk you through it",
+      "no pressure, no drama, just puzzles and decent vibes",
+      "we don't care how good you are. we care that you're having fun",
+      "everyone contributes differently. some of us solve fast, some of us just bring snacks to the call",
+      // Low-key funny
+      "our team has solved the hardest puzzle on the site and also spent 40 minutes on a beginner one. we contain multitudes",
+      "we have a rule against complaining about puzzle difficulty. we break it every single day",
+      "the team name was the hardest puzzle we've ever solved",
+      "at some point this stopped being casual. we don't know when that happened",
+      "one of us does not sleep. we don't know who it is. the streak data is suspicious",
     ];
+
+    // Shuffle descriptions once so sequential assignment never repeats
+    const shuffledDescs = [...TEAM_DESCRIPTIONS].sort(() => Math.random() - 0.5);
+    let descIndex = 0;
 
     // ~45% of bots with enough activity join a team (tiers 2–5)
     // Eligible = bots with 900+ points (regular tier and above)
@@ -1099,7 +1131,7 @@ async function main() {
       const name = t < TEAM_NAMES_POOL.length
         ? TEAM_NAMES_POOL[t]
         : `${TEAM_NAMES_POOL[t % TEAM_NAMES_POOL.length]} ${Math.floor(t / TEAM_NAMES_POOL.length) + 1}`;
-      const description = pickRand(TEAM_DESCRIPTIONS);
+      const description = shuffledDescs[descIndex++ % shuffledDescs.length];
       const theme = pickRand(TEAM_THEMES);
       const createdBy = members[0].userId;
 
