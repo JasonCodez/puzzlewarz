@@ -943,7 +943,7 @@ export default function JigsawPuzzleSVGWithTray({
       const path = pathCacheRef.current.get(p.id);
       if (!path) continue;
       let px = p.pos.x, py = p.pos.y;
-      if (snapRef.current && p.groupId === snapRef.current.groupId) {
+      if (snapRef.current && snapRef.current.pieceIds.has(p.id)) {
         px += snapRef.current.dx; py += snapRef.current.dy;
       }
       // lx/ly are in stage logical space; piece path is in piece-local space (0,0 at piece origin)
