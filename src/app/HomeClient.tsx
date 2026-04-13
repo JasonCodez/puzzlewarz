@@ -337,7 +337,8 @@ export default function HomeClient() {
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:18 }}>
               {[
                 { icon:"⚔️", title:"Warz Battles", tag:"Live Now", tagColor:"#39D46E", body:"Challenge any player head-to-head on the same puzzle. Wager points. The faster solver takes the pot.", href:"/warz", cta:"Enter the Arena" },
-                { icon:"🕵️", title:"Detective Cases", tag:"Coming Soon", tagColor:"#a78bfa", body:"Multi-chapter crime cases with evidence boards, witness interviews, and branching narratives. Only top solvers get access.", href:"/auth/register", cta:"Get Early Access" },
+                { icon:"�", title:"Escape Rooms", tag:"Coming Soon", tagColor:"#38bdf8", body:"Collaborative multi-stage rooms where every puzzle unlocks the next. Timer running. No one gets out alone.", href:"/auth/register", cta:"Join the Waitlist" },
+                { icon:"�🕵️", title:"Detective Cases", tag:"Coming Soon", tagColor:"#a78bfa", body:"Multi-chapter crime cases with evidence boards, witness interviews, and branching narratives. Only top solvers get access.", href:"/auth/register", cta:"Get Early Access" },
                 { icon:"🧩", title:"ARG Experiences", tag:"Coming Soon", tagColor:"#f97316", body:"Alternate reality puzzles that bleed into the real world. Ciphers, coordinates, hidden messages. You can't Google this.", href:"/auth/register", cta:"Join the Waitlist" },
                 { icon:"🏆", title:"Ranked Seasons", tag:"Live Now", tagColor:"#FFD700", body:"3-month seasons. Top players earn exclusive card backs, titles, and first access to new puzzle types.", href:"/leaderboard", cta:"See Current Rankings" },
               ].map((f, i) => (

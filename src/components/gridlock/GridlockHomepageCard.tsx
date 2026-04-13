@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import GridlockFilePuzzle from '@/components/puzzle/GridlockFilePuzzle';
 import {
   getAnonStreak,
@@ -30,6 +31,8 @@ function formatCountdown(secs: number) {
 }
 
 export default function GridlockHomepageCard({ autoExpand = false }: { autoExpand?: boolean }) {
+  const { status } = useSession();
+  const isLoggedIn = status === 'authenticated';
   const [daily, setDaily] = useState<DailyInfo | null>(null);
   const [loadingDaily, setLoadingDaily] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -219,21 +222,23 @@ export default function GridlockHomepageCard({ autoExpand = false }: { autoExpan
               </span>
             )}
 
-            <Link
-              href="/auth/register"
-              style={{
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: '#6b7280',
-                textDecoration: 'none',
-                marginLeft: 'auto',
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = '#9ca3af')}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = '#6b7280')}
-            >
-              Save streak →
-            </Link>
+            {!isLoggedIn && (
+              <Link
+                href="/auth/register"
+                style={{
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  color: '#6b7280',
+                  textDecoration: 'none',
+                  marginLeft: 'auto',
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = '#9ca3af')}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = '#6b7280')}
+              >
+                Save streak →
+              </Link>
+            )}
           </div>
         )}
       </div>
@@ -253,7 +258,7 @@ export default function GridlockHomepageCard({ autoExpand = false }: { autoExpan
           <div style={{ padding: '0 20px 24px' }}>
             <GridlockFilePuzzle
               puzzleId={daily.puzzleId}
-              guestMode
+              guestMode={!isLoggedIn}
               hideHeader
               onSolved={handleSolved}
             />
@@ -270,9 +275,15 @@ export default function GridlockHomepageCard({ autoExpand = false }: { autoExpan
         flexWrap: 'wrap',
         gap: 8,
       }}>
-        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#4b5563' }}>
-          ✔ No account needed &nbsp;·&nbsp; ✔ Streak tracked automatically
-        </span>
+        {isLoggedIn ? (
+          <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#4b5563' }}>
+            ✔ Streak saved to your account &nbsp;·&nbsp; ✔ XP and rank tracked
+          </span>
+        ) : (
+          <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#4b5563' }}>
+            ✔ No account needed &nbsp;·&nbsp; ✔ Streak tracked automatically
+          </span>
+        )}
         <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#4b5563' }}>
           Day 7 unlocks arc reward
         </span>
