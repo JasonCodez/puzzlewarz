@@ -55,17 +55,26 @@ export async function GET(
     // "Beats" = solvers with a worse rank tier + solvers in same tier but slower
     let beaten = 0;
 
-    if (realTotalSolves > 0 && playerRank in rankIndex) {
-      const playerTierIndex = rankIndex[playerRank];
+    const playerTierIndex = playerRank in rankIndex ? rankIndex[playerRank] : -1;
 
-      // All solvers in worse tiers (higher index = worse rank)
+    if (playerTierIndex >= 0) {
+      // Baseline solvers beaten (ghost pool — worse or same tier but "slower")
+      for (const rank of RANK_ORDER) {
+        if (rankIndex[rank] > playerTierIndex) {
+          beaten += BASELINE_TIERS[rank];
+        }
+      }
+      // Partial credit within same baseline tier: assume median speed (50%)
+      beaten += Math.floor(BASELINE_TIERS[playerRank] * 0.5);
+
+      // Real solvers beaten — worse tiers
       for (const rank of RANK_ORDER) {
         if (rankIndex[rank] > playerTierIndex) {
           beaten += tierCounts[rank];
         }
       }
 
-      // Within same tier: count solvers today who were slower
+      // Real solvers in same tier but slower
       if (playerSeconds > 0) {
         const slowerInSameTier = await prisma.gridlockSolve.count({
           where: {
@@ -79,8 +88,10 @@ export async function GET(
       }
     }
 
-    const percentile =
-      realTotalSolves > 0 ? Math.round((beaten / realTotalSolves) * 100) : null;
+    // Percentile is always calculated against the full blended pool
+    const percentile = playerTierIndex >= 0
+      ? Math.min(99, Math.round((beaten / totalSolves) * 100))
+      : null;
 
     return NextResponse.json({
       tierCounts: blendedTierCounts,

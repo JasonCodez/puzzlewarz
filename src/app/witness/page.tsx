@@ -778,6 +778,96 @@ function DocumentFireCanvas({ active }: { active: boolean }) {
   );
 }
 
+// ── How To Play modal ────────────────────────────────────────────────────────
+
+function WitnessHowToPlayModal({ onClose }: { onClose: () => void }) {
+  const steps = [
+    { icon: "📄", title: "Read the report", body: `You have ${READ_SECONDS} seconds to memorise an incident report. Read carefully — it disappears once time is up.` },
+    { icon: "🧠", title: "Answer 5 questions", body: `Answer multiple-choice questions about the report. You have ${QUESTION_SECONDS} seconds per question. No going back.` },
+    { icon: "🔍", title: "Crack the Dead Drop", body: "After the witness stage, you'll enter a second challenge: decode three hidden words using cryptic clues. Use hints if you're stuck." },
+    { icon: "📊", title: "See how you compare", body: "Your recall score and percentile ranking are revealed at the end. The better your memory, the higher you place." },
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        backgroundColor: "rgba(2,2,10,0.88)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "16px",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 480,
+          backgroundColor: "#06080e",
+          border: "1px solid rgba(124,58,237,0.35)",
+          borderRadius: 20,
+          padding: "32px 28px",
+          position: "relative",
+        }}
+      >
+        {/* Corner brackets */}
+        {[["top",0,"left",0],["top",0,"right",0],["bottom",0,"left",0],["bottom",0,"right",0]].map(([v,_,h], i) => (
+          <div key={i} style={{
+            position: "absolute", [v as string]: 12, [h as string]: 12,
+            width: 16, height: 16,
+            borderTop: v === "top" ? "2px solid rgba(124,58,237,0.5)" : undefined,
+            borderBottom: v === "bottom" ? "2px solid rgba(124,58,237,0.5)" : undefined,
+            borderLeft: h === "left" ? "2px solid rgba(124,58,237,0.5)" : undefined,
+            borderRight: h === "right" ? "2px solid rgba(124,58,237,0.5)" : undefined,
+          }} />
+        ))}
+
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase",
+            color: PURPLE_LIGHT, marginBottom: 8,
+          }}>
+            How to play
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>
+            The Witness
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{
+              display: "flex", gap: 14, alignItems: "flex-start",
+              backgroundColor: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              borderRadius: 12, padding: "14px 16px",
+            }}>
+              <span style={{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>{s.icon}</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 4 }}>{s.title}</div>
+                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.6 }}>{s.body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%", padding: "12px",
+            borderRadius: 10, border: "none",
+            backgroundColor: PURPLE, color: "#fff",
+            fontWeight: 700, fontSize: 14, cursor: "pointer",
+            letterSpacing: "0.04em",
+          }}
+        >
+          Got it — let's go
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function WitnessPage() {
