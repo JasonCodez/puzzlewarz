@@ -442,10 +442,24 @@ export default function JigsawPuzzleSVGWithTray({
   const viewOffXRef = useRef(0);
   const viewOffYRef = useRef(0);
 
-  // Mobile pull-out piece tray
-  const [mobileTrayOpen, setMobileTrayOpen] = useState(false);
-  // cleanup handle for global pointermove/up listeners attached during tray drag
-  const trayGlobalCleanupRef = useRef<(() => void) | null>(null);
+  // User-applied zoom (multiplied on top of layout scaleRef). Updated by pinch and zoom buttons.
+  const MIN_ZOOM = 0.4;
+  const MAX_ZOOM = 4;
+  const userZoomRef = useRef(1);
+  const [userZoom, setUserZoom] = useState(1); // mirrors userZoomRef for button rendering only
+
+  // Active pointer positions for pinch/pan gesture detection
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  // Two-finger pinch gesture state
+  const pinchGestureRef = useRef<{ active: boolean; prevMidX: number; prevMidY: number; prevDist: number }>({
+    active: false, prevMidX: 0, prevMidY: 0, prevDist: 1,
+  });
+  // Single-finger pan gesture state
+  const panGestureRef = useRef<{ active: boolean; pointerId: number; lastX: number; lastY: number }>({
+    active: false, pointerId: -1, lastX: 0, lastY: 0,
+  });
+
+
 
   // ── Rebuild Path2D cache ─────────────────────────────────────────────────
 
@@ -620,15 +634,6 @@ export default function JigsawPuzzleSVGWithTray({
       savedElapsedRef.current = 0;
       startTimeRef.current = Date.now();
       finalPieces = initial;
-
-      // On mobile (touch / narrow screen) park all pieces far off-canvas on a fresh start.
-      // Users pick them up via the pull-out tray; pieces teleport under the finger on drag.
-      if (typeof window !== "undefined" &&
-          (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 720)) {
-        const offX = stageDimsRef.current.w + 100;
-        const offY = stageDimsRef.current.h + 100;
-        finalPieces = finalPieces.map(p => ({ ...p, pos: { x: offX, y: offY } }));
-      }
     }
 
     completedRef.current = false;
@@ -756,17 +761,25 @@ export default function JigsawPuzzleSVGWithTray({
       scaleRef.current     = s;
 
       // Shift all piece positions when the board moves within the stage (e.g. orientation change)
-      if ((Math.abs(dOffX) > 0.5 || Math.abs(dOffY) > 0.5) && piecesRef.current.length > 0) {
+      const stageSizeChanged = Math.abs(newStageW - prevStageW) > 0.5 || Math.abs(newStageH - prevStageH) > 0.5;
+      if ((Math.abs(dOffX) > 0.5 || Math.abs(dOffY) > 0.5 || stageSizeChanged) && piecesRef.current.length > 0) {
+        const _pw = pwRef.current, _ph = phRef.current;
         const shifted = piecesRef.current.map(p => {
           // Pieces parked off-stage (tray) get re-parked beyond the new stage bounds
           if (p.pos.x > prevStageW + 50 || p.pos.y > prevStageH + 50) {
             return { ...p, pos: { x: newStageW + 100, y: newStageH + 100 } };
           }
-          return {
-            ...p,
-            pos:     { x: p.pos.x     + dOffX, y: p.pos.y     + dOffY },
-            correct: { x: p.correct.x + dOffX, y: p.correct.y + dOffY },
+          const newCorrect = { x: p.correct.x + dOffX, y: p.correct.y + dOffY };
+          if (p.snapped) {
+            // Snapped pieces: use their authoritative correct position
+            return { ...p, pos: { ...newCorrect }, correct: newCorrect };
+          }
+          // Non-snapped: shift then clamp into the new stage bounds so pieces stay grabbable
+          const newPos = {
+            x: clamp(p.pos.x + dOffX, 0, newStageW - _pw),
+            y: clamp(p.pos.y + dOffY, 0, newStageH - _ph),
           };
+          return { ...p, pos: newPos, correct: newCorrect };
         });
         piecesRef.current = shifted;
         setPiecesState(shifted);
@@ -783,6 +796,14 @@ export default function JigsawPuzzleSVGWithTray({
         canvas.height       = rh * dpr;
         canvas.style.width  = `${rw}px`;
         canvas.style.height = `${rh}px`;
+        // Re-centre viewport: when stage fits inside the canvas (e.g. after fullscreen exit or
+        // zoom-out), viewOff should be negative so the stage is centred rather than top-left.
+        const totalS  = s * userZoomRef.current;
+        const viewW2  = rw / totalS;
+        const viewH2  = rh / totalS;
+        const { w: sw, h: sh } = stageDimsRef.current;
+        viewOffXRef.current = sw <= viewW2 ? (sw - viewW2) / 2 : clamp(viewOffXRef.current, 0, sw - viewW2);
+        viewOffYRef.current = sh <= viewH2 ? (sh - viewH2) / 2 : clamp(viewOffYRef.current, 0, sh - viewH2);
         dirtyRef.current    = true;
       }
     };
@@ -863,7 +884,7 @@ export default function JigsawPuzzleSVGWithTray({
 
       const dpr = window.devicePixelRatio || 1;
       const W = canvas.width, H = canvas.height;
-      const s = scaleRef.current * dpr;
+      const s = scaleRef.current * userZoomRef.current * dpr;
 
       ctx.clearRect(0, 0, W, H);
 
@@ -1045,11 +1066,57 @@ export default function JigsawPuzzleSVGWithTray({
 
   // ── Client → logical canvas coords ──────────────────────────────────────
 
+  // Clamp viewport so the stage can never be panned beyond its edges.
+  const clampViewport = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const s    = scaleRef.current * userZoomRef.current;
+    const dpr  = window.devicePixelRatio || 1;
+    const viewW = canvas.width  / (s * dpr);
+    const viewH = canvas.height / (s * dpr);
+    const { w: stageW, h: stageH } = stageDimsRef.current;
+    // When the stage fits inside the viewport (zoomed out), center it; otherwise pan-clamp.
+    viewOffXRef.current = stageW <= viewW
+      ? (stageW - viewW) / 2
+      : clamp(viewOffXRef.current, 0, stageW - viewW);
+    viewOffYRef.current = stageH <= viewH
+      ? (stageH - viewH) / 2
+      : clamp(viewOffYRef.current, 0, stageH - viewH);
+  }, []);
+
+  const applyZoom = useCallback((factor: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect     = canvas.getBoundingClientRect();
+    const centerX  = rect.width  / 2;
+    const centerY  = rect.height / 2;
+    const s        = scaleRef.current;
+    const oldZoom  = userZoomRef.current;
+    const newZoom  = clamp(oldZoom * factor, MIN_ZOOM, MAX_ZOOM);
+    // Keep canvas centre fixed in stage coords
+    const midStageX = centerX / (s * oldZoom) + viewOffXRef.current;
+    const midStageY = centerY / (s * oldZoom) + viewOffYRef.current;
+    userZoomRef.current  = newZoom;
+    viewOffXRef.current  = midStageX - centerX / (s * newZoom);
+    viewOffYRef.current  = midStageY - centerY / (s * newZoom);
+    clampViewport();
+    setUserZoom(newZoom);
+    dirtyRef.current = true;
+  }, [clampViewport]);
+
+  const resetZoom = useCallback(() => {
+    userZoomRef.current = 1;
+    viewOffXRef.current = 0;
+    viewOffYRef.current = 0;
+    setUserZoom(1);
+    dirtyRef.current = true;
+  }, []);
+
   const clientToLogical = useCallback((cx: number, cy: number): PiecePos => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: cx, y: cy };
     const rect = canvas.getBoundingClientRect();
-    const s = scaleRef.current;
+    const s = scaleRef.current * userZoomRef.current;
     return {
       x: (cx - rect.left) / s + viewOffXRef.current,
       y: (cy - rect.top)  / s + viewOffYRef.current,
@@ -1060,11 +1127,41 @@ export default function JigsawPuzzleSVGWithTray({
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (completedRef.current || isSolvedRef.current) return;
+
+    // Track all active pointers
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    const ptrs = activePointersRef.current;
+
+    // Two fingers → pinch-zoom + pan; cancel any ongoing piece drag or pan
+    if (ptrs.size >= 2) {
+      if (dragRef.current.active) {
+        dragRef.current.active = false;
+        dragRef.current.pointerId = null;
+        dragRef.current.groupId = null;
+        dragRef.current.dx = 0;
+        dragRef.current.dy = 0;
+      }
+      panGestureRef.current.active = false;
+      const vals = [...ptrs.values()];
+      const midX = (vals[0].x + vals[1].x) / 2;
+      const midY = (vals[0].y + vals[1].y) / 2;
+      const dist = Math.max(Math.hypot(vals[1].x - vals[0].x, vals[1].y - vals[0].y), 1);
+      pinchGestureRef.current = { active: true, prevMidX: midX, prevMidY: midY, prevDist: dist };
+      return;
+    }
+
+    // One finger — check for piece hit first
     const lp  = clientToLogical(e.clientX, e.clientY);
     const hit = hitTest(lp.x, lp.y);
-    if (!hit) return;
 
-    e.currentTarget.setPointerCapture(e.pointerId);
+    if (!hit) {
+      // No piece hit → single-finger pan
+      panGestureRef.current = { active: true, pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY };
+      return;
+    }
+
     e.stopPropagation();
 
     const group = piecesRef.current.filter(p => p.groupId === hit.groupId);
@@ -1081,9 +1178,59 @@ export default function JigsawPuzzleSVGWithTray({
       starts, dx: 0, dy: 0,
     };
     dirtyRef.current = true;
-  }, [clientToLogical, hitTest]);
+  }, [clientToLogical, hitTest, clampViewport]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Update tracked pointer position
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    // ── Pinch gesture ────────────────────────────────────────────────────
+    const pinch = pinchGestureRef.current;
+    const ptrs  = activePointersRef.current;
+    if (pinch.active && ptrs.size >= 2) {
+      const vals  = [...ptrs.values()];
+      const midX  = (vals[0].x + vals[1].x) / 2;
+      const midY  = (vals[0].y + vals[1].y) / 2;
+      const dist  = Math.max(Math.hypot(vals[1].x - vals[0].x, vals[1].y - vals[0].y), 1);
+      const zoomDelta = dist / pinch.prevDist;
+      const newZoom   = clamp(userZoomRef.current * zoomDelta, MIN_ZOOM, MAX_ZOOM);
+      const canvas    = canvasRef.current;
+      if (canvas) {
+        const rect     = canvas.getBoundingClientRect();
+        const s        = scaleRef.current;
+        // Stage coords under the previous midpoint must stay fixed after zoom
+        const midStageX = (pinch.prevMidX - rect.left) / (s * userZoomRef.current) + viewOffXRef.current;
+        const midStageY = (pinch.prevMidY - rect.top)  / (s * userZoomRef.current) + viewOffYRef.current;
+        userZoomRef.current = newZoom;
+        viewOffXRef.current = midStageX - (midX - rect.left) / (s * newZoom);
+        viewOffYRef.current = midStageY - (midY - rect.top)  / (s * newZoom);
+        clampViewport();
+      }
+      pinch.prevMidX = midX;
+      pinch.prevMidY = midY;
+      pinch.prevDist = dist;
+      dirtyRef.current = true;
+      return;
+    }
+
+    // ── Single-finger pan ────────────────────────────────────────────────
+    const pan = panGestureRef.current;
+    if (pan.active && pan.pointerId === e.pointerId) {
+      const s  = scaleRef.current * userZoomRef.current;
+      const dx = (e.clientX - pan.lastX) / s;
+      const dy = (e.clientY - pan.lastY) / s;
+      viewOffXRef.current -= dx;
+      viewOffYRef.current -= dy;
+      clampViewport();
+      pan.lastX = e.clientX;
+      pan.lastY = e.clientY;
+      dirtyRef.current = true;
+      return;
+    }
+
+    // ── Piece drag ───────────────────────────────────────────────────────
     const drag = dragRef.current;
     if (!drag.active || e.pointerId !== drag.pointerId) return;
     const lp   = clientToLogical(e.clientX, e.clientY);
@@ -1103,9 +1250,28 @@ export default function JigsawPuzzleSVGWithTray({
     drag.dx = clamp(rawDx, -minX, stageLogW - _pw - minX);
     drag.dy = clamp(rawDy, -minY, stageLogH - _ph - minY);
     dirtyRef.current = true;
-  }, [clientToLogical]);
+  }, [clientToLogical, clampViewport]);
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    activePointersRef.current.delete(e.pointerId);
+
+    // End pinch when fewer than 2 pointers remain
+    const pinch = pinchGestureRef.current;
+    if (pinch.active) {
+      if (activePointersRef.current.size < 2) {
+        pinch.active = false;
+        setUserZoom(userZoomRef.current); // sync state for button rendering
+      }
+      return;
+    }
+
+    // End single-finger pan
+    const pan = panGestureRef.current;
+    if (pan.active && pan.pointerId === e.pointerId) {
+      pan.active = false;
+      return;
+    }
+
     const drag = dragRef.current;
     if (!drag.active || e.pointerId !== drag.pointerId) return;
 
@@ -1328,8 +1494,7 @@ export default function JigsawPuzzleSVGWithTray({
     setPortalReady(true);
     setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window);
   }, []);
-  // Cleanup tray global pointer listeners on unmount
-  useEffect(() => { return () => { trayGlobalCleanupRef.current?.(); }; }, []);
+  // Cleanup on unmount
   useEffect(() => { isFullscreenRef.current = isFullscreen; }, [isFullscreen]);
   useEffect(() => {
     if (!isFullscreen) return;
@@ -1337,170 +1502,6 @@ export default function JigsawPuzzleSVGWithTray({
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
   }, [isFullscreen]);
-
-  // ── Tray ─────────────────────────────────────────────────────────────────
-
-  /** Pieces that haven't landed on the board yet */
-  const trayPieces = useMemo(() =>
-    pieces.filter(p => !p.snapped).sort((a, b) => (a.row * cols + a.col) - (b.row * cols + b.col)),
-    [pieces, cols]);
-
-  /** Drag a piece from the tray onto the canvas.
-   *  Uses window-level pointer listeners so it works regardless of which DOM element
-   *  the pointer originated on (avoids setPointerCapture cross-element issues on mobile). */
-  const onTrayDragDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>, pid: string) => {
-    if (completedRef.current || isSolvedRef.current) return;
-    const p = piecesRef.current.find(x => x.id === pid);
-    if (!p || p.snapped) return;
-    e.stopPropagation();
-    e.preventDefault();
-
-    // Teleport piece to under the pointer in stage coords (or to left-of-board as fallback)
-    const lp = clientToLogical(e.clientX, e.clientY);
-    const stageLogW = stageDimsRef.current.w;
-    const stageLogH = stageDimsRef.current.h;
-    // If the pointer maps outside the canvas (finger still over tray), place near board edge
-    const tX = clamp(lp.x - pwRef.current / 2, 0, stageLogW - pwRef.current);
-    const tY = clamp(lp.y - phRef.current / 2, 0, stageLogH - phRef.current);
-
-    setPieces(prev => {
-      const maxZ = prev.reduce((m, x) => Math.max(m, x.z), 1);
-      return prev.map(x => x.id !== pid ? x : { ...x, z: maxZ + 1, pos: { x: tX, y: tY } });
-    });
-
-    const starts = new Map<string, PiecePos>([[pid, { x: tX, y: tY }]]);
-    dragRef.current = {
-      active: true, pointerId: e.pointerId,
-      groupId: p.groupId, anchorId: pid,
-      anchorOff: { x: 0, y: 0 }, // piece teleported to centre under finger
-      starts, dx: 0, dy: 0,
-    };
-    dirtyRef.current = true;
-    setMobileTrayOpen(false); // close tray once drag begins
-
-    // ── Global pointer handlers ──────────────────────────────────────────
-    const onGlobalMove = (me: PointerEvent) => {
-      if (me.pointerId !== e.pointerId) return;
-      const drag = dragRef.current;
-      if (!drag.active) return;
-      const mlp    = clientToLogical(me.clientX, me.clientY);
-      const aStart = drag.starts.get(pid)!;
-      const rawDx  = mlp.x - aStart.x;
-      const rawDy  = mlp.y - aStart.y;
-      drag.dx = clamp(rawDx, -aStart.x, stageLogW - pwRef.current - aStart.x);
-      drag.dy = clamp(rawDy, -aStart.y, stageLogH - phRef.current - aStart.y);
-      dirtyRef.current = true;
-    };
-
-    const onGlobalUp = (ue: PointerEvent) => {
-      if (ue.pointerId !== e.pointerId) return;
-      cleanup();
-
-      const drag = dragRef.current;
-      if (!drag.active) return;
-      const { groupId: gid, starts: st, dx, dy } = drag;
-      drag.active = false; drag.pointerId = null; drag.groupId = null;
-      drag.dx = 0; drag.dy = 0;
-      if (!gid) return;
-
-      let next = piecesRef.current.map(pz => {
-        if (pz.groupId !== gid) return pz;
-        const sp = st.get(pz.id);
-        return sp ? { ...pz, pos: { x: sp.x + dx, y: sp.y + dy } } : pz;
-      });
-
-      const adjBoard    = boardSnapTolerance    / scaleRef.current;
-      const adjNeighbor = neighborSnapTolerance / scaleRef.current;
-      let lastSnapDelta: { dx: number; dy: number } | null = null;
-
-      const s1 = snapToBoardIfClose(next, gid, adjBoard);
-      next = s1.pieces;
-      if (s1.snapped) lastSnapDelta = { dx: s1.dx, dy: s1.dy };
-      next = snapMergeNeighbours(next, gid, adjNeighbor);
-      const s2 = snapToBoardIfClose(next, gid, adjBoard);
-      next = s2.pieces;
-      if (s2.snapped) lastSnapDelta = { dx: s2.dx, dy: s2.dy };
-
-      if ((s1.snapped || s2.snapped) && st.size === 1) {
-        snapPopRef.current.set(pid, { t0: performance.now(), dur: 380 });
-        snapGlowRef.current.set(pid, { t0: performance.now(), dur: 700 });
-      }
-      if (lastSnapDelta && dist2(lastSnapDelta.dx, lastSnapDelta.dy) > 0.1) {
-        snapRef.current = {
-          pieceIds: new Set(st.keys()),
-          dx: -lastSnapDelta.dx, dy: -lastSnapDelta.dy,
-          t0: performance.now(), dur: 200,
-        };
-      }
-      setPieces(next);
-    };
-
-    const cleanup = () => {
-      window.removeEventListener("pointermove", onGlobalMove);
-      window.removeEventListener("pointerup",   onGlobalUp);
-      window.removeEventListener("pointercancel", onGlobalUp);
-      trayGlobalCleanupRef.current = null;
-    };
-    trayGlobalCleanupRef.current = cleanup;
-    window.addEventListener("pointermove",   onGlobalMove);
-    window.addEventListener("pointerup",     onGlobalUp);
-    window.addEventListener("pointercancel", onGlobalUp);
-  }, [boardWidth, boardHeight, clientToLogical, setPieces, boardSnapTolerance, neighborSnapTolerance, snapMergeNeighbours]);
-
-  /** Mini canvas for tray thumbnails — larger on mobile for touch targets */
-  const TrayThumb = useCallback(({ piece }: { piece: Piece }) => {
-    const ref = useRef<HTMLCanvasElement>(null);
-    const SCALE = isTouchDevice ? 0.82 : 0.52;
-    const tw = Math.round(pwRef.current * SCALE);
-    const th = Math.round(phRef.current * SCALE);
-
-    useEffect(() => {
-      const c = ref.current;
-      if (!c) return;
-      const dpr = window.devicePixelRatio || 1;
-      c.width  = tw * dpr;
-      c.height = th * dpr;
-      c.style.width  = `${tw}px`;
-      c.style.height = `${th}px`;
-      const ctx = c.getContext("2d");
-      if (!ctx) return;
-      ctx.clearRect(0, 0, c.width, c.height);
-      ctx.scale(dpr * SCALE, dpr * SCALE);
-      const path = pathCacheRef.current.get(piece.id);
-      if (!path) return;
-      ctx.save();
-      ctx.clip(path);
-      if (imageOk && imgRef.current) {
-        // In tray thumbnail: piece is at (0,0) in thumb space; image slice is col*pw,row*ph
-        ctx.drawImage(imgRef.current,
-          -piece.col * pwRef.current, -piece.row * phRef.current,
-          boardWidth, boardHeight);
-      } else {
-        const hue = ((piece.row * cols + piece.col) / (rows * cols)) * 360;
-        ctx.fillStyle = `hsl(${hue},38%,32%)`;
-        ctx.fillRect(0, 0, pwRef.current, phRef.current);
-      }
-      const hl = ctx.createLinearGradient(0, 0, pwRef.current, phRef.current);
-      hl.addColorStop(0, "rgba(255,255,255,0.12)"); hl.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = hl; ctx.fillRect(0, 0, pwRef.current, phRef.current);
-      ctx.restore();
-      ctx.strokeStyle = "rgba(255,255,255,0.32)";
-      ctx.lineWidth = 1.2 / SCALE;
-      ctx.stroke(path);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [piece.id, imageOk]);
-
-    return (
-      <canvas
-        ref={ref}
-        width={tw} height={th}
-        style={{ display: "block", width: tw, height: th, cursor: "grab", borderRadius: 6,
-                 flexShrink: 0, touchAction: "none", userSelect: "none",
-                 border: "1px solid rgba(255,255,255,0.10)" }}
-        onPointerDown={e => onTrayDragDown(e, piece.id)}
-      />
-    );
-  }, [imageOk, boardWidth, boardHeight, rows, cols, onTrayDragDown, isTouchDevice]);
 
   const groupCount = useMemo(() => new Set(pieces.map(p => p.groupId)).size, [pieces]);
 
@@ -1610,7 +1611,7 @@ export default function JigsawPuzzleSVGWithTray({
                         background: "rgba(10,20,40,0.88)", color: "white", fontSize: 12, fontWeight: 500,
                         padding: "7px 12px", borderRadius: 22, boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
                         border: "1px solid rgba(255,255,255,0.12)", whiteSpace: "nowrap" }}>
-            <span>Tap tray for pieces · try fullscreen</span>
+            <span>Pinch to zoom · 1 finger to pan · tap piece to drag</span>
             <button onClick={() => setIsFullscreen(true)}
                     style={{ background: "rgba(99,102,241,0.9)", border: "none", color: "white",
                              padding: "3px 10px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
@@ -1621,6 +1622,43 @@ export default function JigsawPuzzleSVGWithTray({
                     style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
                              cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px" }}>
               ×
+            </button>
+          </div>
+        )}
+
+        {/* Zoom controls */}
+        {!isSolved && (
+          <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 9100,
+                        display: "flex", flexDirection: "column", gap: 4 }}>
+            <button
+              onClick={() => applyZoom(1.25)}
+              disabled={userZoom >= MAX_ZOOM}
+              title="Zoom in"
+              style={{ width: 34, height: 34, borderRadius: 10,
+                       background: "rgba(10,20,40,0.85)", color: "rgba(255,255,255,0.9)",
+                       border: "1px solid rgba(255,255,255,0.2)", cursor: userZoom >= MAX_ZOOM ? "default" : "pointer",
+                       fontSize: 18, fontWeight: 700, lineHeight: 1, opacity: userZoom >= MAX_ZOOM ? 0.4 : 1 }}>
+              +
+            </button>
+            <button
+              onClick={resetZoom}
+              disabled={userZoom === 1}
+              title="Reset zoom"
+              style={{ width: 34, height: 34, borderRadius: 10,
+                       background: "rgba(10,20,40,0.85)", color: "rgba(255,255,255,0.75)",
+                       border: "1px solid rgba(255,255,255,0.15)", cursor: userZoom === 1 ? "default" : "pointer",
+                       fontSize: 11, fontWeight: 700, lineHeight: 1, opacity: userZoom === 1 ? 0.4 : 1 }}>
+              {Math.round(userZoom * 100)}%
+            </button>
+            <button
+              onClick={() => applyZoom(0.8)}
+              disabled={userZoom <= MIN_ZOOM}
+              title="Zoom out"
+              style={{ width: 34, height: 34, borderRadius: 10,
+                       background: "rgba(10,20,40,0.85)", color: "rgba(255,255,255,0.9)",
+                       border: "1px solid rgba(255,255,255,0.2)", cursor: userZoom <= MIN_ZOOM ? "default" : "pointer",
+                       fontSize: 18, fontWeight: 700, lineHeight: 1, opacity: userZoom <= MIN_ZOOM ? 0.4 : 1 }}>
+              −
             </button>
           </div>
         )}
@@ -1699,49 +1737,6 @@ export default function JigsawPuzzleSVGWithTray({
         </div>
       </div>
 
-      {/* ── Mobile pull-out piece tray ─────────────────────────────────── */}
-      {isTouchDevice && !isFullscreen && !isSolved && trayPieces.length > 0 && (
-        <div style={{ position: "relative", flexShrink: 0, zIndex: 400 }}>
-          {/* Toggle handle */}
-          <button
-            onClick={() => setMobileTrayOpen(v => !v)}
-            style={{
-              width: "100%", padding: "10px 16px",
-              background: mobileTrayOpen ? "rgba(56,145,166,0.20)" : "rgba(7,10,15,0.98)",
-              border: "none", borderTop: "1px solid rgba(56,145,166,0.28)",
-              color: "rgba(255,255,255,0.88)", fontSize: 13, fontWeight: 700,
-              cursor: "pointer", display: "flex", alignItems: "center",
-              justifyContent: "center", gap: 7, letterSpacing: "0.02em",
-              WebkitTapHighlightColor: "transparent",
-            }}
-          >
-            <span style={{ fontSize: 16 }}>🧩</span>
-            <span>Pieces ({trayPieces.length} remaining)</span>
-            <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 2 }}>
-              {mobileTrayOpen ? "▼" : "▲"}
-            </span>
-          </button>
-
-          {/* Sliding panel */}
-          {mobileTrayOpen && (
-            <div style={{
-              background: "rgba(7,10,15,0.97)",
-              borderTop: "1px solid rgba(56,145,166,0.15)",
-              padding: "10px 10px 14px",
-              maxHeight: "38vh",
-              overflowY: "auto",
-              WebkitOverflowScrolling: "touch" as React.CSSProperties["WebkitOverflowScrolling"],
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              justifyContent: "flex-start",
-              alignContent: "flex-start",
-            }}>
-              {trayPieces.map(p => <TrayThumb key={p.id} piece={p} />)}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 
