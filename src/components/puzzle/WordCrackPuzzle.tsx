@@ -192,7 +192,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   const gameLossRecorded = useRef(false);
   // Responsive tile sizing — measured from the actual board container
   const boardRef = useRef<HTMLDivElement>(null);
-  const [tileSize, setTileSize] = useState(52);
+  const [tileSize, setTileSize] = useState(44);
 
   /** Reset game state for a fresh attempt (same word, new board). */
   const resetForNewAttempt = () => {
@@ -806,6 +806,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             padding: "1.25rem",
             position: "relative",
             overflow: "hidden",
+            width: "100%",
           }}
         >
           <div className="wc-skin-overlay" />

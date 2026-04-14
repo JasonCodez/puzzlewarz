@@ -87,6 +87,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   challenge: "🏆",
   word_crack: "💬",
   word_search: "🔍",
+  crossword: "✏️",
   anagram_blitz: "🔀",
   code_master: "💻",
   crack_safe: "🔒",

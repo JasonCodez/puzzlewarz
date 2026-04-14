@@ -29,6 +29,7 @@ import GridlockFilePuzzle from "@/components/puzzle/GridlockFilePuzzle";
 import CrackTheSafePuzzle from "@/components/puzzle/CrackTheSafePuzzle";
 import WordCrackPuzzle from "@/components/puzzle/WordCrackPuzzle";
 import WordSearchPuzzle from "@/components/puzzle/WordSearchPuzzle";
+import CrosswordPuzzle from "@/components/puzzle/CrosswordPuzzle";
 import AnagramBlitz from "@/components/puzzle/AnagramBlitz";
 import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
 import BlackoutPuzzle from "@/components/puzzle/BlackoutPuzzle";
@@ -1840,6 +1841,30 @@ export default function PuzzleDetailPage() {
                       onSolved={(xpGained) => {
                         setSuccess(true);
                         recordCompletionAndShowModal(undefined, xpGained);
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (puzzle?.puzzleType === 'crossword') {
+                return (
+                  <div className="mb-8">
+                    {progress?.solved && (
+                      <div className="mb-6 p-4 rounded-lg border text-white"
+                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
+                        ✏️ You already solved this crossword!
+                      </div>
+                    )}
+                    <CrosswordPuzzle
+                      puzzleId={puzzleId}
+                      crosswordData={(puzzle.data ?? {}) as Record<string, unknown>}
+                      alreadySolved={progress?.solved ?? false}
+                      hintTokens={hintTokens}
+                      onHintUsed={handleSudokuHintUsed}
+                      onSolved={() => {
+                        setSuccess(true);
+                        recordCompletionAndShowModal();
                       }}
                     />
                   </div>

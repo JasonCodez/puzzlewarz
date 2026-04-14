@@ -62,6 +62,7 @@ const PUZZLE_TYPES = [
   { value: 'crack_safe', label: 'Crack the Safe 🔐' },
   { value: 'word_crack', label: 'Word Crack 🟩' },
   { value: 'word_search', label: 'Word Search 🔍' },
+  { value: 'crossword', label: 'Crossword ✏️' },
   { value: 'anagram_blitz', label: 'Anagram Blitz 🔀' },
   { value: 'blackout', label: 'Blackout ⬛' },
   { value: 'arg', label: 'ARG' },

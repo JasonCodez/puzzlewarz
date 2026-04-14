@@ -3620,6 +3620,305 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
     );
   };
 
+  // ── Crossword ─────────────────────────────────────────────────────────────
+
+  const renderCrosswordFields = () => {
+    // Stored shape: { clues: { across: CrosswordClue[], down: CrosswordClue[] } }
+    // Internally we keep two editable text blobs and parse on every change.
+
+    const fieldCls = 'w-full px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-white placeholder-gray-500 text-sm font-mono';
+    const labelCls = 'block text-xs font-semibold text-gray-400 mb-1';
+
+    // ------------------------------------------------------------------
+    // Helper — read the current across / down arrays from puzzleData
+    // ------------------------------------------------------------------
+    interface RawClue { number: number; text: string; answer: string; row: number; col: number }
+    const cluesObj = (puzzleData.clues ?? {}) as { across?: RawClue[]; down?: RawClue[] };
+    const acrossArr: RawClue[] = Array.isArray(cluesObj.across) ? cluesObj.across : [];
+    const downArr:   RawClue[] = Array.isArray(cluesObj.down)   ? cluesObj.down   : [];
+
+    // ------------------------------------------------------------------
+    // Serialise clue arrays to the textarea format:
+    //   <number>. <ROW>,<COL> | <ANSWER> | <clue text>
+    // ------------------------------------------------------------------
+    function serialise(clues: RawClue[]): string {
+      return clues
+        .sort((a, b) => a.number - b.number)
+        .map((c) => `${c.number}. ${c.row},${c.col} | ${c.answer.toUpperCase()} | ${c.text}`)
+        .join('\n');
+    }
+
+    // ------------------------------------------------------------------
+    // Parse the textarea back into RawClue[]
+    // Returns null for lines that don't match the format.
+    // ------------------------------------------------------------------
+    function parse(raw: string): { clues: RawClue[]; errors: string[] } {
+      const errors: string[] = [];
+      const clues: RawClue[] = [];
+      raw.split('\n').forEach((line, li) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        // Format: "1. 0,3 | ANSWER | Clue text"
+        const m = trimmed.match(/^(\d+)\.\s+(\d+),(\d+)\s*\|\s*([A-Za-z]+)\s*\|\s*(.+)$/);
+        if (!m) {
+          errors.push(`Line ${li + 1}: unrecognised format — "${trimmed}"`);
+          return;
+        }
+        clues.push({
+          number: Number(m[1]),
+          row: Number(m[2]),
+          col: Number(m[3]),
+          answer: m[4].toUpperCase(),
+          text: m[5].trim(),
+        });
+      });
+      return { clues, errors };
+    }
+
+    // Local textarea values — keep them as strings in puzzleData so edits survive re-renders
+    const acrossRaw = typeof puzzleData._acrossRaw === 'string' ? puzzleData._acrossRaw : serialise(acrossArr);
+    const downRaw   = typeof puzzleData._downRaw   === 'string' ? puzzleData._downRaw   : serialise(downArr);
+
+    const acrossParsed = parse(acrossRaw);
+    const downParsed   = parse(downRaw);
+
+    const commitClues = (newAcross: string, newDown: string) => {
+      const a = parse(newAcross);
+      const d = parse(newDown);
+      onDataChange('clues', { across: a.clues, down: d.clues });
+    };
+
+    const handleAcrossChange = (val: string) => {
+      onDataChange('_acrossRaw', val);
+      commitClues(val, downRaw);
+    };
+
+    const handleDownChange = (val: string) => {
+      onDataChange('_downRaw', val);
+      commitClues(acrossRaw, val);
+    };
+
+    // ------------------------------------------------------------------
+    // Auto-number: take a simpler input (no numbers / positions) and
+    // attempt to auto-assign positions based on a user-supplied grid
+    // ------------------------------------------------------------------
+    const autoGridRaw = typeof puzzleData._autoGrid === 'string' ? puzzleData._autoGrid : '';
+
+    function runAutoNumber() {
+      if (!autoGridRaw.trim()) return;
+      // Parse grid: space-separated letters per row, '#' for black cells
+      const gridLines = autoGridRaw
+        .trim()
+        .split('\n')
+        .map((l) => l.trim().toUpperCase().split(/\s+/));
+      if (gridLines.length === 0) return;
+      const rows = gridLines.length;
+      const cols = gridLines[0].length;
+
+      // Ensure rectangular
+      for (const row of gridLines) {
+        if (row.length !== cols) return;
+      }
+
+      const isBlack = (r: number, c: number) => gridLines[r]?.[c] === '#';
+
+      const acrossClues: RawClue[] = [];
+      const downClues: RawClue[]   = [];
+      let num = 1;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (isBlack(r, c)) continue;
+          const startsAcross = (c === 0 || isBlack(r, c - 1)) && !isBlack(r, c + 1);
+          const startsDown   = (r === 0 || isBlack(r - 1, c)) && !isBlack(r + 1, c);
+          if (!startsAcross && !startsDown) continue;
+
+          if (startsAcross) {
+            let answer = '';
+            let cc = c;
+            while (cc < cols && !isBlack(r, cc)) answer += gridLines[r][cc++];
+            acrossClues.push({ number: num, row: r, col: c, answer, text: `${num} Across clue` });
+          }
+          if (startsDown) {
+            let answer = '';
+            let rr = r;
+            while (rr < rows && !isBlack(rr, c)) answer += gridLines[rr++][c];
+            downClues.push({ number: num, row: r, col: c, answer, text: `${num} Down clue` });
+          }
+          num++;
+        }
+      }
+
+      const newAcrossRaw = serialise(acrossClues);
+      const newDownRaw   = serialise(downClues);
+      onDataChange('_acrossRaw', newAcrossRaw);
+      onDataChange('_downRaw',   newDownRaw);
+      onDataChange('clues', { across: acrossClues, down: downClues });
+    }
+
+    // ------------------------------------------------------------------
+    // Grid preview
+    // ------------------------------------------------------------------
+    const allClues: RawClue[] = [...acrossParsed.clues, ...downParsed.clues];
+    let previewGrid: string[][] = [];
+    let previewRows = 0, previewCols = 0;
+    if (allClues.length > 0) {
+      for (const c of acrossParsed.clues) {
+        previewRows = Math.max(previewRows, c.row + 1);
+        previewCols = Math.max(previewCols, c.col + c.answer.length);
+      }
+      for (const c of downParsed.clues) {
+        previewRows = Math.max(previewRows, c.row + c.answer.length);
+        previewCols = Math.max(previewCols, c.col + 1);
+      }
+      previewGrid = Array.from({ length: previewRows }, () => Array(previewCols).fill('#'));
+      for (const c of acrossParsed.clues) {
+        for (let i = 0; i < c.answer.length; i++) previewGrid[c.row][c.col + i] = c.answer[i];
+      }
+      for (const c of downParsed.clues) {
+        for (let i = 0; i < c.answer.length; i++) previewGrid[c.row + i][c.col] = previewGrid[c.row + i][c.col] === '#' ? c.answer[i] : previewGrid[c.row + i][c.col];
+      }
+    }
+
+    const allErrors = [...acrossParsed.errors, ...downParsed.errors];
+
+    return (
+      <div className="space-y-6">
+
+        {/* How-to */}
+        <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)', color: '#c7d2fe' }}>
+          <p className="font-bold mb-1">✏️ How to author a crossword</p>
+          <p>Each clue line follows the format:</p>
+          <code className="block mt-1 mb-1 px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,0,0,0.4)' }}>
+            {'<number>. <row>,<col> | <ANSWER> | Clue text'}
+          </code>
+          <p>Row and col are <strong>0-based</strong> — the top-left cell is <code>0,0</code>. Example:</p>
+          <code className="block mt-1 px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,0,0,0.4)' }}>
+            {'1. 0,0 | BOAT | Something that floats'}
+          </code>
+          <p className="mt-1">Or use the <strong>Auto-number from grid</strong> tool below to generate positions automatically.</p>
+        </div>
+
+        {/* Auto-number tool */}
+        <details className="rounded-lg overflow-hidden" style={{ border: '1px solid rgba(99,102,241,0.3)' }}>
+          <summary className="px-4 py-2 text-sm font-bold cursor-pointer text-indigo-300" style={{ background: 'rgba(99,102,241,0.1)' }}>
+            🔢 Auto-number from grid layout (optional)
+          </summary>
+          <div className="p-4 space-y-3">
+            <p className="text-xs text-gray-400">
+              Type each row on its own line. Use letters for white cells, <code>#</code> for black cells. Separate each cell with a space.
+            </p>
+            <textarea
+              rows={8}
+              value={autoGridRaw}
+              onChange={(e) => onDataChange('_autoGrid', e.target.value)}
+              placeholder={'B O A T #\n# A # E #\n# T # A #\n# # # L #'}
+              className={`${fieldCls} resize-y`}
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              onClick={runAutoNumber}
+              disabled={!autoGridRaw.trim()}
+              className="px-4 py-2 rounded-lg font-bold text-sm text-white transition-all disabled:opacity-40"
+              style={{ background: 'rgba(99,102,241,0.3)', border: '1px solid rgba(99,102,241,0.5)' }}
+            >
+              🔢 Generate clue list from grid
+            </button>
+            <p className="text-xs text-gray-500">
+              This fills in the Across and Down sections below. You still need to replace the placeholder clue texts with real clues.
+            </p>
+          </div>
+        </details>
+
+        {/* Across / Down textareas */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>
+              ACROSS clues <span className="text-red-400">*</span>
+              <span className="font-normal text-gray-500 ml-1">({acrossParsed.clues.length} parsed)</span>
+            </label>
+            <textarea
+              rows={10}
+              value={acrossRaw}
+              onChange={(e) => handleAcrossChange(e.target.value)}
+              placeholder={'1. 0,0 | ACROSS | Goes from left to right\n3. 2,1 | WORD | Another across clue'}
+              className={`${fieldCls} resize-y`}
+              spellCheck={false}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>
+              DOWN clues <span className="text-red-400">*</span>
+              <span className="font-normal text-gray-500 ml-1">({downParsed.clues.length} parsed)</span>
+            </label>
+            <textarea
+              rows={10}
+              value={downRaw}
+              onChange={(e) => handleDownChange(e.target.value)}
+              placeholder={'1. 0,0 | DOWN | Goes from top to bottom\n2. 0,2 | CLUE | Another down clue'}
+              className={`${fieldCls} resize-y`}
+              spellCheck={false}
+            />
+          </div>
+        </div>
+
+        {/* Validation errors */}
+        {allErrors.length > 0 && (
+          <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#fca5a5' }}>
+            <p className="font-bold">Parse errors:</p>
+            {allErrors.map((e, i) => <p key={i}>{e}</p>)}
+          </div>
+        )}
+
+        {/* Grid preview */}
+        {previewGrid.length > 0 && (
+          <div>
+            <label className={labelCls}>Grid preview</label>
+            <div className="overflow-x-auto">
+              <table className="border-collapse text-xs font-mono" style={{ borderSpacing: 0 }}>
+                <tbody>
+                  {previewGrid.map((row, r) => (
+                    <tr key={r}>
+                      {row.map((cell, c) => {
+                        const isBlack = cell === '#';
+                        const clueNum = allClues.find((cl) => cl.row === r && cl.col === c)?.number;
+                        return (
+                          <td
+                            key={c}
+                            style={{
+                              width: 28, height: 28, padding: 0, textAlign: 'center', verticalAlign: 'middle',
+                              background: isBlack ? '#111' : 'rgba(99,102,241,0.12)',
+                              border: isBlack ? '1px solid #222' : '1px solid rgba(99,102,241,0.4)',
+                              position: 'relative',
+                              color: isBlack ? 'transparent' : '#e2e8f0',
+                              fontWeight: 700,
+                              fontSize: 13,
+                            }}
+                          >
+                            {!isBlack && clueNum !== undefined && (
+                              <span style={{ position: 'absolute', top: 1, left: 1, fontSize: 7, lineHeight: 1, color: '#94a3b8', fontWeight: 700 }}>
+                                {clueNum}
+                              </span>
+                            )}
+                            {isBlack ? '' : cell}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {previewRows}×{previewCols} grid · {acrossParsed.clues.length} across · {downParsed.clues.length} down
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const typeSpecificRenders: Record<string, () => JSX.Element> = {
     cipher: renderCipherFields,
     text_extraction: renderTextExtractionFields,
@@ -3642,6 +3941,7 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
     anagram_blitz: renderAnagramBlitzFields,
     blackout: renderBlackoutFields,
     arg: renderArgFields,
+    crossword: renderCrosswordFields,
   };
 
   const renderer = typeSpecificRenders[puzzleType];

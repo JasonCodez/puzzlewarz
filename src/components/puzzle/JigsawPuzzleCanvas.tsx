@@ -721,8 +721,8 @@ export default function JigsawPuzzleSVGWithTray({
         // Stage adapts to those exact CSS dimensions so pieces scatter over the full visible area.
         const isLandscape = window.innerWidth > window.innerHeight;
         const availH      = isLandscape
-          ? window.innerHeight * 0.90   // landscape — nearly full height
-          : window.innerHeight * 0.78;  // portrait  — 78 % of screen height
+          ? Math.max(180, window.innerHeight - 90)  // landscape — leave room for tray + nav
+          : window.innerHeight * 0.78;              // portrait  — 78 % of screen height
         s         = Math.min(availW * 0.88 / boardWidth, availH * 0.88 / boardHeight);
         physW     = Math.round(availW);
         physH     = Math.round(availH);
@@ -1070,12 +1070,7 @@ export default function JigsawPuzzleSVGWithTray({
     const group = piecesRef.current.filter(p => p.groupId === hit.groupId);
     if (group.some(p => p.snapped)) return;
 
-    // Bring group to front
-    setPieces(prev => {
-      const maxZ = prev.reduce((m, p) => Math.max(m, p.z), 1);
-      return prev.map(p => p.groupId === hit.groupId ? { ...p, z: maxZ + 1 } : p);
-    });
-
+    // z-order is handled by dragRef during drag; committed on pointerUp — no React re-render here
     const starts = new Map<string, PiecePos>();
     for (const p of group) starts.set(p.id, { ...p.pos });
 
@@ -1086,7 +1081,7 @@ export default function JigsawPuzzleSVGWithTray({
       starts, dx: 0, dy: 0,
     };
     dirtyRef.current = true;
-  }, [clientToLogical, hitTest, setPieces]);
+  }, [clientToLogical, hitTest]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
@@ -1119,11 +1114,12 @@ export default function JigsawPuzzleSVGWithTray({
     drag.dx = 0; drag.dy = 0;
     if (!groupId) return;
 
-    // Commit drag positions
+    // Commit drag positions + bring group to front (z-bump deferred from pointerDown)
+    const maxZ = piecesRef.current.reduce((m, p) => Math.max(m, p.z), 1);
     let next = piecesRef.current.map(p => {
       if (p.groupId !== groupId) return p;
       const sp = starts.get(p.id);
-      return sp ? { ...p, pos: { x: sp.x + dx, y: sp.y + dy } } : p;
+      return sp ? { ...p, pos: { x: sp.x + dx, y: sp.y + dy }, z: maxZ + 1 } : p;
     });
 
     const adjBoard    = boardSnapTolerance / scaleRef.current;
@@ -1712,7 +1708,6 @@ export default function JigsawPuzzleSVGWithTray({
             style={{
               width: "100%", padding: "10px 16px",
               background: mobileTrayOpen ? "rgba(56,145,166,0.20)" : "rgba(7,10,15,0.98)",
-              borderTop: "1px solid rgba(56,145,166,0.28)",
               border: "none", borderTop: "1px solid rgba(56,145,166,0.28)",
               color: "rgba(255,255,255,0.88)", fontSize: 13, fontWeight: 700,
               cursor: "pointer", display: "flex", alignItems: "center",
