@@ -50,6 +50,13 @@ export async function GET() {
       select: { id: true, name: true, image: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 
+    // Batch-fetch premium season pass holders
+    const premiumPasses = await prisma.userSeasonPass.findMany({
+      where: { userId: { in: relevantIds }, isPremium: true },
+      select: { userId: true },
+    });
+    const premiumIds = new Set(premiumPasses.map((p) => p.userId));
+
     const entries = users.map((user) => {
       const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
       const puzzlesSolved = Math.floor(earnedPoints / 100);
@@ -58,6 +65,7 @@ export async function GET() {
         userName: user.name,
         userImage: user.image,
         activeFlair: resolveFlair(user.activeFlair),
+        isPremium: premiumIds.has(user.id),
         puzzlesSolved,
         totalPoints: earnedPoints,
         rank: 0,

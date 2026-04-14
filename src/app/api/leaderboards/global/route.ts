@@ -33,6 +33,13 @@ export async function GET(request: NextRequest) {
       select: { id: true, name: true, image: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 
+    // Batch-fetch premium season pass holders
+    const premiumPasses = await prisma.userSeasonPass.findMany({
+      where: { userId: { in: users.map((u) => u.id) }, isPremium: true },
+      select: { userId: true },
+    });
+    const premiumIds = new Set(premiumPasses.map((p) => p.userId));
+
     // earnedPoints = totalPoints - purchasedPoints so bought points never affect rank.
     // puzzlesSolved = Math.floor(earnedPoints / 100) — every solve awards exactly 100 pts,
     // so this recovers the exact solve count without a per-user DB query or a puzzle-count cap.
@@ -44,6 +51,7 @@ export async function GET(request: NextRequest) {
         userName: user.name,
         userImage: user.image,
         activeFlair: resolveFlair(user.activeFlair),
+        isPremium: premiumIds.has(user.id),
         puzzlesSolved,
         totalPoints: earnedPoints,
         rank: 0,

@@ -11,6 +11,7 @@ interface LeaderboardEntry {
   userImage: string | null;
   email?: string;
   activeFlair: string;
+  isPremium?: boolean;
   totalPoints: number;
   puzzlesSolved: number;
   rank: number;
@@ -22,6 +23,7 @@ interface PeriodEntry {
   userName: string | null;
   userImage: string | null;
   activeFlair: string;
+  isPremium?: boolean;
   periodPoints: number;
   puzzlesSolved: number;
   rank: number;
@@ -296,7 +298,7 @@ export default function LeaderboardsPage() {
                               onError={(e) => { const img = e.currentTarget; img.onerror = null; img.src = '/images/default-avatar.svg'; }}
                             />
                             <Link href={`/profile/${entry.userId}`} className="text-white font-semibold hover:underline hover:text-[#3891A6]">
-                              {entry.userName || "Anonymous"}{entry.activeFlair && entry.activeFlair !== "none" ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {entry.activeFlair}</span> : ""}
+                              {entry.userName || "Anonymous"}{entry.isPremium ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> 💎</span> : ""}{entry.activeFlair && entry.activeFlair !== "none" ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {entry.activeFlair}</span> : ""}
                             </Link>
                           </div>
                         </td>
@@ -389,10 +391,10 @@ export default function LeaderboardsPage() {
                                 href={`/profile/${entry.userId}`}
                                 className="text-white font-semibold hover:underline hover:text-[#3891A6]"
                               >
-                                {entry.userName || "Anonymous"}{entry.activeFlair && entry.activeFlair !== "none" ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {entry.activeFlair}</span> : ""}
+                                {entry.userName || "Anonymous"}{entry.isPremium ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> 💎</span> : ""}{entry.activeFlair && entry.activeFlair !== "none" ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {entry.activeFlair}</span> : ""}
                               </Link>
                             ) : (
-                              <span className="text-white font-semibold">{entry.userName || "Anonymous"}</span>
+                              <span className="text-white font-semibold">{entry.userName || "Anonymous"}{entry.isPremium ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> 💎</span> : ""}</span>
                             )}
                           </div>
                         </td>

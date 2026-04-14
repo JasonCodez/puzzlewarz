@@ -98,6 +98,13 @@ export async function GET(request: NextRequest) {
 
     const userMap = new Map(users.map((u) => [u.id, u]));
 
+    // Batch-fetch premium season pass holders
+    const premiumPasses = await prisma.userSeasonPass.findMany({
+      where: { userId: { in: userIds }, isPremium: true },
+      select: { userId: true },
+    });
+    const premiumIds = new Set(premiumPasses.map((p) => p.userId));
+
     const entries = rawRows
       .map((row) => {
         const u = userMap.get(row.userId);
@@ -107,6 +114,7 @@ export async function GET(request: NextRequest) {
           userName: u.name,
           userImage: u.image,
           activeFlair: resolveFlair(u.activeFlair),
+          isPremium: premiumIds.has(u.id),
           periodPoints: row._sum.pointsEarned ?? 0,
           puzzlesSolved: row._count.puzzleId,
           rank: 0,
@@ -117,6 +125,7 @@ export async function GET(request: NextRequest) {
         userName: string | null;
         userImage: string | null;
         activeFlair: string;
+        isPremium: boolean;
         periodPoints: number;
         puzzlesSolved: number;
         rank: number;

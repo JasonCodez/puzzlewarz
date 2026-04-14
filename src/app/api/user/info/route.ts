@@ -65,7 +65,11 @@ export async function GET(request: NextRequest) {
     // Map legacy word flair values to emojis
     const FLAIR_EMOJI: Record<string, string> = { crown: "👑", fire: "🔥", lightning: "⚡", warz_legend: "⚔️🏆" };
     const resolvedFlair = (() => { const f = user.activeFlair; if (!f || f === "none") return null; return FLAIR_EMOJI[f] ?? f; })();
-    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, totalPoints: user.totalPoints ?? 0, username: user.name ?? null, activeFlair: resolvedFlair, activeSkin: user.activeSkin ?? 'default', ...calcLevel(user.xp ?? 0) });
+    const premiumPass = await prisma.userSeasonPass.findFirst({
+      where: { userId: user.id, isPremium: true },
+      select: { userId: true },
+    });
+    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, totalPoints: user.totalPoints ?? 0, username: user.name ?? null, activeFlair: resolvedFlair, activeSkin: user.activeSkin ?? 'default', isPremium: !!premiumPass, ...calcLevel(user.xp ?? 0) });
   } catch (error) {
     console.error("Error fetching user info:", error);
     return NextResponse.json(

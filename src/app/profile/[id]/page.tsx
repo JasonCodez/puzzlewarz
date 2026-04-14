@@ -34,6 +34,7 @@ interface UserProfile {
   xpProgress: number;
   xpToNextLevel: number;
   activeFlair: string;
+  isPremium?: boolean;
   activeFrame: string;
   activeTheme: string;
   activeSkin: string;
@@ -416,7 +417,7 @@ export default function PublicProfilePage() {
               {renderAvatar('w-20 h-20')}
             </div>
             <div className="flex-1">
-              <h1 className="text-4xl font-extrabold text-white mb-1">{profile.name || 'Player'}{flair}</h1>
+              <h1 className="text-4xl font-extrabold text-white mb-1">{profile.name || 'Player'}{profile.isPremium ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> 💎</span> : ''}{flair}</h1>
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-sm font-semibold px-3 py-1 rounded-full" style={{ backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primary}`, boxShadow: `0 0 8px ${t.avatarGlow}` }}>
                   LVL {profile.level} &middot; {profile.xpTitle}

@@ -37,6 +37,7 @@ interface UserInfo {
   nextLevelXp?: number;
   progress?: number;
   activeFlair?: string | null;
+  isPremium?: boolean;
 }
 
 /* Nav link config */
@@ -285,7 +286,7 @@ export default function Navbar() {
                     onMouseLeave={(e) => { if (!profileOpen) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
                   >
                     <span className="text-sm font-medium text-zinc-300 max-w-[100px] truncate hidden lg:block">
-                      {session.user?.name || "Player"}
+                      {session.user?.name || "Player"}{userInfo?.isPremium ? " 💎" : ""}
                     </span>
                     <img
                       src={avatarSrc}
@@ -315,7 +316,7 @@ export default function Navbar() {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-white truncate">
-                              {session.user?.name || session.user?.email}
+                              {session.user?.name || session.user?.email}{userInfo?.isPremium ? " 💎" : ""}
                               {userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}
                             </p>
                             {userInfo?.level !== undefined ? (
@@ -449,7 +450,7 @@ export default function Navbar() {
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-white truncate">
-                  {session.user?.name || session.user?.email}
+                  {session.user?.name || session.user?.email}{userInfo?.isPremium ? " 💎" : ""}
                   {userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}
                 </p>
                 {userInfo?.level !== undefined ? (

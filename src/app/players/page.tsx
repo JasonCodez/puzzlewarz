@@ -9,6 +9,7 @@ interface PlayerProfile {
   name: string;
   email: string;
   image: string;
+  isPremium?: boolean;
   createdAt: string;
   stats: {
     puzzlesSolved: number;
@@ -170,7 +171,7 @@ export default function PlayersPage() {
                       )}
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-white truncate group-hover:opacity-80">
-                          {player.name || "Anonymous"}
+                          {player.name || "Anonymous"}{player.isPremium ? " 💎" : ""}
                         </h3>
                         <p
                           style={{ color: '#DDDBF1' }}

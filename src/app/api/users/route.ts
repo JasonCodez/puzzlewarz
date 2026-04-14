@@ -57,6 +57,13 @@ export async function GET(request: NextRequest) {
       skip,
     });
 
+    // Batch-fetch premium season pass holders
+    const premiumPasses = await prisma.userSeasonPass.findMany({
+      where: { userId: { in: users.map((u) => u.id) }, isPremium: true },
+      select: { userId: true },
+    });
+    const premiumIds = new Set(premiumPasses.map((p) => p.userId));
+
     // Format the response
     const formattedUsers = users.map((user: {
       id: string;
@@ -72,6 +79,7 @@ export async function GET(request: NextRequest) {
       name: user.name,
       image: user.image,
       createdAt: user.createdAt,
+      isPremium: premiumIds.has(user.id),
       stats: {
         puzzlesSolved: user.solvedPuzzles.length,
         totalPoints: (user as any).totalPoints ?? 0,

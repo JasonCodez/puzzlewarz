@@ -120,12 +120,19 @@ export async function GET(
 
     const { level, title, currentXp, nextLevelXp, progress } = calcLevel(user.xp ?? 0);
 
+    // Check if this user has a premium season pass
+    const premiumPass = await prisma.userSeasonPass.findFirst({
+      where: { userId, isPremium: true },
+      select: { userId: true },
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { isHidden: _hidden, purchasedPoints: _pp, ...publicUser } = user as typeof user & { isHidden: boolean; purchasedPoints: number | null };
 
     return NextResponse.json({
       ...publicUser,
       activeFlair: resolveFlair(user.activeFlair),
+      isPremium: !!premiumPass,
       level,
       xpTitle: title,
       stats: {

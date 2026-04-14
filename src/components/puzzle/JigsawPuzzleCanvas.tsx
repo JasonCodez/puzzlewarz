@@ -341,18 +341,14 @@ export default function JigsawPuzzleSVGWithTray({
   const phRef = useRef(ph);
   pwRef.current = pw; phRef.current = ph;
 
-  // Stage: the canvas logical space is STAGE_SCALE × the board, board centered within it.
-  // p.pos / p.correct are in board-relative coords (0..boardWidth, 0..boardHeight for correct).
-  // boardOffX/Y is added at render-time and hit-test-time only.
+  // Stage: logical space that the canvas covers. On desktop = STAGE_SCALE × board (fixed).
+  // On mobile the stage adapts to fill the available container (dynamic dimensions).
+  // boardOffX/Y = top-left of the board within the stage; updated by the resize effect only.
+  // p.pos / p.correct are in stage coords; boardOffX/Y is NOT baked in at render time.
   const STAGE_SCALE = 1.8;
-  const stageW = boardWidth * STAGE_SCALE;
-  const stageH = boardHeight * STAGE_SCALE;
-  const boardOffX = (stageW - boardWidth) / 2;
-  const boardOffY = (stageH - boardHeight) / 2;
-  const boardOffXRef = useRef(boardOffX);
-  const boardOffYRef = useRef(boardOffY);
-  boardOffXRef.current = boardOffX;
-  boardOffYRef.current = boardOffY;
+  const boardOffXRef  = useRef((boardWidth  * (STAGE_SCALE - 1)) / 2);
+  const boardOffYRef  = useRef((boardHeight * (STAGE_SCALE - 1)) / 2);
+  const stageDimsRef  = useRef({ w: boardWidth * STAGE_SCALE, h: boardHeight * STAGE_SCALE });
 
   // DPR-aware canvas pixel dimensions
   const [canvasW, setCanvasW] = useState(boardWidth);
@@ -439,6 +435,17 @@ export default function JigsawPuzzleSVGWithTray({
   const [mobileHintDismissed, setMobileHintDismissed]   = useState(false);
   const [showPreview, setShowPreview]                   = useState(false);
   const controlsAssignedRef = useRef(false);
+
+  // Viewport: on mobile we zoom into the board area rather than showing the full scatter stage.
+  // viewOff is the top-left corner of the viewport in stage logical coordinates.
+  // scaleRef maps (stage unit → CSS pixel); clientToLogical adds viewOff back.
+  const viewOffXRef = useRef(0);
+  const viewOffYRef = useRef(0);
+
+  // Mobile pull-out piece tray
+  const [mobileTrayOpen, setMobileTrayOpen] = useState(false);
+  // cleanup handle for global pointermove/up listeners attached during tray drag
+  const trayGlobalCleanupRef = useRef<(() => void) | null>(null);
 
   // ── Rebuild Path2D cache ─────────────────────────────────────────────────
 
@@ -564,9 +571,9 @@ export default function JigsawPuzzleSVGWithTray({
   const buildInitial = useCallback((
     edgesMap: Map<string, EdgeMap>,
   ): Piece[] => {
-    // Stage dimensions in board-relative space — stage is STAGE_SCALE × board
-    const stageLogW = boardWidth * STAGE_SCALE;
-    const stageLogH = boardHeight * STAGE_SCALE;
+    // Stage dimensions from current layout (set by the resize effect)
+    const stageLogW = stageDimsRef.current.w;
+    const stageLogH = stageDimsRef.current.h;
     const list: Piece[] = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -585,7 +592,7 @@ export default function JigsawPuzzleSVGWithTray({
       }
     }
     return list;
-  }, [rows, cols, boardWidth, boardHeight, STAGE_SCALE, pickSpawn]);
+  }, [rows, cols, boardWidth, boardHeight, pickSpawn]);
 
   // ── Initialise / re-initialise ───────────────────────────────────────────
 
@@ -613,6 +620,15 @@ export default function JigsawPuzzleSVGWithTray({
       savedElapsedRef.current = 0;
       startTimeRef.current = Date.now();
       finalPieces = initial;
+
+      // On mobile (touch / narrow screen) park all pieces far off-canvas on a fresh start.
+      // Users pick them up via the pull-out tray; pieces teleport under the finger on drag.
+      if (typeof window !== "undefined" &&
+          (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 720)) {
+        const offX = stageDimsRef.current.w + 100;
+        const offY = stageDimsRef.current.h + 100;
+        finalPieces = finalPieces.map(p => ({ ...p, pos: { x: offX, y: offY } }));
+      }
     }
 
     completedRef.current = false;
@@ -677,39 +693,113 @@ export default function JigsawPuzzleSVGWithTray({
     if (!wrapper) return;
 
     const update = () => {
-      const availW = isFullscreen ? (window.innerWidth || window.screen.width) : (wrapper.clientWidth || boardWidth);
-      // Scale the STAGE (not just the board) to fit the available area.
-      // STAGE_SCALE > 1, so the board occupies the center and pieces scatter around it.
-      const stageAspect = (boardWidth * STAGE_SCALE) / (boardHeight * STAGE_SCALE);
-      const availH = isFullscreen
-        ? (window.innerHeight || window.screen.height)
-        : Math.min(window.innerHeight * 0.62, Math.max(320, availW / stageAspect));
+      const isMobile = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 720;
+      const availW = wrapper.clientWidth || boardWidth;
+      let physW: number, physH: number, s: number;
+      let newStageW: number, newStageH: number;
 
-      // s: stage logical px → CSS px — always maintain aspect ratio
-      const s = Math.min(availW / (boardWidth * STAGE_SCALE), availH / (boardHeight * STAGE_SCALE));
-      const physW = Math.round(boardWidth * STAGE_SCALE * s);
-      const physH = Math.round(boardHeight * STAGE_SCALE * s);
-      scaleRef.current = s;
-      setCanvasW(physW);
-      setCanvasH(physH);
+      if (isFullscreen) {
+        const fsW = window.innerWidth  || window.screen.width;
+        const fsH = window.innerHeight || window.screen.height;
+        if (isMobile) {
+          // Mobile fullscreen: fill the screen; board centred with ~12% margin per side
+          s         = Math.min(fsW * 0.88 / boardWidth, fsH * 0.88 / boardHeight);
+          physW     = fsW;
+          physH     = fsH;
+          newStageW = fsW / s;
+          newStageH = fsH / s;
+        } else {
+          // Desktop fullscreen: fixed STAGE_SCALE
+          s         = Math.min(fsW / (boardWidth * STAGE_SCALE), fsH / (boardHeight * STAGE_SCALE));
+          physW     = Math.round(boardWidth  * STAGE_SCALE * s);
+          physH     = Math.round(boardHeight * STAGE_SCALE * s);
+          newStageW = boardWidth  * STAGE_SCALE;
+          newStageH = boardHeight * STAGE_SCALE;
+        }
+      } else if (isMobile) {
+        // Mobile non-fullscreen: canvas fills available width × a large portion of screen height.
+        // Stage adapts to those exact CSS dimensions so pieces scatter over the full visible area.
+        const isLandscape = window.innerWidth > window.innerHeight;
+        const availH      = isLandscape
+          ? window.innerHeight * 0.90   // landscape — nearly full height
+          : window.innerHeight * 0.78;  // portrait  — 78 % of screen height
+        s         = Math.min(availW * 0.88 / boardWidth, availH * 0.88 / boardHeight);
+        physW     = Math.round(availW);
+        physH     = Math.round(availH);
+        newStageW = availW / s;
+        newStageH = availH / s;
+      } else {
+        // Desktop non-fullscreen: fixed STAGE_SCALE, letterboxed into wrapper
+        const stageAspect = boardWidth / boardHeight; // STAGE_SCALE cancels out
+        const availH = Math.min(window.innerHeight * 0.62, Math.max(320, availW / stageAspect));
+        s         = Math.min(availW / (boardWidth * STAGE_SCALE), availH / (boardHeight * STAGE_SCALE));
+        physW     = Math.round(boardWidth  * STAGE_SCALE * s);
+        physH     = Math.round(boardHeight * STAGE_SCALE * s);
+        newStageW = boardWidth  * STAGE_SCALE;
+        newStageH = boardHeight * STAGE_SCALE;
+      }
 
+      const newOffX    = (newStageW - boardWidth)  / 2;
+      const newOffY    = (newStageH - boardHeight) / 2;
+      const prevOffX   = boardOffXRef.current;
+      const prevOffY   = boardOffYRef.current;
+      const prevStageW = stageDimsRef.current.w;
+      const prevStageH = stageDimsRef.current.h;
+      const dOffX      = newOffX - prevOffX;
+      const dOffY      = newOffY - prevOffY;
+
+      boardOffXRef.current = newOffX;
+      boardOffYRef.current = newOffY;
+      stageDimsRef.current = { w: newStageW, h: newStageH };
+      viewOffXRef.current  = 0;
+      viewOffYRef.current  = 0;
+      scaleRef.current     = s;
+
+      // Shift all piece positions when the board moves within the stage (e.g. orientation change)
+      if ((Math.abs(dOffX) > 0.5 || Math.abs(dOffY) > 0.5) && piecesRef.current.length > 0) {
+        const shifted = piecesRef.current.map(p => {
+          // Pieces parked off-stage (tray) get re-parked beyond the new stage bounds
+          if (p.pos.x > prevStageW + 50 || p.pos.y > prevStageH + 50) {
+            return { ...p, pos: { x: newStageW + 100, y: newStageH + 100 } };
+          }
+          return {
+            ...p,
+            pos:     { x: p.pos.x     + dOffX, y: p.pos.y     + dOffY },
+            correct: { x: p.correct.x + dOffX, y: p.correct.y + dOffY },
+          };
+        });
+        piecesRef.current = shifted;
+        setPiecesState(shifted);
+        dirtyRef.current = true;
+      }
+
+      const rw = physW, rh = physH;
+      setCanvasW(rw);
+      setCanvasH(rh);
       const canvas = canvasRef.current;
       if (canvas) {
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width  = physW * dpr;
-        canvas.height = physH * dpr;
-        canvas.style.width  = `${physW}px`;
-        canvas.style.height = `${physH}px`;
-        dirtyRef.current = true;
+        const dpr           = window.devicePixelRatio || 1;
+        canvas.width        = rw * dpr;
+        canvas.height       = rh * dpr;
+        canvas.style.width  = `${rw}px`;
+        canvas.style.height = `${rh}px`;
+        dirtyRef.current    = true;
       }
     };
 
     update();
     const ro = new ResizeObserver(update);
     ro.observe(wrapper);
+    const onOrient = () => setTimeout(update, 150);
     window.addEventListener("resize", update);
-    return () => { ro.disconnect(); window.removeEventListener("resize", update); };
-  }, [isFullscreen, boardWidth, boardHeight, TRAY_H, setPieces]);
+    window.addEventListener("orientationchange", onOrient);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", onOrient);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFullscreen, boardWidth, boardHeight]);
 
   // ── Auto-save (debounced) ────────────────────────────────────────────────
 
@@ -788,6 +878,7 @@ export default function JigsawPuzzleSVGWithTray({
 
       ctx.save();
       ctx.scale(s, s);   // from here: 1 unit = 1 stage logical px
+      ctx.translate(-viewOffXRef.current, -viewOffYRef.current); // apply viewport offset
 
       const _pw = pwRef.current, _ph = phRef.current;
       const _bOffX = boardOffXRef.current, _bOffY = boardOffYRef.current;
@@ -959,7 +1050,10 @@ export default function JigsawPuzzleSVGWithTray({
     if (!canvas) return { x: cx, y: cy };
     const rect = canvas.getBoundingClientRect();
     const s = scaleRef.current;
-    return { x: (cx - rect.left) / s, y: (cy - rect.top) / s };
+    return {
+      x: (cx - rect.left) / s + viewOffXRef.current,
+      y: (cy - rect.top)  / s + viewOffYRef.current,
+    };
   }, []);
 
   // ── Canvas pointer handlers ──────────────────────────────────────────────
@@ -1005,9 +1099,8 @@ export default function JigsawPuzzleSVGWithTray({
     const rawDy = lp.y - drag.anchorOff.y - aStart.y;
 
     const _pw = pwRef.current, _ph = phRef.current;
-    // Stage logical dimensions
-    const stageLogW = boardWidth * STAGE_SCALE;
-    const stageLogH = boardHeight * STAGE_SCALE;
+    const stageLogW = stageDimsRef.current.w;
+    const stageLogH = stageDimsRef.current.h;
 
     let minX = Infinity, minY = Infinity;
     for (const sp of drag.starts.values()) { minX = Math.min(minX, sp.x); minY = Math.min(minY, sp.y); }
@@ -1015,7 +1108,7 @@ export default function JigsawPuzzleSVGWithTray({
     drag.dx = clamp(rawDx, -minX, stageLogW - _pw - minX);
     drag.dy = clamp(rawDy, -minY, stageLogH - _ph - minY);
     dirtyRef.current = true;
-  }, [clientToLogical, boardWidth, boardHeight]);
+  }, [clientToLogical]);
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
@@ -1185,8 +1278,8 @@ export default function JigsawPuzzleSVGWithTray({
 
   const sendLooseToTray = useCallback(() => {
     setPieces(prev => {
-      const logW = boardWidth * STAGE_SCALE;
-      const logH = boardHeight * STAGE_SCALE;
+      const logW = stageDimsRef.current.w;
+      const logH = stageDimsRef.current.h;
       const gids = [...new Set(prev.map(p => p.groupId))];
       let next = [...prev.map(p => ({ ...p }))];
       for (const gid of gids) {
@@ -1239,6 +1332,8 @@ export default function JigsawPuzzleSVGWithTray({
     setPortalReady(true);
     setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window);
   }, []);
+  // Cleanup tray global pointer listeners on unmount
+  useEffect(() => { return () => { trayGlobalCleanupRef.current?.(); }; }, []);
   useEffect(() => { isFullscreenRef.current = isFullscreen; }, [isFullscreen]);
   useEffect(() => {
     if (!isFullscreen) return;
@@ -1254,38 +1349,112 @@ export default function JigsawPuzzleSVGWithTray({
     pieces.filter(p => !p.snapped).sort((a, b) => (a.row * cols + a.col) - (b.row * cols + b.col)),
     [pieces, cols]);
 
-  /** Drag a piece from the tray up onto the canvas */
+  /** Drag a piece from the tray onto the canvas.
+   *  Uses window-level pointer listeners so it works regardless of which DOM element
+   *  the pointer originated on (avoids setPointerCapture cross-element issues on mobile). */
   const onTrayDragDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>, pid: string) => {
     if (completedRef.current || isSolvedRef.current) return;
     const p = piecesRef.current.find(x => x.id === pid);
     if (!p || p.snapped) return;
     e.stopPropagation();
+    e.preventDefault();
 
-    // Place piece at center of stage (away from the board)
-    const tX = boardOffXRef.current - pwRef.current - 8;
-    const tY = boardOffYRef.current + (boardHeight - phRef.current) / 2;
+    // Teleport piece to under the pointer in stage coords (or to left-of-board as fallback)
+    const lp = clientToLogical(e.clientX, e.clientY);
+    const stageLogW = stageDimsRef.current.w;
+    const stageLogH = stageDimsRef.current.h;
+    // If the pointer maps outside the canvas (finger still over tray), place near board edge
+    const tX = clamp(lp.x - pwRef.current / 2, 0, stageLogW - pwRef.current);
+    const tY = clamp(lp.y - phRef.current / 2, 0, stageLogH - phRef.current);
 
     setPieces(prev => {
       const maxZ = prev.reduce((m, x) => Math.max(m, x.z), 1);
       return prev.map(x => x.id !== pid ? x : { ...x, z: maxZ + 1, pos: { x: tX, y: tY } });
     });
 
-    const lp = clientToLogical(e.clientX, e.clientY);
     const starts = new Map<string, PiecePos>([[pid, { x: tX, y: tY }]]);
     dragRef.current = {
       active: true, pointerId: e.pointerId,
       groupId: p.groupId, anchorId: pid,
-      anchorOff: { x: lp.x - tX, y: lp.y - tY },
+      anchorOff: { x: 0, y: 0 }, // piece teleported to centre under finger
       starts, dx: 0, dy: 0,
     };
     dirtyRef.current = true;
-    try { canvasRef.current?.setPointerCapture(e.pointerId); } catch { /* noop */ }
-  }, [boardWidth, boardHeight, clientToLogical, setPieces]);
+    setMobileTrayOpen(false); // close tray once drag begins
 
-  /** Mini canvas for tray thumbnails */
+    // ── Global pointer handlers ──────────────────────────────────────────
+    const onGlobalMove = (me: PointerEvent) => {
+      if (me.pointerId !== e.pointerId) return;
+      const drag = dragRef.current;
+      if (!drag.active) return;
+      const mlp    = clientToLogical(me.clientX, me.clientY);
+      const aStart = drag.starts.get(pid)!;
+      const rawDx  = mlp.x - aStart.x;
+      const rawDy  = mlp.y - aStart.y;
+      drag.dx = clamp(rawDx, -aStart.x, stageLogW - pwRef.current - aStart.x);
+      drag.dy = clamp(rawDy, -aStart.y, stageLogH - phRef.current - aStart.y);
+      dirtyRef.current = true;
+    };
+
+    const onGlobalUp = (ue: PointerEvent) => {
+      if (ue.pointerId !== e.pointerId) return;
+      cleanup();
+
+      const drag = dragRef.current;
+      if (!drag.active) return;
+      const { groupId: gid, starts: st, dx, dy } = drag;
+      drag.active = false; drag.pointerId = null; drag.groupId = null;
+      drag.dx = 0; drag.dy = 0;
+      if (!gid) return;
+
+      let next = piecesRef.current.map(pz => {
+        if (pz.groupId !== gid) return pz;
+        const sp = st.get(pz.id);
+        return sp ? { ...pz, pos: { x: sp.x + dx, y: sp.y + dy } } : pz;
+      });
+
+      const adjBoard    = boardSnapTolerance    / scaleRef.current;
+      const adjNeighbor = neighborSnapTolerance / scaleRef.current;
+      let lastSnapDelta: { dx: number; dy: number } | null = null;
+
+      const s1 = snapToBoardIfClose(next, gid, adjBoard);
+      next = s1.pieces;
+      if (s1.snapped) lastSnapDelta = { dx: s1.dx, dy: s1.dy };
+      next = snapMergeNeighbours(next, gid, adjNeighbor);
+      const s2 = snapToBoardIfClose(next, gid, adjBoard);
+      next = s2.pieces;
+      if (s2.snapped) lastSnapDelta = { dx: s2.dx, dy: s2.dy };
+
+      if ((s1.snapped || s2.snapped) && st.size === 1) {
+        snapPopRef.current.set(pid, { t0: performance.now(), dur: 380 });
+        snapGlowRef.current.set(pid, { t0: performance.now(), dur: 700 });
+      }
+      if (lastSnapDelta && dist2(lastSnapDelta.dx, lastSnapDelta.dy) > 0.1) {
+        snapRef.current = {
+          pieceIds: new Set(st.keys()),
+          dx: -lastSnapDelta.dx, dy: -lastSnapDelta.dy,
+          t0: performance.now(), dur: 200,
+        };
+      }
+      setPieces(next);
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onGlobalMove);
+      window.removeEventListener("pointerup",   onGlobalUp);
+      window.removeEventListener("pointercancel", onGlobalUp);
+      trayGlobalCleanupRef.current = null;
+    };
+    trayGlobalCleanupRef.current = cleanup;
+    window.addEventListener("pointermove",   onGlobalMove);
+    window.addEventListener("pointerup",     onGlobalUp);
+    window.addEventListener("pointercancel", onGlobalUp);
+  }, [boardWidth, boardHeight, clientToLogical, setPieces, boardSnapTolerance, neighborSnapTolerance, snapMergeNeighbours]);
+
+  /** Mini canvas for tray thumbnails — larger on mobile for touch targets */
   const TrayThumb = useCallback(({ piece }: { piece: Piece }) => {
     const ref = useRef<HTMLCanvasElement>(null);
-    const SCALE = 0.52;
+    const SCALE = isTouchDevice ? 0.82 : 0.52;
     const tw = Math.round(pwRef.current * SCALE);
     const th = Math.round(phRef.current * SCALE);
 
@@ -1329,12 +1498,13 @@ export default function JigsawPuzzleSVGWithTray({
       <canvas
         ref={ref}
         width={tw} height={th}
-        style={{ display: "block", width: tw, height: th, cursor: "grab", borderRadius: 4,
-                 flexShrink: 0, touchAction: "none", userSelect: "none" }}
+        style={{ display: "block", width: tw, height: th, cursor: "grab", borderRadius: 6,
+                 flexShrink: 0, touchAction: "none", userSelect: "none",
+                 border: "1px solid rgba(255,255,255,0.10)" }}
         onPointerDown={e => onTrayDragDown(e, piece.id)}
       />
     );
-  }, [imageOk, boardWidth, boardHeight, rows, cols, onTrayDragDown]);
+  }, [imageOk, boardWidth, boardHeight, rows, cols, onTrayDragDown, isTouchDevice]);
 
   const groupCount = useMemo(() => new Set(pieces.map(p => p.groupId)).size, [pieces]);
 
@@ -1357,7 +1527,7 @@ export default function JigsawPuzzleSVGWithTray({
       }}
     >
       {/* ── Canvas area ──────────────────────────────── */}
-      <div style={{ position: "relative", flex: 1, minHeight: 0, ...(isFullscreen ? { display: "flex", alignItems: "center", justifyContent: "center" } : {}) }}>
+      <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <canvas
           ref={canvasRef}
           width={canvasW} height={canvasH}
@@ -1444,7 +1614,7 @@ export default function JigsawPuzzleSVGWithTray({
                         background: "rgba(10,20,40,0.88)", color: "white", fontSize: 12, fontWeight: 500,
                         padding: "7px 12px", borderRadius: 22, boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
                         border: "1px solid rgba(255,255,255,0.12)", whiteSpace: "nowrap" }}>
-            <span>Drag pieces · try fullscreen</span>
+            <span>Tap tray for pieces · try fullscreen</span>
             <button onClick={() => setIsFullscreen(true)}
                     style={{ background: "rgba(99,102,241,0.9)", border: "none", color: "white",
                              padding: "3px 10px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
@@ -1532,6 +1702,51 @@ export default function JigsawPuzzleSVGWithTray({
           )}
         </div>
       </div>
+
+      {/* ── Mobile pull-out piece tray ─────────────────────────────────── */}
+      {isTouchDevice && !isFullscreen && !isSolved && trayPieces.length > 0 && (
+        <div style={{ position: "relative", flexShrink: 0, zIndex: 400 }}>
+          {/* Toggle handle */}
+          <button
+            onClick={() => setMobileTrayOpen(v => !v)}
+            style={{
+              width: "100%", padding: "10px 16px",
+              background: mobileTrayOpen ? "rgba(56,145,166,0.20)" : "rgba(7,10,15,0.98)",
+              borderTop: "1px solid rgba(56,145,166,0.28)",
+              border: "none", borderTop: "1px solid rgba(56,145,166,0.28)",
+              color: "rgba(255,255,255,0.88)", fontSize: 13, fontWeight: 700,
+              cursor: "pointer", display: "flex", alignItems: "center",
+              justifyContent: "center", gap: 7, letterSpacing: "0.02em",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <span style={{ fontSize: 16 }}>🧩</span>
+            <span>Pieces ({trayPieces.length} remaining)</span>
+            <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 2 }}>
+              {mobileTrayOpen ? "▼" : "▲"}
+            </span>
+          </button>
+
+          {/* Sliding panel */}
+          {mobileTrayOpen && (
+            <div style={{
+              background: "rgba(7,10,15,0.97)",
+              borderTop: "1px solid rgba(56,145,166,0.15)",
+              padding: "10px 10px 14px",
+              maxHeight: "38vh",
+              overflowY: "auto",
+              WebkitOverflowScrolling: "touch" as React.CSSProperties["WebkitOverflowScrolling"],
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              justifyContent: "flex-start",
+              alignContent: "flex-start",
+            }}>
+              {trayPieces.map(p => <TrayThumb key={p.id} piece={p} />)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
