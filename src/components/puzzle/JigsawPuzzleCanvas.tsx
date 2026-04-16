@@ -1100,6 +1100,19 @@ export default function JigsawPuzzleSVGWithTray({
     viewOffXRef.current  = midStageX - centerX / (s * newZoom);
     viewOffYRef.current  = midStageY - centerY / (s * newZoom);
     clampViewport();
+    // When returning to or above 100%, pull any out-of-stage pieces back into stage
+    if (newZoom >= 1) {
+      const { w: sw, h: sh } = stageDimsRef.current;
+      const _pw = pwRef.current, _ph = phRef.current;
+      const clamped = piecesRef.current.map(p => {
+        if (p.snapped) return p;
+        const nx = clamp(p.pos.x, 0, sw - _pw);
+        const ny = clamp(p.pos.y, 0, sh - _ph);
+        return (nx === p.pos.x && ny === p.pos.y) ? p : { ...p, pos: { x: nx, y: ny } };
+      });
+      piecesRef.current = clamped;
+      setPiecesState(clamped);
+    }
     setUserZoom(newZoom);
     dirtyRef.current = true;
   }, [clampViewport]);
@@ -1108,6 +1121,17 @@ export default function JigsawPuzzleSVGWithTray({
     userZoomRef.current = 1;
     viewOffXRef.current = 0;
     viewOffYRef.current = 0;
+    // Pull any out-of-stage pieces (placed while zoomed out) back into stage
+    const { w: sw, h: sh } = stageDimsRef.current;
+    const _pw = pwRef.current, _ph = phRef.current;
+    const clamped = piecesRef.current.map(p => {
+      if (p.snapped) return p;
+      const nx = clamp(p.pos.x, 0, sw - _pw);
+      const ny = clamp(p.pos.y, 0, sh - _ph);
+      return (nx === p.pos.x && ny === p.pos.y) ? p : { ...p, pos: { x: nx, y: ny } };
+    });
+    piecesRef.current = clamped;
+    setPiecesState(clamped);
     setUserZoom(1);
     dirtyRef.current = true;
   }, []);
@@ -1241,14 +1265,23 @@ export default function JigsawPuzzleSVGWithTray({
     const rawDy = lp.y - drag.anchorOff.y - aStart.y;
 
     const _pw = pwRef.current, _ph = phRef.current;
-    const stageLogW = stageDimsRef.current.w;
-    const stageLogH = stageDimsRef.current.h;
+
+    // Constrain drag to the current visible viewport in stage-logical coords.
+    // When zoomed out the viewport extends into the dark padding area, giving extra placement
+    // room. When zoomed in the constraint keeps pieces within the visible section.
+    const cvs    = canvasRef.current;
+    const dpr    = window.devicePixelRatio || 1;
+    const totalS = scaleRef.current * userZoomRef.current;
+    const vpLeft   = viewOffXRef.current;
+    const vpTop    = viewOffYRef.current;
+    const vpRight  = cvs ? vpLeft + cvs.width  / (totalS * dpr) - _pw : stageDimsRef.current.w - _pw;
+    const vpBottom = cvs ? vpTop  + cvs.height / (totalS * dpr) - _ph : stageDimsRef.current.h - _ph;
 
     let minX = Infinity, minY = Infinity;
     for (const sp of drag.starts.values()) { minX = Math.min(minX, sp.x); minY = Math.min(minY, sp.y); }
 
-    drag.dx = clamp(rawDx, -minX, stageLogW - _pw - minX);
-    drag.dy = clamp(rawDy, -minY, stageLogH - _ph - minY);
+    drag.dx = clamp(rawDx, vpLeft - minX,  vpRight  - minX);
+    drag.dy = clamp(rawDy, vpTop  - minY,  vpBottom - minY);
     dirtyRef.current = true;
   }, [clientToLogical, clampViewport]);
 
@@ -1612,12 +1645,12 @@ export default function JigsawPuzzleSVGWithTray({
                         padding: "7px 12px", borderRadius: 22, boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
                         border: "1px solid rgba(255,255,255,0.12)", whiteSpace: "nowrap" }}>
             <span>Pinch to zoom · 1 finger to pan · tap piece to drag</span>
-            <button onClick={() => setIsFullscreen(true)}
+            <button type="button" onClick={() => setIsFullscreen(true)}
                     style={{ background: "rgba(99,102,241,0.9)", border: "none", color: "white",
                              padding: "3px 10px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
               Fullscreen
             </button>
-            <button onClick={() => setMobileHintDismissed(true)}
+            <button type="button" onClick={() => setMobileHintDismissed(true)}
                     aria-label="Dismiss"
                     style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
                              cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px" }}>
@@ -1631,6 +1664,7 @@ export default function JigsawPuzzleSVGWithTray({
           <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 9100,
                         display: "flex", flexDirection: "column", gap: 4 }}>
             <button
+              type="button"
               onClick={() => applyZoom(1.25)}
               disabled={userZoom >= MAX_ZOOM}
               title="Zoom in"
@@ -1641,6 +1675,7 @@ export default function JigsawPuzzleSVGWithTray({
               +
             </button>
             <button
+              type="button"
               onClick={resetZoom}
               disabled={userZoom === 1}
               title="Reset zoom"
@@ -1651,6 +1686,7 @@ export default function JigsawPuzzleSVGWithTray({
               {Math.round(userZoom * 100)}%
             </button>
             <button
+              type="button"
               onClick={() => applyZoom(0.8)}
               disabled={userZoom <= MIN_ZOOM}
               title="Zoom out"
@@ -1665,7 +1701,7 @@ export default function JigsawPuzzleSVGWithTray({
 
         {/* Preview button */}
         {imageOk && effectiveUrl && !isSolved && (
-          <button onClick={() => setShowPreview(v => !v)}
+          <button type="button" onClick={() => setShowPreview(v => !v)}
                   style={{ position: "absolute", bottom: 12, right: 12, zIndex: 9100,
                            background: showPreview ? "rgba(99,102,241,0.9)" : "rgba(10,20,40,0.85)",
                            color: "rgba(255,255,255,0.9)", border: "1px solid rgba(255,255,255,0.2)",
@@ -1698,7 +1734,7 @@ export default function JigsawPuzzleSVGWithTray({
           <div style={{ position: "absolute", left: 12, top: 12, background: "rgba(0,0,0,0.6)",
                         color: "white", padding: "6px 10px", borderRadius: 8, fontSize: 12, zIndex: 200 }}>
             Image failed to load.{" "}
-            <button onClick={() => {
+            <button type="button" onClick={() => {
                       setImageOk(null); setReloadKey(k => k + 1);
                       setProxyTried(false); setEffectiveUrl(imageUrl ?? "");
                     }}
@@ -1711,7 +1747,7 @@ export default function JigsawPuzzleSVGWithTray({
 
         {/* Fullscreen exit */}
         {isFullscreen && (
-          <button onClick={() => setIsFullscreen(false)}
+          <button type="button" onClick={() => setIsFullscreen(false)}
                   style={{ position: "absolute", right: 12, top: 12, zIndex: 13000, padding: "6px 8px",
                            borderRadius: 8, background: "rgba(0,0,0,0.5)", color: "white",
                            border: "1px solid rgba(255,255,255,0.06)", cursor: "pointer" }}>

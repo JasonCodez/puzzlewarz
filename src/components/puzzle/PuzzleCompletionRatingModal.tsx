@@ -108,7 +108,7 @@ export default function PuzzleCompletionRatingModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/50 flex items-start overflow-y-auto py-4 justify-center z-50 backdrop-blur-sm"
         onClick={onClose}
       >
         {/* Modal Content */}
@@ -117,11 +117,12 @@ export default function PuzzleCompletionRatingModal({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.5, opacity: 0, y: 20 }}
           transition={{ type: "spring", stiffness: 200, damping: 25 }}
-          className="bg-gray-900 rounded-lg border p-8 w-full sm:max-w-md mx-4 shadow-2xl"
+          className="bg-gray-900 rounded-lg border p-5 sm:p-8 w-full sm:max-w-md mx-4 my-auto shadow-2xl"
           style={{
             backgroundColor: "rgba(2, 2, 2, 0.95)",
             borderColor: "#FDE74C",
             borderWidth: "2px",
+            fontFamily: "var(--font-geist-sans, sans-serif)",
           }}
           onClick={(e) => e.stopPropagation()}
         >

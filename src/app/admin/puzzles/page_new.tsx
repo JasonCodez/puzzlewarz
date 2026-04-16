@@ -757,12 +757,11 @@ export default function AdminPuzzlesPage() {
         } catch {
           errorData = rawText ? { raw: rawText } : null;
         }
-        console.error("[SUBMIT] Puzzle creation error response:", {
-          status: response.status,
-          statusText: response.statusText,
-          errorData,
-          rawText,
-        });
+        console.error("[SUBMIT] Puzzle creation error response:",
+          response.status, response.statusText,
+          "body:", rawText || "(empty)",
+          "parsed:", errorData
+        );
         throw new Error(
           errorData?.details
             ? `${errorData.error || "Failed to create puzzle"}: ${errorData.details}`
