@@ -46,7 +46,7 @@ export async function GET() {
     const relevantIds = [...new Set([currentUser.id, ...followingIds])];
 
     const users = await prisma.user.findMany({
-      where: { id: { in: relevantIds }, isHidden: false },
+      where: { id: { in: relevantIds }, isHidden: false, isBot: false },
       select: { id: true, name: true, image: true, totalPoints: true, purchasedPoints: true, activeFlair: true },
     });
 

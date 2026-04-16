@@ -699,7 +699,7 @@ export default function JigsawPuzzleSVGWithTray({
 
     const update = () => {
       const isMobile = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 720;
-      const availW = wrapper.clientWidth || boardWidth;
+      const availW = Math.min(wrapper.clientWidth || boardWidth, window.innerWidth);
       let physW: number, physH: number, s: number;
       let newStageW: number, newStageH: number;
 
@@ -725,9 +725,13 @@ export default function JigsawPuzzleSVGWithTray({
         // Mobile non-fullscreen: canvas fills available width × a large portion of screen height.
         // Stage adapts to those exact CSS dimensions so pieces scatter over the full visible area.
         const isLandscape = window.innerWidth > window.innerHeight;
-        const availH      = isLandscape
-          ? Math.max(180, window.innerHeight - 90)  // landscape — leave room for tray + nav
-          : window.innerHeight * 0.78;              // portrait  — 78 % of screen height
+        const containerMaxH = wrapper.style.maxHeight ? parseInt(wrapper.style.maxHeight) : Infinity;
+        const availH      = Math.min(
+          isLandscape
+            ? Math.max(180, window.innerHeight - 90)  // landscape — leave room for tray + nav
+            : window.innerHeight * 0.78,              // portrait  — 78 % of screen height
+          containerMaxH
+        );
         s         = Math.min(availW * 0.88 / boardWidth, availH * 0.88 / boardHeight);
         physW     = Math.round(availW);
         physH     = Math.round(availH);

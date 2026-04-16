@@ -14,7 +14,7 @@ export default function LoadingSpinner({ label, size = 72 }: LoadingSpinnerProps
         width={size}
         height={size}
         className="pw-logo-spin"
-        style={{ objectFit: "contain", animation: "pw-logo-spin 1.1s linear infinite" }}
+        style={{ objectFit: "contain", animation: "pw-logo-spin 1.4s ease-in-out infinite" }}
         priority
       />
       {label && (

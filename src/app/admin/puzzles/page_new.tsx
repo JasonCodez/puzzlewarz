@@ -98,6 +98,7 @@ export default function AdminPuzzlesPage() {
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [jigsawImagePreview, setJigsawImagePreview] = useState<string>("");
+  const [jigsawBoardDims, setJigsawBoardDims] = useState<{ w: number; h: number }>({ w: 640, h: 480 });
   const [jigsawImageUrl, setJigsawImageUrl] = useState<string>("");
   const [jigsawImageFile, setJigsawImageFile] = useState<File | null>(null);
   const [jigsawImageObjectUrl, setJigsawImageObjectUrl] = useState<string>("");
@@ -391,6 +392,21 @@ export default function AdminPuzzlesPage() {
       }
     };
   }, [jigsawImageObjectUrl]);
+
+  // Detect natural image dimensions whenever the preview URL changes so we can pass
+  // matching boardWidth/boardHeight to JigsawPuzzle (prevents piece distortion).
+  useEffect(() => {
+    if (!jigsawImagePreview) return;
+    const img = new window.Image();
+    img.onload = () => {
+      const MAX = 640;
+      const { naturalWidth: nw, naturalHeight: nh } = img;
+      if (!nw || !nh) return;
+      const scale = Math.min(MAX / nw, MAX / nh, 1);
+      setJigsawBoardDims({ w: Math.round(nw * scale), h: Math.round(nh * scale) });
+    };
+    img.src = jigsawImagePreview;
+  }, [jigsawImagePreview]);
 
   const uploadJigsawFile = async (targetPuzzleId: string, file: File) => {
     const formDataUpload = new FormData();
@@ -1355,15 +1371,18 @@ export default function AdminPuzzlesPage() {
                       {jigsawImagePreview && (
                         <div className="mt-6">
                           <label className="block text-sm font-semibold text-gray-300 mb-2">Live Jigsaw Puzzle Preview</label>
-                          <div style={{ background: '#222', borderRadius: 8, padding: 12, width: '100%', minHeight: 260 }}>
+                          <div style={{ background: '#222', borderRadius: 8, padding: 12, width: '100%', overflow: 'hidden' }}>
                             <JigsawPuzzle
                               imageUrl={jigsawImagePreview}
+                              boardWidth={jigsawBoardDims.w}
+                              boardHeight={jigsawBoardDims.h}
                               rows={typeof formData.puzzleData.gridRows === 'number' && formData.puzzleData.gridRows > 1 ? formData.puzzleData.gridRows : 3}
                               cols={typeof formData.puzzleData.gridCols === 'number' && formData.puzzleData.gridCols > 1 ? formData.puzzleData.gridCols : 4}
                               pieceExtFrac={typeof formData.puzzleData.pieceExtFrac === 'number' ? formData.puzzleData.pieceExtFrac : undefined}
                               pieceRFrac={typeof formData.puzzleData.pieceRFrac === 'number' ? formData.puzzleData.pieceRFrac : undefined}
                               pieceNHalfFrac={typeof formData.puzzleData.pieceNHalfFrac === 'number' ? formData.puzzleData.pieceNHalfFrac : undefined}
                               pieceShoulderStart={typeof formData.puzzleData.pieceShoulderStart === 'number' ? formData.puzzleData.pieceShoulderStart : undefined}
+                              containerStyle={{ maxHeight: '420px' }}
                               onComplete={() => {}}
                             />
                           </div>

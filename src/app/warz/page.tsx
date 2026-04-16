@@ -148,7 +148,7 @@ function PuzzlePickerModal({
         <div className="overflow-y-auto flex-1 p-4 space-y-2">
           {loading ? (
             <div className="flex justify-center py-8">
-              <img src="/images/puzzle_warz_logo.png" alt="Loading…" width={40} height={40} style={{ animation: "pw-logo-spin 1.1s linear infinite", objectFit: "contain" }} />
+              <img src="/images/puzzle_warz_logo.png" alt="Loading…" width={40} height={40} style={{ animation: "pw-logo-spin 1.4s ease-in-out infinite", objectFit: "contain" }} />
             </div>
           ) : filtered.length === 0 ? (
             <p className="text-center text-sm py-8" style={{ color: "#6b7280" }}>

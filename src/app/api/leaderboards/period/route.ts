@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       where: {
         solved: true,
         solvedAt: { gte: windowStart, lte: windowEnd },
-        user: { isHidden: false, role: { not: "admin" } },
+        user: { isHidden: false, isBot: false, role: { not: "admin" } },
       },
       _sum: { pointsEarned: true },
       _count: { puzzleId: true },

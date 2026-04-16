@@ -6,7 +6,7 @@ services:
     region: oregon
     branch: main
     buildCommand: "npm ci && npm run build"
-    startCommand: "npx prisma migrate deploy && npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts && npx tsx scripts/seed-bots.ts && npm run start"
+    startCommand: "npx prisma migrate deploy && npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts && npm run start"
     autoDeploy: true
     disk:
       name: uploads

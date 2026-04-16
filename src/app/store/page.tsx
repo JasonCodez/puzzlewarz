@@ -8,6 +8,7 @@ import { THEME_CONFIGS, FRAME_CONFIGS, type ThemeConfig } from "@/lib/profileThe
 import { SKIN_TOKENS, getSkinTokens, type PuzzleSkinTokens } from "@/lib/puzzleSkins";
 import dynamic from "next/dynamic";
 import Tooltip from "@/components/Tooltip";
+import { FEATURE_STORE_ENABLED } from "@/lib/featureFlags";
 
 const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
 const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), { ssr: false });
@@ -826,6 +827,12 @@ function StorePageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  useEffect(() => {
+    if (!FEATURE_STORE_ENABLED) router.replace('/dashboard');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!FEATURE_STORE_ENABLED) return null;
   if (status === "unauthenticated") return null;
 
   return (

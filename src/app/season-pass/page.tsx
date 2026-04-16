@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { FEATURE_SEASONS_ENABLED } from "@/lib/featureFlags";
 
 interface SeasonTier {
   id: string;
@@ -749,6 +750,14 @@ export default function SeasonPassPage() {
   const [celebration, setCelebration] = useState<ClaimCelebration | null>(null);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
+
+  // Redirect if feature is disabled — must come after all hook declarations
+  useEffect(() => {
+    if (!FEATURE_SEASONS_ENABLED) router.replace('/dashboard');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!FEATURE_SEASONS_ENABLED) return null;
 
   const fetchSeason = useCallback(async () => {
     try {

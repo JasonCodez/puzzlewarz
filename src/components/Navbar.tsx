@@ -6,6 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState, useRef } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import MessagesBell from "@/components/notifications/MessagesBell";
+import { FEATURE_STORE_ENABLED, FEATURE_SEASONS_ENABLED } from "@/lib/featureFlags";
 
 function Hamburger({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
   return (
@@ -41,19 +42,21 @@ interface UserInfo {
 }
 
 /* Nav link config */
-const NAV_LINKS = [
-  { href: "/dashboard", label: "Dashboard", emoji: null },
-  { href: "/puzzles",   label: "Puzzles",   emoji: null },
-  { href: "/daily",     label: "Daily",     emoji: "🟩" },
-  { href: "/warz",      label: "Warz",      emoji: "⚔️", accent: "#FDE74C" },
-  { href: "/season-pass", label: "Season",  emoji: "🏅" },
-  { href: "/store",     label: "Store",     emoji: "🛍️", accent: "#a78bfa" },
-  { href: "/leaderboards", label: "Ranks",  emoji: null },
+const ALL_NAV_LINKS = [
+  { href: "/dashboard",   label: "Dashboard", emoji: null },
+  { href: "/puzzles",     label: "Puzzles",   emoji: null },
+  { href: "/daily",       label: "Daily",     emoji: "🟩" },
+  { href: "/warz",        label: "Warz",      emoji: "⚔️", accent: "#FDE74C" },
+  { href: "/season-pass", label: "Season",    emoji: "🏅",  enabled: FEATURE_SEASONS_ENABLED },
+  { href: "/store",       label: "Store",     emoji: "🛍️", accent: "#a78bfa", enabled: FEATURE_STORE_ENABLED },
+  { href: "/leaderboards",label: "Ranks",     emoji: null },
 ];
+const NAV_LINKS = ALL_NAV_LINKS.filter(l => !('enabled' in l) || l.enabled);
 
 const MORE_LINKS = [
   { href: "/witness",      label: "The Witness 🔍" },
   { href: "/frequency",    label: "Frequency 📡" },
+  { href: "/forum",        label: "Forum 💬" },
   { href: "/teams",        label: "Teams" },
   { href: "/achievements", label: "Achievements" },
   { href: "/learn",        label: "Learn" },

@@ -42,10 +42,10 @@ body {
   overflow-x: hidden;
 }
 
-/* ── Logo spin (used by LoadingSpinner and inline loaders) ───── */
+/* ── Logo pulse (used by LoadingSpinner and inline loaders) ───── */
 @keyframes pw-logo-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.82); }
 }
 
 /* ── Custom scrollbar ─────────────────────────────────────────── */
