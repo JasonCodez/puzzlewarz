@@ -160,7 +160,7 @@ export default function LeaderboardsPage() {
           </div>
 
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">🏆 Leaderboard</h1>
+            <h1 className="text-4xl font-bold text-white mb-2">🏆 All-Time Leaderboard</h1>
             <p style={{ color: '#DDDBF1' }}>
               Top players solving puzzles and earning points
             </p>
@@ -171,9 +171,9 @@ export default function LeaderboardsPage() {
             {(
               [
                 { id: "global",   label: "🌍 Global"  },
-                { id: "following",label: "👥 Following"},
                 { id: "weekly",   label: "📅 Weekly"  },
                 { id: "monthly",  label: "🗓️ Monthly" },
+                { id: "following",label: "👥 Following"},
               ] as { id: Tab; label: string }[]
             ).map(({ id, label }) => (
               <button

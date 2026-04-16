@@ -17,7 +17,9 @@ import { PuzzlePageSkeleton } from "@/components/Skeleton";
 import { EscapeRoomPuzzle } from "@/components/puzzle/EscapeRoomPuzzle";
 import PuzzleCompletionRatingModal from "@/components/puzzle/PuzzleCompletionRatingModal";
 import PuzzleXpModal from "@/components/puzzle/PuzzleXpModal";
+import PuzzleComparisonModal, { type ComparisonStats } from "@/components/puzzle/PuzzleComparisonModal";
 import { calcLevel } from "@/lib/levels";
+import { FEATURE_TOKENS_ENABLED } from "@/lib/featureFlags";
 import Toasts from '@/components/Toast';
 import type { JigsawPuzzle as JigsawPuzzleType } from "@/lib/puzzle-types";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
@@ -251,6 +253,8 @@ export default function PuzzleDetailPage() {
   const [userTotalXp, setUserTotalXp] = useState<number>(0);
   const [showXpModal, setShowXpModal] = useState(false);
   const [xpModalData, setXpModalData] = useState<XpModalData | null>(null);
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [comparisonStats, setComparisonStats] = useState<ComparisonStats | null>(null);
 
   // Fetch user's current total XP so we can animate the XP bar on puzzle completion
   useEffect(() => {
@@ -280,6 +284,10 @@ export default function PuzzleDetailPage() {
   const [hintTokens, setHintTokens] = useState<number>(0);
   const [skipTokens, setSkipTokens] = useState<number>(0);
   const [isSkipping, setIsSkipping] = useState(false);
+
+  // Tokens are tied to the store — hide them when the store is disabled
+  const effectiveHintTokens = FEATURE_TOKENS_ENABLED ? hintTokens : 0;
+  const effectiveSkipTokens = FEATURE_TOKENS_ENABLED ? skipTokens : 0;
 
   type JigsawControlsApi = {
     reset: () => void;
@@ -872,11 +880,16 @@ export default function PuzzleDetailPage() {
     window.dispatchEvent(new CustomEvent('puzzlewarz:xp-updated'));
     // Trigger an immediate achievement check instead of waiting for the 30-second poll
     window.dispatchEvent(new CustomEvent('puzzlewarz:puzzle-solved'));
+    // Fire-and-forget: fetch comparison stats so they're ready when XP modal dismisses
+    fetch(`/api/puzzles/${puzzleId}/comparison-stats`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setComparisonStats(data); })
+      .catch(() => {});
   };
 
   const handleSkipPuzzle = async () => {
     if (isSkipping || progress?.solved) return;
-    if (skipTokens < 1) return;
+    if (effectiveSkipTokens < 1) return;
     setIsSkipping(true);
     try {
       const res = await fetch(`/api/puzzles/${puzzleId}/skip`, {
@@ -1585,6 +1598,21 @@ export default function PuzzleDetailPage() {
                 levelReward={xpModalData.levelReward}
                 onDismiss={() => {
                   setShowXpModal(false);
+                  if (comparisonStats) {
+                    setShowComparisonModal(true);
+                  } else {
+                    setShowRatingModal(true);
+                  }
+                }}
+              />
+            )}
+
+            {showComparisonModal && comparisonStats && (
+              <PuzzleComparisonModal
+                puzzleId={puzzleId}
+                stats={comparisonStats}
+                onDismiss={() => {
+                  setShowComparisonModal(false);
                   setShowRatingModal(true);
                 }}
               />
@@ -1834,7 +1862,7 @@ export default function PuzzleDetailPage() {
                       wordCrackData={(puzzle.data ?? {}) as Record<string, unknown>}
                       alreadySolved={progress?.solved ?? false}
                       failedAttempts={progress?.failedAttempts ?? 0}
-                      hintTokens={hintTokens}
+                      hintTokens={effectiveHintTokens}
                       xpReward={puzzle.xpReward ?? 50}
                       pointsReward={puzzle.solutions?.[0]?.points ?? 100}
                       onHintUsed={handleSudokuHintUsed}
@@ -1860,7 +1888,7 @@ export default function PuzzleDetailPage() {
                       puzzleId={puzzleId}
                       crosswordData={(puzzle.data ?? {}) as Record<string, unknown>}
                       alreadySolved={progress?.solved ?? false}
-                      hintTokens={hintTokens}
+                      hintTokens={effectiveHintTokens}
                       onHintUsed={handleSudokuHintUsed}
                       onSolved={() => {
                         setSuccess(true);
@@ -1884,7 +1912,7 @@ export default function PuzzleDetailPage() {
                       puzzleId={puzzleId}
                       wordSearchData={(puzzle.data ?? {}) as Record<string, unknown>}
                       alreadySolved={progress?.solved ?? false}
-                      hintTokens={hintTokens}
+                      hintTokens={effectiveHintTokens}
                       onHintUsed={handleSudokuHintUsed}
                       onSolved={() => {
                         setSuccess(true);
@@ -2132,7 +2160,7 @@ export default function PuzzleDetailPage() {
                             }}
                             disabled={timeLimitExceeded || maxAttemptsExceeded || Boolean(progress?.solved)}
                             maxAttempts={puzzle?.sudoku?.maxAttempts ?? 5}
-                            hintTokens={hintTokens}
+                            hintTokens={effectiveHintTokens}
                             onHintUsed={handleSudokuHintUsed}
                             onAttempt={(attemptNumber, locked) => {
                               setSudokuAttemptsUsed(attemptNumber);
@@ -2260,7 +2288,7 @@ export default function PuzzleDetailPage() {
               {/* ── Skip Token Button ─────────────────────────────────── */}
               {!progress?.solved && !teamIdParam && (
                 <div className="mb-6 flex flex-col items-center gap-2">
-                  {skipTokens > 0 ? (
+                  {effectiveSkipTokens > 0 ? (
                     <button
                       onClick={handleSkipPuzzle}
                       disabled={isSkipping}
@@ -2273,7 +2301,7 @@ export default function PuzzleDetailPage() {
                     >
                       {isSkipping
                         ? "Skipping…"
-                        : `⏭️ Skip Puzzle (${skipTokens} token${skipTokens !== 1 ? "s" : ""})`}
+                        : `⏭️ Skip Puzzle (${effectiveSkipTokens} token${effectiveSkipTokens !== 1 ? "s" : ""})`}
                     </button>
                   ) : (
                     <div className="flex flex-col items-center gap-1">

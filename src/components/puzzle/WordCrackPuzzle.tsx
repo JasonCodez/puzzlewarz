@@ -529,7 +529,6 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           borderRadius: "1rem",
           overflow: "hidden",
           width: "100%",
-          maxWidth: "100vw",
         }}
       >
         {/* Animated skin backgrounds */}
@@ -607,9 +606,9 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           <p className="text-xs mt-1 font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
             {wordLength} letters · {maxGuesses - guesses.length} attempt{maxGuesses - guesses.length !== 1 ? "s" : ""} remaining
           </p>
-          {!warzMode && gameStatus === "playing" && MAX_ATTEMPTS > 0 && (
-            <p className="text-xs mt-0.5" style={{ color: failedAttempts >= 1 ? "#f97316" : "#9ca3af" }}>
-              {failedAttempts >= 1 ? "⚠️ Final attempt — rewards halved" : `Attempt ${failedAttempts + 1} of ${MAX_ATTEMPTS}`}
+          {!warzMode && gameStatus === "playing" && failedAttempts >= 1 && (
+            <p className="text-xs mt-0.5" style={{ color: "#f97316" }}>
+              ⚠️ Final attempt — rewards halved
             </p>
           )}
         </div>
@@ -810,7 +809,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           }}
         >
           <div className="wc-skin-overlay" />
-          <div className="flex flex-col gap-[3px] sm:gap-1.5" style={{ position: "relative", zIndex: 1 }}>
+          <div className="flex flex-col items-center gap-[3px] sm:gap-1.5" style={{ position: "relative", zIndex: 1 }}>
           {rows.map(({ letters, rowIndex }) => {
             const isCurrentRow = rowIndex === guesses.length && gameStatus === "playing";
             const isRevealing = revealingRow === rowIndex;

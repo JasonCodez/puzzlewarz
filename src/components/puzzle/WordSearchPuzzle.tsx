@@ -286,8 +286,9 @@ export default function WordSearchPuzzle({
     if (cell) extendDrag(cell.row, cell.col);
   }
 
-  // Responsive cell size: fills available width but caps at 38px
-  const cellSz = `clamp(22px, calc((min(90vw, 520px) - 2rem - ${(gridSize - 1) * 3}px) / ${gridSize}), 38px)`;
+  // Responsive cell size: fills available width but caps at 38px.
+  // Subtracts: grid inner padding (10px*2=20px) + outer px-2 (8px*2=16px) + cell gaps.
+  const cellSz = `clamp(14px, calc((min(94vw, 480px) - 36px - ${(gridSize - 1) * 3}px) / ${gridSize}), 38px)`;
 
   return (
     <>
@@ -311,7 +312,7 @@ export default function WordSearchPuzzle({
 
       <div
         className="flex flex-col items-center gap-4 select-none pb-6"
-        style={{ position: "relative", zIndex: 1, fontFamily: skin.tileFontFamily !== "inherit" ? skin.tileFontFamily : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif" }}
+          style={{ position: "relative", zIndex: 1, overflowX: "hidden", fontFamily: skin.tileFontFamily !== "inherit" ? skin.tileFontFamily : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif" }}
       >
         {/* Header */}
         <div className="text-center w-full px-4">
@@ -387,7 +388,7 @@ export default function WordSearchPuzzle({
                       style={{
                         width: cellSz,
                         height: cellSz,
-                        fontSize: `clamp(0.55rem, 2.6vw, 0.875rem)`,
+                        fontSize: `clamp(0.45rem, 2.4vw, 0.875rem)`,
                         cursor: gameStatus === "playing" ? "crosshair" : "default",
                         background: isSelected
                           ? skin.accentActive

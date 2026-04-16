@@ -3,7 +3,9 @@
  *
  * STORE:   Point store (spend points on cosmetics / power-ups)
  * SEASONS: Season pass / seasonal reward track
+ * TOKENS:  Hint & skip tokens usable in puzzles (tied to the store)
  */
 
 export const FEATURE_STORE_ENABLED   = false;
 export const FEATURE_SEASONS_ENABLED = false;
+export const FEATURE_TOKENS_ENABLED  = false;
