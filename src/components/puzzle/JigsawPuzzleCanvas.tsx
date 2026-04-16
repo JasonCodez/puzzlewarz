@@ -1714,17 +1714,18 @@ export default function JigsawPuzzleSVGWithTray({
         {/* Preview overlay */}
         {showPreview && effectiveUrl && (
           <div onClick={() => setShowPreview(false)}
-               style={{ position: "absolute", inset: 0, zIndex: 9500, display: "flex",
+               style={{ position: "fixed", inset: 0, zIndex: 9500, display: "flex",
                         alignItems: "center", justifyContent: "center",
-                        background: "rgba(0,0,0,0.75)", cursor: "pointer" }}>
+                        background: "rgba(0,0,0,0.85)", cursor: "pointer" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={effectiveUrl} alt="Puzzle preview"
-                 style={{ maxWidth: "80%", maxHeight: "80%", objectFit: "contain", borderRadius: 8,
+                 style={{ maxWidth: "90vw", maxHeight: "80vh", width: "auto", height: "auto",
+                          objectFit: "contain", borderRadius: 8,
                           boxShadow: "0 8px 40px rgba(0,0,0,0.7)", border: "2px solid rgba(255,255,255,0.2)",
-                          pointerEvents: "none" }} />
+                          pointerEvents: "none", display: "block" }} />
             <div style={{ position: "absolute", top: 12, right: 12, color: "rgba(255,255,255,0.7)",
                           fontSize: 13, fontWeight: 600 }}>
-              Click anywhere to close
+              Tap to close
             </div>
           </div>
         )}
