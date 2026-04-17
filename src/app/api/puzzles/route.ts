@@ -146,22 +146,46 @@ export async function GET(request: NextRequest) {
       detectiveCaseFailedByPuzzleId = new Map();
     }
 
-    // Fetch completion and attempt counts separately
-    const puzzleStats = await Promise.all(
-      puzzles.map(async (p: { id: string }) => {
-        const totalAttempts = await prisma.userPuzzleProgress.count({ where: { puzzleId: p.id, user: { isBot: false } } });
-        const completedCount = await prisma.userPuzzleProgress.count({
-          where: { puzzleId: p.id, solved: true, user: { isBot: false } },
-        });
-        return {
-          puzzleId: p.id,
-          totalAttempts,
-          completedCount,
-        };
-      })
-    );
+    // Fetch completion, attempt, and rating counts in parallel (avoids N+1)
+    const puzzleIds = puzzles.map((p: { id: string }) => p.id);
+    const [attemptGroups, solvedGroups, ratingGroups] = await Promise.all([
+      prisma.userPuzzleProgress.groupBy({
+        by: ["puzzleId"],
+        where: { puzzleId: { in: puzzleIds }, user: { isBot: false } },
+        _count: { puzzleId: true },
+      }),
+      prisma.userPuzzleProgress.groupBy({
+        by: ["puzzleId"],
+        where: { puzzleId: { in: puzzleIds }, solved: true, user: { isBot: false } },
+        _count: { puzzleId: true },
+      }),
+      prisma.puzzleRating.groupBy({
+        by: ["puzzleId"],
+        where: { puzzleId: { in: puzzleIds } },
+        _avg: { rating: true },
+        _count: { rating: true },
+      }),
+    ]);
+    const statsMap = new Map<string, { totalAttempts: number; completedCount: number }>();
+    for (const row of attemptGroups) {
+      statsMap.set(row.puzzleId, { totalAttempts: row._count.puzzleId, completedCount: 0 });
+    }
+    for (const row of solvedGroups) {
+      const existing = statsMap.get(row.puzzleId);
+      if (existing) {
+        existing.completedCount = row._count.puzzleId;
+      } else {
+        statsMap.set(row.puzzleId, { totalAttempts: 0, completedCount: row._count.puzzleId });
+      }
+    }
 
-    const statsMap = new Map(puzzleStats.map((s: { puzzleId: string; totalAttempts: number; completedCount: number }) => [s.puzzleId, s]));
+    const ratingsMap = new Map<string, { averageRating: number; ratingCount: number }>();
+    for (const row of ratingGroups) {
+      ratingsMap.set(row.puzzleId, {
+        averageRating: row._avg.rating != null ? Math.round(row._avg.rating * 100) / 100 : 0,
+        ratingCount: row._count.rating,
+      });
+    }
 
     // Map solutions points and completion count to puzzle
     const puzzlesWithPoints = puzzles.map((p: any) => {
@@ -184,21 +208,23 @@ export async function GET(request: NextRequest) {
         pointsReward: p.solutions[0]?.points || 100,
         completionCount: stats?.completedCount || 0,
         attemptCount: stats?.totalAttempts || 0,
+        averageRating: ratingsMap.get(p.id)?.averageRating ?? 0,
+        ratingCount: ratingsMap.get(p.id)?.ratingCount ?? 0,
       };
     });
 
-    // Filter by status if specified
-    let filtered = puzzles;
+    // Filter by status if specified — applied to puzzlesWithPoints (which has normalized titles etc.)
+    let filtered = puzzlesWithPoints;
     if (status === "solved") {
-      filtered = puzzles.filter((p: { userProgress: { solved?: boolean }[] }) => p.userProgress.length > 0 && p.userProgress[0].solved);
+      filtered = puzzlesWithPoints.filter((p: any) => p.userProgress.length > 0 && p.userProgress[0].solved);
     } else if (status === "in-progress") {
-      filtered = puzzles.filter((p: { userProgress: { solved?: boolean; attempts?: number }[] }) => p.userProgress.length > 0 && !p.userProgress[0].solved && ((p.userProgress[0].attempts ?? 0) > 0));
+      filtered = puzzlesWithPoints.filter((p: any) => p.userProgress.length > 0 && !p.userProgress[0].solved && ((p.userProgress[0].attempts ?? 0) > 0));
     } else if (status === "unsolved") {
-      filtered = puzzles.filter((p: { userProgress: { solved?: boolean; attempts?: number }[] }) => p.userProgress.length === 0 || (!p.userProgress[0].solved && ((p.userProgress[0].attempts ?? 0) === 0)));
+      filtered = puzzlesWithPoints.filter((p: any) => p.userProgress.length === 0 || (!p.userProgress[0].solved && ((p.userProgress[0].attempts ?? 0) === 0)));
     }
 
     // Sudoku lockout state (per-user): failed/locked Sudoku puzzles are no longer accessible.
-    const visiblePuzzles = puzzlesWithPoints.filter((p: any) => {
+    const visiblePuzzles = filtered.filter((p: any) => {
       try {
         if (p?.puzzleType !== 'sudoku') return true;
         const up = Array.isArray(p?.userProgress) ? p.userProgress[0] : null;

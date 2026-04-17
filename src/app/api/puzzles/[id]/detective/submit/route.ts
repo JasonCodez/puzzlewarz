@@ -6,7 +6,8 @@ import { getDetectiveCaseData, isDetectiveCaseAnswerCorrect } from '@/lib/detect
 import { validateSameOrigin } from '@/lib/requestSecurity';
 import { calcLevel } from '@/lib/levels';
 import { awardSeasonXp } from '@/lib/seasonXp';
-import { getAttemptStatus, recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from '@/lib/attemptLimit';
+import { recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from '@/lib/attemptLimit';
+import { getPuzzleAccessState } from '@/lib/puzzle-state/getPuzzleAccessState';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -49,10 +50,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Check 3-attempt limit (replaces the old single-wrong-answer lock)
-    const attemptStatus = await getAttemptStatus(user.id, puzzleId);
-    if (attemptStatus.locked) {
+    const accessState = await getPuzzleAccessState(user.id, puzzleId);
+    if (accessState.isAttemptLocked) {
       return NextResponse.json(
-        { error: 'Case locked — no attempts remaining', locked: true, attemptsUsed: attemptStatus.failedAttempts, maxAttempts: MAX_PUZZLE_ATTEMPTS },
+        { error: 'Case locked — no attempts remaining', locked: true, attemptsUsed: accessState.attemptsUsed, maxAttempts: MAX_PUZZLE_ATTEMPTS },
         { status: 403 }
       );
     }

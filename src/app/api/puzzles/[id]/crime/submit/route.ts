@@ -3,7 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { getCrimeCaseData, validateAccusation } from '@/lib/crimeCase';
-import { getAttemptStatus, recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from '@/lib/attemptLimit';
+import { recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from '@/lib/attemptLimit';
+import { getPuzzleAccessState } from '@/lib/puzzle-state/getPuzzleAccessState';
 
 export async function POST(
   req: NextRequest,
@@ -35,10 +36,10 @@ export async function POST(
     }
 
     // Enforce 3-attempt limit
-    const attemptStatus = await getAttemptStatus(user.id, puzzleId);
-    if (attemptStatus.locked) {
+    const accessState = await getPuzzleAccessState(user.id, puzzleId);
+    if (accessState.isAttemptLocked) {
       return NextResponse.json(
-        { error: 'No attempts remaining', locked: true, attemptsUsed: attemptStatus.failedAttempts, maxAttempts: MAX_PUZZLE_ATTEMPTS },
+        { error: 'No attempts remaining', locked: true, attemptsUsed: accessState.attemptsUsed, maxAttempts: MAX_PUZZLE_ATTEMPTS },
         { status: 403 }
       );
     }

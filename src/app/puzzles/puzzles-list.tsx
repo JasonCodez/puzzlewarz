@@ -42,12 +42,8 @@ interface Puzzle {
   failed?: boolean;
   failedReason?: string | null;
   completedElapsedSeconds?: number | null;
-}
-
-interface RatingStats {
-  puzzleId: string;
-  averageRating: number;
-  ratingCount: number;
+  averageRating?: number;
+  ratingCount?: number;
 }
 
 interface Category {
@@ -155,7 +151,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
   const [sortOrder, setSortOrder] = useState<string>("asc");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [totalUsers, setTotalUsers] = useState(0);
-  const [ratingStats, setRatingStats] = useState<Record<string, RatingStats>>({})
+  
   const [focusedPuzzleId, setFocusedPuzzleId] = useState<string | null>(null);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [teamModalMessage, setTeamModalMessage] = useState("");
@@ -300,24 +296,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
         });
         setPuzzles(annotated);
         
-        // Fetch ratings for all puzzles
-        const ratingsData: Record<string, RatingStats> = {};
-        await Promise.all(
-          puzzlesData.map(async (puzzle: Puzzle) => {
-            try {
-              const ratingRes = await fetch(
-                `/api/puzzles/ratings-stats?puzzleId=${puzzle.id}`
-              );
-              if (ratingRes.ok) {
-                const stats = await ratingRes.json();
-                ratingsData[puzzle.id] = stats;
-              }
-            } catch (error) {
-              console.error(`Failed to fetch ratings for puzzle ${puzzle.id}:`, error);
-            }
-          })
-        );
-        setRatingStats(ratingsData);
+        // Ratings are now included in the puzzle list response — no separate fetch needed
       }
 
       if (categoriesRes.ok) {
@@ -696,12 +675,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                   </div>
                   <div className="mb-2">
                     <StarRating 
-                      rating={ratingStats[puzzle.id]?.averageRating ?? 0}
+                      rating={puzzle.averageRating ?? 0}
                       size="sm"
-                      ratingCount={ratingStats[puzzle.id]?.ratingCount}
-                      showText={ratingStats[puzzle.id]?.averageRating > 0}
+                      ratingCount={puzzle.ratingCount}
+                      showText={(puzzle.averageRating ?? 0) > 0}
                     />
-                    {(!ratingStats[puzzle.id] || ratingStats[puzzle.id].averageRating === 0) && (
+                    {(!puzzle.averageRating || puzzle.averageRating === 0) && (
                       <p style={{ color: '#AB9F9D' }} className="text-xs mt-1">No ratings yet</p>
                     )}
                   </div>
@@ -835,12 +814,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                     </div>
                     <div className="mb-2">
                       <StarRating 
-                        rating={ratingStats[puzzle.id]?.averageRating ?? 0}
+                        rating={puzzle.averageRating ?? 0}
                         size="sm"
-                        ratingCount={ratingStats[puzzle.id]?.ratingCount}
-                        showText={ratingStats[puzzle.id]?.averageRating > 0}
+                        ratingCount={puzzle.ratingCount}
+                        showText={(puzzle.averageRating ?? 0) > 0}
                       />
-                      {(!ratingStats[puzzle.id] || ratingStats[puzzle.id].averageRating === 0) && (
+                      {(!puzzle.averageRating || puzzle.averageRating === 0) && (
                         <p style={{ color: '#AB9F9D' }} className="text-xs mt-1">No ratings yet</p>
                       )}
                     </div>
@@ -987,12 +966,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                       </div>
                       <div className="mb-2">
                         <StarRating 
-                          rating={ratingStats[puzzle.id]?.averageRating ?? 0}
+                          rating={puzzle.averageRating ?? 0}
                           size="sm"
-                          ratingCount={ratingStats[puzzle.id]?.ratingCount}
-                          showText={ratingStats[puzzle.id]?.averageRating > 0}
+                          ratingCount={puzzle.ratingCount}
+                          showText={(puzzle.averageRating ?? 0) > 0}
                         />
-                        {(!ratingStats[puzzle.id] || ratingStats[puzzle.id].averageRating === 0) && (
+                        {(!puzzle.averageRating || puzzle.averageRating === 0) && (
                           <p style={{ color: '#AB9F9D' }} className="text-xs mt-1">No ratings yet</p>
                         )}
                       </div>
@@ -1072,12 +1051,12 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                       </div>
                       <div className="mb-2">
                         <StarRating 
-                          rating={ratingStats[puzzle.id]?.averageRating ?? 0}
+                          rating={puzzle.averageRating ?? 0}
                           size="sm"
-                          ratingCount={ratingStats[puzzle.id]?.ratingCount}
-                          showText={ratingStats[puzzle.id]?.averageRating > 0}
+                          ratingCount={puzzle.ratingCount}
+                          showText={(puzzle.averageRating ?? 0) > 0}
                         />
-                        {(!ratingStats[puzzle.id] || ratingStats[puzzle.id].averageRating === 0) && (
+                        {(!puzzle.averageRating || puzzle.averageRating === 0) && (
                           <p style={{ color: '#AB9F9D' }} className="text-xs mt-1">No ratings yet</p>
                         )}
                       </div>

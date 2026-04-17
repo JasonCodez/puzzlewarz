@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
-import { getAttemptStatus, recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from "@/lib/attemptLimit";
+import { recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from "@/lib/attemptLimit";
+import { getPuzzleAccessState } from "@/lib/puzzle-state/getPuzzleAccessState";
 
 export async function POST(request: NextRequest, context: { params: { id: string } } | { params: Promise<{ id: string }> }) {
 	try {
@@ -43,10 +44,10 @@ export async function POST(request: NextRequest, context: { params: { id: string
 		// Enforce 3-attempt limit for applicable puzzle types (not gridlock, sudoku, jigsaw, escape_room)
 		const attemptLimitTypes = ["riddle", "general", "math", "code_master", "arg", "blackout", "anagram_blitz", "word_search"];
 		if (attemptLimitTypes.includes(puzzle.puzzleType)) {
-			const attemptStatus = await getAttemptStatus(currentUser.id, puzzleId);
-			if (attemptStatus.locked) {
+			const accessState = await getPuzzleAccessState(currentUser.id, puzzleId);
+			if (accessState.isAttemptLocked) {
 				return NextResponse.json(
-					{ error: "No attempts remaining", locked: true, attemptsUsed: attemptStatus.failedAttempts, maxAttempts: MAX_PUZZLE_ATTEMPTS },
+					{ error: "No attempts remaining", locked: true, attemptsUsed: accessState.attemptsUsed, maxAttempts: MAX_PUZZLE_ATTEMPTS },
 					{ status: 403 }
 				);
 			}

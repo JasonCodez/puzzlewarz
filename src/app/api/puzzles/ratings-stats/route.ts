@@ -5,6 +5,34 @@ export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
     const puzzleId = searchParams.get("puzzleId");
+    const puzzleIds = searchParams.get("puzzleIds"); // comma-separated bulk mode
+
+    // ── Bulk mode: ?puzzleIds=id1,id2,... ─────────────────────────────────
+    if (puzzleIds) {
+      const ids = puzzleIds.split(",").map((s) => s.trim()).filter(Boolean);
+      if (ids.length === 0) return NextResponse.json({});
+
+      const allRatings = await prisma.puzzleRating.findMany({
+        where: { puzzleId: { in: ids } },
+        select: { puzzleId: true, rating: true },
+      });
+
+      const grouped: Record<string, number[]> = {};
+      for (const r of allRatings) {
+        if (!grouped[r.puzzleId]) grouped[r.puzzleId] = [];
+        grouped[r.puzzleId].push(r.rating);
+      }
+
+      const result: Record<string, { averageRating: number; ratingCount: number }> = {};
+      for (const id of ids) {
+        const list = grouped[id] ?? [];
+        result[id] = {
+          averageRating: list.length > 0 ? Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 100) / 100 : 0,
+          ratingCount: list.length,
+        };
+      }
+      return NextResponse.json(result);
+    }
 
     if (!puzzleId) {
       return NextResponse.json(

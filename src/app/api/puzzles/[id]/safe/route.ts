@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
-import { getAttemptStatus, MAX_PUZZLE_ATTEMPTS } from "@/lib/attemptLimit";
+import { MAX_PUZZLE_ATTEMPTS } from "@/lib/attemptLimit";
+import { getPuzzleAccessState } from "@/lib/puzzle-state/getPuzzleAccessState";
 
 export async function POST(
   request: NextRequest,
@@ -40,12 +41,12 @@ export async function POST(
     }
 
     // Check 3-attempt limit (each full failed game = 1 attempt)
-    const attemptStatus = await getAttemptStatus(currentUser.id, puzzleId);
-    if (attemptStatus.locked) {
+    const accessState = await getPuzzleAccessState(currentUser.id, puzzleId);
+    if (accessState.isAttemptLocked) {
       return NextResponse.json(
         {
           locked: true,
-          attemptsUsed: attemptStatus.failedAttempts,
+          attemptsUsed: accessState.attemptsUsed,
           maxAttempts: MAX_PUZZLE_ATTEMPTS,
           revealCode: code,
         },

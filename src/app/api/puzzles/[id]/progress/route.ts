@@ -6,10 +6,9 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { validateSameOrigin } from "@/lib/requestSecurity";
 
-import { calcLevel } from "@/lib/levels";
-import { awardSeasonXp } from "@/lib/seasonXp";
-import { incrementStreak } from "@/lib/streakService";
-import { getXpMultiplier } from "@/lib/getXpMultiplier";
+import { startSession, endSession } from "@/lib/puzzle-progress/session-actions";
+import { startSudokuTimer, lockSudoku, clearSudokuState } from "@/lib/puzzle-progress/sudoku-actions";
+import { logAttempt, handleAttemptSuccess, recordGameLoss } from "@/lib/puzzle-progress/attempt-actions";
 
 // GET /api/puzzles/[id]/progress - Fetch user's progress for puzzle
 export async function GET(
@@ -207,404 +206,49 @@ export async function POST(
 
     switch (action) {
       case "start_session":
-        // Start a new session
-        await prisma.userPuzzleProgress.update({
-          where: { id: progress.id },
-          data: {
-            currentSessionStart: new Date(),
-          },
-        });
-
-        // Create session log entry
-        await prisma.puzzleSessionLog.create({
-          data: {
-            progressId: progress.id,
-            userId: user.id,
-            puzzleId: id,
-            sessionStart: new Date(),
-          },
-        });
-
+        await startSession(progress.id, user.id, id);
         break;
-
-      case "start_sudoku_timer": {
-        if (puzzleRecord?.puzzleType !== 'sudoku') {
-          return NextResponse.json({ error: 'Not a Sudoku puzzle' }, { status: 400 });
-        }
-
-        if (progress.solved) break;
-        if (progress.sudokuLockedAt) {
-          return NextResponse.json({ error: 'Sudoku puzzle is locked' }, { status: 403 });
-        }
-
-        const now = new Date();
-        const limitSeconds = puzzleRecord.sudoku?.timeLimitSeconds ?? 15 * 60;
-
-        if (!progress.sudokuStartedAt || !progress.sudokuExpiresAt) {
-          const startedAt = (() => {
-            if (clientStartedAtMs && Number.isFinite(clientStartedAtMs)) {
-              const safeMs = Math.min(Date.now(), clientStartedAtMs);
-              return new Date(safeMs);
-            }
-            return now;
-          })();
-
-          const expiresAt = new Date(startedAt.getTime() + limitSeconds * 1000);
-
-          await prisma.userPuzzleProgress.update({
-            where: { id: progress.id },
-            data: {
-              sudokuStartedAt: startedAt,
-              sudokuExpiresAt: expiresAt,
-              sudokuLockedAt: null,
-              sudokuLockReason: null,
-            },
-          });
-        }
-        break;
-      }
 
       case "end_session":
-        if (progress.currentSessionStart) {
-          const now = new Date();
-          const computedSeconds = Math.max(
-            0,
-            Math.floor((now.getTime() - progress.currentSessionStart.getTime()) / 1000)
-          );
-          const finalDuration = typeof durationSeconds === 'number' ? durationSeconds : computedSeconds;
-
-          await prisma.userPuzzleProgress.update({
-            where: { id: progress.id },
-            data: {
-              totalTimeSpent: progress.totalTimeSpent + finalDuration,
-              currentSessionStart: null,
-            },
-          });
-
-          // Update latest session log (best effort)
-          const sessionLog = await prisma.puzzleSessionLog.findFirst({
-            where: {
-              progressId: progress.id,
-              sessionEnd: null,
-            },
-            orderBy: { sessionStart: "desc" },
-          });
-
-          if (sessionLog) {
-            await prisma.puzzleSessionLog.update({
-              where: { id: sessionLog.id },
-              data: {
-                sessionEnd: now,
-                durationSeconds: finalDuration,
-                hintUsed: hintUsed ?? false,
-              },
-            });
-          }
-        }
+        await endSession(progress, durationSeconds, hintUsed);
         break;
 
       case "log_attempt":
-        const newAttempts = progress.attempts + 1;
-        const newAvgTime =
-          progress.averageTimePerAttempt && durationSeconds
-            ? (progress.averageTimePerAttempt * progress.attempts + durationSeconds) /
-              newAttempts
-            : durationSeconds || 0;
-
-        await prisma.userPuzzleProgress.update({
-          where: { id: progress.id },
-          data: {
-            attempts: newAttempts,
-            lastAttemptAt: new Date(),
-            averageTimePerAttempt: newAvgTime,
-          },
-        });
-
-        // Create/update session log
-        const currentSessionLog = await prisma.puzzleSessionLog.findFirst({
-          where: {
-            progressId: progress.id,
-            sessionEnd: null,
-          },
-          orderBy: { sessionStart: "desc" },
-        });
-
-        if (currentSessionLog) {
-          await prisma.puzzleSessionLog.update({
-            where: { id: currentSessionLog.id },
-            data: {
-              attemptMade: true,
-            },
-          });
-        }
-
+        await logAttempt(progress, durationSeconds);
         break;
 
-      case "attempt_success":
-        // Enforce Sudoku time limit / lock server-side to prevent refresh/localStorage cheating.
-        if (puzzleRecord?.puzzleType === 'sudoku') {
-          const now = new Date();
-          if (progress.sudokuLockedAt) {
-            return NextResponse.json({ error: 'Sudoku puzzle is locked' }, { status: 403 });
-          }
-          if (!progress.sudokuStartedAt || !progress.sudokuExpiresAt) {
-            return NextResponse.json({ error: 'Sudoku timer not started' }, { status: 403 });
-          }
-          if (now.getTime() > progress.sudokuExpiresAt.getTime()) {
-            // Mark locked (best effort) and deny.
-            try {
-              await prisma.userPuzzleProgress.update({
-                where: { id: progress.id },
-                data: {
-                  sudokuLockedAt: now,
-                  sudokuLockReason: 'time_limit',
-                },
-              });
-            } catch {
-              // ignore
-            }
-            return NextResponse.json({ error: 'Time limit exceeded' }, { status: 403 });
-          }
-        }
-
-        // If this is a Sudoku puzzle, validate the submitted grid against the stored solution
-        try {
-          const submittedGrid = rawBody.grid;
-          if (puzzleRecord?.puzzleType === 'sudoku') {
-            if (!Array.isArray(submittedGrid)) {
-              console.warn('[PROGRESS] attempt_success missing grid for sudoku');
-              return NextResponse.json({ error: 'Missing submitted grid for Sudoku validation' }, { status: 400 });
-            }
-
-            let storedSolution: any = null;
-            try {
-              storedSolution = puzzleRecord.sudoku?.solutionGrid ? JSON.parse(puzzleRecord.sudoku.solutionGrid) : null;
-            } catch (e) {
-              storedSolution = null;
-            }
-
-            if (!Array.isArray(storedSolution)) {
-              console.error('[PROGRESS] server missing sudoku solution for puzzle', id);
-              return NextResponse.json({ error: 'Server missing Sudoku solution' }, { status: 500 });
-            }
-
-            const gridsMatch = (() => {
-              for (let r = 0; r < 9; r++) {
-                for (let c = 0; c < 9; c++) {
-                  const s = Number(storedSolution[r]?.[c] ?? -1);
-                  const g = Number(submittedGrid[r]?.[c] ?? -1);
-                  if (Number.isNaN(s) || Number.isNaN(g) || s !== g) return false;
-                }
-              }
-              return true;
-            })();
-
-            if (!gridsMatch) {
-              console.warn('[PROGRESS] submitted sudoku grid does not match solution');
-              return NextResponse.json({ error: 'Submitted Sudoku solution does not match' }, { status: 400 });
-            }
-          }
-        } catch (e) {
-          console.error('[PROGRESS] error validating sudoku grid', e);
-          return NextResponse.json({ error: 'Failed to validate submitted solution' }, { status: 500 });
-        }
-
-        const successfulAttempts = progress.successfulAttempts + 1;
-        const newAttempts2 = progress.attempts + 1;
-        const newAvgTime2 =
-          progress.averageTimePerAttempt && durationSeconds
-            ? (progress.averageTimePerAttempt * progress.attempts + durationSeconds) /
-              newAttempts2
-            : durationSeconds || 0;
-
-        await prisma.userPuzzleProgress.update({
-          where: { id: progress.id },
-          data: {
-            attempts: newAttempts2,
-            successfulAttempts,
-            lastAttemptAt: new Date(),
-            averageTimePerAttempt: newAvgTime2,
-            solved: true,
-            solvedAt: new Date(),
-          },
-        });
-
-        // Mark session log as successful
-        const successSessionLog = await prisma.puzzleSessionLog.findFirst({
-          where: {
-            progressId: progress.id,
-            sessionEnd: null,
-          },
-          orderBy: { sessionStart: "desc" },
-        });
-
-        if (successSessionLog) {
-          await prisma.puzzleSessionLog.update({
-            where: { id: successSessionLog.id },
-            data: {
-              wasSuccessful: true,
-              attemptMade: true,
-            },
-          });
-        }
-
-          // Check Triple-or-Nothing token (3× rewards on first attempt)
-          let tripleActive = false;
-          try {
-            const tripleUser = await prisma.user.findUnique({
-              where: { id: user.id },
-              select: { tripleOrNothingActive: true },
-            });
-            tripleActive = !!(tripleUser?.tripleOrNothingActive && progress.attempts === 0);
-            if (tripleActive) {
-              await prisma.user.update({ where: { id: user.id }, data: { tripleOrNothingActive: false } });
-            }
-          } catch { /* non-critical */ }
-
-          // Award points for solving the puzzle
-          try {
-            let awardPoints = 100;
-            if (puzzleRecord) {
-              if (puzzleRecord.solutions && puzzleRecord.solutions.length > 0) {
-                awardPoints = puzzleRecord.solutions[0].points ?? awardPoints;
-              } else if (puzzleRecord.parts && puzzleRecord.parts.length > 0) {
-                // Sum part point values as a fallback for multi-part puzzles
-                awardPoints = puzzleRecord.parts.reduce(
-                  (sum: number, part: { pointsValue?: number | null }) => sum + (part.pointsValue ?? 0),
-                  0
-                ) || awardPoints;
-              }
-            }
-
-            if (tripleActive) awardPoints *= 3;
-
-            // Update user's progress points
-            await prisma.userPuzzleProgress.update({
-              where: { id: progress.id },
-              data: { pointsEarned: { increment: awardPoints } },
-            });
-
-            // Update user's persistent total (survives puzzle deletion)
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { totalPoints: { increment: awardPoints } },
-            });
-
-            // Update or create global leaderboard entry
-            const existingLeaderboard = await prisma.globalLeaderboard.findFirst({ where: { userId: user.id } });
-            if (existingLeaderboard) {
-              await prisma.globalLeaderboard.update({
-                where: { id: existingLeaderboard.id },
-                data: { totalPoints: { increment: awardPoints } },
-              });
-            } else {
-              await prisma.globalLeaderboard.create({ data: { userId: user.id, totalPoints: awardPoints } });
-            }
-          } catch (err) {
-            console.error('Failed to award points on puzzle success:', err);
-          }
-
-          // ── Award XP and recalculate level/title ──────────────────────
-          try {
-            const baseXp = puzzleRecord?.xpReward ?? 50;
-            const xpMultiplier = await getXpMultiplier(user.id);
-            const xpGain = baseXp * xpMultiplier * (tripleActive ? 3 : 1);
-            const freshUser = await prisma.user.findUnique({
-              where: { id: user.id },
-              select: { xp: true },
-            });
-            const newXp = (freshUser?.xp ?? 0) + xpGain;
-            const { level, title } = calcLevel(newXp);
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { xp: newXp, level, xpTitle: title },
-            });
-            // Season pass XP
-            await awardSeasonXp(user.id, xpGain);
-          } catch (err) {
-            console.error('Failed to award XP on puzzle success:', err);
-          }
-
-          // ── Streak ────────────────────────────────────────────────────
-          try {
-            await incrementStreak(user.id);
-          } catch (err) {
-            console.error('Failed to update streak on puzzle success:', err);
-          }
-
-          // ── Real-time leaderboard broadcast ───────────────────────────
-          try {
-            const socketUrl = process.env.SOCKET_URL;
-            if (socketUrl) {
-              fetch(`${socketUrl}/emit`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-socket-secret': process.env.SOCKET_SECRET ?? '',
-                },
-                body: JSON.stringify({ event: 'leaderboard:update', payload: { userId: user.id } }),
-              }).catch(() => {/* non-critical */});
-            }
-          } catch { /* non-critical */ }
-
+      case "attempt_success": {
+        const earlyReturn = await handleAttemptSuccess(progress, puzzleRecord, rawBody.grid, durationSeconds, user.id);
+        if (earlyReturn) return earlyReturn;
         break;
+      }
+
+      case "start_sudoku_timer": {
+        if (puzzleRecord?.puzzleType !== "sudoku") {
+          return NextResponse.json({ error: "Not a Sudoku puzzle" }, { status: 400 });
+        }
+        const earlyReturn = await startSudokuTimer(progress, puzzleRecord, clientStartedAtMs);
+        if (earlyReturn) return earlyReturn;
+        break;
+      }
 
       case "lock_puzzle": {
-        // Currently used by Sudoku UI when time runs out.
-        const now = new Date();
-        if (puzzleRecord?.puzzleType === 'sudoku') {
-          await prisma.userPuzzleProgress.update({
-            where: { id: progress.id },
-            data: {
-              sudokuLockedAt: now,
-              sudokuLockReason: lockReason || 'locked',
-              // Ensure deadline is not in the future once locked.
-              sudokuExpiresAt: progress.sudokuExpiresAt && progress.sudokuExpiresAt.getTime() < now.getTime() ? progress.sudokuExpiresAt : now,
-            },
-          });
+        if (puzzleRecord?.puzzleType === "sudoku") {
+          await lockSudoku(progress, lockReason);
         }
         break;
       }
 
       case "clear_state": {
-        // IMPORTANT: do not allow users to reset an active Sudoku timer.
-        if (puzzleRecord?.puzzleType === 'sudoku') {
-          const now = new Date();
-          const expired = !!(progress.sudokuExpiresAt && progress.sudokuExpiresAt.getTime() <= now.getTime());
-          const canClearTimer = progress.solved || !!progress.sudokuLockedAt || expired;
-
-          if (canClearTimer) {
-            await prisma.userPuzzleProgress.update({
-              where: { id: progress.id },
-              data: {
-                sudokuStartedAt: null,
-                sudokuExpiresAt: null,
-                sudokuLockedAt: null,
-                sudokuLockReason: null,
-              },
-            });
-          }
+        if (puzzleRecord?.puzzleType === "sudoku") {
+          await clearSudokuState(progress);
         }
         break;
       }
 
-      case "record_game_loss": {
-        // Called by multi-guess puzzle components (Word Crack, Crack Safe) when
-        // the player exhausts all guesses without solving. Each full failed game
-        // counts as one attempt toward the MAX_PUZZLE_ATTEMPTS limit.
-        if (!progress.solved) {
-          await prisma.userPuzzleProgress.update({
-            where: { id: progress.id },
-            data: { failedAttempts: { increment: 1 }, lastAttemptAt: new Date() },
-          });
-          // Consume any active Triple-or-Nothing token (wasted on failure)
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { tripleOrNothingActive: false },
-          });
-        }
+      case "record_game_loss":
+        await recordGameLoss(progress, user.id);
         break;
-      }
     }
 
     // Return updated progress
