@@ -7,22 +7,6 @@ services:
     buildCommand: "npm ci && npm run build"
     startCommand: "npx prisma migrate deploy && npm run start"
     autoDeploy: true
-    envVars:
-      - key: UPLOADS_DIR
-        value: /var/data/uploads
-      # CRON_SECRET — set this in the Render dashboard; pass as "Authorization: Bearer <value>"
-      # to the settlement endpoints below.
-      # - key: CRON_SECRET
-      #   sync: false
-      # Add secrets in the Render dashboard instead of committing them here.
-      # - key: DATABASE_URL
-      #   sync: false
-      # - key: REDIS_URL
-      #   sync: false
-      # - key: NEXTAUTH_URL
-      #   sync: false
-      # - key: NEXTAUTH_SECRET
-      #   sync: false
 
 # ── Leaderboard settlement cron jobs ─────────────────────────────────────────
 # Uncomment when you upgrade to a paid Render plan (cron jobs require paid tier).
