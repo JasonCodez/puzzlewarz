@@ -2,7 +2,6 @@ services:
   - type: web
     name: kryptyk-labs-arg
     env: node
-    plan: starter
     region: oregon
     branch: main
     buildCommand: "npm ci && npm run build"
