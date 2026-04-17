@@ -9,7 +9,7 @@ RUN apk add --no-cache libc6-compat bash
 
 # Copy package files and install
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 # Copy source and build
 COPY . .
