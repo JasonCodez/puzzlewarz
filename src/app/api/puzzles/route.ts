@@ -47,9 +47,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Build sort object
+    // Note: "points" sort is applied in-memory after mapping (pointsReward is derived from solutions, not a Puzzle column)
     const orderBy: any = {};
     if (sortBy === "points") {
-      orderBy.pointsReward = sortOrder === "desc" ? "desc" : "asc";
+      orderBy.order = "asc"; // stable secondary sort; primary sort applied below
     } else if (sortBy === "difficulty") {
       orderBy.difficulty = sortOrder === "desc" ? "desc" : "asc";
     } else if (sortBy === "releaseDate") {
@@ -92,6 +93,7 @@ export async function GET(request: NextRequest) {
             id: true,
             solved: true,
             attempts: true,
+            totalTimeSpent: true,
             sudokuLockedAt: true,
             sudokuLockReason: true,
           },
@@ -212,6 +214,12 @@ export async function GET(request: NextRequest) {
         ratingCount: ratingsMap.get(p.id)?.ratingCount ?? 0,
       };
     });
+
+    // Apply in-memory sort for "points" (derived field not available as a Prisma column)
+    if (sortBy === "points") {
+      const dir = sortOrder === "desc" ? -1 : 1;
+      puzzlesWithPoints.sort((a: any, b: any) => dir * ((a.pointsReward ?? 0) - (b.pointsReward ?? 0)));
+    }
 
     // Filter by status if specified — applied to puzzlesWithPoints (which has normalized titles etc.)
     let filtered = puzzlesWithPoints;

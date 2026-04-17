@@ -37,6 +37,9 @@ import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
 import BlackoutPuzzle from "@/components/puzzle/BlackoutPuzzle";
 import { getSkinTokens } from "@/lib/puzzleSkins";
 import { getPuzzleTypeLabel } from "@/lib/puzzleTypeLabels";
+import { PuzzlePageOverlays } from "@/components/puzzle/PuzzlePageOverlays";
+import { PuzzleTypeRenderer } from "@/components/puzzle/PuzzleTypeRenderer";
+import { PuzzleProgressSection } from "@/components/puzzle/PuzzleProgressSection";
 
 interface XpModalData {
   xpGained: number;
@@ -887,6 +890,75 @@ export default function PuzzleDetailPage() {
       .catch(() => {});
   };
 
+  const handleGiveUpConfirm = async () => {
+    setShowGiveUpConfirm(false);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`sudoku-failed:${puzzleId}`, JSON.stringify({ ts: Date.now(), reason: 'given_up' }));
+      }
+    } catch (e) { /* ignore */ }
+    try {
+      sudokuLockSentRef.current = true;
+      await fetch(`/api/puzzles/${puzzleId}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'lock_puzzle', reason: 'given_up', durationSeconds: sudokuStartRef.current ? Math.round((Date.now() - sudokuStartRef.current) / 1000) : 0 }),
+      });
+    } catch (e) { /* ignore */ }
+    try {
+      await fetch(`/api/puzzles/${puzzleId}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear_state' }),
+      });
+    } catch (e) { /* ignore */ }
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`sudoku-progress:${puzzleId}`);
+        localStorage.removeItem(`sudoku-start:${puzzleId}`);
+      }
+    } catch (e) { /* ignore */ }
+    try {
+      if (sudokuTimerRef.current != null) {
+        clearInterval(sudokuTimerRef.current);
+        sudokuTimerRef.current = null;
+      }
+      sudokuStartRef.current = null;
+    } catch (e) { /* ignore */ }
+    setMaxAttemptsExceeded(true);
+    setTimeout(() => router.push('/puzzles'), 3500);
+  };
+
+  const handleJigsawComplete = async (timeSpentSeconds?: number): Promise<number> => {
+    const prevPoints = progress?.pointsEarned || 0;
+    try {
+      const resp = await fetch(`/api/puzzles/${puzzleId}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'attempt_success', durationSeconds: timeSpentSeconds || 0 }),
+      });
+      if (resp.ok) {
+        const updated = await resp.json();
+        setProgress(updated);
+        setSuccess(true);
+        const newPoints = updated?.pointsEarned ?? prevPoints;
+        const pointsAwarded = Math.max(0, newPoints - prevPoints);
+        setJustAwardedPoints(pointsAwarded);
+        setCompletionSeconds(timeSpentSeconds ?? null);
+        return pointsAwarded;
+      }
+    } catch (err) {
+      console.error('Failed to log jigsaw success:', err);
+    }
+    setSuccess(true);
+    return 0;
+  };
+
+  const handlePuzzleTypeComplete = (elapsed?: number, xp?: number) => {
+    setSuccess(true);
+    recordCompletionAndShowModal(elapsed, xp);
+  };
+
   const handleSkipPuzzle = async () => {
     if (isSkipping || progress?.solved) return;
     if (effectiveSkipTokens < 1) return;
@@ -1183,146 +1255,15 @@ export default function PuzzleDetailPage() {
       } as React.CSSProperties}
       className="min-h-screen"
     >
-      {timeLimitExceeded && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="max-w-md w-full bg-gradient-to-br from-[#071016] to-[#09313a] text-white rounded-xl p-6 shadow-2xl border border-[#FDE74C]/20">
-            <div className="flex items-center gap-4">
-              <div className="flex-shrink-0 w-16 h-16 rounded-full bg-gradient-to-br from-[#FDE74C] to-[#FFB86B] flex items-center justify-center shadow-lg">
-                <span className="text-3xl">⏱️</span>
-              </div>
-              <div className="flex-1 text-left">
-                <h2 className="text-2xl font-extrabold text-yellow-300">Oh No! Time Limit Reached</h2>
-                <p className="mt-1 text-sm text-gray-200">Puzzle failed. Try another puzzle — you'll get it next time!</p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="text-xs text-[#cbd5e1]">You will be redirected to the puzzles page shortly.</div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => router.push('/puzzles')}
-                  className="px-4 py-2 rounded bg-yellow-300 text-black font-semibold shadow hover:brightness-95 transition"
-                >
-                  Go to puzzles now
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {maxAttemptsExceeded && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="max-w-md w-full bg-gradient-to-br from-[#071016] to-[#09313a] text-white rounded-xl p-6 shadow-2xl border border-[#FDE74C]/20">
-            <div className="flex items-center gap-4">
-              <div className="flex-shrink-0 w-16 h-16 rounded-full bg-gradient-to-br from-[#FDE74C] to-[#FFB86B] flex items-center justify-center shadow-lg">
-                <span className="text-3xl">🔒</span>
-              </div>
-              <div className="flex-1 text-left">
-                <h2 className="text-2xl font-extrabold text-yellow-300">Oh No! Max Submissions Reached</h2>
-                <p className="mt-1 text-sm text-gray-200">Puzzle failed due to too many incorrect submissions. Try another puzzle!</p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="text-xs text-[#cbd5e1]">You will be redirected to the puzzles page shortly.</div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => router.push('/puzzles')}
-                  className="px-4 py-2 rounded bg-yellow-300 text-black font-semibold shadow hover:brightness-95 transition"
-                >
-                  Go to puzzles now
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {showGiveUpConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="max-w-md w-full bg-gradient-to-br from-[#071016] to-[#09313a] text-white rounded-xl p-6 shadow-2xl border border-[#FDE74C]/20">
-            <div className="flex items-center gap-4">
-              <div className="flex-shrink-0 w-16 h-16 rounded-full bg-gradient-to-br from-[#FDE74C] to-[#FFB86B] flex items-center justify-center shadow-lg">
-                <span className="text-3xl">❗</span>
-              </div>
-              <div className="flex-1 text-left">
-                <h2 className="text-2xl font-extrabold text-yellow-300">Give Up?</h2>
-                <p className="mt-1 text-sm text-gray-200">Giving up will mark this puzzle as failed and you will not be able to access it again. Are you sure?</p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="text-xs text-[#cbd5e1]">This action is permanent for this puzzle.</div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={async () => {
-                    setShowGiveUpConfirm(false);
-                    // call existing give-up flow
-                    try {
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem(`sudoku-failed:${puzzleId}`, JSON.stringify({ ts: Date.now(), reason: 'given_up' }));
-                      }
-                    } catch (e) {
-                      // ignore
-                    }
-
-                    try {
-                      sudokuLockSentRef.current = true;
-                      await fetch(`/api/puzzles/${puzzleId}/progress`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'lock_puzzle', reason: 'given_up', durationSeconds: sudokuStartRef.current ? Math.round((Date.now() - sudokuStartRef.current) / 1000) : 0 }),
-                      });
-                    } catch (e) {
-                      // ignore
-                    }
-
-                    try {
-                      await fetch(`/api/puzzles/${puzzleId}/progress`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'clear_state' }),
-                      });
-                    } catch (e) {
-                      // ignore
-                    }
-
-                    try {
-                      if (typeof window !== 'undefined') {
-                        localStorage.removeItem(`sudoku-progress:${puzzleId}`);
-                        localStorage.removeItem(`sudoku-start:${puzzleId}`);
-                      }
-                    } catch (e) {
-                      // ignore
-                    }
-
-                    try {
-                      if (sudokuTimerRef.current != null) {
-                        clearInterval(sudokuTimerRef.current);
-                        sudokuTimerRef.current = null;
-                      }
-                      sudokuStartRef.current = null;
-                    } catch (e) {
-                      // ignore
-                    }
-
-                    setMaxAttemptsExceeded(true);
-                    setTimeout(() => router.push('/puzzles'), 3500);
-                  }}
-                  className="px-4 py-2 rounded bg-yellow-300 text-black font-semibold shadow hover:brightness-95 transition"
-                >
-                  Give Up
-                </button>
-                <button
-                  onClick={() => setShowGiveUpConfirm(false)}
-                  className="px-3 py-2 rounded bg-transparent border border-white/10 text-sm text-white/90 hover:bg-white/5 transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <PuzzlePageOverlays
+        timeLimitExceeded={timeLimitExceeded}
+        maxAttemptsExceeded={maxAttemptsExceeded}
+        showGiveUpConfirm={showGiveUpConfirm}
+        sudokuTimeLimitMinutes={puzzle?.sudoku?.timeLimitSeconds ? Math.round(puzzle.sudoku.timeLimitSeconds / 60) : 15}
+        onGoToPuzzles={() => router.push('/puzzles')}
+        onGiveUpConfirm={handleGiveUpConfirm}
+        onGiveUpCancel={() => setShowGiveUpConfirm(false)}
+      />
 
 
       <div className="flex-1 w-full px-3 sm:px-8 py-6 sm:py-8">
@@ -1660,746 +1601,293 @@ export default function PuzzleDetailPage() {
             {/* Toasts (inline above puzzle) */}
             <Toasts toasts={toasts} onRemove={(id) => removeToast(id)} inline />
 
-            {(() => {
-              if (puzzle?.puzzleType === 'jigsaw') {
-                return (
-                  <div className="mb-8">
-                    {jigsawPlayable && (
-                      <div className="mb-4 flex flex-col items-stretch gap-3">
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
-                          <button
-                            onClick={() => jigsawControls?.enterFullscreen?.()}
-                            className="w-full sm:w-auto px-3 py-2 rounded bg-gray-800 text-white border border-gray-600 hover:opacity-90"
-                          >
-                            Fullscreen
-                          </button>
-                          <button
-                            onClick={() => jigsawControls?.sendLooseToTray?.()}
-                            className="w-full sm:w-auto px-3 py-2 rounded bg-yellow-400 text-black border border-yellow-500 hover:opacity-90"
-                          >
-                            Send loose to tray
-                          </button>
-                          <button
-                            onClick={() => jigsawControls?.reset?.()}
-                            className="w-full sm:w-auto px-3 py-2 rounded bg-red-600 text-white border border-red-700 hover:opacity-90"
-                          >
-                            Reset
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {!jigsawPlayable ? (
-                      <div className="p-4 rounded-lg border" style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.4)", color: "#fca5a5" }}>
-                        This jigsaw puzzle is missing its image. Upload an image in the admin puzzle creator.
-                      </div>
-                    ) : (
-                      <div
-                        className="rounded-none overflow-hidden border border-gray-700"
-                        style={{ margin: "0 -2rem" }}
-                      >
-                        <JigsawPuzzle
-                          puzzleId={puzzleId as string}
-                          imageUrl={jigsawPlayable.imageUrl}
-                          rows={jigsawPlayable.data.gridRows}
-                          cols={jigsawPlayable.data.gridCols}
-                          pieceExtFrac={typeof (jigsawPlayable.data as any).pieceExtFrac === 'number' ? (jigsawPlayable.data as any).pieceExtFrac : undefined}
-                          pieceRFrac={typeof (jigsawPlayable.data as any).pieceRFrac === 'number' ? (jigsawPlayable.data as any).pieceRFrac : undefined}
-                          pieceNHalfFrac={typeof (jigsawPlayable.data as any).pieceNHalfFrac === 'number' ? (jigsawPlayable.data as any).pieceNHalfFrac : undefined}
-                          pieceShoulderStart={typeof (jigsawPlayable.data as any).pieceShoulderStart === 'number' ? (jigsawPlayable.data as any).pieceShoulderStart : undefined}
-                          funFact={typeof (jigsawPlayable.data as any).funFact === 'string' ? (jigsawPlayable.data as any).funFact : undefined}
-                          onControlsReady={(api) => setJigsawControls(api)}
-                          suppressInternalCongrats={true}
-                          onComplete={async (timeSpentSeconds?: number) => {
-                            const prevPoints = progress?.pointsEarned || 0;
-                            try {
-                              const resp = await fetch(`/api/puzzles/${puzzleId}/progress`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action: 'attempt_success', durationSeconds: timeSpentSeconds || 0 }),
-                              });
-                              if (resp.ok) {
-                                const updated = await resp.json();
-                                setProgress(updated);
-                                setSuccess(true);
-                                const newPoints = updated?.pointsEarned ?? prevPoints;
-                                const pointsAwarded = Math.max(0, newPoints - prevPoints);
-                                setJustAwardedPoints(pointsAwarded);
-                                setCompletionSeconds(timeSpentSeconds ?? null);
-                                return pointsAwarded;
-                              }
-                            } catch (err) {
-                              console.error('Failed to log jigsaw success:', err);
-                            }
-                            setSuccess(true);
-                            return 0;
-                          }}
-                          onShowRatingModal={() => handlePuzzleSolved()}
-                        />
-                      </div>
-                    )}
+            <PuzzleTypeRenderer
+              puzzle={puzzle}
+              progress={progress}
+              puzzleId={puzzleId}
+              teamIdParam={teamIdParam}
+              lobbyIdParam={lobbyIdParam}
+              jigsawPlayable={jigsawPlayable}
+              jigsawControls={jigsawControls}
+              setJigsawControls={setJigsawControls}
+              effectiveHintTokens={effectiveHintTokens}
+              onHintUsed={handleSudokuHintUsed}
+              onSolved={handlePuzzleTypeComplete}
+              onJigsawComplete={handleJigsawComplete}
+              onJigsawShowRatingModal={handlePuzzleSolved}
+            />
+
+            {/* Default form — text / sudoku / code_master puzzle types */}
+            {!['jigsaw','escape_room','detective_case','crime_rpg','parasite_code','gridlock_file','crack_safe','word_crack','crossword','word_search','anagram_blitz','arg','blackout'].includes(puzzle?.puzzleType ?? '') && (
+              <form onSubmit={handleSubmit} className="mb-8">
+                {progress?.solved && (
+                  <div className="mb-6 p-4 rounded-lg border text-white" style={{ backgroundColor: "rgba(76, 91, 92, 0.3)", borderColor: "#3891A6" }}>
+                    ✓ You have already solved this puzzle! Visit the puzzles page to try another one.
                   </div>
-                );
-              }
+                )}
 
-              if (puzzle?.puzzleType === 'escape_room') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div className="mb-6 p-4 rounded-lg border text-white" style={{ backgroundColor: "rgba(76, 91, 92, 0.3)", borderColor: "#3891A6" }}>
-                        ✓ You have already solved this puzzle! Visit the puzzles page to try another one.
-                      </div>
-                    )}
-                    <div className="mb-4">
-                      {!teamIdParam && !lobbyIdParam ? (
-                        <div className="flex flex-col gap-3 p-4 rounded-lg border" style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.4)", color: "#fca5a5" }}>
-                          <span>This escape room requires a team or lobby. Start it from the escape room lobby page.</span>
-                          <Link
-                            href={`/escape-rooms/${puzzleId}/lobby`}
-                            className="inline-block px-4 py-2 rounded bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium w-fit"
-                          >
-                            Open Lobby
-                          </Link>
-                        </div>
-                      ) : (
-                        <EscapeRoomPuzzle
-                          puzzleId={puzzleId}
-                          teamId={teamIdParam}
-                          lobbyId={lobbyIdParam}
-                          onComplete={() => {
-                            setSuccess(true);
-                            recordCompletionAndShowModal();
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'detective_case') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div
-                        className="mb-6 p-4 rounded-lg border text-white"
-                        style={{ backgroundColor: "rgba(76, 91, 92, 0.3)", borderColor: "#3891A6" }}
-                      >
-                        ✓ You have already solved this case.
-                      </div>
-                    )}
-                    <DetectiveCasePuzzle puzzleId={puzzleId} />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'crime_rpg') {
-                return (
-                  <div className="mb-8">
-                    <CrimeCasePuzzle
-                      puzzleId={puzzleId}
-                      onSolved={() => recordCompletionAndShowModal()}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'parasite_code') {
-                return (
-                  <div className="mb-8">
-                    <ParasiteCodePuzzle
-                      puzzleId={puzzleId}
-                      onSolved={() => recordCompletionAndShowModal()}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'gridlock_file') {
-                return (
-                  <div className="mb-8">
-                    <GridlockFilePuzzle
-                      puzzleId={puzzleId}
-                      onSolved={() => recordCompletionAndShowModal()}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'crack_safe') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div className="mb-6 p-4 rounded-lg border text-white"
-                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
-                        🔓 You have already cracked this safe!
-                      </div>
-                    )}
-                    <CrackTheSafePuzzle
-                      puzzleId={puzzleId}
-                      safeData={(puzzle.data ?? {}) as Record<string, unknown>}
-                      alreadySolved={progress?.solved ?? false}
-                      failedAttempts={progress?.failedAttempts ?? 0}
-                      onSolved={() => {
-                        setSuccess(true);
-                        recordCompletionAndShowModal();
-                      }}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'word_crack') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div className="mb-6 p-4 rounded-lg border text-white"
-                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
-                        🟩 You already solved this one!
-                      </div>
-                    )}
-                    <WordCrackPuzzle
-                      puzzleId={puzzleId}
-                      wordCrackData={(puzzle.data ?? {}) as Record<string, unknown>}
-                      alreadySolved={progress?.solved ?? false}
-                      failedAttempts={progress?.failedAttempts ?? 0}
-                      hintTokens={effectiveHintTokens}
-                      xpReward={puzzle.xpReward ?? 50}
-                      pointsReward={puzzle.solutions?.[0]?.points ?? 100}
-                      onHintUsed={handleSudokuHintUsed}
-                      onSolved={(xpGained) => {
-                        setSuccess(true);
-                        recordCompletionAndShowModal(undefined, xpGained);
-                      }}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'crossword') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div className="mb-6 p-4 rounded-lg border text-white"
-                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
-                        ✏️ You already solved this crossword!
-                      </div>
-                    )}
-                    <CrosswordPuzzle
-                      puzzleId={puzzleId}
-                      crosswordData={(puzzle.data ?? {}) as Record<string, unknown>}
-                      alreadySolved={progress?.solved ?? false}
-                      hintTokens={effectiveHintTokens}
-                      onHintUsed={handleSudokuHintUsed}
-                      onSolved={() => {
-                        setSuccess(true);
-                        recordCompletionAndShowModal();
-                      }}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'word_search') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div className="mb-6 p-4 rounded-lg border text-white"
-                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
-                        🔍 You already found all the words!
-                      </div>
-                    )}
-                    <WordSearchPuzzle
-                      puzzleId={puzzleId}
-                      wordSearchData={(puzzle.data ?? {}) as Record<string, unknown>}
-                      alreadySolved={progress?.solved ?? false}
-                      hintTokens={effectiveHintTokens}
-                      onHintUsed={handleSudokuHintUsed}
-                      onSolved={() => {
-                        setSuccess(true);
-                        recordCompletionAndShowModal();
-                      }}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'anagram_blitz') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div className="mb-6 p-4 rounded-lg border text-white"
-                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
-                        🔀 You already unscrambled all the words!
-                      </div>
-                    )}
-                    <AnagramBlitz
-                      puzzleId={puzzleId}
-                      anagramData={(puzzle.data ?? {}) as Record<string, unknown>}
-                      alreadySolved={progress?.solved ?? false}
-                      onSolved={() => {
-                        setSuccess(true);
-                        recordCompletionAndShowModal();
-                      }}
-                      onFailed={() => recordCompletionAndShowModal()}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'arg') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div className="mb-6 p-4 rounded-lg border text-white"
-                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
-                        🕵️ You already cracked this ARG!
-                      </div>
-                    )}
-                    <ArgPuzzle
-                      puzzleId={puzzleId}
-                      argData={(puzzle.data ?? {}) as Record<string, unknown>}
-                      alreadySolved={progress?.solved ?? false}
-                      onSolved={() => {
-                        setSuccess(true);
-                        recordCompletionAndShowModal();
-                      }}
-                    />
-                  </div>
-                );
-              }
-
-              if (puzzle?.puzzleType === 'blackout') {
-                return (
-                  <div className="mb-8">
-                    {progress?.solved && (
-                      <div className="mb-6 p-4 rounded-lg border text-white"
-                           style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
-                        ⬛ You already declassified this document!
-                      </div>
-                    )}
-                    <BlackoutPuzzle
-                      puzzleId={puzzleId}
-                      blackoutData={(puzzle.data ?? {}) as Record<string, unknown>}
-                      alreadySolved={progress?.solved ?? false}
-                      onSolved={() => {
-                        setSuccess(true);
-                        recordCompletionAndShowModal();
-                      }}
-                    />
-                  </div>
-                );
-              }
-
-              // Default: render the standard answer form (for text puzzles and Sudoku paths)
-              return (
-                <form onSubmit={handleSubmit} className="mb-8">
-                  {progress?.solved && (
-                    <div className="mb-6 p-4 rounded-lg border text-white" style={{ backgroundColor: "rgba(76, 91, 92, 0.3)", borderColor: "#3891A6" }}>
-                      ✓ You have already solved this puzzle! Visit the puzzles page to try another one.
-                    </div>
-                  )}
-
-                  {puzzle?.puzzleType === 'sudoku' ? (
-                    <div className="mb-4">
-                      {/* Sudoku Start Modal Overlay */}
-                      {showSudokuStartModal && !progress?.solved && !sudokuStarted && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-                          <div className="max-w-md w-full bg-gradient-to-br from-[#071016] to-[#09313a] text-white rounded-xl p-8 shadow-2xl border border-[#FDE74C]/20 flex flex-col items-center">
-                            <div className="flex flex-col items-center gap-4">
-                              <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gradient-to-br from-[#FDE74C] to-[#FFB86B] flex items-center justify-center shadow-lg mb-2">
-                                <span className="text-4xl">🧩</span>
-                              </div>
-                              <h2 className="text-2xl font-extrabold text-yellow-300 text-center">Ready to Start the Sudoku?</h2>
-                              <p className="mt-2 text-base text-gray-200 text-center">You have <span className="font-bold text-yellow-200">{puzzle?.sudoku?.timeLimitSeconds ? Math.round((puzzle.sudoku.timeLimitSeconds) / 60) : 15}</span> minutes and <span className="font-bold text-yellow-200">{puzzle?.sudoku?.maxAttempts ?? 5}</span> guesses. The timer will start when you click Start.</p>
+                {puzzle?.puzzleType === 'sudoku' ? (
+                  <div className="mb-4">
+                    {/* Sudoku Start Modal Overlay */}
+                    {showSudokuStartModal && !progress?.solved && !sudokuStarted && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+                        <div className="max-w-md w-full bg-gradient-to-br from-[#071016] to-[#09313a] text-white rounded-xl p-8 shadow-2xl border border-[#FDE74C]/20 flex flex-col items-center">
+                          <div className="flex flex-col items-center gap-4">
+                            <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gradient-to-br from-[#FDE74C] to-[#FFB86B] flex items-center justify-center shadow-lg mb-2">
+                              <span className="text-4xl">🧩</span>
                             </div>
-                            <button
-                              className="mt-8 px-6 py-3 rounded-lg bg-yellow-300 text-black font-bold text-lg shadow hover:brightness-95 transition"
-                              type="button"
-                              onClick={async (e) => {
-                                // This button lives inside a <form>; ensure we don't submit the form.
-                                e.preventDefault();
-                                e.stopPropagation();
+                            <h2 className="text-2xl font-extrabold text-yellow-300 text-center">Ready to Start the Sudoku?</h2>
+                            <p className="mt-2 text-base text-gray-200 text-center">You have <span className="font-bold text-yellow-200">{puzzle?.sudoku?.timeLimitSeconds ? Math.round((puzzle.sudoku.timeLimitSeconds) / 60) : 15}</span> minutes and <span className="font-bold text-yellow-200">{puzzle?.sudoku?.maxAttempts ?? 5}</span> guesses. The timer will start when you click Start.</p>
+                          </div>
+                          <button
+                            className="mt-8 px-6 py-3 rounded-lg bg-yellow-300 text-black font-bold text-lg shadow hover:brightness-95 transition"
+                            type="button"
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
 
-                                setShowSudokuStartModal(false);
-                                setSudokuStarted(true);
+                              setShowSudokuStartModal(false);
+                              setSudokuStarted(true);
 
-                                // Start an immediate local tick so the UI countdown begins even if
-                                // the server bootstrap request is slow. Server enforcement still
-                                // controls validation/locking.
-                                const limitSeconds = puzzle?.sudoku?.timeLimitSeconds ?? 15 * 60;
-                                const localStart = Date.now();
-                                const localExpiresAtMs = localStart + limitSeconds * 1000;
+                              const limitSeconds = puzzle?.sudoku?.timeLimitSeconds ?? 15 * 60;
+                              const localStart = Date.now();
+                              const localExpiresAtMs = localStart + limitSeconds * 1000;
 
-                                sudokuStartRef.current = localStart;
-                                setSudokuElapsed(0);
-                                setTimeLimitExceeded(false);
+                              sudokuStartRef.current = localStart;
+                              setSudokuElapsed(0);
+                              setTimeLimitExceeded(false);
 
-                                try {
-                                  if (sudokuTimerRef.current != null) {
-                                    clearInterval(sudokuTimerRef.current);
-                                    sudokuTimerRef.current = null;
-                                  }
-                                } catch {
-                                  // ignore
+                              try {
+                                if (sudokuTimerRef.current != null) {
+                                  clearInterval(sudokuTimerRef.current);
+                                  sudokuTimerRef.current = null;
                                 }
+                              } catch { /* ignore */ }
 
-                                const localTick = () => {
-                                  const now = Date.now();
-                                  const elapsedNow = Math.max(0, Math.floor((now - localStart) / 1000));
-                                  setSudokuElapsed(elapsedNow);
-                                  if (now >= localExpiresAtMs) {
-                                    setTimeLimitExceeded(true);
-                                    try {
-                                      if (sudokuTimerRef.current != null) {
-                                        clearInterval(sudokuTimerRef.current);
-                                        sudokuTimerRef.current = null;
-                                      }
-                                    } catch {
-                                      // ignore
-                                    }
-                                  }
-                                };
-
-                                localTick();
-                                sudokuTimerRef.current = window.setInterval(localTick, 1000) as any;
-
-                                // Bootstrap server timer. If an older client had saved a local start,
-                                // pass it up but clamp on the server so it can't extend time.
-                                let localStartMs: number | null = null;
-                                try {
-                                  const saved = typeof window !== 'undefined' ? localStorage.getItem(`sudoku-start:${puzzleId}`) : null;
-                                  if (saved) {
-                                    const n = Number(saved);
-                                    if (Number.isFinite(n) && n > 0) localStartMs = n;
-                                  }
-                                } catch {
-                                  // ignore
-                                }
-
-                                // If we don't already have a stored start time, persist this click's
-                                // timestamp so we can send it on retries without extending time.
-                                if (!localStartMs) {
+                              const localTick = () => {
+                                const now = Date.now();
+                                const elapsedNow = Math.max(0, Math.floor((now - localStart) / 1000));
+                                setSudokuElapsed(elapsedNow);
+                                if (now >= localExpiresAtMs) {
+                                  setTimeLimitExceeded(true);
                                   try {
-                                    if (typeof window !== 'undefined') {
-                                      localStorage.setItem(`sudoku-start:${puzzleId}`, String(localStart));
+                                    if (sudokuTimerRef.current != null) {
+                                      clearInterval(sudokuTimerRef.current);
+                                      sudokuTimerRef.current = null;
                                     }
-                                  } catch {
-                                    // ignore
-                                  }
-                                  localStartMs = localStart;
+                                  } catch { /* ignore */ }
                                 }
+                              };
 
+                              localTick();
+                              sudokuTimerRef.current = window.setInterval(localTick, 1000) as any;
+
+                              let localStartMs: number | null = null;
+                              try {
+                                const saved = typeof window !== 'undefined' ? localStorage.getItem(`sudoku-start:${puzzleId}`) : null;
+                                if (saved) {
+                                  const n = Number(saved);
+                                  if (Number.isFinite(n) && n > 0) localStartMs = n;
+                                }
+                              } catch { /* ignore */ }
+
+                              if (!localStartMs) {
                                 try {
-                                  const resp = await fetch(`/api/puzzles/${puzzleId}/progress`, {
+                                  if (typeof window !== 'undefined') {
+                                    localStorage.setItem(`sudoku-start:${puzzleId}`, String(localStart));
+                                  }
+                                } catch { /* ignore */ }
+                                localStartMs = localStart;
+                              }
+
+                              try {
+                                const resp = await fetch(`/api/puzzles/${puzzleId}/progress`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ action: 'start_sudoku_timer', clientStartedAtMs: localStartMs ?? undefined }),
+                                });
+                                if (resp.ok) {
+                                  const updated = await resp.json();
+                                  setProgress(updated);
+                                } else {
+                                  const t = await resp.text().catch(() => '');
+                                  console.error('Failed to start sudoku timer', resp.status, t);
+                                }
+                              } catch (e) {
+                                console.error('Failed to start sudoku timer (network)', e);
+                              }
+                            }}
+                          >
+                            Start Puzzle
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Render the interactive Sudoku board after the user starts */}
+                    {sudokuStarted && (
+                      <div className="mb-6">
+                        <div className="mb-1 flex flex-col items-center gap-1 px-2 py-1 rounded bg-[#071016] text-sm">
+                          <div className="text-2xl sm:text-3xl" style={{ color: '#FDE74C', fontWeight: 800, lineHeight: 1 }}>
+                            {(() => {
+                              const limit = puzzle?.sudoku?.timeLimitSeconds ?? 15 * 60;
+                              const rem = Math.max(0, limit - sudokuElapsed);
+                              const mm = Math.floor(rem / 60).toString().padStart(2, '0');
+                              const ss = (rem % 60).toString().padStart(2, '0');
+                              return `Time remaining: ${mm}:${ss}`;
+                            })()}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowSudokuHelp(true)}
+                            className="mt-1 text-xs text-[#AB9F9D] hover:text-white underline"
+                          >
+                            How to play
+                          </button>
+                        </div>
+
+                        <SudokuGrid
+                          puzzle={(sudokuOriginal ?? (sudokuGrid as unknown as number[][])) as number[][]}
+                          givens={sudokuOriginal ?? undefined}
+                          solution={sudokuSolution ?? undefined}
+                          onChange={(g) => {
+                            setSudokuGrid(g);
+                            try {
+                              if (typeof window !== 'undefined') {
+                                localStorage.setItem(`sudoku-progress:${puzzleId}`, JSON.stringify(g));
+                              }
+                            } catch (e) { /* ignore */ }
+                          }}
+                          onValidatedSuccess={(sol) => {
+                            try {
+                              handleSudokuSubmit(sol);
+                            } catch (e) {
+                              console.error('Sudoku success handler failed:', e);
+                            }
+                          }}
+                          disabled={timeLimitExceeded || maxAttemptsExceeded || Boolean(progress?.solved)}
+                          maxAttempts={puzzle?.sudoku?.maxAttempts ?? 5}
+                          hintTokens={effectiveHintTokens}
+                          onHintUsed={handleSudokuHintUsed}
+                          onAttempt={(attemptNumber, locked) => {
+                            setSudokuAttemptsUsed(attemptNumber);
+                            if (!locked) return;
+
+                            setMaxAttemptsExceeded(true);
+
+                            try {
+                              if (typeof window !== 'undefined') {
+                                localStorage.setItem(`sudoku-failed:${puzzleId}`, JSON.stringify({ ts: Date.now(), reason: 'max_attempts' }));
+                              }
+                            } catch { /* ignore */ }
+
+                            if (!sudokuLockSentRef.current) {
+                              sudokuLockSentRef.current = true;
+                              void (async () => {
+                                try {
+                                  await fetch(`/api/puzzles/${puzzleId}/progress`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: 'start_sudoku_timer', clientStartedAtMs: localStartMs ?? undefined }),
+                                    body: JSON.stringify({
+                                      action: 'lock_puzzle',
+                                      reason: 'max_attempts',
+                                      durationSeconds: sudokuStartRef.current ? Math.round((Date.now() - sudokuStartRef.current) / 1000) : 0,
+                                    }),
                                   });
-                                  if (resp.ok) {
-                                    const updated = await resp.json();
-                                    setProgress(updated);
-                                  } else {
-                                    const t = await resp.text().catch(() => '');
-                                    console.error('Failed to start sudoku timer', resp.status, t);
-                                  }
-                                } catch (e) {
-                                  console.error('Failed to start sudoku timer (network)', e);
-                                }
-                              }}
-                            >
-                              Start Puzzle
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                                } catch { /* ignore */ }
+                              })();
+                            }
 
-                      {/* Render the interactive Sudoku board after the user starts */}
-                      {sudokuStarted && (
-                        <div className="mb-6">
-                          {/* Compact info bar stacked above the board */}
-                          <div className="mb-1 flex flex-col items-center gap-1 px-2 py-1 rounded bg-[#071016] text-sm">
-                            <div className="text-2xl sm:text-3xl" style={{ color: '#FDE74C', fontWeight: 800, lineHeight: 1 }}>
-                              {(() => {
-                                const limit = puzzle?.sudoku?.timeLimitSeconds ?? 15 * 60;
-                                const rem = Math.max(0, limit - sudokuElapsed);
-                                const mm = Math.floor(rem / 60).toString().padStart(2, '0');
-                                const ss = (rem % 60).toString().padStart(2, '0');
-                                return `Time remaining: ${mm}:${ss}`;
-                              })()}
-                            </div>
-                            {/* small help button */}
-                            <button
-                              type="button"
-                              onClick={() => setShowSudokuHelp(true)}
-                              className="mt-1 text-xs text-[#AB9F9D] hover:text-white underline"
-                            >
-                              How to play
-                            </button>
-                          </div>
-
-                          <SudokuGrid
-                            puzzle={(sudokuOriginal ?? (sudokuGrid as unknown as number[][])) as number[][]}
-                            givens={sudokuOriginal ?? undefined}
-                            solution={sudokuSolution ?? undefined}
-                            onChange={(g) => {
-                              setSudokuGrid(g);
-                              try {
-                                if (typeof window !== 'undefined') {
-                                  localStorage.setItem(`sudoku-progress:${puzzleId}`, JSON.stringify(g));
-                                }
-                              } catch (e) {
-                                // ignore storage errors
+                            try {
+                              if (typeof window !== 'undefined') {
+                                localStorage.removeItem(`sudoku-progress:${puzzleId}`);
+                                localStorage.removeItem(`sudoku-start:${puzzleId}`);
                               }
-                            }}
-                            onValidatedSuccess={(sol) => {
-                              try {
-                                handleSudokuSubmit(sol);
-                              } catch (e) {
-                                console.error('Sudoku success handler failed:', e);
-                              }
-                            }}
-                            disabled={timeLimitExceeded || maxAttemptsExceeded || Boolean(progress?.solved)}
-                            maxAttempts={puzzle?.sudoku?.maxAttempts ?? 5}
-                            hintTokens={effectiveHintTokens}
-                            onHintUsed={handleSudokuHintUsed}
-                            onAttempt={(attemptNumber, locked) => {
-                              setSudokuAttemptsUsed(attemptNumber);
-                              if (!locked) return;
+                            } catch { /* ignore */ }
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : null}
 
-                              setMaxAttemptsExceeded(true);
+                {/* Code Master IDE */}
+                {puzzle?.puzzleType === 'code_master' && (
+                  <div className="mb-6">
+                    <CodeMasterIDE
+                      language={String(puzzle?.data?.language || 'html')}
+                      brokenCode={String(puzzle?.data?.brokenCode || '')}
+                      prefillCss={String(puzzle?.data?.prefillCss || '')}
+                      files={puzzle?.data?.files as Record<string, string> | undefined}
+                      validationMode={String(puzzle?.data?.validationMode || 'exact')}
+                      validationRules={puzzle?.data?.validationRules as { mustContain?: string[]; mustNotContain?: string[]; ignoreCase?: boolean; ignoreWhitespace?: boolean } | undefined}
+                      expectedFix={String(puzzle?.data?.expectedFix || '')}
+                      theory={puzzle?.data?.theory ? String(puzzle.data.theory) : undefined}
+                      lessonSummary={puzzle?.data?.lessonSummary ? String(puzzle.data.lessonSummary) : undefined}
+                      concepts={Array.isArray(puzzle?.data?.concepts) ? (puzzle.data.concepts as string[]) : undefined}
+                      track={puzzle?.data?.track ? String(puzzle.data.track) : undefined}
+                      trackOrder={puzzle?.data?.trackOrder ? Number(puzzle.data.trackOrder) : undefined}
+                      scenario={puzzle?.data?.scenario ? String(puzzle.data.scenario) : undefined}
+                      puzzleId={puzzle?.id}
+                      solved={progress?.solved}
+                      onCodeChange={(combined) => setAnswer(combined)}
+                    />
+                  </div>
+                )}
 
-                              try {
-                                if (typeof window !== 'undefined') {
-                                  localStorage.setItem(`sudoku-failed:${puzzleId}`, JSON.stringify({ ts: Date.now(), reason: 'max_attempts' }));
-                                }
-                              } catch {
-                                // ignore
-                              }
-
-                              if (!sudokuLockSentRef.current) {
-                                sudokuLockSentRef.current = true;
-                                void (async () => {
-                                  try {
-                                    await fetch(`/api/puzzles/${puzzleId}/progress`, {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        action: 'lock_puzzle',
-                                        reason: 'max_attempts',
-                                        durationSeconds: sudokuStartRef.current ? Math.round((Date.now() - sudokuStartRef.current) / 1000) : 0,
-                                      }),
-                                    });
-                                  } catch {
-                                    // ignore
-                                  }
-                                })();
-                              }
-
-                              try {
-                                if (typeof window !== 'undefined') {
-                                  localStorage.removeItem(`sudoku-progress:${puzzleId}`);
-                                  localStorage.removeItem(`sudoku-start:${puzzleId}`);
-                                }
-                              } catch {
-                                // ignore
-                              }
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-
-                  {/* Code Master IDE */}
-                  {puzzle?.puzzleType === 'code_master' && (
-                    <div className="mb-6">
-                      <CodeMasterIDE
-                        language={String(puzzle?.data?.language || 'html')}
-                        brokenCode={String(puzzle?.data?.brokenCode || '')}
-                        prefillCss={String(puzzle?.data?.prefillCss || '')}
-                        files={puzzle?.data?.files as Record<string, string> | undefined}
-                        validationMode={String(puzzle?.data?.validationMode || 'exact')}
-                        validationRules={puzzle?.data?.validationRules as { mustContain?: string[]; mustNotContain?: string[]; ignoreCase?: boolean; ignoreWhitespace?: boolean } | undefined}
-                        expectedFix={String(puzzle?.data?.expectedFix || '')}
-                        theory={puzzle?.data?.theory ? String(puzzle.data.theory) : undefined}
-                        lessonSummary={puzzle?.data?.lessonSummary ? String(puzzle.data.lessonSummary) : undefined}
-                        concepts={Array.isArray(puzzle?.data?.concepts) ? (puzzle.data.concepts as string[]) : undefined}
-                        track={puzzle?.data?.track ? String(puzzle.data.track) : undefined}
-                        trackOrder={puzzle?.data?.trackOrder ? Number(puzzle.data.trackOrder) : undefined}
-                        scenario={puzzle?.data?.scenario ? String(puzzle.data.scenario) : undefined}
-                        puzzleId={puzzle?.id}
-                        solved={progress?.solved}
-                        onCodeChange={(combined) => setAnswer(combined)}
-                      />
-                    </div>
-                  )}
-
-                  {/* Text answer area - only show for non-Sudoku puzzles */}
-                  {puzzle?.puzzleType !== 'sudoku' && puzzle?.puzzleType !== 'code_master' && (
-                    <>
-                      <textarea
-                        value={answer}
-                        onChange={(e) => setAnswer(e.target.value)}
-                        disabled={submitting || success || progress?.solved}
-                        placeholder={progress?.solved ? "This puzzle has been solved." : "Enter your answer here..."}
-                        className="w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none disabled:opacity-50"
-                        style={{ backgroundColor: "#111820", borderWidth: "2px", borderColor: "rgba(56,145,166,0.35)" }}
-                        onFocus={(e) => (e.currentTarget.style.borderColor = "#3891A6")}
-                        onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(56,145,166,0.35)")}
-                        rows={4}
-                      />
-                      <button
-                        type="submit"
-                        disabled={submitting || success || !answer.trim() || progress?.solved}
-                        className="mt-4 px-6 py-2.5 rounded-lg font-bold tracking-wide transition-all hover:opacity-90 disabled:opacity-50"
-                        style={{ backgroundColor: "#3891A6", color: "#020202" }}
-                      >
-                        {submitting ? "Submitting..." : progress?.solved ? "Puzzle Solved ✓" : "Submit Answer"}
-                      </button>
-                    </>
-                  )}
-
-                  {puzzle?.puzzleType === 'code_master' && (
+                {/* Text answer area — standard puzzles */}
+                {puzzle?.puzzleType !== 'sudoku' && puzzle?.puzzleType !== 'code_master' && (
+                  <>
+                    <textarea
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      disabled={submitting || success || progress?.solved}
+                      placeholder={progress?.solved ? "This puzzle has been solved." : "Enter your answer here..."}
+                      className="w-full px-4 py-3 rounded-lg text-white placeholder-gray-400 focus:outline-none disabled:opacity-50"
+                      style={{ backgroundColor: "#111820", borderWidth: "2px", borderColor: "rgba(56,145,166,0.35)" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#3891A6")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(56,145,166,0.35)")}
+                      rows={4}
+                    />
                     <button
                       type="submit"
                       disabled={submitting || success || !answer.trim() || progress?.solved}
-                      className={`mt-5 w-full py-3.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all disabled:opacity-50 shadow-lg ${
-                        progress?.solved
-                          ? 'bg-emerald-700 cursor-not-allowed'
-                          : 'bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] shadow-indigo-900/50'
-                      }`}
+                      className="mt-4 px-6 py-2.5 rounded-lg font-bold tracking-wide transition-all hover:opacity-90 disabled:opacity-50"
+                      style={{ backgroundColor: "#3891A6", color: "#020202" }}
                     >
-                      {submitting ? 'Submitting…' : progress?.solved ? '✓ Puzzle Solved' : 'Submit Fix →'}
+                      {submitting ? "Submitting..." : progress?.solved ? "Puzzle Solved ✓" : "Submit Answer"}
                     </button>
-                  )}
-                </form>
-              );
-            })()}
+                  </>
+                )}
+
+                {puzzle?.puzzleType === 'code_master' && (
+                  <button
+                    type="submit"
+                    disabled={submitting || success || !answer.trim() || progress?.solved}
+                    className={`mt-5 w-full py-3.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all disabled:opacity-50 shadow-lg ${
+                      progress?.solved
+                        ? 'bg-emerald-700 cursor-not-allowed'
+                        : 'bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] shadow-indigo-900/50'
+                    }`}
+                  >
+                    {submitting ? 'Submitting…' : progress?.solved ? '✓ Puzzle Solved' : 'Submit Fix →'}
+                  </button>
+                )}
+              </form>
+            )}
 
             {/* Hints / Progress Section Wrapper */}
-            <div
-              style={
-                puzzle?.puzzleType === 'sudoku'
-                  ? undefined
-                  : { borderTopColor: "#3891A6", borderTopWidth: "1px", paddingTop: "2rem" }
-              }
-            >
-
-              {/* ── Skip Token Button ─────────────────────────────────── */}
-              {!progress?.solved && !teamIdParam && (
-                <div className="mb-6 flex flex-col items-center gap-2">
-                  {effectiveSkipTokens > 0 ? (
-                    <button
-                      onClick={handleSkipPuzzle}
-                      disabled={isSkipping}
-                      className="px-5 py-2.5 rounded-xl font-semibold text-sm transition-opacity hover:opacity-80 disabled:opacity-40"
-                      style={{
-                        backgroundColor: "rgba(139,92,246,0.15)",
-                        border: "1px solid rgba(139,92,246,0.4)",
-                        color: "#a78bfa",
-                      }}
-                    >
-                      {isSkipping
-                        ? "Skipping…"
-                        : `⏭️ Skip Puzzle (${effectiveSkipTokens} token${effectiveSkipTokens !== 1 ? "s" : ""})`}
-                    </button>
-                  ) : (
-                    <div className="flex flex-col items-center gap-1">
-                      <button
-                        disabled
-                        className="px-5 py-2.5 rounded-xl font-semibold text-sm opacity-40 cursor-not-allowed"
-                        style={{
-                          backgroundColor: "rgba(139,92,246,0.1)",
-                          border: "1px solid rgba(139,92,246,0.3)",
-                          color: "#a78bfa",
-                        }}
-                      >
-                        ⏭️ Skip Puzzle — No Tokens
-                      </button>
-                      <a
-                        href="/store"
-                        className="text-xs font-semibold underline transition-opacity hover:opacity-80"
-                        style={{ color: "#FDE74C" }}
-                      >
-                        Buy skip tokens →
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
-              {/* Progress Section */}
-              {progress && showProgress && progress.partProgress && progress.partProgress.length > 1 && (
-                <div className="mb-8 space-y-4">
-                  <h2 className="text-xl font-semibold text-white">📊 Your Progress</h2>
-                  
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    {/* Main progress bar */}
-                    <div className="lg:col-span-3">
-                      <ProgressBar 
-                        percentage={progress.completionPercentage} 
-                        solved={progress.solved}
-                        showPercentage={true}
-                        animateOnLoad={true}
-                      />
-                    </div>
-
-                    {/* Attempt stats */}
-                    <div className="lg:col-span-1">
-                      <AttemptStats 
-                        attempts={progress.attempts}
-                        successfulAttempts={progress.successfulAttempts}
-                        averageTimePerAttempt={progress.averageTimePerAttempt}
-                        totalAttempts={100}
-                      />
-                    </div>
-
-                    {/* Time tracker */}
-                    <div className="lg:col-span-1">
-                      <TimeTracker
-                        totalTimeSpent={progress.totalTimeSpent}
-                        currentSessionStart={progress.currentSessionStart}
-                        sessionLogs={progress.sessionLogs}
-                        isActive={!progress.solved}
-                      />
-                    </div>
-
-                    {/* Completion percentage for multi-part */}
-                    {progress.partProgress && progress.partProgress.length > 0 && (
-                      <div className="lg:col-span-1">
-                        <CompletionPercentage
-                          parts={progress.partProgress.map((p) => ({
-                            id: p.id,
-                            title: p.part.title,
-                            description: p.part.description,
-                            order: p.part.order,
-                            pointsValue: p.part.pointsValue,
-                            solved: p.solved,
-                            solvedAt: p.solvedAt,
-                          }))}
-                          overallPercentage={progress.completionPercentage}
-                          isMultiPart={progress.partProgress.length > 1}
-                          puzzleTitle={puzzle?.title}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="text-right">
-                    <button
-                      onClick={() => setShowProgress(!showProgress)}
-                      className="text-sm px-3 py-1 rounded-lg transition-colors hover:opacity-80"
-                      style={{
-                        backgroundColor: "rgba(171, 159, 157, 0.1)",
-                        color: "#AB9F9D",
-                      }}
-                    >
-                      {showProgress ? "Collapse" : "Expand"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-            </div>
+            <PuzzleProgressSection
+              progress={progress}
+              puzzleTitle={puzzle?.title}
+              showProgress={showProgress}
+              onToggleProgress={() => setShowProgress(!showProgress)}
+              effectiveSkipTokens={effectiveSkipTokens}
+              isSkipping={isSkipping}
+              onSkip={handleSkipPuzzle}
+              teamIdParam={teamIdParam}
+              puzzleType={puzzle?.puzzleType}
+            />
             </div>{/* end card body */}
           </div>{/* end card outer */}
         </div>
