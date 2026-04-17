@@ -7,10 +7,6 @@ services:
     buildCommand: "npm ci && npm run build"
     startCommand: "npx prisma migrate deploy && npm run start"
     autoDeploy: true
-    disk:
-      name: uploads
-      mountPath: /var/data/uploads
-      sizeGB: 1
     envVars:
       - key: UPLOADS_DIR
         value: /var/data/uploads
