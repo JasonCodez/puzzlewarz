@@ -1084,6 +1084,8 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
   const [parasiteCodeJsonError, setParasiteCodeJsonError] = useState<string>('');
   const [gridlockFileJson, setGridlockFileJson] = useState<string>('');
   const [gridlockFileJsonError, setGridlockFileJsonError] = useState<string>('');
+  const [debriefJson, setDebriefJson] = useState<string>('');
+  const [debriefJsonError, setDebriefJsonError] = useState<string>('');
   const [templateId, setTemplateId] = useState<string>('');
   const [templateConfirm, setTemplateConfirm] = useState(false);
 
@@ -2077,6 +2079,80 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
         spellCheck={false}
       />
       {gridlockFileJsonError ? <div className="text-sm text-red-300">{gridlockFileJsonError}</div> : null}
+    </div>
+  );
+
+  // ── The Debrief initializer ───────────────────────────────────────────────
+  const DEBRIEF_TEMPLATE = {
+    scenario: {
+      id: "debrief-001",
+      caseNumber: "001",
+      classification: "RESTRICTED",
+      dateTime: "January 1, 2026 — 00:00",
+      report: "Write the classified intelligence report here. The player has 35 seconds to read and memorize it.",
+      questions: [
+        { question: "Question 1?", options: ["Option A", "Option B", "Option C", "Option D"], correctIndex: 0 },
+        { question: "Question 2?", options: ["Option A", "Option B", "Option C", "Option D"], correctIndex: 1 },
+        { question: "Question 3?", options: ["Option A", "Option B", "Option C", "Option D"], correctIndex: 2 },
+        { question: "Question 4?", options: ["Option A", "Option B", "Option C", "Option D"], correctIndex: 3 },
+        { question: "Question 5?", options: ["Option A", "Option B", "Option C", "Option D"], correctIndex: 0 },
+      ],
+    },
+    deadDrop: {
+      id: "dd-001",
+      metaQuestion: "What is the meta answer?",
+      finalAnswer: "answer",
+      finalDisplay: "Answer",
+      clues: [
+        { clue: "First clue text", hint: "Hint after one wrong guess", answer: "clue1answer", displayAnswer: "Clue 1 Answer" },
+        { clue: "Second clue text", hint: "Hint after one wrong guess", answer: "clue2answer", displayAnswer: "Clue 2 Answer" },
+        { clue: "Third clue text", hint: "Hint after one wrong guess", answer: "clue3answer", displayAnswer: "Clue 3 Answer" },
+      ],
+    },
+  };
+
+  useEffect(() => {
+    if (puzzleType !== 'debrief') return;
+    const existing = (puzzleData as any)?.debrief ?? null;
+    const initial = existing ?? DEBRIEF_TEMPLATE;
+    setDebriefJson(JSON.stringify(initial, null, 2));
+    setDebriefJsonError('');
+    onDataChange('debrief', initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzleType]);
+
+  const renderDebriefFields = () => (
+    <div className="space-y-4">
+      <div className="text-sm text-gray-300">
+        Configure <span className="font-semibold">The Debrief</span> daily puzzle. The player reads a classified report for 35 seconds, then answers 5 recall questions (18s each), then solves a Dead Drop cipher.
+      </div>
+      <div className="text-xs text-gray-500 space-y-1">
+        <div><span className="text-yellow-400 font-semibold">scenario.id</span> — unique string ID for this scenario (e.g. <code>"debrief-001"</code>)</div>
+        <div><span className="text-yellow-400 font-semibold">scenario.questions</span> — array of at least 5 questions; each has <code>question</code>, <code>options[4]</code>, <code>correctIndex</code></div>
+        <div><span className="text-yellow-400 font-semibold">deadDrop.clues</span> — exactly 3 clues; each has <code>clue</code>, <code>hint</code>, <code>answer</code> (lowercase), <code>displayAnswer</code></div>
+        <div><span className="text-yellow-400 font-semibold">deadDrop.finalAnswer</span> — lowercase space-separated phrase the player must deduce from clue answers</div>
+      </div>
+      <textarea
+        value={debriefJson}
+        onChange={(e) => {
+          const next = e.target.value;
+          setDebriefJson(next);
+          try {
+            const parsed = JSON.parse(next);
+            if (!parsed?.scenario?.id || !Array.isArray(parsed?.scenario?.questions) || !parsed?.deadDrop?.clues) {
+              setDebriefJsonError('JSON must include scenario.id, scenario.questions[], deadDrop.clues[], and deadDrop.finalAnswer.');
+              return;
+            }
+            onDataChange('debrief', parsed);
+            setDebriefJsonError('');
+          } catch {
+            setDebriefJsonError('Invalid JSON — fix before saving.');
+          }
+        }}
+        className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-[32rem]"
+        spellCheck={false}
+      />
+      {debriefJsonError ? <div className="text-sm text-red-300">{debriefJsonError}</div> : null}
     </div>
   );
 
@@ -3935,6 +4011,7 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
     crime_rpg: renderCrimeCaseFields,
     parasite_code: renderParasiteCodeFields,
     gridlock_file: renderGridlockFileFields,
+    debrief: renderDebriefFields,
     crack_safe: renderCrackSafeFields,
     word_crack: renderWordleFields,
     word_search: renderWordSearchFields,

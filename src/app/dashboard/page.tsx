@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -95,7 +95,7 @@ function FeaturedBanner({ visible }: { visible: boolean }) {
   const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
-    fetch('/api/witness/today')
+    fetch('/api/debrief/today')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
@@ -115,7 +115,7 @@ function FeaturedBanner({ visible }: { visible: boolean }) {
 
   return (
     <Link
-      href="/witness"
+      href="/debrief"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -199,7 +199,7 @@ function FeaturedBanner({ visible }: { visible: boolean }) {
             fontSize: 'clamp(22px, 3.5vw, 34px)', fontWeight: 900, color: '#fff',
             margin: '0 0 6px', letterSpacing: '-0.02em', lineHeight: 1.1,
           }}>
-            The Witness
+            The Debrief
           </h2>
 
           {teaser && (

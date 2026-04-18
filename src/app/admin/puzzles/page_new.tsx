@@ -31,6 +31,7 @@ interface PuzzleFormData {
   puzzleData: Record<string, unknown>;
   isWarzExclusive: boolean;
   gridlockReleaseAt: string; // ISO date string YYYY-MM-DD, gridlock_file only
+  debriefReleaseAt: string; // ISO date string, debrief only
 }
 
 interface PuzzlePart {
@@ -59,6 +60,7 @@ const PUZZLE_TYPES = [
   { value: 'crime_rpg', label: 'Crime Case RPG 🔎' },
   { value: 'parasite_code', label: 'Parasite Code 🦠' },
   { value: 'gridlock_file', label: 'Gridlock File 🔐' },
+  { value: 'debrief', label: 'The Debrief 📋' },
   { value: 'crack_safe', label: 'Crack the Safe 🔐' },
   { value: 'word_crack', label: 'Word Crack 🟩' },
   { value: 'word_search', label: 'Word Search 🔍' },
@@ -127,6 +129,7 @@ export default function AdminPuzzlesPage() {
     puzzleData: {},
     isWarzExclusive: false,
     gridlockReleaseAt: "",
+    debriefReleaseAt: "",
   });
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
@@ -220,10 +223,16 @@ export default function AdminPuzzlesPage() {
         ],
         puzzleData: (p.data as Record<string, unknown>) || {},
         isWarzExclusive: (p as any).isWarzExclusive === true,
-        gridlockReleaseAt: (p as any).schedule?.releaseAt
+        gridlockReleaseAt: (p as any).schedule?.releaseAt && (p as any).puzzleType === 'gridlock_file'
           ? (() => {
               const d = new Date((p as any).schedule.releaseAt);
-              // Format for datetime-local input: YYYY-MM-DDTHH:MM in local time
+              const pad = (n: number) => String(n).padStart(2, '0');
+              return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            })()
+          : "",
+        debriefReleaseAt: (p as any).schedule?.releaseAt && (p as any).puzzleType === 'debrief'
+          ? (() => {
+              const d = new Date((p as any).schedule.releaseAt);
               const pad = (n: number) => String(n).padStart(2, '0');
               return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
             })()
@@ -288,6 +297,7 @@ export default function AdminPuzzlesPage() {
       puzzleData: {},
       isWarzExclusive: false,
       gridlockReleaseAt: "",
+      debriefReleaseAt: "",
     });
     setJigsawImageUrl("");
     setJigsawImagePreview("");
@@ -712,6 +722,12 @@ export default function AdminPuzzlesPage() {
           submitBody.gridlockReleaseAt = new Date(formData.gridlockReleaseAt).toISOString();
         }
       }
+      if (formData.puzzleType === 'debrief') {
+        delete submitBody.correctAnswer;
+        if (formData.debriefReleaseAt) {
+          submitBody.debriefReleaseAt = new Date(formData.debriefReleaseAt).toISOString();
+        }
+      }
       if (formData.puzzleType === 'parasite_code') {
         delete submitBody.correctAnswer;
       }
@@ -988,6 +1004,7 @@ export default function AdminPuzzlesPage() {
           puzzleData: {},
           isWarzExclusive: false,
           gridlockReleaseAt: "",
+          debriefReleaseAt: "",
         });
         setMediaFiles([]);
         setJigsawImagePreview("");
@@ -1092,6 +1109,20 @@ export default function AdminPuzzlesPage() {
                       ))}
                     </select>
                   </div>
+
+                  {/* Debrief: release date scheduler */}
+                  {formData.puzzleType === 'debrief' && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-300 mb-2">📅 Go-Live Date &amp; Time (your local time)</label>
+                      <input
+                        type="datetime-local"
+                        value={formData.debriefReleaseAt}
+                        onChange={e => setFormData(prev => ({ ...prev, debriefReleaseAt: e.target.value }))}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Leave blank to make it live immediately.</p>
+                    </div>
+                  )}
 
                   {/* Gridlock File: release date scheduler */}
                   {formData.puzzleType === 'gridlock_file' && (
@@ -1392,7 +1423,7 @@ export default function AdminPuzzlesPage() {
                   )}
 
                   {/* Show Difficulty/Category for non-escape_room, non-crime_rpg types only */}
-                  {formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && (
+                  {formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && formData.puzzleType !== 'debrief' && (
                     formData.puzzleType === 'sudoku' ? (
                       <div className="grid md:grid-cols-1 gap-4">
                         <div>
@@ -1463,7 +1494,7 @@ export default function AdminPuzzlesPage() {
                   )}
 
                   {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
-                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && formData.puzzleType !== 'anagram_blitz' && formData.puzzleType !== 'blackout' && (
+                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && formData.puzzleType !== 'debrief' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && formData.puzzleType !== 'anagram_blitz' && formData.puzzleType !== 'blackout' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">
                         Correct Answer *

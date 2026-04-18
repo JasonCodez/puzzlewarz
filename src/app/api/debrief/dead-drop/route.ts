@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getTodaysDeadDrop } from "@/lib/witness-content";
+import { getTodaysDeadDropDebrief, DeadDropChallenge } from "@/lib/debrief-content";
 
-// POST /api/witness/dead-drop — validate a dead drop answer
+// POST /api/debrief/dead-drop — validate a dead drop answer
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -15,7 +15,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    const challenge = getTodaysDeadDrop();
+    // Resolve challenge — try DB-authored first, then hardcoded
+    let challenge: DeadDropChallenge;
+    const now = new Date();
+    const dbPuzzle = await prisma.puzzle.findFirst({
+      where: {
+        puzzleType: 'debrief',
+        isActive: true,
+        schedule: { releaseAt: { lte: now } },
+      },
+      select: { data: true },
+      orderBy: { schedule: { releaseAt: 'desc' } },
+    }) ?? await prisma.puzzle.findFirst({
+      where: { puzzleType: 'debrief', isActive: true, schedule: null },
+      select: { data: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (dbPuzzle?.data) {
+      const d = dbPuzzle.data as any;
+      challenge = d?.debrief?.deadDrop ? (d.debrief.deadDrop as DeadDropChallenge) : getTodaysDeadDropDebrief();
+    } else {
+      challenge = getTodaysDeadDropDebrief();
+    }
+
     if (challenge.id !== challengeId) {
       return NextResponse.json({ error: "Challenge mismatch" }, { status: 400 });
     }

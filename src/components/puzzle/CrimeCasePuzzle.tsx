@@ -3,12 +3,18 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
+  Contradiction,
+  CorkboardSlot,
   CrimeCaseClientData,
   EvidenceItem,
   EvidenceType,
+  InvestigationPhase,
   InterrogationQuestion,
+  Objective,
+  SceneHotspot,
   SuspectProfile,
   TimelineEvent,
+  UnlockEffect,
 } from '@/lib/crimeCase';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -32,8 +38,101 @@ interface ServerState {
   retentionUnlock: string | null;
 }
 
-type ActiveTab = 'evidence' | 'suspects' | 'timeline' | 'scene' | 'corkboard' | 'notes';
+type ActiveTab = 'evidence' | 'suspects' | 'timeline' | 'scene' | 'corkboard' | 'notes' | 'objectives';
 type CorkTag = 'key' | 'suspicious' | 'red-herring' | null;
+
+// ─── Progression state ────────────────────────────────────────────────────────
+interface InvestigationState {
+  phase: InvestigationPhase;
+  unlockedTabs: Set<string>;
+  unlockedEvidenceIds: Set<string>;
+  unlockedQuestionIds: Set<string>;
+  unlockedTimelineIds: Set<string>;
+  solvedContradictions: Set<string>;
+  solvedHotspots: Set<string>;
+  filledSlots: Record<string, string>; // slotId → evidenceId
+  completedObjectives: Set<string>;
+  accusationUnlocked: boolean;
+}
+
+function buildInitialState(puzzle: CrimeCaseClientData): InvestigationState {
+  const hasObjectives = (puzzle.objectives?.length ?? 0) > 0;
+  const defaultTabs = ['evidence', 'suspects', 'corkboard', 'notes'];
+  if (puzzle.timeline?.length)    defaultTabs.push('timeline');
+  if (puzzle.sceneImageUrl)       defaultTabs.push('scene');
+  if (hasObjectives)              defaultTabs.push('objectives');
+
+  const starterTabs   = puzzle.starterTabs ?? defaultTabs;
+  const starterEvIds  = puzzle.starterEvidenceIds ?? puzzle.evidence.map(e => e.id);
+  const starterQIds   = puzzle.starterQuestionIds  ?? puzzle.suspects.flatMap(s => s.interrogation?.map(q => q.id) ?? []);
+  const starterTlIds  = puzzle.starterTimelineIds  ?? (puzzle.timeline?.map(e => e.id) ?? []);
+
+  // If no objectives/contradictions/hotspots are defined → accusation always unlocked (legacy)
+  const hasGating = hasObjectives || (puzzle.contradictions?.length ?? 0) > 0 || (puzzle.hotspots?.length ?? 0) > 0;
+
+  return {
+    phase: 'intake',
+    unlockedTabs: new Set(starterTabs),
+    unlockedEvidenceIds: new Set(starterEvIds),
+    unlockedQuestionIds: new Set(starterQIds),
+    unlockedTimelineIds: new Set(starterTlIds),
+    solvedContradictions: new Set(),
+    solvedHotspots: new Set(),
+    filledSlots: {},
+    completedObjectives: new Set(),
+    accusationUnlocked: !hasGating,
+  };
+}
+
+function applyUnlockEffects(
+  state: InvestigationState,
+  effects: UnlockEffect[],
+  puzzle: CrimeCaseClientData,
+): InvestigationState {
+  let next = { ...state };
+  for (const fx of effects) {
+    switch (fx.type) {
+      case 'tab':        next = { ...next, unlockedTabs: new Set([...next.unlockedTabs, fx.id]) }; break;
+      case 'evidence':   next = { ...next, unlockedEvidenceIds: new Set([...next.unlockedEvidenceIds, fx.id]) }; break;
+      case 'question':   next = { ...next, unlockedQuestionIds: new Set([...next.unlockedQuestionIds, fx.id]) }; break;
+      case 'timeline':   next = { ...next, unlockedTimelineIds: new Set([...next.unlockedTimelineIds, fx.id]) }; break;
+      case 'phase':      next = { ...next, phase: fx.id }; break;
+      case 'accusation': next = { ...next, accusationUnlocked: true }; break;
+    }
+  }
+  // Check if accusation should unlock based on objectives threshold
+  if (!next.accusationUnlocked && (puzzle.objectives?.length ?? 0) > 0) {
+    const min = puzzle.accusationMinObjectives ?? puzzle.objectives!.length;
+    if (next.completedObjectives.size >= min) {
+      next = { ...next, accusationUnlocked: true };
+    }
+  }
+  return next;
+}
+
+function checkObjectiveCompletion(
+  state: InvestigationState,
+  actionId: string,
+  puzzle: CrimeCaseClientData,
+): InvestigationState {
+  if (!puzzle.objectives?.length) return state;
+  const newlyCompleted: string[] = [];
+  for (const obj of puzzle.objectives) {
+    if (!state.completedObjectives.has(obj.id) && obj.completedBy.includes(actionId)) {
+      newlyCompleted.push(obj.id);
+    }
+  }
+  if (!newlyCompleted.length) return state;
+  const next = { ...state, completedObjectives: new Set([...state.completedObjectives, ...newlyCompleted]) };
+  // Re-check accusation threshold after objective completion
+  if (!next.accusationUnlocked && (puzzle.objectives?.length ?? 0) > 0) {
+    const min = puzzle.accusationMinObjectives ?? puzzle.objectives!.length;
+    if (next.completedObjectives.size >= min) {
+      return { ...next, accusationUnlocked: true };
+    }
+  }
+  return next;
+}
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const TYPE_COLOR: Record<EvidenceType, string> = {
@@ -134,6 +233,18 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
   const [timeLeft, setTimeLeft] = useState(PUZZLE_TIME_SECONDS);
   const [failed, setFailed]     = useState(false);
   const timerActiveRef          = useRef(false);
+  const timeLeftRef             = useRef(PUZZLE_TIME_SECONDS);
+
+  // ── Progression state ─────────────────────────────────────────────────────
+  const [investState, setInvestState] = useState<InvestigationState | null>(null);
+  // Contradiction feedback: { id, correct, message }
+  const [contradictionFeedback, setContradictionFeedback] = useState<{
+    id: string; correct: boolean; message: string;
+  } | null>(null);
+  // Hotspot feedback: { id, text }
+  const [hotspotFeedback, setHotspotFeedback] = useState<{
+    id: string; isRedHerring: boolean; text: string;
+  } | null>(null);
 
   const storageKey = `crime-case:${puzzleId}`;
 
@@ -152,16 +263,33 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
 
   useEffect(() => { loadState(); }, [loadState]);
 
+  // ── Bootstrap progression state when puzzle loads ─────────────────────────
+  useEffect(() => {
+    if (!serverState?.puzzle) return;
+    setInvestState(prev => prev ?? buildInitialState(serverState.puzzle));
+  }, [serverState?.puzzle]);
+
+  // ── Helper: apply unlock effects and recheck objectives ───────────────────
+  const applyUnlocks = useCallback((effects: UnlockEffect[], actionId?: string) => {
+    if (!serverState?.puzzle) return;
+    setInvestState(prev => {
+      if (!prev) return prev;
+      let next = applyUnlockEffects(prev, effects, serverState.puzzle);
+      if (actionId) next = checkObjectiveCompletion(next, actionId, serverState.puzzle);
+      return next;
+    });
+  }, [serverState?.puzzle]);
+
   // ── Countdown tick ────────────────────────────────────────────────────────
   useEffect(() => {
     const id = setInterval(() => {
       if (!timerActiveRef.current) return;
-      let expired = false;
-      setTimeLeft(prev => {
-        if (prev <= 1) { timerActiveRef.current = false; expired = true; return 0; }
-        return prev - 1;
-      });
-      if (expired) setFailed(true);
+      timeLeftRef.current -= 1;
+      setTimeLeft(timeLeftRef.current);
+      if (timeLeftRef.current <= 0) {
+        timerActiveRef.current = false;
+        setFailed(true);
+      }
     }, 1000);
     return () => clearInterval(id);
   }, []); // eslint-disable-line
@@ -200,6 +328,61 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
     } catch { /* ignore */ }
   }, [storageKey]);
 
+  // ── Contradiction handler ─────────────────────────────────────────────────
+  const handleContradiction = useCallback((contradictionId: string, evidenceId: string) => {
+    if (!serverState?.puzzle?.contradictions || !investState) return;
+    const c = serverState.puzzle.contradictions.find(x => x.id === contradictionId);
+    if (!c || investState.solvedContradictions.has(contradictionId)) return;
+    const correct = evidenceId === c.challengeEvidenceId;
+    setContradictionFeedback({
+      id: contradictionId,
+      correct,
+      message: correct ? c.correctChallengeMessage : c.wrongChallengeMessage,
+    });
+    if (correct) {
+      setInvestState(prev => {
+        if (!prev) return prev;
+        const next = { ...prev, solvedContradictions: new Set([...prev.solvedContradictions, contradictionId]) };
+        const afterFx = applyUnlockEffects(next, c.unlocks, serverState.puzzle);
+        return checkObjectiveCompletion(afterFx, contradictionId, serverState.puzzle);
+      });
+    }
+  }, [serverState?.puzzle, investState]);
+
+  // ── Hotspot handler ───────────────────────────────────────────────────────
+  const handleHotspot = useCallback((hotspot: SceneHotspot) => {
+    if (!serverState?.puzzle || !investState) return;
+    setHotspotFeedback({ id: hotspot.id, isRedHerring: hotspot.isRedHerring, text: hotspot.revealText });
+    if (!investState.solvedHotspots.has(hotspot.id)) {
+      setInvestState(prev => {
+        if (!prev) return prev;
+        const next = { ...prev, solvedHotspots: new Set([...prev.solvedHotspots, hotspot.id]) };
+        if (!hotspot.isRedHerring && hotspot.unlocks?.length) {
+          const afterFx = applyUnlockEffects(next, hotspot.unlocks, serverState.puzzle);
+          return checkObjectiveCompletion(afterFx, hotspot.id, serverState.puzzle);
+        }
+        return checkObjectiveCompletion(next, hotspot.id, serverState.puzzle);
+      });
+    }
+  }, [serverState?.puzzle, investState]);
+
+  // ── Corkboard slot handler ────────────────────────────────────────────────
+  const handleSlotFill = useCallback((slotId: string, evidenceId: string) => {
+    if (!serverState?.puzzle?.corkboardSlots || !investState) return;
+    const slot = serverState.puzzle.corkboardSlots.find(s => s.id === slotId);
+    if (!slot) return;
+    const correct = evidenceId === slot.correctEvidenceId;
+    setInvestState(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, filledSlots: { ...prev.filledSlots, [slotId]: evidenceId } };
+      if (correct && slot.unlocks?.length) {
+        const afterFx = applyUnlockEffects(next, slot.unlocks, serverState.puzzle);
+        return checkObjectiveCompletion(afterFx, slotId, serverState.puzzle);
+      }
+      return checkObjectiveCompletion(next, slotId, serverState.puzzle);
+    });
+  }, [serverState?.puzzle, investState]);
+
   // ── Evidence interactions ─────────────────────────────────────────────────
   const openEvidence = (item: EvidenceItem) => {
     setViewingEvidence(item); setContrastValue(1.0); setIsZoomed(false); setCombineMode(false);
@@ -233,6 +416,14 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
       if (l.trigger === 'zoom' && !discoveredLayers.has(l.id)) discoverLayer(l.id);
     }
   }, [isZoomed, viewingEvidence]); // eslint-disable-line
+
+  const unlinkEvidence = (targetId: string) => {
+    if (!viewingEvidence) return;
+    const a = viewingEvidence.id, b = targetId;
+    const nextPairs = linkedPairs.filter(([x,y]) => !((x===a&&y===b)||(x===b&&y===a)));
+    setLinkedPairs(nextPairs);
+    saveBoard(examinedIds, discoveredLayers, nextPairs, notes);
+  };
 
   const linkEvidence = (targetId: string) => {
     if (!viewingEvidence) return;
@@ -275,13 +466,10 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
         timerActiveRef.current = false;
         await loadState(); onSolved?.();
       } else {
-        let expired = false;
-        setTimeLeft(prev => {
-          const next = Math.max(0, prev - TIME_PENALTY_SECONDS);
-          if (next <= 0) expired = true;
-          return next;
-        });
-        if (expired) { timerActiveRef.current = false; setFailed(true); }
+        const next = Math.max(0, timeLeftRef.current - TIME_PENALTY_SECONDS);
+        timeLeftRef.current = next;
+        setTimeLeft(next);
+        if (next <= 0) { timerActiveRef.current = false; setFailed(true); }
       }
     } catch { setError('Submission failed'); }
     finally   { setSubmitting(false); }
@@ -354,6 +542,7 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
       {failed ? (
         <FailedScreen caseTitle={puzzle.caseTitle} onRetry={() => {
           setFailed(false);
+          timeLeftRef.current = PUZZLE_TIME_SECONDS;
           setTimeLeft(PUZZLE_TIME_SECONDS);
           setAccuseResult(null);
           timerActiveRef.current = true;
@@ -363,9 +552,31 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
       ) : (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            <TabBar activeTab={activeTab} setActiveTab={setActiveTab}
+            <TabBar
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
               hasTimeline={Boolean(puzzle.timeline?.length)}
-              hasScene={Boolean(puzzle.sceneImageUrl)} />
+              hasScene={Boolean(puzzle.sceneImageUrl)}
+              hasObjectives={Boolean(puzzle.objectives?.length)}
+              unlockedTabs={investState?.unlockedTabs ?? new Set(['evidence', 'suspects', 'corkboard', 'notes', 'objectives', 'timeline', 'scene'])}
+              pendingTabs={(() => {
+                if (!puzzle.objectives || !investState) return undefined;
+                const phaseOrder = ['intake', 'investigation', 'theory', 'breakthrough', 'accusation'] as const;
+                const curIdx = phaseOrder.indexOf(investState.phase);
+                const result = new Set<string>();
+                for (const obj of puzzle.objectives) {
+                  if (investState.completedObjectives.has(obj.id)) continue;
+                  if (phaseOrder.indexOf(obj.phase as typeof phaseOrder[number]) > curIdx) continue;
+                  for (const id of obj.completedBy) {
+                    if (id.startsWith('hs_') && investState.unlockedTabs.has('scene')) result.add('scene');
+                    else if (id.startsWith('slot_') && investState.unlockedTabs.has('corkboard')) result.add('corkboard');
+                    else if ((id.startsWith('c_') || id.startsWith('q_')) && investState.unlockedTabs.has('suspects')) result.add('suspects');
+                    else if (/^e\d/.test(id) && investState.unlockedTabs.has('evidence')) result.add('evidence');
+                  }
+                }
+                return result;
+              })()}
+            />
             <div className="flex justify-end px-1 py-1">
               <button onClick={() => setShowHelp(true)} className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-80" style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C" }}>? How to play</button>
             </div>
@@ -380,20 +591,43 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.2 }}
               >
+                {activeTab === 'objectives' && puzzle.objectives && investState && (
+                  <ObjectivesPanel
+                    objectives={puzzle.objectives}
+                    completedObjectives={investState.completedObjectives}
+                    currentPhase={investState.phase}
+                  />
+                )}
                 {activeTab === 'evidence' && (
-                  <EvidenceBoard evidence={puzzle.evidence} examinedIds={examinedIds}
-                    discoveredLayers={discoveredLayers} linkedPairs={linkedPairs} onOpen={openEvidence} />
+                  <EvidenceBoard
+                    evidence={puzzle.evidence.filter(e => investState?.unlockedEvidenceIds.has(e.id) ?? true)}
+                    examinedIds={examinedIds}
+                    discoveredLayers={discoveredLayers}
+                    linkedPairs={linkedPairs}
+                    onOpen={openEvidence}
+                  />
                 )}
                 {activeTab === 'suspects' && (
                   <SuspectBoard suspects={puzzle.suspects}
                     revealedAnswers={revealedAnswers}
                     onInterrogate={setInterrogatingSuspect} />
                 )}
-                {activeTab === 'timeline' && puzzle.timeline && <TimelineBoard events={puzzle.timeline} />}
-                {activeTab === 'scene' && puzzle.sceneImageUrl && <SceneBoard imageUrl={puzzle.sceneImageUrl} />}
+                {activeTab === 'timeline' && puzzle.timeline && (
+                  <TimelineBoard
+                    events={puzzle.timeline.filter(e => investState?.unlockedTimelineIds.has(e.id) ?? true)}
+                  />
+                )}
+                {activeTab === 'scene' && puzzle.sceneImageUrl && (
+                  <SceneBoard
+                    imageUrl={puzzle.sceneImageUrl}
+                    hotspots={puzzle.hotspots ?? []}
+                    solvedHotspots={investState?.solvedHotspots ?? new Set()}
+                    onHotspot={handleHotspot}
+                  />
+                )}
                 {activeTab === 'corkboard' && (
                   <CorkboardBoard
-                    evidence={puzzle.evidence}
+                    evidence={puzzle.evidence.filter(e => investState?.unlockedEvidenceIds.has(e.id) ?? true)}
                     examinedIds={examinedIds}
                     linkedPairs={linkedPairs}
                     cardPositions={cardPositions}
@@ -407,6 +641,9 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
                       saveBoard(examinedIds, discoveredLayers, linkedPairs, notes, revealedAnswers, cardPositions, ct);
                     }}
                     onOpen={openEvidence}
+                    slots={puzzle.corkboardSlots ?? []}
+                    filledSlots={investState?.filledSlots ?? {}}
+                    onSlotFill={handleSlotFill}
                   />
                 )}
                 {activeTab === 'notes' && (
@@ -432,23 +669,37 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
             )}
           </AnimatePresence>
 
-          {/* CTA */}
+          {/* CTA — locked until accusationUnlocked */}
           <motion.div
-            className="mt-6 flex justify-end"
+            className="mt-6 flex items-center justify-end gap-3"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.45 }}
           >
+            {investState && !investState.accusationUnlocked && (
+              <p className="text-xs" style={{ color: '#4b5563' }}>
+                🔒 Complete the investigation to unlock accusation
+              </p>
+            )}
             <motion.button
-              whileHover={{ scale: 1.04, boxShadow: '0 0 32px rgba(239,68,68,0.35)' }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setShowAccusation(true)}
+              whileHover={investState?.accusationUnlocked ? { scale: 1.04, boxShadow: '0 0 32px rgba(239,68,68,0.35)' } : {}}
+              whileTap={investState?.accusationUnlocked ? { scale: 0.97 } : {}}
+              onClick={() => { if (investState?.accusationUnlocked) setShowAccusation(true); }}
+              disabled={!investState?.accusationUnlocked}
               className="relative overflow-hidden px-7 py-3 rounded-xl font-bold text-sm uppercase tracking-widest"
               style={{
-                background: 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 50%, #7f1d1d 100%)',
-                color: '#fca5a5',
-                border: '1px solid rgba(239,68,68,0.45)',
-                boxShadow: '0 0 20px rgba(239,68,68,0.15), inset 0 1px 0 rgba(255,255,255,0.06)',
+                background: investState?.accusationUnlocked
+                  ? 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 50%, #7f1d1d 100%)'
+                  : 'rgba(255,255,255,0.04)',
+                color: investState?.accusationUnlocked ? '#fca5a5' : '#374151',
+                border: investState?.accusationUnlocked
+                  ? '1px solid rgba(239,68,68,0.45)'
+                  : '1px solid rgba(255,255,255,0.06)',
+                boxShadow: investState?.accusationUnlocked
+                  ? '0 0 20px rgba(239,68,68,0.15), inset 0 1px 0 rgba(255,255,255,0.06)'
+                  : 'none',
+                cursor: investState?.accusationUnlocked ? 'pointer' : 'not-allowed',
+                transition: 'all 0.3s',
               }}
             >
               ⚖ File Accusation
@@ -465,30 +716,44 @@ export default function CrimeCasePuzzle({ puzzleId, onSolved }: CrimeCasePuzzleP
             discoveredLayers={discoveredLayers} contrastValue={contrastValue}
             setContrastValue={setContrastValue} isZoomed={isZoomed} setIsZoomed={setIsZoomed}
             combineMode={combineMode} setCombineMode={setCombineMode}
-            onClose={closeViewer} onLink={linkEvidence} linkedPairs={linkedPairs}
+            onClose={closeViewer} onLink={linkEvidence} onUnlink={unlinkEvidence} linkedPairs={linkedPairs}
           />
         )}
       </AnimatePresence>
 
       {/* Interrogation modal */}
       <AnimatePresence>
-        {interrogatingSuspect && (
+        {interrogatingSuspect && investState && (
           <InterrogationModal
             suspect={interrogatingSuspect}
             revealedAnswers={revealedAnswers}
+            unlockedQuestionIds={investState.unlockedQuestionIds}
+            allEvidence={puzzle.evidence.filter(e => investState.unlockedEvidenceIds.has(e.id))}
+            contradictions={puzzle.contradictions ?? []}
+            solvedContradictions={investState.solvedContradictions}
+            contradictionFeedback={
+              contradictionFeedback?.id
+                ? (puzzle.contradictions?.find(c => c.suspectId === interrogatingSuspect.id && c.id === contradictionFeedback.id)
+                  ? contradictionFeedback
+                  : null)
+                : null
+            }
             onReveal={qId => {
               const next = new Set(revealedAnswers).add(qId);
               setRevealedAnswers(next);
               saveBoard(examinedIds, discoveredLayers, linkedPairs, notes, next, cardPositions, cardTags);
+              // Unlock effects from revealing a question
+              applyUnlocks([], qId);
             }}
-            onClose={() => setInterrogatingSuspect(null)}
+            onChallenge={handleContradiction}
+            onClose={() => { setInterrogatingSuspect(null); setContradictionFeedback(null); }}
           />
         )}
       </AnimatePresence>
 
       {/* Accusation modal */}
       <AnimatePresence>
-        {showAccusation && !failed && (
+        {showAccusation && !failed && investState?.accusationUnlocked && (
           <AccusationModal
             suspects={puzzle.suspects} evidence={puzzle.evidence} mechanisms={puzzle.mechanisms}
             suspectId={accuseSuspectId} setSuspectId={setAccuseSuspectId}
@@ -728,42 +993,214 @@ function CaseHeader({ caseTitle, premise, caseClockHours, solved }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Tab Bar
 // ─────────────────────────────────────────────────────────────────────────────
-function TabBar({ activeTab, setActiveTab, hasTimeline, hasScene }: {
-  activeTab: ActiveTab; setActiveTab: (t: ActiveTab) => void; hasTimeline: boolean; hasScene: boolean;
+function TabBar({ activeTab, setActiveTab, hasTimeline, hasScene, unlockedTabs, hasObjectives, pendingTabs }: {
+  activeTab: ActiveTab;
+  setActiveTab: (t: ActiveTab) => void;
+  hasTimeline: boolean;
+  hasScene: boolean;
+  hasObjectives: boolean;
+  unlockedTabs: Set<string>;
+  pendingTabs?: Set<string>;
 }) {
-  const tabs: { id: ActiveTab; label: string; icon: string }[] = [
+  const ALL_TABS: { id: ActiveTab; label: string; icon: string }[] = [
+    { id: 'objectives', label: 'Leads',      icon: '🎯' },
     { id: 'evidence',   label: 'Evidence',   icon: '🗂' },
     { id: 'suspects',   label: 'Suspects',   icon: '👤' },
-    ...(hasTimeline ? [{ id: 'timeline'  as ActiveTab, label: 'Timeline',  icon: '⏱' }] : []),
-    ...(hasScene    ? [{ id: 'scene'     as ActiveTab, label: 'Scene',     icon: '🖼' }] : []),
+    { id: 'timeline',   label: 'Timeline',   icon: '⏱' },
+    { id: 'scene',      label: 'Scene',      icon: '🖼' },
     { id: 'corkboard',  label: 'Corkboard',  icon: '📌' },
     { id: 'notes',      label: 'Notes',      icon: '📝' },
   ];
 
+  const tabs = ALL_TABS.filter(t => {
+    if (t.id === 'objectives' && !hasObjectives) return false;
+    if (t.id === 'timeline'   && !hasTimeline)   return false;
+    if (t.id === 'scene'      && !hasScene)       return false;
+    return true;
+  });
+
   return (
     <div className="flex gap-1 mb-2 overflow-x-auto p-1 rounded-xl"
       style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-      {tabs.map((t) => (
-        <motion.button
-          key={t.id}
-          onClick={() => setActiveTab(t.id)}
-          whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
-          whileTap={{ scale: 0.97 }}
-          className="relative flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest whitespace-nowrap"
-          style={{ color: activeTab === t.id ? '#f87171' : '#6b7280', minWidth: 90 }}
+      {tabs.map((t) => {
+        const locked = !unlockedTabs.has(t.id);
+        const active = activeTab === t.id;
+        return (
+          <motion.button
+            key={t.id}
+            onClick={() => { if (!locked) setActiveTab(t.id); }}
+            whileHover={locked ? {} : { backgroundColor: 'rgba(255,255,255,0.05)' }}
+            whileTap={locked ? {} : { scale: 0.97 }}
+            title={locked ? 'Locked — check the Leads tab for your next step' : undefined}
+            className="relative flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+            style={{
+              color: locked ? '#1f2937' : active ? '#f87171' : '#6b7280',
+              cursor: locked ? 'not-allowed' : 'pointer',
+              minWidth: 90,
+            }}
+          >
+            {active && !locked && (
+              <motion.div
+                layoutId="tab-pill"
+                className="absolute inset-0 rounded-lg"
+                style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              />
+            )}
+            <span className="relative">{locked ? '🔒' : t.icon}</span>
+            <span className="relative">{t.label}</span>
+            {!locked && !active && pendingTabs?.has(t.id) && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full animate-pulse"
+                style={{ background: '#f97316' }} />
+            )}
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Objectives / Leads Panel
+// ─────────────────────────────────────────────────────────────────────────────
+const PHASE_LABEL: Record<InvestigationPhase, string> = {
+  intake:        'Phase 1 — Intake',
+  investigation: 'Phase 2 — Investigation',
+  theory:        'Phase 3 — Theory Testing',
+  breakthrough:  'Phase 4 — Breakthrough',
+  accusation:    'Phase 5 — Final Accusation',
+};
+
+/** Derives a short "where to act" label from completedBy action IDs */
+function deriveActionHint(completedBy: string[]): string | null {
+  const tabs = new Set<string>();
+  for (const id of completedBy) {
+    if (id.startsWith('hs_'))           tabs.add('Scene tab');
+    else if (id.startsWith('slot_'))    tabs.add('Corkboard tab');
+    else if (id.startsWith('c_'))       tabs.add('Suspects tab → Interrogate → ⚡ Challenge');
+    else if (id.startsWith('q_'))       tabs.add('Suspects tab → Interrogate');
+    else if (/^e\d/.test(id))           tabs.add('Evidence tab');
+  }
+  if (!tabs.size) return null;
+  return [...tabs].join('  •  ');
+}
+
+function ObjectivesPanel({
+  objectives,
+  completedObjectives,
+  currentPhase,
+}: {
+  objectives: Objective[];
+  completedObjectives: Set<string>;
+  currentPhase: InvestigationPhase;
+}) {
+  const phases: InvestigationPhase[] = ['intake', 'investigation', 'theory', 'breakthrough', 'accusation'];
+  const phaseIndex = phases.indexOf(currentPhase);
+
+  // Group by phase, only show phases up to and including current
+  const visiblePhases = phases.slice(0, phaseIndex + 1);
+
+  // First incomplete objective in visible phases = the active next step
+  const visibleObjs = objectives.filter(o => phases.indexOf(o.phase) <= phaseIndex);
+  const nextObj = visibleObjs.find(o => !completedObjectives.has(o.id));
+  const allDone = objectives.every(o => completedObjectives.has(o.id));
+
+  return (
+    <div className="p-4 space-y-5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-widest" style={{ color: '#4b5563' }}>
+          Investigation Leads
+        </p>
+        <span className="text-xs font-bold px-2 py-1 rounded-full"
+          style={{ background: 'rgba(253,231,76,0.08)', color: '#FDE74C', border: '1px solid rgba(253,231,76,0.2)' }}>
+          {PHASE_LABEL[currentPhase]}
+        </span>
+      </div>
+
+      {/* ── NEXT STEP callout ─────────────────────────────────────── */}
+      {!allDone && nextObj && (
+        <motion.div
+          key={nextObj.id}
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-xl px-4 py-3"
+          style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.35)' }}
         >
-          {activeTab === t.id && (
-            <motion.div
-              layoutId="tab-pill"
-              className="absolute inset-0 rounded-lg"
-              style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
+          <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#f97316' }}>
+            ▶ Next step
+          </p>
+          <p className="text-sm font-semibold" style={{ color: '#fdba74' }}>{nextObj.text}</p>
+          {(nextObj.hint ?? deriveActionHint(nextObj.completedBy)) && (
+            <p className="text-xs mt-1.5" style={{ color: '#78716c' }}>
+              {nextObj.hint ?? deriveActionHint(nextObj.completedBy)}
+            </p>
           )}
-          <span className="relative">{t.icon}</span>
-          <span className="relative">{t.label}</span>
-        </motion.button>
-      ))}
+        </motion.div>
+      )}
+
+      {visiblePhases.map(phase => {
+        const phaseObjs = objectives.filter(o => o.phase === phase);
+        if (!phaseObjs.length) return null;
+        return (
+          <div key={phase}>
+            <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#374151' }}>
+              {PHASE_LABEL[phase]}
+            </p>
+            <div className="space-y-2">
+              {phaseObjs.map(obj => {
+                const done = completedObjectives.has(obj.id);
+                const isNext = !done && nextObj?.id === obj.id;
+                const autoHint = !done ? deriveActionHint(obj.completedBy) : null;
+                return (
+                  <motion.div
+                    key={obj.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-start gap-3 rounded-xl px-4 py-3"
+                    style={{
+                      background: done ? 'rgba(52,211,153,0.06)' : isNext ? 'rgba(249,115,22,0.05)' : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${done ? 'rgba(52,211,153,0.2)' : isNext ? 'rgba(249,115,22,0.3)' : 'rgba(255,255,255,0.07)'}`,
+                    }}
+                  >
+                    <motion.span
+                      initial={false}
+                      animate={{ scale: done ? [1.4, 1] : 1 }}
+                      transition={{ type: 'spring', stiffness: 400 }}
+                      className="text-sm shrink-0 mt-0.5"
+                    >
+                      {done ? '✅' : isNext ? '▶' : '⬜'}
+                    </motion.span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm leading-relaxed"
+                        style={{ color: done ? '#34d399' : '#9ca3af', textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.7 : 1 }}>
+                        {obj.text}
+                      </p>
+                      {!done && (obj.hint ?? autoHint) && (
+                        <p className="text-xs mt-1" style={{ color: '#57534e' }}>
+                          {obj.hint ?? autoHint}
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {allDone && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.92 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="rounded-xl p-4 text-center"
+          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}
+        >
+          <p className="text-sm font-bold" style={{ color: '#f87171' }}>
+            ⚖ All leads resolved — file your accusation
+          </p>
+        </motion.div>
+      )}
     </div>
   );
 }
@@ -1190,69 +1627,109 @@ function CaseTimer({ timeLeft }: { timeLeft: number }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Scene Board
 // ─────────────────────────────────────────────────────────────────────────────
-function SceneBoard({ imageUrl }: { imageUrl: string }) {
-  const [zoomed, setZoomed] = useState(false);
-  const [origin, setOrigin] = useState({ x: '50%', y: '50%' });
-
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!zoomed) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const xPct = ((e.clientX - rect.left) / rect.width * 100).toFixed(1) + '%';
-      const yPct = ((e.clientY - rect.top)  / rect.height * 100).toFixed(1) + '%';
-      setOrigin({ x: xPct, y: yPct });
-    }
-    setZoomed(z => !z);
-  };
+function SceneBoard({
+  imageUrl,
+  hotspots = [],
+  solvedHotspots,
+  onHotspot,
+}: {
+  imageUrl: string;
+  hotspots?: SceneHotspot[];
+  solvedHotspots: Set<string>;
+  onHotspot: (h: SceneHotspot) => void;
+}) {
+  const [activeHotspot, setActiveHotspot] = useState<SceneHotspot | null>(null);
 
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs uppercase tracking-widest" style={{ color: '#4b5563' }}>
-          Crime Scene Overview
+          Crime Scene — click markers to investigate
         </p>
-        <span className="text-xs" style={{ color: '#374151' }}>
-          {zoomed ? 'Click to zoom out' : 'Click image to zoom in'}
-        </span>
+        {hotspots.length > 0 && (
+          <span className="text-xs" style={{ color: '#6b7280' }}>
+            {solvedHotspots.size}/{hotspots.length} examined
+          </span>
+        )}
       </div>
 
-      <motion.div
-        onClick={handleClick}
+      <div
         className="relative rounded-xl overflow-hidden"
-        style={{
-          border: '1px solid rgba(255,255,255,0.08)',
-          cursor: zoomed ? 'zoom-out' : 'zoom-in',
-          maxHeight: zoomed ? '70vh' : 480,
-          overflow: 'hidden',
-        }}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
+        style={{ border: '1px solid rgba(255,255,255,0.08)' }}
       >
-        <motion.div
-          animate={{ scale: zoomed ? 2 : 1 }}
-          style={{ transformOrigin: `${origin.x} ${origin.y}` }}
-          transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageUrl}
-            alt="Crime scene"
-            className="w-full block select-none"
-            draggable={false}
-          />
-        </motion.div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt="Crime scene"
+          className="w-full block select-none"
+          draggable={false}
+        />
 
-        {!zoomed && (
-          <div
-            className="absolute inset-0 flex items-end pb-4 justify-center pointer-events-none"
-            style={{ background: 'linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.45))' }}
+        {/* Hotspot markers */}
+        {hotspots.map(h => {
+          const examined = solvedHotspots.has(h.id);
+          return (
+            <motion.button
+              key={h.id}
+              onClick={() => { onHotspot(h); setActiveHotspot(h); }}
+              className="absolute"
+              style={{ left: `${h.x}%`, top: `${h.y}%`, transform: 'translate(-50%, -50%)', zIndex: 10 }}
+              title={h.label}
+            >
+              <motion.div
+                animate={examined ? {} : { scale: [1, 1.25, 1] }}
+                transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                style={{
+                  background: examined
+                    ? (h.isRedHerring ? 'rgba(107,114,128,0.6)' : 'rgba(52,211,153,0.6)')
+                    : 'rgba(239,68,68,0.7)',
+                  border: `2px solid ${examined ? (h.isRedHerring ? '#6b7280' : '#34d399') : '#f87171'}`,
+                  boxShadow: examined ? 'none' : '0 0 12px rgba(239,68,68,0.5)',
+                  color: '#fff',
+                }}
+              >
+                {examined ? (h.isRedHerring ? '✗' : '✓') : '!'}
+              </motion.div>
+            </motion.button>
+          );
+        })}
+      </div>
+
+      {/* Active hotspot reveal */}
+      <AnimatePresence>
+        {activeHotspot && (
+          <motion.div
+            key={activeHotspot.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mt-3 rounded-xl px-4 py-3 flex items-start gap-3"
+            style={{
+              background: activeHotspot.isRedHerring ? 'rgba(107,114,128,0.08)' : 'rgba(52,211,153,0.06)',
+              border: `1px solid ${activeHotspot.isRedHerring ? 'rgba(107,114,128,0.25)' : 'rgba(52,211,153,0.2)'}`,
+            }}
           >
-            <span className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full"
-              style={{ background: 'rgba(0,0,0,0.5)', color: '#6b7280', border: '1px solid rgba(255,255,255,0.08)' }}>
-              \uD83D\uDD0D Click anywhere to zoom
-            </span>
-          </div>
+            <span className="text-lg shrink-0">{activeHotspot.isRedHerring ? '🚫' : '🔎'}</span>
+            <div className="flex-1">
+              <p className="text-xs font-bold uppercase tracking-widest mb-1"
+                style={{ color: activeHotspot.isRedHerring ? '#6b7280' : '#34d399' }}>
+                {activeHotspot.label} {activeHotspot.isRedHerring ? '— Red Herring' : '— Lead Found'}
+              </p>
+              <p className="text-sm leading-relaxed" style={{ color: '#d1d5db' }}>
+                {activeHotspot.revealText}
+              </p>
+            </div>
+            <button onClick={() => setActiveHotspot(null)} style={{ color: '#4b5563', fontSize: 16 }}>✕</button>
+          </motion.div>
         )}
-      </motion.div>
+      </AnimatePresence>
+
+      {hotspots.length === 0 && (
+        <p className="mt-2 text-xs text-center" style={{ color: '#374151' }}>
+          No interactive hotspots configured for this scene.
+        </p>
+      )}
     </div>
   );
 }
@@ -1355,15 +1832,31 @@ function SolvedScreen({ retentionUnlock, caseTitle }: { retentionUnlock: string 
 function InterrogationModal({
   suspect,
   revealedAnswers,
+  unlockedQuestionIds,
+  allEvidence,
+  contradictions,
+  solvedContradictions,
+  contradictionFeedback,
   onReveal,
+  onChallenge,
   onClose,
 }: {
   suspect: SuspectProfile;
   revealedAnswers: Set<string>;
+  unlockedQuestionIds: Set<string>;
+  allEvidence: EvidenceItem[];
+  contradictions: Contradiction[];
+  solvedContradictions: Set<string>;
+  contradictionFeedback: { id: string; correct: boolean; message: string } | null;
   onReveal: (id: string) => void;
+  onChallenge: (contradictionId: string, evidenceId: string) => void;
   onClose: () => void;
 }) {
-  const questions = suspect.interrogation ?? [];
+  const questions = (suspect.interrogation ?? []).filter(q => unlockedQuestionIds.has(q.id));
+  const [challengingId, setChallengingId] = useState<string | null>(null);
+
+  // Contradictions relevant to this suspect
+  const suspectContradictions = contradictions.filter(c => c.suspectId === suspect.id);
 
   return (
     <motion.div
@@ -1412,7 +1905,7 @@ function InterrogationModal({
               <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
                 {questions.length > 0
                   ? `${questions.filter(q => revealedAnswers.has(q.id)).length}/${questions.length} questions asked`
-                  : 'No questions on file'}
+                  : 'No questions available'}
               </div>
             </div>
           </div>
@@ -1428,12 +1921,18 @@ function InterrogationModal({
         <div className="p-5 flex-1 space-y-3">
           {questions.length === 0 && (
             <p className="text-sm text-center py-8" style={{ color: '#374151' }}>
-              This subject has declined to answer any questions.
+              No questions available yet — keep investigating.
             </p>
           )}
 
           {questions.map((q, i) => {
             const revealed = revealedAnswers.has(q.id);
+            // Is there an unsolved contradiction for this question?
+            const contradiction = suspectContradictions.find(c => c.questionId === q.id);
+            const contradictionSolved = contradiction ? solvedContradictions.has(contradiction.id) : false;
+            const canChallenge = revealed && !!contradiction && !contradictionSolved;
+            const isBeingChallenged = challengingId === contradiction?.id;
+
             return (
               <motion.div
                 key={q.id}
@@ -1463,7 +1962,7 @@ function InterrogationModal({
 
                 {/* Answer area */}
                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                  <AnimatePresence>
+                  <AnimatePresence mode="wait">
                     {revealed ? (
                       <motion.div
                         key="answer"
@@ -1471,13 +1970,77 @@ function InterrogationModal({
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.25 }}
-                        className="px-4 py-3 flex items-start gap-3"
+                        className="px-4 py-3 space-y-3"
                       >
-                        <span className="text-xs font-bold uppercase tracking-widest shrink-0 mt-0.5"
-                          style={{ color: '#f87171' }}>A</span>
-                        <p className="text-sm leading-relaxed" style={{ color: '#9ca3af', fontFamily: 'ui-monospace, monospace' }}>
-                          {q.answer}
-                        </p>
+                        <div className="flex items-start gap-3">
+                          <span className="text-xs font-bold uppercase tracking-widest shrink-0 mt-0.5"
+                            style={{ color: '#f87171' }}>A</span>
+                          <p className="text-sm leading-relaxed" style={{ color: '#9ca3af', fontFamily: 'ui-monospace, monospace' }}>
+                            {q.answer}
+                          </p>
+                        </div>
+
+                        {/* Contradiction challenge */}
+                        {canChallenge && (
+                          <div>
+                            {isBeingChallenged ? (
+                              <div className="space-y-2">
+                                <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#FDE74C' }}>
+                                  ⚡ Challenge this statement — pick the evidence that disproves it:
+                                </p>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  {allEvidence.map(ev => (
+                                    <motion.button
+                                      key={ev.id}
+                                      whileHover={{ scale: 1.02 }}
+                                      whileTap={{ scale: 0.96 }}
+                                      onClick={() => {
+                                        setChallengingId(null);
+                                        onChallenge(contradiction!.id, ev.id);
+                                      }}
+                                      className="text-left text-xs px-3 py-2 rounded-lg"
+                                      style={{
+                                        background: 'rgba(253,231,76,0.06)',
+                                        border: '1px solid rgba(253,231,76,0.2)',
+                                        color: '#d1d5db',
+                                      }}
+                                    >
+                                      {TYPE_ICON[ev.type]} {ev.label}
+                                    </motion.button>
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={() => setChallengingId(null)}
+                                  className="text-xs"
+                                  style={{ color: '#4b5563' }}
+                                >Cancel</button>
+                              </div>
+                            ) : (
+                              <motion.button
+                                whileHover={{ scale: 1.02, boxShadow: '0 0 14px rgba(253,231,76,0.15)' }}
+                                whileTap={{ scale: 0.97 }}
+                                onClick={() => setChallengingId(contradiction!.id)}
+                                className="w-full py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest"
+                                style={{
+                                  background: 'rgba(253,231,76,0.08)',
+                                  border: '1px solid rgba(253,231,76,0.25)',
+                                  color: '#FDE74C',
+                                }}
+                              >
+                                ⚡ Challenge this statement
+                              </motion.button>
+                            )}
+                          </div>
+                        )}
+                        {contradictionSolved && (
+                          <motion.p
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                            className="text-xs font-bold"
+                            style={{ color: '#34d399' }}
+                          >
+                            ✅ Contradiction resolved
+                          </motion.p>
+                        )}
                       </motion.div>
                     ) : (
                       <motion.div
@@ -1507,6 +2070,27 @@ function InterrogationModal({
           })}
         </div>
 
+        {/* Contradiction feedback toast */}
+        <AnimatePresence>
+          {contradictionFeedback && (
+            <motion.div
+              key={contradictionFeedback.id + String(contradictionFeedback.correct)}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="mx-5 mb-5 rounded-xl px-4 py-3"
+              style={{
+                background: contradictionFeedback.correct ? 'rgba(52,211,153,0.08)' : 'rgba(239,68,68,0.08)',
+                border: `1px solid ${contradictionFeedback.correct ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)'}`,
+              }}
+            >
+              <p className="text-xs font-bold" style={{ color: contradictionFeedback.correct ? '#34d399' : '#f87171' }}>
+                {contradictionFeedback.correct ? '✅' : '✗'} {contradictionFeedback.message}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* bottom accent */}
         <div className="h-px mx-5 mb-5"
           style={{ background: 'linear-gradient(90deg, transparent, rgba(239,68,68,0.15), transparent)' }} />
@@ -1515,7 +2099,6 @@ function InterrogationModal({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Corkboard
 // ─────────────────────────────────────────────────────────────────────────────
 const CORK_TAG_STYLE: Record<NonNullable<CorkTag>, { bg: string; border: string; color: string; label: string }> = {
@@ -1525,7 +2108,8 @@ const CORK_TAG_STYLE: Record<NonNullable<CorkTag>, { bg: string; border: string;
 };
 
 function CorkboardBoard({
-  evidence, examinedIds, linkedPairs, cardPositions, setCardPositions, cardTags, setCardTags, onOpen,
+  evidence, examinedIds, linkedPairs, cardPositions, setCardPositions,
+  cardTags, setCardTags, onOpen, slots, filledSlots, onSlotFill,
 }: {
   evidence: EvidenceItem[];
   examinedIds: Set<string>;
@@ -1535,6 +2119,9 @@ function CorkboardBoard({
   cardTags: Record<string, CorkTag>;
   setCardTags: (t: Record<string, CorkTag>) => void;
   onOpen: (item: EvidenceItem) => void;
+  slots: CorkboardSlot[];
+  filledSlots: Record<string, string>;
+  onSlotFill: (slotId: string, evidenceId: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tagMenuFor, setTagMenuFor] = useState<string | null>(null);
@@ -1652,7 +2239,6 @@ function CorkboardBoard({
               initial={false}
               animate={{ x: pos.x, y: pos.y }}
               onDragEnd={(_, info) => {
-                // info.point is viewport-relative; use offset from container
                 const rect = containerRef.current?.getBoundingClientRect();
                 if (!rect) return;
                 const nx = Math.max(0, Math.min(rect.width - CARD_W, pos.x + info.offset.x));
@@ -1668,6 +2254,9 @@ function CorkboardBoard({
               }}
               whileDrag={{ scale: 1.05, zIndex: 10, cursor: 'grabbing' }}
               onContextMenu={e => { e.preventDefault(); setTagMenuFor(item.id); }}
+              // HTML5 drag for slot drops (separate from framer board drag)
+              onMouseDown={e => { e.currentTarget.setAttribute('data-evidence-id', item.id); }}
+              onDragStartCapture={e => { e.dataTransfer.setData('evidenceId', item.id); }}
             >
               {/* pin */}
               <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 z-10"
@@ -1768,6 +2357,68 @@ function CorkboardBoard({
       <p className="mt-2 text-xs text-center" style={{ color: '#374151' }}>
         Link evidence in the Evidence tab to draw connections · right-click a card to tag it
       </p>
+
+      {/* ── Corkboard Deduction Slots ── */}
+      {slots.length > 0 && (
+        <div className="mt-5">
+          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: '#4b5563' }}>
+            Deduction Board — drag evidence into the correct slot
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {slots.map(slot => {
+              const filled = filledSlots[slot.id];
+              const filledEvidence = filled ? evidence.find(e => e.id === filled) : null;
+              const isCorrect = filled === slot.correctEvidenceId;
+
+              const SLOT_COLOR: Record<typeof slot.label, { bg: string; border: string; color: string }> = {
+                'motive':      { bg: 'rgba(239,68,68,0.06)',   border: 'rgba(239,68,68,0.25)',    color: '#f87171' },
+                'opportunity': { bg: 'rgba(56,189,248,0.06)',  border: 'rgba(56,189,248,0.25)',   color: '#38bdf8' },
+                'method':      { bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.25)',  color: '#a78bfa' },
+                'alibi':       { bg: 'rgba(253,231,76,0.06)',  border: 'rgba(253,231,76,0.25)',   color: '#FDE74C' },
+                'red-herring': { bg: 'rgba(107,114,128,0.06)', border: 'rgba(107,114,128,0.25)', color: '#6b7280' },
+              };
+              const sc = SLOT_COLOR[slot.label];
+
+              return (
+                <div
+                  key={slot.id}
+                  className="rounded-xl p-3 flex flex-col gap-2 min-h-[90px]"
+                  style={{
+                    background: filled ? (isCorrect ? 'rgba(52,211,153,0.06)' : sc.bg) : sc.bg,
+                    border: `1px solid ${filled ? (isCorrect ? 'rgba(52,211,153,0.3)' : sc.border) : sc.border}`,
+                  }}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => {
+                    const evId = e.dataTransfer.getData('evidenceId');
+                    if (evId) onSlotFill(slot.id, evId);
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: sc.color }}>
+                      {slot.label}
+                    </span>
+                    {filled && (
+                      <span className="text-xs">{isCorrect ? '✅' : '❓'}</span>
+                    )}
+                  </div>
+                  {filledEvidence ? (
+                    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <span>{TYPE_ICON[filledEvidence.type]}</span>
+                      <span className="text-xs truncate" style={{ color: '#d1d5db' }}>{filledEvidence.label}</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs" style={{ color: '#374151' }}>Drop evidence here</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-center" style={{ color: '#374151' }}>
+            Drag a card from above into a slot to assign evidence
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1777,7 +2428,7 @@ function CorkboardBoard({
 // ─────────────────────────────────────────────────────────────────────────────
 function EvidenceViewerModal({
   item, allEvidence, discoveredLayers, contrastValue, setContrastValue,
-  isZoomed, setIsZoomed, combineMode, setCombineMode, onClose, onLink, linkedPairs,
+  isZoomed, setIsZoomed, combineMode, setCombineMode, onClose, onLink, onUnlink, linkedPairs,
 }: {
   item: EvidenceItem;
   allEvidence: EvidenceItem[];
@@ -1790,6 +2441,7 @@ function EvidenceViewerModal({
   setCombineMode: (v: boolean) => void;
   onClose: () => void;
   onLink: (id: string) => void;
+  onUnlink: (id: string) => void;
   linkedPairs: [string,string][];
 }) {
   const color = TYPE_COLOR[item.type];
@@ -1944,16 +2596,17 @@ function EvidenceViewerModal({
                         key={e.id}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.97 }}
-                        onClick={() => onLink(e.id)}
-                        disabled={al}
-                        className="text-left px-3 py-2 rounded-lg text-xs disabled:opacity-40"
+                        onClick={() => al ? onUnlink(e.id) : onLink(e.id)}
+                        title={al ? 'Click to remove link' : 'Click to link'}
+                        className="text-left px-3 py-2 rounded-lg text-xs"
                         style={{
-                          background: 'rgba(255,255,255,0.04)',
+                          background: al ? 'rgba(52,211,153,0.06)' : 'rgba(255,255,255,0.04)',
                           border: `1px solid ${al ? 'rgba(52,211,153,0.35)' : 'rgba(255,255,255,0.08)'}`,
                           color: al ? '#34d399' : '#d1d5db',
                         }}
                       >
-                        {TYPE_ICON[e.type]} {e.label} {al && '🔗'}
+                        {TYPE_ICON[e.type]} {e.label}{al && <span className="ml-1 text-red-400 opacity-60"> ✕</span>}
+                        {al && <span className="ml-1">🔗</span>}
                       </motion.button>
                     );
                   })}

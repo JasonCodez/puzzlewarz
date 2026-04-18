@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getGridlockFileData, sanitizeGridlockForClient } from '@/lib/gridlockFile';
 
+// Force dynamic — never cache this route. The puzzle changes at midnight every day.
+export const dynamic = 'force-dynamic';
+
 // GET /api/gridlock/daily
 // Public — no auth required.
 // Returns today's active gridlock_file puzzle.
@@ -55,11 +58,23 @@ export async function GET() {
     });
     const solvedToday = realSolvedToday + SOCIAL_PROOF_BASELINE;
 
-    return NextResponse.json({
-      puzzleId: puzzle.id,
-      puzzle: sanitizeGridlockForClient(fileData),
-      solvedToday,
-    });
+    // Calculate seconds until next UTC midnight so the browser revalidates at the right time
+    const nextMidnight = new Date(todayStart);
+    nextMidnight.setUTCDate(nextMidnight.getUTCDate() + 1);
+    const secondsUntilMidnight = Math.max(1, Math.floor((nextMidnight.getTime() - now.getTime()) / 1000));
+
+    return NextResponse.json(
+      {
+        puzzleId: puzzle.id,
+        puzzle: sanitizeGridlockForClient(fileData),
+        solvedToday,
+      },
+      {
+        headers: {
+          'Cache-Control': `public, max-age=${secondsUntilMidnight}, stale-while-revalidate=60`,
+        },
+      }
+    );
   } catch (e) {
     console.error('[gridlock/daily]', e);
     return NextResponse.json({ puzzle: null });

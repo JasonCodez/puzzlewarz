@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -54,7 +54,7 @@ const ALL_NAV_LINKS = [
 const NAV_LINKS = ALL_NAV_LINKS.filter(l => !('enabled' in l) || l.enabled);
 
 const MORE_LINKS = [
-  { href: "/witness",      label: "The Witness 🔍" },
+  { href: "/debrief",      label: "The Debrief 🔍" },
   { href: "/frequency",    label: "Frequency 📡" },
   { href: "/forum",        label: "Forum 💬" },
   { href: "/teams",        label: "Teams" },

@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import { getTodaysScenario, getTodaysQuestionIndices } from "@/lib/witness-content";
+import { getTodaysDebriefScenario, getTodaysDebriefQuestionIndices, DebriefScenario } from "@/lib/debrief-content";
 
-// POST /api/witness/submit — record a witness attempt and return results
+// POST /api/debrief/submit — record a debrief attempt and return results
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -14,13 +14,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    const scenario = getTodaysScenario();
+    // Resolve scenario — try DB-authored first, then hardcoded
+    let scenario: DebriefScenario;
+    const now = new Date();
+    const dbPuzzle = await prisma.puzzle.findFirst({
+      where: {
+        puzzleType: 'debrief',
+        isActive: true,
+        schedule: { releaseAt: { lte: now } },
+      },
+      select: { data: true },
+      orderBy: { schedule: { releaseAt: 'desc' } },
+    }) ?? await prisma.puzzle.findFirst({
+      where: { puzzleType: 'debrief', isActive: true, schedule: null },
+      select: { data: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (dbPuzzle?.data) {
+      const d = dbPuzzle.data as any;
+      if (d?.debrief?.scenario) {
+        scenario = d.debrief.scenario as DebriefScenario;
+      } else {
+        scenario = getTodaysDebriefScenario();
+      }
+    } else {
+      scenario = getTodaysDebriefScenario();
+    }
+
     if (scenario.id !== scenarioId) {
       return NextResponse.json({ error: "Scenario mismatch" }, { status: 400 });
     }
 
     // Grade against today's selected question indices (same deterministic selection as /today)
-    const indices = getTodaysQuestionIndices(scenario, 5);
+    const indices = getTodaysDebriefQuestionIndices(scenario, 5);
     const correctAnswers = indices.map((i) => scenario.questions[i].correctIndex);
     let score = 0;
     const breakdown = answers.map((a, i) => {

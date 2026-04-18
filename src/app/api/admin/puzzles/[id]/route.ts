@@ -68,14 +68,31 @@ export async function PUT(
     timeLimitSeconds,
     isWarzExclusive,
     gridlockReleaseAt,
+    debriefReleaseAt,
   } = body;
 
+  // Normalise snake_case category values coming from the admin dropdown to display names
+  const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+    word_crack:     'Word Crack',
+    word_search:    'Word Search',
+    anagram_blitz:  'Anagram Blitz',
+    crack_safe:     'Crack Safe',
+    detective_case: 'Detective Case',
+    escape_room:    'Escape Room',
+    gridlock_file:  'Gridlock File',
+    parasite_code:  'Parasite Code',
+    crime_rpg:      'Crime RPG',
+    code_master:    'Code Master',
+    debrief:        'The Debrief',
+  };
+  const resolvedCategory = category ? (CATEGORY_DISPLAY_NAMES[category] ?? category) : category;
+
   // Get or create category
-  let categoryRecord = category
-    ? await prisma.puzzleCategory.findFirst({ where: { name: category } })
+  let categoryRecord = resolvedCategory
+    ? await prisma.puzzleCategory.findFirst({ where: { name: resolvedCategory } })
     : null;
-  if (!categoryRecord && category) {
-    categoryRecord = await prisma.puzzleCategory.create({ data: { name: category } });
+  if (!categoryRecord && resolvedCategory) {
+    categoryRecord = await prisma.puzzleCategory.create({ data: { name: resolvedCategory } });
   }
 
   const validDifficulties = ["easy", "medium", "hard", "expert", "extreme"];
@@ -85,7 +102,7 @@ export async function PUT(
       ? sudokuDifficulty.toLowerCase()
       : (difficulty && validDifficulties.includes(difficulty) ? difficulty : "medium");
 
-  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg", "gridlock_file", "parasite_code"].includes(puzzleType);
+  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg", "gridlock_file", "debrief", "parasite_code"].includes(puzzleType);
 
   if (puzzleType === 'gridlock_file') {
     const parsed = getGridlockFileData(puzzleData);
@@ -112,7 +129,7 @@ export async function PUT(
     if (!isSpecialType) {
       puzzleUpdateData.riddleAnswer = correctAnswer;
     }
-    if (["escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file"].includes(puzzleType) && puzzleData != null) {
+    if (["escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file", "debrief"].includes(puzzleType) && puzzleData != null) {
       puzzleUpdateData.data = puzzleData;
     }
     if (puzzleType === 'jigsaw' && puzzleData) {
@@ -211,6 +228,15 @@ export async function PUT(
   // Upsert PuzzleSchedule.releaseAt for gridlock_file puzzles
   if (puzzleType === 'gridlock_file') {
     const releaseAt = gridlockReleaseAt ? new Date(gridlockReleaseAt) : new Date();
+    await prisma.puzzleSchedule.upsert({
+      where: { puzzleId },
+      create: { puzzleId, releaseAt, schedulingType: 'scheduled' },
+      update: { releaseAt },
+    });
+  }
+  // Upsert PuzzleSchedule.releaseAt for debrief puzzles
+  if (puzzleType === 'debrief') {
+    const releaseAt = debriefReleaseAt ? new Date(debriefReleaseAt) : new Date();
     await prisma.puzzleSchedule.upsert({
       where: { puzzleId },
       create: { puzzleId, releaseAt, schedulingType: 'scheduled' },

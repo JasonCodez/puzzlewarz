@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
@@ -454,7 +454,7 @@ function WitnessComparisonModal({
   const maxCount = Math.max(...scoreDist, 1);
 
   const shareText = encodeURIComponent(
-    `🔍 The Witness — PuzzleWarz\n\nI recalled ${score}/5 details from today's incident report.\nI beat ${percentile}% of all investigators.\n\nCan you do better?\nhttps://puzzlewarz.com/witness`
+    `🔍 The Debrief — PuzzleWarz\n\nI recalled ${score}/5 details from today's incident report.\nI beat ${percentile}% of all investigators.\n\nCan you do better?\nhttps://puzzlewarz.com/witness`
   );
   const shareUrl = encodeURIComponent("https://puzzlewarz.com/witness");
   const twitterUrl = `https://x.com/intent/tweet?text=${shareText}`;
@@ -784,7 +784,7 @@ function WitnessHowToPlayModal({ onClose }: { onClose: () => void }) {
   const steps = [
     { icon: "📄", title: "Read the report", body: `You have ${READ_SECONDS} seconds to memorise an incident report. Read carefully — it disappears once time is up.` },
     { icon: "🧠", title: "Answer 5 questions", body: `Answer multiple-choice questions about the report. You have ${QUESTION_SECONDS} seconds per question. No going back.` },
-    { icon: "🔍", title: "Crack the Dead Drop", body: "After the witness stage, you'll enter a second challenge: decode three hidden words using cryptic clues. Use hints if you're stuck." },
+    { icon: "🔍", title: "Crack the Dead Drop", body: "After The Debrief stage, you'll enter a second challenge: decode three hidden words using cryptic clues. Use hints if you're stuck." },
     { icon: "📊", title: "See how you compare", body: "Your recall score and percentile ranking are revealed at the end. The better your memory, the higher you place." },
   ];
 
@@ -830,7 +830,7 @@ function WitnessHowToPlayModal({ onClose }: { onClose: () => void }) {
             How to play
           </div>
           <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>
-            The Witness
+            The Debrief
           </div>
         </div>
 
@@ -929,7 +929,7 @@ export default function WitnessPage() {
   // ── Load today's data ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetch("/api/witness/today")
+    fetch("/api/debrief/today")
       .then((r) => r.json())
       .then((data) => {
         setScenario(data.scenario);
@@ -993,7 +993,7 @@ export default function WitnessPage() {
         fadeIn();
       }, 500);
     } else {
-      fetch("/api/witness/submit", {
+      fetch("/api/debrief/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenarioId: scenario.id, answers: newAnswers }),
@@ -1079,7 +1079,7 @@ export default function WitnessPage() {
         } else {
           // All answered — submit
           setStage("witness-questions"); // keep UI but disable
-          fetch("/api/witness/submit", {
+          fetch("/api/debrief/submit", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ scenarioId: scenario.id, answers: newAnswers }),
@@ -1107,7 +1107,7 @@ export default function WitnessPage() {
 
       // Validate server-side via the route (avoids leaking answers in GET response)
       // For immediate UX we do client-side first then confirm server
-      fetch("/api/witness/dead-drop", {
+      fetch("/api/debrief/dead-drop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1147,7 +1147,7 @@ export default function WitnessPage() {
   const handleRevealAll = useCallback(() => {
     if (!deadDrop) return;
     setDdSubmitting(true);
-    fetch("/api/witness/dead-drop", {
+    fetch("/api/debrief/dead-drop", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1191,7 +1191,7 @@ export default function WitnessPage() {
 
   const shareWitness = useCallback(() => {
     if (!submitResult) return;
-    const text = `🔍 PuzzleWarz — The Witness\n\nI recalled ${submitResult.score}/5 critical details.\nI beat ${submitResult.percentile}% of players.\n\nCan you do better?\nhttps://puzzlewarz.com/witness`;
+    const text = `🔍 PuzzleWarz — The Debrief\n\nI recalled ${submitResult.score}/5 critical details.\nI beat ${submitResult.percentile}% of players.\n\nCan you do better?\nhttps://puzzlewarz.com/witness`;
     navigator.clipboard.writeText(text).catch(() => {});
   }, [submitResult]);
 
@@ -1291,7 +1291,7 @@ export default function WitnessPage() {
                     lineHeight: 1.0,
                   }}
                 >
-                  The Witness
+                  The Debrief
                 </h1>
                 <p style={{ color: MUTED, fontSize: 15, lineHeight: 1.75, maxWidth: 400, margin: "0 auto 0" }}>
                   You have <strong style={{ color: TEXT }}>{READ_SECONDS} seconds</strong> to read a classified incident report.
@@ -1763,7 +1763,7 @@ export default function WitnessPage() {
                 const blendedTotal = submitResult.totalPlays + 517;
                 const beatCount = blendedDist.slice(0, submitResult.score).reduce((s, c) => s + c, 0);
                 const blendedPercentile = blendedTotal > 1 ? Math.round((beatCount / (blendedTotal - 1)) * 100) : 100;
-                const st = encodeURIComponent(`🔍 The Witness — PuzzleWarz\n\nI recalled ${submitResult.score}/5 details.\nI beat ${blendedPercentile}% of all investigators.\n\nhttps://puzzlewarz.com/witness`);
+                const st = encodeURIComponent(`🔍 The Debrief — PuzzleWarz\n\nI recalled ${submitResult.score}/5 details.\nI beat ${blendedPercentile}% of all investigators.\n\nhttps://puzzlewarz.com/witness`);
                 const su = encodeURIComponent("https://puzzlewarz.com/witness");
                 return (
                   <>

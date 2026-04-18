@@ -81,6 +81,93 @@ export type CrimeCaseSolution = {
   requiredEvidenceIds: string[];
 };
 
+// ─── Progression system ───────────────────────────────────────────────────────
+
+export type InvestigationPhase = 'intake' | 'investigation' | 'theory' | 'breakthrough' | 'accusation';
+
+/**
+ * An effect that fires when a player action is correct.
+ * - 'tab'       → unlocks a tab in the UI
+ * - 'evidence'  → makes a piece of evidence visible on the board
+ * - 'question'  → unlocks a question in an interrogation
+ * - 'timeline'  → makes a timeline event appear
+ * - 'phase'     → advances the investigation to the next phase
+ * - 'accusation'→ enables the File Accusation button
+ */
+export type UnlockEffect =
+  | { type: 'tab';        id: string }
+  | { type: 'evidence';   id: string }
+  | { type: 'question';   id: string }
+  | { type: 'timeline';   id: string }
+  | { type: 'phase';      id: InvestigationPhase }
+  | { type: 'accusation' };
+
+/**
+ * A contradiction: the player can challenge a flagged suspect statement
+ * by presenting specific evidence that disproves it.
+ */
+export type Contradiction = {
+  id: string;
+  suspectId: string;
+  /** The interrogation question ID whose answer can be challenged */
+  questionId: string;
+  /** The evidence ID that busts the contradiction */
+  challengeEvidenceId: string;
+  wrongChallengeMessage: string;
+  correctChallengeMessage: string;
+  unlocks: UnlockEffect[];
+};
+
+/**
+ * A clickable hotspot on the crime scene image.
+ * Position is given as percentage of image dimensions.
+ */
+export type SceneHotspot = {
+  id: string;
+  x: number; // 0–100 % from left
+  y: number; // 0–100 % from top
+  label: string;
+  isRedHerring: boolean;
+  revealText: string;
+  unlocks?: UnlockEffect[];
+};
+
+/**
+ * A named slot on the corkboard that the player must assign evidence to.
+ * Correct assignment fires unlocks.
+ */
+export type CorkboardSlot = {
+  id: string;
+  label: 'motive' | 'opportunity' | 'method' | 'alibi' | 'red-herring';
+  correctEvidenceId: string;
+  unlocks?: UnlockEffect[];
+};
+
+/**
+ * A guiding objective card shown in the Objectives panel.
+ * completedBy is a list of action IDs (contradiction IDs, hotspot IDs,
+ * corkboard slot IDs, or the special string "accusation_unlocked") that
+ * mark this objective done.
+ */
+export type Objective = {
+  id: string;
+  /** Short description visible to the player e.g. "Examine the victim's laptop" */
+  text: string;
+  phase: InvestigationPhase;
+  /** Action IDs whose completion marks this objective done */
+  completedBy: string[];
+  /** Optional one-liner shown under the objective text telling the player exactly where/how to act */
+  hint?: string;
+};
+
+// ─── Evidence unlock gating ───────────────────────────────────────────────────
+
+/**
+ * When set, this evidence item is hidden from the player until one of its
+ * prerequisite action IDs is triggered (contradiction solved, hotspot found, etc.)
+ */
+// (Added as optional field on EvidenceItem below via extension in CrimeCaseData)
+
 export type CrimeCaseData = {
   caseTitle: string;
   premise: string;
@@ -97,6 +184,47 @@ export type CrimeCaseData = {
   solution: CrimeCaseSolution;
   /** Text/content shown to the player after fully solving (retention hook) */
   retentionUnlock?: string;
+
+  // ── Progression layer (all optional — falls back to legacy behaviour) ──
+
+  /**
+   * Evidence IDs that are visible from the start (Phase 1).
+   * If omitted, ALL evidence is shown immediately (legacy behaviour).
+   */
+  starterEvidenceIds?: string[];
+
+  /**
+   * Question IDs that are available from the start (Phase 1).
+   * If omitted, ALL interrogation questions are available immediately.
+   */
+  starterQuestionIds?: string[];
+
+  /**
+   * Timeline event IDs visible from the start.
+   * If omitted, all timeline events are shown.
+   */
+  starterTimelineIds?: string[];
+
+  /** Tabs visible in Phase 1. If omitted, all tabs are shown. */
+  starterTabs?: string[];
+
+  /** Contradiction challenges the player can trigger. */
+  contradictions?: Contradiction[];
+
+  /** Hotspots on the crime scene image. */
+  hotspots?: SceneHotspot[];
+
+  /** Named corkboard assignment slots. */
+  corkboardSlots?: CorkboardSlot[];
+
+  /** Guiding objectives shown in the Objectives panel. */
+  objectives?: Objective[];
+
+  /**
+   * Minimum number of completed objectives before accusation is unlocked.
+   * Ignored when objectives is empty. Defaults to all objectives completed.
+   */
+  accusationMinObjectives?: number;
 };
 
 // ─── Parser ──────────────────────────────────────────────────────────────────

@@ -1,10 +1,10 @@
-export interface WitnessQuestion {
+﻿export interface WitnessQuestion {
   question: string;
   options: string[];
   correctIndex: number;
 }
 
-export interface WitnessScenario {
+export interface DebriefScenario {
   id: string;
   caseNumber: string;
   classification: string;
@@ -30,7 +30,7 @@ export interface DeadDropChallenge {
 
 // ── Witness Scenarios ─────────────────────────────────────────────────────────
 
-export const WITNESS_SCENARIOS: WitnessScenario[] = [
+export const DEBRIEF_SCENARIOS: DebriefScenario[] = [
   {
     id: "w-001",
     caseNumber: "047",
@@ -335,14 +335,14 @@ export const DEAD_DROP_CHALLENGES: DeadDropChallenge[] = [
 ];
 
 // Rotate by day of year so the daily scenario changes
-export function getTodaysScenario(): WitnessScenario {
+export function getTodaysDebriefScenario(): DebriefScenario {
   const dayOfYear = Math.floor(
     (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
   );
-  return WITNESS_SCENARIOS[dayOfYear % WITNESS_SCENARIOS.length];
+  return DEBRIEF_SCENARIOS[dayOfYear % DEBRIEF_SCENARIOS.length];
 }
 
-export function getTodaysDeadDrop(): DeadDropChallenge {
+export function getTodaysDeadDropDebrief(): DeadDropChallenge {
   const dayOfYear = Math.floor(
     (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
   );
@@ -358,8 +358,8 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-export function getTodaysQuestionIndices(
-  scenario: WitnessScenario,
+export function getTodaysDebriefQuestionIndices(
+  scenario: DebriefScenario,
   count = 5
 ): number[] {
   // Seed = today's ISO date string + scenario id (e.g. "2026-04-08w-001")
