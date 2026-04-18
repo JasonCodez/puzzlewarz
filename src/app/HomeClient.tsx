@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
@@ -54,11 +54,11 @@ const fade = (visible: boolean, delay = 0, y = 28): React.CSSProperties => ({
 /* -----------------------------------------------------------------
    Share card example
 ----------------------------------------------------------------- */
-const EXAMPLE_SHARE = `?? GRIDLOCK FILE #247
-+- ??????????
-+- Rank: S  �  2 attempts
-+- Law: CONFIRMED ?
-+- ? 1:42  ?? 7-day arc complete
+const EXAMPLE_SHARE = `🔐 GRIDLOCK FILE #247
++- 🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜
++- Rank: S  ·  2 attempts
++- Law: CONFIRMED ✓
++- ⏱️ 1:42  🔥 7-day arc complete
 
 puzzlewarz.com/gridlock`;
 
@@ -185,7 +185,7 @@ export default function HomeClient() {
             <div style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"6px 14px", borderRadius:999, background:"rgba(57,212,110,0.07)", border:"1px solid rgba(57,212,110,0.25)", marginBottom:28, ...fade(heroVisible, 0) }}>
               <span style={{ width:7, height:7, borderRadius:"50%", background:"#39D46E", animation:"pw-pulse-dot 1.5s ease-in-out infinite" }} />
               <span className="hw-badge" style={{ fontSize:11, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#39D46E" }}>
-                Daily puzzle � Free to play � No account needed
+                Daily puzzle · Free to play · No account needed
               </span>
             </div>
 
@@ -200,11 +200,11 @@ export default function HomeClient() {
               <button onClick={() => { setExpandGridlock(true); setTimeout(() => document.getElementById('gridlock')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} className="pw-cta" style={{ padding:"16px 36px", borderRadius:10, fontWeight:800, fontSize:15, letterSpacing:"0.04em", color:"#000", background:"#FFD700", boxShadow:"0 0 44px rgba(255,208,0,0.5)", border:"none", cursor:"pointer", display:"inline-block", transition:"transform 0.2s, box-shadow 0.2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px) scale(1.03)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 64px rgba(255,208,0,0.75)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 44px rgba(255,208,0,0.5)"; }}
-              >?? Solve Now � Free</button>
+              >🔐 Solve Now · Free</button>
               <Link href={competeHref} style={{ padding:"16px 28px", borderRadius:10, fontWeight:600, fontSize:15, color:"#c4b5fd", background:"transparent", border:"1px solid rgba(167,139,250,0.35)", textDecoration:"none", display:"inline-block", transition:"border-color 0.2s, background 0.2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.08)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.65)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.35)"; }}
-              >?? Compete Head-to-Head</Link>
+              >⚔️ Compete Head-to-Head</Link>
             </div>
 
             <div style={{ marginTop:40, display:"flex", justifyContent:"center", alignItems:"center", gap:10, ...fade(heroVisible, 0.44) }}>
@@ -215,13 +215,13 @@ export default function HomeClient() {
         </section>
 
         {/* ------------------------------------------------------
-            RECENT SOLVES FEED � social proof ticker
+            RECENT SOLVES FEED — social proof ticker
         ------------------------------------------------------ */}
         {recentSolves.length > 0 && (
           <div style={{ padding:"0 16px 0", overflow:"hidden" }}>
             <div className="hw-live-feed" style={{ maxWidth:1100, margin:"0 auto", borderRadius:12, border:"1px solid rgba(255,255,255,0.06)", background:"rgba(255,255,255,0.02)", padding:"12px 20px" }}>
               <div style={{ display:"flex", alignItems:"center", gap:12, overflowX:"auto", scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
-                <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#9ca3af", flexShrink:0 }}>?? LIVE</span>
+                <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"#9ca3af", flexShrink:0 }}>📡 LIVE</span>
                 {recentSolves.slice(0, 8).map(s => {
                   const rankColor: Record<string, string> = { S:"#FFD700", A:"#7DF9AA", B:"#60a5fa", C:"#f97316", F:"#ef4444" };
                   const mins = s.minsAgo < 1 ? "just now" : s.minsAgo < 60 ? `${s.minsAgo}m ago` : `${Math.floor(s.minsAgo/60)}h ago`;
@@ -240,13 +240,13 @@ export default function HomeClient() {
         )}
 
         {/* ------------------------------------------------------
-            GRIDLOCK FILE � THE CENTERPIECE
+            GRIDLOCK FILE — THE CENTERPIECE
         ------------------------------------------------------ */}
         <section id="gridlock" className="hw-section" style={{ padding:"100px 20px 60px" }}>
           <div ref={gridlockReveal.ref} style={{ maxWidth:1100, margin:"0 auto" }}>
             <div style={{ textAlign:"center", marginBottom:48 }}>
               <div style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"5px 14px", borderRadius:999, background:"rgba(255,208,0,0.07)", border:"1px solid rgba(255,208,0,0.25)", marginBottom:20, animation:"pw-badge-pulse 2.5s ease-in-out infinite", ...fade(gridlockReveal.visible, 0) }}>
-                <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#FFD700" }}>Daily Puzzle � Arc System Active</span>
+                <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase", color:"#FFD700" }}>Daily Puzzle · Arc System Active</span>
               </div>
               <h2 style={{ fontSize:"clamp(28px,4.5vw,48px)", fontWeight:900, color:"#fff", letterSpacing:"-0.025em", marginBottom:14, lineHeight:1.1, ...fade(gridlockReveal.visible, 0.08) }}>Can You Crack Today&apos;s File?</h2>
               <p style={{ color:"#6B7280", fontSize:16, maxWidth:480, margin:"0 auto", lineHeight:1.7, ...fade(gridlockReveal.visible, 0.16) }}>
@@ -258,9 +258,9 @@ export default function HomeClient() {
             </div>
             <div style={{ display:"flex", justifyContent:"center", gap:12, marginTop:32, flexWrap:"wrap", ...fade(gridlockReveal.visible, 0.3) }}>
               {[
-                { icon:"??", label:"Solve daily to extend your streak" },
-                { icon:"??", label:"7 days = arc transmission decoded" },
-                { icon:"?", label:"Miss a day � arc resets" },
+                { icon:"🔥", label:"Solve daily to extend your streak" },
+                { icon:"📡", label:"7 days = arc transmission decoded" },
+                { icon:"⚡", label:"Miss a day — arc resets" },
               ].map(p => (
                 <div key={p.label} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:999, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", fontSize:13, color:"#6B7280" }}>
                   <span>{p.icon}</span><span>{p.label}</span>
@@ -271,7 +271,7 @@ export default function HomeClient() {
         </section>
 
         {/* ------------------------------------------------------
-            HOW IT WORKS � minimal, provocative
+            HOW IT WORKS — minimal, provocative
         ------------------------------------------------------ */}
         <section className="hw-section" style={{ padding:"80px 20px", borderTop:"1px solid rgba(56,145,166,0.08)" }}>
           <div ref={howReveal.ref} style={{ maxWidth:900, margin:"0 auto", textAlign:"center" }}>
@@ -283,9 +283,9 @@ export default function HomeClient() {
             </p>
             <div className="hw-steps-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:24, ...fade(howReveal.visible, 0.18) }}>
               {[
-                { n:"01", title:"Study the Grid", body:"Every cell contains data. Most of it is noise. One pattern is the key.", icon:"??" },
-                { n:"02", title:"Declare the Law", body:"Name the rule that governs the grid. Right or wrong � commit.", icon:"??" },
-                { n:"03", title:"Submit & Rank", body:"Correct? Your rank is set by speed and attempts. Can you hit S-tier?", icon:"??" },
+                { n:"01", title:"Study the Grid", body:"Every cell contains data. Most of it is noise. One pattern is the key.", icon:"🔍" },
+                { n:"02", title:"Declare the Law", body:"Name the rule that governs the grid. Right or wrong — commit.", icon:"⚖️" },
+                { n:"03", title:"Submit & Rank", body:"Correct? Your rank is set by speed and attempts. Can you hit S-tier?", icon:"🏆" },
               ].map(step => (
                 <div key={step.n} style={{ padding:"28px 20px", borderRadius:16, background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,255,255,0.06)", transition:"border-color 0.2s, background 0.2s" }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,208,0,0.3)"; (e.currentTarget as HTMLElement).style.background = "rgba(255,208,0,0.04)"; }}
@@ -318,7 +318,7 @@ export default function HomeClient() {
                   onClick={handleCopyShare}
                   className="pw-cta"
                   style={{ padding:"13px 28px", borderRadius:10, fontWeight:700, fontSize:14, color: copied ? "#000" : "#fff", background: copied ? "#39D46E" : "rgba(57,212,110,0.12)", border:`1px solid ${copied ? "#39D46E" : "rgba(57,212,110,0.35)"}`, cursor:"pointer", transition:"all 0.2s", width:"100%" }}
-                >{copied ? "? Copied!" : "?? Copy Example Result"}</button>
+                >{copied ? "✓ Copied!" : "📋 Copy Example Result"}</button>
                 <p style={{ fontSize:12, color:"#9ca3af", marginTop:12, textAlign:"center" }}>Your real result includes your score and arc progress.</p>
               </div>
             </div>
@@ -336,11 +336,11 @@ export default function HomeClient() {
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:18 }}>
               {[
-                { icon:"??", title:"Warz Battles", tag:"Live Now", tagColor:"#39D46E", body:"Challenge any player head-to-head on the same puzzle. Wager points. The faster solver takes the pot.", href:"/warz", cta:"Enter the Arena" },
-                { icon:"?", title:"Escape Rooms", tag:"Coming Soon", tagColor:"#38bdf8", body:"Collaborative multi-stage rooms where every puzzle unlocks the next. Timer running. No one gets out alone.", href:"/auth/register", cta:"Join the Waitlist" },
-                { icon:"????", title:"Detective Cases", tag:"Coming Soon", tagColor:"#a78bfa", body:"Multi-chapter crime cases with evidence boards, witness interviews, and branching narratives. Only top solvers get access.", href:"/auth/register", cta:"Get Early Access" },
-                { icon:"??", title:"ARG Experiences", tag:"Coming Soon", tagColor:"#f97316", body:"Alternate reality puzzles that bleed into the real world. Ciphers, coordinates, hidden messages. You can't Google this.", href:"/auth/register", cta:"Join the Waitlist" },
-                { icon:"??", title:"Ranked Seasons", tag:"Live Now", tagColor:"#FFD700", body:"3-month seasons. Top players earn exclusive card backs, titles, and first access to new puzzle types.", href:"/leaderboard", cta:"See Current Rankings" },
+                { icon:"⚔️", title:"Warz Battles", tag:"Live Now", tagColor:"#39D46E", body:"Challenge any player head-to-head on the same puzzle. Wager points. The faster solver takes the pot.", href:"/warz", cta:"Enter the Arena" },
+                { icon:"🔓", title:"Escape Rooms", tag:"Coming Soon", tagColor:"#38bdf8", body:"Collaborative multi-stage rooms where every puzzle unlocks the next. Timer running. No one gets out alone.", href:"/auth/register", cta:"Join the Waitlist" },
+                { icon:"🕵️", title:"Detective Cases", tag:"Coming Soon", tagColor:"#a78bfa", body:"Multi-chapter crime cases with evidence boards, witness interviews, and branching narratives. Only top solvers get access.", href:"/auth/register", cta:"Get Early Access" },
+                { icon:"🌐", title:"ARG Experiences", tag:"Coming Soon", tagColor:"#f97316", body:"Alternate reality puzzles that bleed into the real world. Ciphers, coordinates, hidden messages. You can't Google this.", href:"/auth/register", cta:"Join the Waitlist" },
+                { icon:"🏆", title:"Ranked Seasons", tag:"Live Now", tagColor:"#FFD700", body:"3-month seasons. Top players earn exclusive card backs, titles, and first access to new puzzle types.", href:"/leaderboard", cta:"See Current Rankings" },
               ].map((f, i) => (
                 <div
                   key={f.title}
@@ -358,7 +358,7 @@ export default function HomeClient() {
                   <Link href={f.href} style={{ fontSize:13, fontWeight:700, color:f.tagColor, textDecoration:"none", borderBottom:`1px solid ${f.tagColor}30`, paddingBottom:2, alignSelf:"flex-start", transition:"border-color 0.2s" }}
                     onMouseEnter={e => (e.currentTarget.style.borderColor = f.tagColor)}
                     onMouseLeave={e => (e.currentTarget.style.borderColor = `${f.tagColor}30`)}
-                  >{f.cta} ?</Link>
+                  >{f.cta} →</Link>
                 </div>
               ))}
             </div>
@@ -386,7 +386,7 @@ export default function HomeClient() {
               <button onClick={() => { setExpandGridlock(true); setTimeout(() => document.getElementById('gridlock')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} className="pw-cta" style={{ padding:"18px 52px", borderRadius:10, fontWeight:900, fontSize:17, letterSpacing:"0.04em", color:"#000", background:"#FFD700", boxShadow:"0 0 56px rgba(255,208,0,0.55)", border:"none", cursor:"pointer", display:"inline-block", transition:"transform 0.2s, box-shadow 0.2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-3px) scale(1.03)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 80px rgba(255,208,0,0.8)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 56px rgba(255,208,0,0.55)"; }}
-              >?? Solve Today&apos;s File</button>
+              >🔐 Solve Today&apos;s File</button>
               <Link href="/auth/register" style={{ padding:"18px 32px", borderRadius:10, fontWeight:600, fontSize:16, color:"#9CA3AF", background:"transparent", border:"1px solid rgba(255,255,255,0.12)", textDecoration:"none", display:"inline-block", transition:"border-color 0.2s, color 0.2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#fff"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.35)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#9CA3AF"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.12)"; }}
@@ -430,7 +430,7 @@ export default function HomeClient() {
             </div>
           </div>
           <div className="hw-footer-bottom" style={{ paddingTop:20, borderTop:"1px solid rgba(255,255,255,0.04)", display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, alignItems:"center" }}>
-            <p style={{ color:"#6b7280", fontSize:12 }}>&copy; 2026 PuzzleWarz � All rights reserved</p>
+            <p style={{ color:"#6b7280", fontSize:12 }}>&copy; 2026 PuzzleWarz · All rights reserved</p>
             <p style={{ color:"#6b7280", fontSize:12 }}>Train your mind. Earn your rank.</p>
           </div>
         </footer>
