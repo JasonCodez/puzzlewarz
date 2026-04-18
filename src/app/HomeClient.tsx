@@ -56,8 +56,7 @@ const fade = (visible: boolean, delay = 0, y = 28): React.CSSProperties => ({
 ----------------------------------------------------------------- */
 const EXAMPLE_SHARE = `🔐 GRIDLOCK FILE #247
 +- 🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜
-+- Rank: S  ·  2 attempts
-+- Law: CONFIRMED ✓
++- Rank: S  ·  2 attempts  ·  no hints
 +- ⏱️ 1:42  🔥 7-day arc complete
 
 puzzlewarz.com/gridlock`;
@@ -283,9 +282,9 @@ export default function HomeClient() {
             </p>
             <div className="hw-steps-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:24, ...fade(howReveal.visible, 0.18) }}>
               {[
-                { n:"01", title:"Study the Grid", body:"Every cell contains data. Most of it is noise. One pattern is the key.", icon:"🔍" },
-                { n:"02", title:"Declare the Law", body:"Name the rule that governs the grid. Right or wrong — commit.", icon:"⚖️" },
-                { n:"03", title:"Submit & Rank", body:"Correct? Your rank is set by speed and attempts. Can you hit S-tier?", icon:"🏆" },
+                { n:"01", title:"Study the Grid", body:"Every cell contains data. Most of it is noise. One pattern connects them all.", icon:"🔍" },
+                { n:"02", title:"Crack the Pattern", body:"Identify the hidden rule. Fill in the missing cell. One answer unlocks the file.", icon:"🧠" },
+                { n:"03", title:"Submit & Rank", body:"Rank is set by speed and attempts. First try with no hints? That's S-tier.", icon:"🏆" },
               ].map(step => (
                 <div key={step.n} style={{ padding:"28px 20px", borderRadius:16, background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,255,255,0.06)", transition:"border-color 0.2s, background 0.2s" }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,208,0,0.3)"; (e.currentTarget as HTMLElement).style.background = "rgba(255,208,0,0.04)"; }}

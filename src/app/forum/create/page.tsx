@@ -85,98 +85,109 @@ export default function CreateForumPostPage() {
   return (
     <>
       <Navbar />
-      <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-20 sm:pt-24">
-        <div className="max-w-3xl mx-auto px-4 py-12">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">Create New Forum Post</h1>
-            <p style={{ color: '#DDDBF1' }}>Start a discussion with the community</p>
-          </div>
+      <div style={{ backgroundColor: '#010101', minHeight: '100vh', paddingTop: 80 }}>
+        <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 20px 80px' }}>
 
-          <form onSubmit={handleSubmit} className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-lg p-6 space-y-6">
+          {/* Back + header */}
+          <Link href="/forum"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6B7280', textDecoration: 'none', marginBottom: 28, transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#FFD700')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#6B7280')}
+          >
+            ← Forum
+          </Link>
+
+          <h1 style={{ fontSize: 'clamp(24px,4vw,38px)', fontWeight: 900, color: '#fff', letterSpacing: '-0.03em', margin: '0 0 6px' }}>New Post</h1>
+          <p style={{ color: '#6B7280', fontSize: 14, marginBottom: 36 }}>Start a discussion with the community.</p>
+
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '32px 28px' }}>
+
             {error && (
-              <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-200">
+              <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', color: '#fca5a5', fontSize: 14, marginBottom: 20 }}>
                 {error}
               </div>
             )}
-
             {success && (
-              <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20 text-green-200">
-                ✓ Post created! Redirecting...
+              <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(57,212,110,0.08)', border: '1px solid rgba(57,212,110,0.25)', color: '#6ee7b7', fontSize: 14, marginBottom: 20 }}>
+                ✓ Post created! Redirecting…
               </div>
             )}
 
-            {/* Title */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">
-                Post Title *
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., Help with cipher puzzle or Looking for team mates"
-                className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#3891A6]"
-                required
-              />
-            </div>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column' as const, gap: 22 }}>
 
-            {/* Puzzle Selection */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">
-                Related Puzzle (optional)
-              </label>
-              <select
-                value={puzzleId}
-                onChange={(e) => setPuzzleId(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white focus:outline-none focus:ring-2 focus:ring-[#3891A6]"
-              >
-                <option value="">-- Select a puzzle or leave blank --</option>
-                {Array.isArray(puzzles) && puzzles.map((puzzle) => (
-                  <option key={puzzle.id} value={puzzle.id}>
-                    {puzzle.title}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-400 mt-2">
-                Selecting a puzzle makes it easier for others to find related discussions
-              </p>
-            </div>
+              {/* Title */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: '#9ca3af', marginBottom: 8 }}>
+                  Title <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Help with today's cipher puzzle"
+                  required
+                  style={{ width: '100%', padding: '11px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#f3f4f6', fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, transition: 'border-color 0.15s' }}
+                  onFocus={e => (e.currentTarget.style.borderColor = 'rgba(255,208,0,0.4)')}
+                  onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
+                />
+              </div>
 
-            {/* Content */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">
-                Post Content *
-              </label>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Share your thoughts, ask questions, or propose ideas..."
-                rows={10}
-                className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#3891A6] font-mono text-sm"
-                required
-              />
-              <p className="text-xs text-gray-400 mt-2">
-                Be respectful and constructive in your discussion
-              </p>
-            </div>
+              {/* Puzzle */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: '#9ca3af', marginBottom: 8 }}>
+                  Related Puzzle <span style={{ color: '#4B5563', fontWeight: 400, textTransform: 'none' as const, letterSpacing: 0 }}>(optional)</span>
+                </label>
+                <select
+                  value={puzzleId}
+                  onChange={(e) => setPuzzleId(e.target.value)}
+                  style={{ width: '100%', padding: '11px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#e5e7eb', fontSize: 14, outline: 'none', boxSizing: 'border-box' as const }}
+                >
+                  <option value="" style={{ background: '#111' }}>— No specific puzzle —</option>
+                  {Array.isArray(puzzles) && puzzles.map((puzzle) => (
+                    <option key={puzzle.id} value={puzzle.id} style={{ background: '#111' }}>
+                      {puzzle.title}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 12, color: '#4B5563', marginTop: 6 }}>Links your post to a puzzle so others can find related discussions.</p>
+              </div>
 
-            {/* Buttons */}
-            <div className="flex gap-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-3 bg-[#3891A6] hover:bg-[#2a7f8f] disabled:bg-zinc-600 disabled:text-zinc-400 text-[#020202] font-semibold rounded-lg transition-colors"
-              >
-                {loading ? "Creating..." : "Create Post"}
-              </button>
-              <Link
-                href="/forum"
-                className="px-6 py-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 text-white font-semibold rounded-lg transition-all"
-              >
-                Cancel
-              </Link>
-            </div>
-          </form>
+              {/* Content */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: '#9ca3af', marginBottom: 8 }}>
+                  Content <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Share your thoughts, ask questions, or propose ideas…"
+                  rows={10}
+                  required
+                  style={{ width: '100%', padding: '11px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#f3f4f6', fontSize: 14, outline: 'none', resize: 'vertical' as const, fontFamily: 'ui-monospace,monospace', lineHeight: 1.65, boxSizing: 'border-box' as const, transition: 'border-color 0.15s' }}
+                  onFocus={e => (e.currentTarget.style.borderColor = 'rgba(255,208,0,0.4)')}
+                  onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
+                />
+                <p style={{ fontSize: 12, color: '#4B5563', marginTop: 6 }}>Be respectful and constructive.</p>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 12, paddingTop: 4 }}>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{ padding: '12px 28px', borderRadius: 8, background: loading ? 'rgba(255,255,255,0.06)' : '#FFD700', color: loading ? '#6B7280' : '#000', fontWeight: 700, fontSize: 14, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}
+                >
+                  {loading ? 'Creating…' : 'Publish Post'}
+                </button>
+                <Link
+                  href="/forum"
+                  style={{ padding: '12px 24px', borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', color: '#9ca3af', fontWeight: 600, fontSize: 14, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                >
+                  Cancel
+                </Link>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </>

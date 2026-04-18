@@ -155,15 +155,10 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
     return (
       <>
         <Navbar />
-        <div style={{ backgroundColor: '#020202' }} className="min-h-screen pt-16 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-4xl text-white mb-4">❌</div>
-            <p style={{ color: '#DDDBF1' }} className="mb-6">Post not found</p>
-            <Link
-              href="/forum"
-              className="inline-block px-6 py-3 rounded-lg text-white font-semibold"
-              style={{ backgroundColor: '#3891A6' }}
-            >
+        <div style={{ backgroundColor: '#010101', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ color: '#6B7280', marginBottom: 24, fontSize: 15 }}>Post not found.</p>
+            <Link href="/forum" style={{ display: 'inline-block', padding: '11px 24px', borderRadius: 8, background: '#3891A6', color: '#fff', fontWeight: 600, textDecoration: 'none', fontSize: 14 }}>
               Back to Forum
             </Link>
           </div>
@@ -175,170 +170,152 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
   return (
     <>
       <Navbar />
-      <div style={{ backgroundColor: '#020202', backgroundImage: 'linear-gradient(135deg, #020202 0%, #0a0a0a 50%, #020202 100%)' }} className="min-h-screen pt-20 sm:pt-24">
-        <div className="max-w-4xl mx-auto px-4 py-12">
-          {/* Back Link */}
-          <Link href="/forum" className="text-sm" style={{ color: '#FDE74C' }}>
-            ← Back to Forum
+      <div style={{ backgroundColor: '#010101', minHeight: '100vh', paddingTop: 80 }}>
+        <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 20px 80px' }}>
+
+          {/* Back */}
+          <Link href="/forum"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, color: '#6B7280', textDecoration: 'none', marginBottom: 28, transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#FFD700')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#6B7280')}
+          >
+            ← Forum
           </Link>
 
-          {/* Post */}
-          <div className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-lg p-6 mt-4 mb-8">
-            <h1 className="text-3xl font-bold text-white mb-4">{post?.title || "Untitled"}</h1>
-
-            {/* Post Meta */}
-            <div className="flex items-center gap-3 mb-6" style={{ borderBottomColor: '#3891A6', borderBottomWidth: '1px', paddingBottom: '1rem' }}>
-              {post?.author?.image && (
-                <img
-                  src={post.author.image}
-                  alt={post.author.name || "User"}
-                  className="w-10 h-10 rounded-full"
-                />
+          {/* Post card */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '28px', marginBottom: 20 }}>
+            {/* Title + puzzle tag */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 18, flexWrap: 'wrap' as const }}>
+              <h1 style={{ flex: 1, fontSize: 'clamp(20px,3.5vw,28px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', margin: 0, lineHeight: 1.25 }}>
+                {post.title}
+              </h1>
+              {post.puzzle && (
+                <span style={{ padding: '4px 12px', borderRadius: 999, background: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.3)', color: '#38bdf8', fontSize: 12, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' as const }}>
+                  {post.puzzle.title}
+                </span>
               )}
+            </div>
+
+            {/* Author row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24, paddingBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              {post.author.image && <img src={post.author.image} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} />}
               <div>
-                <Link href={`/profile/${post?.author?.id}`}>
-                  <p className="text-white font-semibold hover:opacity-80 cursor-pointer transition-opacity">{post?.author?.name || "Unknown"}</p>
+                <Link href={`/profile/${post.author.id}`} style={{ color: '#FFD700', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}>
+                  {post.author.name}
                 </Link>
-                <p style={{ color: '#DDDBF1' }} className="text-xs">
-                  {post?.createdAt ? new Date(post.createdAt).toLocaleDateString() : ""}
+                <p style={{ color: '#4B5563', fontSize: 12, margin: '2px 0 0' }}>
+                  {post.createdAt ? new Date(post.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
                 </p>
               </div>
-              {post?.puzzle && (
-                <div className="ml-auto px-3 py-2 rounded text-sm" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
-                  📌 {post.puzzle.title}
-                </div>
-              )}
             </div>
 
-            {/* Post Content */}
-            <div className="prose prose-invert max-w-none mb-6">
-              <p style={{ color: '#DDDBF1' }} className="whitespace-pre-wrap text-base leading-relaxed">
-                {post?.content || ""}
-              </p>
+            {/* Content */}
+            <div style={{ color: '#d1d5db', fontSize: 15, lineHeight: 1.75, whiteSpace: 'pre-wrap', marginBottom: 28 }}>
+              {post.content}
             </div>
 
-            {/* Post Stats & Voting */}
-            <div className="flex items-center gap-4 pt-4" style={{ borderTopColor: '#3891A6', borderTopWidth: '1px' }}>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleVote("post", post?.id || "", "up")}
-                  className="text-xl hover:scale-125 transition-transform"
-                  title="Upvote"
-                >
-                  👍
-                </button>
-                <span style={{ color: '#DDDBF1' }} className="text-sm font-semibold">
-                  {post?.upvotes || 0}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleVote("post", post?.id || "", "down")}
-                  className="text-xl hover:scale-125 transition-transform"
-                  title="Downvote"
-                >
-                  👎
-                </button>
-                <span style={{ color: '#DDDBF1' }} className="text-sm font-semibold">
-                  {post?.downvotes || 0}
-                </span>
-              </div>
-              <div className="ml-auto flex items-center gap-4 text-sm" style={{ color: '#DDDBF1' }}>
-                <span>👁️ {post?.viewCount || 0} views</span>
-                <span>💬 {post?.replyCount || 0} replies</span>
+            {/* Stats + voting */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <button
+                onClick={() => handleVote("post", post.id, "up")}
+                style={{ padding: '5px 12px', borderRadius: 6, background: userVotes[post.id] === 'up' ? 'rgba(57,212,110,0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${userVotes[post.id] === 'up' ? 'rgba(57,212,110,0.4)' : 'rgba(255,255,255,0.1)'}`, color: userVotes[post.id] === 'up' ? '#39D46E' : '#9ca3af', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}
+              >
+                ▲ {post.upvotes}
+              </button>
+              <button
+                onClick={() => handleVote("post", post.id, "down")}
+                style={{ padding: '5px 12px', borderRadius: 6, background: userVotes[post.id] === 'down' ? 'rgba(248,113,113,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${userVotes[post.id] === 'down' ? 'rgba(248,113,113,0.35)' : 'rgba(255,255,255,0.1)'}`, color: userVotes[post.id] === 'down' ? '#f87171' : '#9ca3af', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}
+              >
+                ▼ {post.downvotes}
+              </button>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, color: '#4B5563', fontSize: 13 }}>
+                <span>👁 {post.viewCount}</span>
+                <span>💬 {post.replyCount}</span>
               </div>
             </div>
           </div>
 
-          {/* Comments Section */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-6">💬 Discussion ({post.comments.length})</h2>
+          {/* Discussion */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>Discussion</h2>
+              <span style={{ padding: '2px 9px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', color: '#9ca3af', fontSize: 12, fontFamily: 'ui-monospace,monospace' }}>
+                {post.comments.length}
+              </span>
+            </div>
 
-            {/* New Comment Form */}
+            {/* Comment form */}
             {session && (
-              <form onSubmit={handleCommentSubmit} className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-lg p-4 mb-6">
+              <form onSubmit={handleCommentSubmit} style={{ marginBottom: 20 }}>
                 {error && (
-                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20 text-red-200 text-sm mb-4">
+                  <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#fca5a5', fontSize: 13, marginBottom: 10 }}>
                     {error}
                   </div>
                 )}
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add your comment..."
+                  placeholder="Add your comment…"
                   rows={4}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#3891A6] mb-3"
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)', color: '#f3f4f6', fontSize: 14, outline: 'none', resize: 'vertical' as const, fontFamily: 'inherit', lineHeight: 1.6, boxSizing: 'border-box' as const, marginBottom: 10, transition: 'border-color 0.15s' }}
+                  onFocus={e => (e.currentTarget.style.borderColor = 'rgba(255,208,0,0.35)')}
+                  onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)')}
                 />
                 <button
                   type="submit"
                   disabled={submitting || !newComment.trim()}
-                  className="px-6 py-2 bg-gradient-to-r from-[#3891A6] to-[#FDE74C] hover:from-[#2a7f8f] hover:to-[#FDE74C] disabled:from-gray-500 disabled:to-gray-500 text-white font-semibold rounded-lg transition-all"
+                  style={{ padding: '10px 24px', borderRadius: 8, background: submitting || !newComment.trim() ? 'rgba(255,255,255,0.06)' : '#FFD700', color: submitting || !newComment.trim() ? '#4B5563' : '#000', fontWeight: 700, fontSize: 13, border: 'none', cursor: submitting || !newComment.trim() ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}
                 >
-                  {submitting ? "Posting..." : "Post Comment"}
+                  {submitting ? 'Posting…' : 'Post Comment'}
                 </button>
               </form>
             )}
 
-            {/* Comments List */}
-            <div className="space-y-4">
+            {/* Comments */}
+            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
               {!post.comments || post.comments.length === 0 ? (
-                <div className="text-center py-8">
-                  <p style={{ color: '#DDDBF1' }}>No comments yet. Be the first to comment!</p>
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#4B5563', fontSize: 14 }}>
+                  No comments yet. Be the first to reply.
                 </div>
               ) : (
-                (post.comments || []).map((comment) => (
+                post.comments.map((comment) => (
                   <div
                     key={comment.id}
-                    className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-lg p-4"
+                    style={{ padding: '16px 18px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
                   >
-                    {/* Comment Header */}
-                    <div className="flex items-center gap-3 mb-2">
-                      {comment.author.image && (
-                        <img
-                          src={comment.author.image}
-                          alt={comment.author.name || "User"}
-                          className="w-8 h-8 rounded-full"
-                        />
-                      )}
-                      <div>
-                        <Link href={`/profile/${comment.author.id}`}>
-                          <p className="text-white font-semibold text-sm hover:opacity-80 cursor-pointer transition-opacity">
-                            {comment.author.name}
-                          </p>
+                    {/* Comment header */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      {comment.author.image && <img src={comment.author.image} alt="" style={{ width: 26, height: 26, borderRadius: '50%' }} />}
+                      <div style={{ flex: 1 }}>
+                        <Link href={`/profile/${comment.author.id}`} style={{ color: '#FFD700', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
+                          {comment.author.name}
                         </Link>
-                        <p style={{ color: '#DDDBF1' }} className="text-xs">
-                          {new Date(comment.createdAt).toLocaleDateString()}
-                        </p>
+                        <span style={{ color: '#374151', margin: '0 6px' }}>·</span>
+                        <span style={{ color: '#4B5563', fontSize: 12 }}>
+                          {new Date(comment.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      {/* Vote buttons */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <button
+                          onClick={() => handleVote("comment", comment.id, "up")}
+                          style={{ padding: '3px 8px', borderRadius: 5, background: userVotes[comment.id] === 'up' ? 'rgba(57,212,110,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${userVotes[comment.id] === 'up' ? 'rgba(57,212,110,0.35)' : 'rgba(255,255,255,0.08)'}`, color: userVotes[comment.id] === 'up' ? '#39D46E' : '#6B7280', fontSize: 11, cursor: 'pointer', transition: 'all 0.15s' }}
+                        >
+                          ▲ {comment.upvotes}
+                        </button>
+                        <button
+                          onClick={() => handleVote("comment", comment.id, "down")}
+                          style={{ padding: '3px 8px', borderRadius: 5, background: userVotes[comment.id] === 'down' ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${userVotes[comment.id] === 'down' ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.08)'}`, color: userVotes[comment.id] === 'down' ? '#f87171' : '#6B7280', fontSize: 11, cursor: 'pointer', transition: 'all 0.15s' }}
+                        >
+                          ▼ {comment.downvotes}
+                        </button>
                       </div>
                     </div>
 
-                    {/* Comment Content */}
-                    <p
-                      style={{ color: '#DDDBF1' }}
-                      className="text-sm mb-3 whitespace-pre-wrap leading-relaxed"
-                    >
+                    {/* Comment content */}
+                    <p style={{ color: '#d1d5db', fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap', margin: 0 }}>
                       {comment.content}
                     </p>
-
-                    {/* Comment Voting */}
-                    <div className="flex items-center gap-3 text-sm">
-                      <button
-                        onClick={() => handleVote("comment", comment.id, "up")}
-                        className="flex items-center gap-1 hover:scale-110 transition-transform"
-                        title="Upvote"
-                      >
-                        <span>👍</span>
-                        <span style={{ color: '#DDDBF1' }}>{comment.upvotes}</span>
-                      </button>
-                      <button
-                        onClick={() => handleVote("comment", comment.id, "down")}
-                        className="flex items-center gap-1 hover:scale-110 transition-transform"
-                        title="Downvote"
-                      >
-                        <span>👎</span>
-                        <span style={{ color: '#DDDBF1' }}>{comment.downvotes}</span>
-                      </button>
-                    </div>
                   </div>
                 ))
               )}
