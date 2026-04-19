@@ -805,7 +805,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             padding: "1.25rem",
             position: "relative",
             overflow: "hidden",
-            width: "100%",
+            width: "fit-content",
           }}
         >
           <div className="wc-skin-overlay" />

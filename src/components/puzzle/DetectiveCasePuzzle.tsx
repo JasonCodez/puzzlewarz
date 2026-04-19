@@ -330,12 +330,6 @@ export default function DetectiveCasePuzzle({ puzzleId }: { puzzleId: string }) 
     );
   }
 
-  const stageLabel = useMemo(() => {
-    if (!state) return '';
-    const stageNum = Math.min(state.currentStageIndex + 1, state.totalStages);
-    return `Stage ${stageNum} of ${state.totalStages}`;
-  }, [state]);
-
   async function loadState() {
     setLoading(true);
     setError('');
