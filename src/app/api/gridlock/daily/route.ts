@@ -15,16 +15,27 @@ export async function GET() {
   try {
     const now = new Date();
 
-    // Look for a scheduled puzzle whose go-live date has passed
-    let puzzle = await prisma.puzzle.findFirst({
+    // Look for scheduled puzzles whose go-live date has passed.
+    // We fetch ALL candidates and sort in JS to avoid relying on Prisma
+    // orderBy-on-relation, which can silently fall back to natural row order
+    // and always return the first-created puzzle.
+    const candidates = await prisma.puzzle.findMany({
       where: {
         puzzleType: 'gridlock_file',
         isActive: true,
         schedule: { releaseAt: { lte: now } },
       },
-      select: { id: true, data: true },
-      orderBy: { schedule: { releaseAt: 'desc' } },
+      select: { id: true, data: true, schedule: { select: { releaseAt: true } } },
     });
+
+    // Sort descending by releaseAt — most recently scheduled = current puzzle
+    candidates.sort((a, b) => {
+      const aT = (a.schedule?.releaseAt ?? new Date(0)).getTime();
+      const bT = (b.schedule?.releaseAt ?? new Date(0)).getTime();
+      return bT - aT;
+    });
+
+    let puzzle: { id: string; data: unknown } | null = candidates[0] ?? null;
 
     // Fall back: puzzle with no schedule record at all
     if (!puzzle) {
@@ -71,7 +82,7 @@ export async function GET() {
       },
       {
         headers: {
-          'Cache-Control': `public, max-age=${secondsUntilMidnight}, stale-while-revalidate=60`,
+          'Cache-Control': `private, max-age=${secondsUntilMidnight}, stale-while-revalidate=60`,
         },
       }
     );
