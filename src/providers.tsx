@@ -3,6 +3,7 @@
 import { SessionProvider } from "next-auth/react";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import AchievementNotification from "@/components/AchievementNotification";
 import { rarityColors } from "@/lib/rarity";
 import { useSession } from "next-auth/react";
@@ -186,6 +187,8 @@ function AuthenticatedEffects() {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
   // Ensure next-auth client always fetches from the current origin.
   // This avoids CLIENT_FETCH_ERROR when NEXTAUTH_URL is set to a different host
   // (e.g. production) or when accessing dev via a LAN IP.
@@ -198,7 +201,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider>
-      <Navbar />
+      {pathname !== '/coming-soon' && <Navbar />}
       <GlobalAchievementModal />
       <AuthenticatedEffects />
       {children}
