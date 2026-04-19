@@ -330,69 +330,6 @@ export default function DetectiveCasePuzzle({ puzzleId }: { puzzleId: string }) 
     );
   }
 
-  async function loadState() {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`/api/puzzles/${puzzleId}/detective/state`, { cache: 'no-store' });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError((data && (data.error as string)) || 'Failed to load case');
-        setState(null);
-        return;
-      }
-      setState(data);
-    } catch (e) {
-      setError('Failed to load case');
-      setState(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [puzzleId]);
-
-  async function submitStage() {
-    if (!state?.stage) return;
-    if (state.locked) return;
-    if (state.solved) return;
-
-    setSubmitting(true);
-    setError('');
-
-    try {
-      const res = await fetch(`/api/puzzles/${puzzleId}/detective/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stageId: state.stage.id, answer }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const msg = (data && (data.error as string)) || 'Submission failed';
-        setError(msg);
-        await loadState();
-        return;
-      }
-
-      if (data && data.correct === false) {
-        setError('Incorrect. Case locked — no retry.');
-        await loadState();
-        return;
-      }
-
-      setAnswer('');
-      await loadState();
-    } catch (e) {
-      setError('Submission failed');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   if (loading) {
     return (
       <div className="rounded-xl border border-zinc-800 bg-black/50 p-6">
