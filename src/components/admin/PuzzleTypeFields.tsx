@@ -1078,6 +1078,15 @@ interface PuzzleTypeFieldsProps {
 export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange }: PuzzleTypeFieldsProps) {
   const [detectiveJson, setDetectiveJson] = useState<string>('');
   const [detectiveJsonError, setDetectiveJsonError] = useState<string>('');
+  const [dcNoirTitle, setDcNoirTitle] = useState('');
+  const [dcIntro, setDcIntro] = useState('');
+  const [dcPrologueText, setDcPrologueText] = useState('');
+  const [dcNarratorName, setDcNarratorName] = useState('');
+  const [dcNarratorVoice, setDcNarratorVoice] = useState('');
+  const [dcPrologueBgImage, setDcPrologueBgImage] = useState('');
+  const [dcPrologueBgVideo, setDcPrologueBgVideo] = useState('');
+  const [dcPrologueAudio, setDcPrologueAudio] = useState('');
+  const [dcPrologueAudioLoop, setDcPrologueAudioLoop] = useState(false);
   const [crimeCaseJson, setCrimeCaseJson] = useState<string>('');
   const [crimeCaseJsonError, setCrimeCaseJsonError] = useState<string>('');
   const [parasiteCodeJson, setParasiteCodeJson] = useState<string>('');
@@ -1095,7 +1104,12 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     const existing = (puzzleData as any)?.detectiveCase;
     const template = {
       noirTitle: 'The Blackout Ledger',
-      intro: 'It rained like the city wanted to wash itself clean. It never does.',
+      intro: 'A city that never sleeps has secrets it never tells.',
+      prologue: {
+        text: "It was a Tuesday. The kind that feels like a Monday that gave up.\n\nThe envelope was on my desk when I got in — no stamp, no return address, just a name inside. The name of someone I hadn't heard in six years.\n\nI probably should've walked away. But I never could resist a case that walked through my door uninvited.",
+        narratorName: 'Det. Ray Voss',
+        narratorVoice: 'gravel',
+      },
       lockMode: 'fail_once',
       stages: [
         {
@@ -1130,12 +1144,29 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
 
     try {
       const next = existing && typeof existing === 'object' ? existing : template;
-      setDetectiveJson(JSON.stringify(next, null, 2));
+      setDcNoirTitle(next.noirTitle ?? '');
+      setDcIntro(next.intro ?? '');
+      setDcPrologueText(next.prologue?.text ?? '');
+      setDcNarratorName(next.prologue?.narratorName ?? '');
+      setDcNarratorVoice(next.prologue?.narratorVoice ?? '');
+      setDcPrologueBgImage(next.prologue?.backgroundImage ?? '');
+      setDcPrologueBgVideo(next.prologue?.backgroundVideo ?? '');
+      setDcPrologueAudio(next.prologue?.audio ?? '');
+      setDcPrologueAudioLoop(next.prologue?.audioLoop ?? false);
+      setDetectiveJson(JSON.stringify(next.stages ?? [], null, 2));
       setDetectiveJsonError('');
-      // Ensure the parent form actually has detectiveCase data even if the admin never edits the JSON textarea.
       onDataChange('detectiveCase', next);
     } catch {
-      setDetectiveJson(JSON.stringify(template, null, 2));
+      setDcNoirTitle(template.noirTitle);
+      setDcIntro(template.intro);
+      setDcPrologueText(template.prologue.text);
+      setDcNarratorName(template.prologue.narratorName);
+      setDcNarratorVoice(template.prologue.narratorVoice);
+      setDcPrologueBgImage('');
+      setDcPrologueBgVideo('');
+      setDcPrologueAudio('');
+      setDcPrologueAudioLoop(false);
+      setDetectiveJson(JSON.stringify(template.stages, null, 2));
       setDetectiveJsonError('');
       onDataChange('detectiveCase', template);
     }
@@ -2156,30 +2187,219 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     </div>
   );
 
-  const renderDetectiveCaseFields = () => (
-    <div className="space-y-3">
-      <div className="text-sm text-gray-300">
-        Paste a <span className="font-semibold">detectiveCase</span> JSON object. This puzzle type is multi-stage and locks forever on the first wrong submission.
+  const renderDetectiveCaseFields = () => {
+    /** Rebuild full detectiveCase object from individual fields + stages JSON, then push to parent */
+    function syncDetectiveCase(overrides: {
+      noirTitle?: string; intro?: string;
+      prologueText?: string; narratorName?: string; narratorVoice?: string;
+      bgImage?: string; bgVideo?: string; audio?: string; audioLoop?: boolean;
+      stagesJson?: string;
+    } = {}) {
+      const title      = overrides.noirTitle     ?? dcNoirTitle;
+      const intro      = overrides.intro         ?? dcIntro;
+      const pText      = overrides.prologueText  ?? dcPrologueText;
+      const nName      = overrides.narratorName  ?? dcNarratorName;
+      const nVoice     = overrides.narratorVoice ?? dcNarratorVoice;
+      const bgImg      = overrides.bgImage       ?? dcPrologueBgImage;
+      const bgVid      = overrides.bgVideo       ?? dcPrologueBgVideo;
+      const aud        = overrides.audio         ?? dcPrologueAudio;
+      const audLoop    = overrides.audioLoop     !== undefined ? overrides.audioLoop : dcPrologueAudioLoop;
+      const stJson     = overrides.stagesJson    ?? detectiveJson;
+
+      let stages: unknown[] = [];
+      try { stages = JSON.parse(stJson); } catch { /* leave empty */ }
+
+      const obj: Record<string, unknown> = {
+        noirTitle: title,
+        intro,
+        lockMode: 'fail_once',
+        stages,
+      };
+      if (pText.trim()) {
+        obj.prologue = {
+          text: pText,
+          ...(nName.trim()  ? { narratorName: nName }  : {}),
+          ...(nVoice.trim() ? { narratorVoice: nVoice } : {}),
+          ...(bgImg.trim()  ? { backgroundImage: bgImg } : {}),
+          ...(bgVid.trim()  ? { backgroundVideo: bgVid } : {}),
+          ...(aud.trim()    ? { audio: aud, audioLoop: audLoop } : {}),
+        };
+      }
+      onDataChange('detectiveCase', obj);
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Series header */}
+        <div className="flex items-center gap-3">
+          <div
+            className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black tracking-[0.2em] uppercase"
+            style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.3)', color: '#eab308' }}
+          >
+            ◆ WISE UP ◆
+          </div>
+          <span className="text-xs text-zinc-500">Multi-stage · one wrong answer locks the case forever</span>
+        </div>
+
+        {/* Case Title */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Case Title</label>
+          <input
+            type="text"
+            value={dcNoirTitle}
+            onChange={e => { setDcNoirTitle(e.target.value); syncDetectiveCase({ noirTitle: e.target.value }); }}
+            placeholder="e.g. The Blackout Ledger"
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500"
+          />
+        </div>
+
+        {/* Case Brief */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">Case Brief <span className="font-normal text-zinc-500">(short tagline shown before stages)</span></label>
+          <textarea
+            value={dcIntro}
+            onChange={e => { setDcIntro(e.target.value); syncDetectiveCase({ intro: e.target.value }); }}
+            placeholder="A sentence or two setting the scene…"
+            className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 h-16 resize-none"
+          />
+        </div>
+
+        {/* Prologue section */}
+        <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-yellow-400 text-xs font-black tracking-widest uppercase">Opening Prologue</span>
+            <span className="text-xs text-zinc-500">— shown as a cinematic screen before Stage 1</span>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Detective's Monologue</label>
+            <textarea
+              value={dcPrologueText}
+              onChange={e => { setDcPrologueText(e.target.value); syncDetectiveCase({ prologueText: e.target.value }); }}
+              placeholder="How did the case land in their lap? Write it in the detective's voice. Use line breaks for paragraphs."
+              className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white placeholder-gray-500 h-40 font-serif text-sm"
+              spellCheck={false}
+            />
+            <div className="text-xs text-zinc-500 mt-1">Leave blank to skip the prologue screen entirely.</div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-300 mb-1">Narrator Name <span className="font-normal text-zinc-500">(optional)</span></label>
+              <input
+                type="text"
+                value={dcNarratorName}
+                onChange={e => { setDcNarratorName(e.target.value); syncDetectiveCase({ narratorName: e.target.value }); }}
+                placeholder="e.g. Det. Ray Voss"
+                className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white placeholder-gray-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-300 mb-1">Voice Style <span className="font-normal text-zinc-500">(optional · drives future TTS)</span></label>
+              <input
+                type="text"
+                value={dcNarratorVoice}
+                onChange={e => { setDcNarratorVoice(e.target.value); syncDetectiveCase({ narratorVoice: e.target.value }); }}
+                placeholder="e.g. gravel, weary, sharp, dry wit"
+                className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white placeholder-gray-500"
+              />
+            </div>
+          </div>
+
+          {/* Media */}
+          <div className="border-t border-yellow-500/10 pt-4 space-y-3">
+            <div className="text-xs font-semibold text-yellow-400/70 tracking-widest uppercase">Prologue Media</div>
+            <div className="text-xs text-zinc-500">
+              Upload files via the <span className="text-zinc-300">Media Manager</span> first, then paste the URL here.
+              Video takes priority over image for the background.
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-300 mb-1">
+                Background Image URL
+                <span className="font-normal text-zinc-500 ml-2">(.jpg · .png · .webp)</span>
+              </label>
+              <input
+                type="text"
+                value={dcPrologueBgImage}
+                onChange={e => { setDcPrologueBgImage(e.target.value); syncDetectiveCase({ bgImage: e.target.value }); }}
+                placeholder="/uploads/puzzles/… or CDN URL"
+                className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white placeholder-gray-500 font-mono text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-300 mb-1">
+                Background Video URL
+                <span className="font-normal text-zinc-500 ml-2">(.mp4 · .webm — plays muted &amp; looped)</span>
+              </label>
+              <input
+                type="text"
+                value={dcPrologueBgVideo}
+                onChange={e => { setDcPrologueBgVideo(e.target.value); syncDetectiveCase({ bgVideo: e.target.value }); }}
+                placeholder="/uploads/puzzles/… or CDN URL"
+                className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white placeholder-gray-500 font-mono text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-300 mb-1">
+                Audio URL
+                <span className="font-normal text-zinc-500 ml-2">(.mp3 · .wav · .ogg — narration or ambience)</span>
+              </label>
+              <input
+                type="text"
+                value={dcPrologueAudio}
+                onChange={e => { setDcPrologueAudio(e.target.value); syncDetectiveCase({ audio: e.target.value }); }}
+                placeholder="/uploads/puzzles/… or CDN URL"
+                className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white placeholder-gray-500 font-mono text-xs"
+              />
+            </div>
+
+            {dcPrologueAudio.trim() && (
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={dcPrologueAudioLoop}
+                  onChange={e => { setDcPrologueAudioLoop(e.target.checked); syncDetectiveCase({ audioLoop: e.target.checked }); }}
+                  className="accent-yellow-500"
+                />
+                Loop audio
+              </label>
+            )}
+          </div>
+        </div>
+
+        {/* Stages JSON */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-300 mb-1">
+            Stages <span className="font-normal text-zinc-500">(JSON array)</span>
+          </label>
+          <div className="text-xs text-zinc-500 mb-2 space-y-0.5">
+            <div>Each stage: <code className="text-yellow-400/80">id</code>, <code className="text-yellow-400/80">title</code>, <code className="text-yellow-400/80">prompt</code>, <code className="text-yellow-400/80">expectedAnswer</code> (string or string[])</div>
+            <div>Optional: <code className="text-yellow-400/80">ignoreCase</code> (default true), <code className="text-yellow-400/80">ignoreWhitespace</code> (default true)</div>
+          </div>
+          <textarea
+            value={detectiveJson}
+            onChange={e => {
+              const next = e.target.value;
+              setDetectiveJson(next);
+              try {
+                JSON.parse(next);
+                setDetectiveJsonError('');
+                syncDetectiveCase({ stagesJson: next });
+              } catch {
+                setDetectiveJsonError('Invalid JSON — fix before saving.');
+              }
+            }}
+            className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-64"
+            spellCheck={false}
+          />
+          {detectiveJsonError ? <div className="text-sm text-red-300 mt-1">{detectiveJsonError}</div> : null}
+        </div>
       </div>
-      <textarea
-        value={detectiveJson}
-        onChange={(e) => {
-          const next = e.target.value;
-          setDetectiveJson(next);
-          try {
-            const parsed = JSON.parse(next);
-            onDataChange('detectiveCase', parsed);
-            setDetectiveJsonError('');
-          } catch (err) {
-            setDetectiveJsonError('Invalid JSON (fix to save).');
-          }
-        }}
-        className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-64"
-        spellCheck={false}
-      />
-      {detectiveJsonError ? <div className="text-sm text-red-300">{detectiveJsonError}</div> : null}
-    </div>
-  );
+    );
+  };
 
   const renderCipherFields = () => (
     <div className="space-y-4">

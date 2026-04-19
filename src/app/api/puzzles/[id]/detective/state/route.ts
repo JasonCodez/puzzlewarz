@@ -52,6 +52,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       puzzleId,
       noirTitle: dc.noirTitle || puzzle.title,
       intro: dc.intro || null,
+      prologue: dc.prologue ?? null,
       totalStages: dc.stages.length,
       solved,
       locked,

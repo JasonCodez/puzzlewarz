@@ -12,10 +12,28 @@ export type DetectiveCaseStage = {
   ignoreWhitespace?: boolean;
 };
 
+export type DetectiveCasePrologue = {
+  /** The detective's opening monologue — how the case landed in their lap. */
+  text: string;
+  /** Detective character name shown on the prologue screen, e.g. "Det. Ray Voss" */
+  narratorName?: string;
+  /** Voice style for future TTS / flavour, e.g. "gravel", "weary", "sharp" */
+  narratorVoice?: string;
+  /** Background image URL (/uploads/… or CDN). Shown dimmed behind the text. */
+  backgroundImage?: string;
+  /** Background video URL (/uploads/… or CDN). Plays muted/looped behind the text. Takes priority over backgroundImage. */
+  backgroundVideo?: string;
+  /** Narration or ambience audio URL (/uploads/… or CDN). Player controls playback. */
+  audio?: string;
+  /** Whether the audio track loops. Default false. */
+  audioLoop?: boolean;
+};
+
 export type DetectiveCaseData = {
   noirTitle?: string;
   intro?: string;
   lockMode?: 'fail_once';
+  prologue?: DetectiveCasePrologue;
   stages: DetectiveCaseStage[];
 };
 
@@ -54,10 +72,27 @@ export function getDetectiveCaseData(puzzleData: unknown): DetectiveCaseData | n
     });
   }
 
+  let prologue: DetectiveCasePrologue | undefined;
+  if (maybe.prologue && typeof maybe.prologue === 'object') {
+    const p = maybe.prologue as Record<string, unknown>;
+    if (typeof p.text === 'string' && p.text.trim()) {
+      prologue = {
+        text: p.text,
+        narratorName: typeof p.narratorName === 'string' ? p.narratorName : undefined,
+        narratorVoice: typeof p.narratorVoice === 'string' ? p.narratorVoice : undefined,
+        backgroundImage: typeof p.backgroundImage === 'string' ? p.backgroundImage : undefined,
+        backgroundVideo: typeof p.backgroundVideo === 'string' ? p.backgroundVideo : undefined,
+        audio: typeof p.audio === 'string' ? p.audio : undefined,
+        audioLoop: typeof p.audioLoop === 'boolean' ? p.audioLoop : false,
+      };
+    }
+  }
+
   return {
     noirTitle: typeof maybe.noirTitle === 'string' ? maybe.noirTitle : undefined,
     intro: typeof maybe.intro === 'string' ? maybe.intro : undefined,
     lockMode: maybe.lockMode === 'fail_once' ? 'fail_once' : 'fail_once',
+    prologue,
     stages: parsedStages,
   };
 }

@@ -2,6 +2,22 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
+// ── Coming-soon gate ──────────────────────────────────────────────────────────
+// Set COMING_SOON=true in env to redirect all visitors to /coming-soon.
+// Bypass: append ?preview=<PREVIEW_SECRET> to any URL; stores a session cookie.
+const COMING_SOON_ACTIVE = process.env.COMING_SOON === 'true';
+const PREVIEW_SECRET     = process.env.PREVIEW_SECRET ?? '';
+const BYPASS_COOKIE      = 'pw_preview_bypass';
+
+const COMING_SOON_ALLOWED = [
+  '/coming-soon',
+  '/api/waitlist',
+  '/_next',
+  '/favicon',
+  '/images',
+  '/uploads',
+];
+
 // Paths that require authentication
 const protectedPaths = [
   "/dashboard",
@@ -14,8 +30,27 @@ const protectedPaths = [
 ];
 
 export async function proxy(request: NextRequest) {
+  const { pathname, searchParams } = request.nextUrl;
+
+  // ── Coming-soon gate (runs before everything else) ──────────────────────────
+  if (COMING_SOON_ACTIVE && !COMING_SOON_ALLOWED.some(p => pathname.startsWith(p))) {
+    // Allow bypass via ?preview=<secret> — set cookie and redirect to clean URL
+    if (PREVIEW_SECRET && searchParams.get('preview') === PREVIEW_SECRET) {
+      const url = request.nextUrl.clone();
+      url.searchParams.delete('preview');
+      const res = NextResponse.redirect(url);
+      res.cookies.set(BYPASS_COOKIE, '1', { httpOnly: true, sameSite: 'lax', path: '/' });
+      return res;
+    }
+    // Allow bypass via cookie
+    if (request.cookies.get(BYPASS_COOKIE)?.value !== '1') {
+      const url = request.nextUrl.clone();
+      url.pathname = '/coming-soon';
+      return NextResponse.redirect(url);
+    }
+  }
+
   const token = await getToken({ req: request });
-  const pathname = request.nextUrl.pathname;
 
   // Check if accessing protected paths
   const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path));
@@ -61,11 +96,10 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/puzzles/:path*",
-    "/teams/:path*",
-    "/leaderboards/:path*",
-    "/auth/:path*",
-    // Do not include /api/* here to avoid interfering with NextAuth and other API routes
+    /*
+     * Match all paths except Next.js internals and static assets.
+     * Required so the coming-soon gate can intercept every route.
+     */
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };

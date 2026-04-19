@@ -1536,6 +1536,14 @@ model PuzzleSchedule {
   @@map("puzzle_schedules")
 }
 
+model WaitlistEmail {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("waitlist_emails")
+}
+
 model HintTier {
   id               String   @id @default(cuid())
   puzzleId         String

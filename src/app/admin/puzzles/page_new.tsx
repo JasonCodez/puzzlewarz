@@ -56,7 +56,7 @@ const PUZZLE_TYPES = [
   { value: 'sudoku', label: 'Sudoku' },
   { value: 'jigsaw', label: 'Jigsaw Puzzle' },
   { value: 'code_master', label: 'Code Master' },
-  { value: 'detective_case', label: 'Detective Case (Noir)' },
+  { value: 'detective_case', label: 'Wise Up' },
   { value: 'crime_rpg', label: 'Crime Case RPG 🔎' },
   { value: 'parasite_code', label: 'Parasite Code 🦠' },
   { value: 'gridlock_file', label: 'Gridlock File 🔐' },

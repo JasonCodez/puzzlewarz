@@ -3,12 +3,17 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import FrequencyGame from "@/components/FrequencyGame";
 import Navbar from "@/components/Navbar";
+import { cookies } from "next/headers";
 
 export const metadata = { title: "Frequency | PuzzleWarz" };
 
 export default async function FrequencyPage() {
   const session = await getServerSession(authOptions);
   const userId = (session?.user as { id?: string })?.id ?? null;
+  const isGuest = !userId;
+
+  const cookieStore = await cookies();
+  const guestSessionId = cookieStore.get('pw_freq_session')?.value ?? null;
 
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -29,6 +34,16 @@ export default async function FrequencyPage() {
         select: { answers: true, score: true },
       });
       alreadySubmitted = !!existingSubmission;
+    } else if (guestSessionId) {
+      // Check if guest already submitted via their session cookie
+      const guestExisting = await prisma.frequencySubmission.findFirst({
+        where: { questionId: question.id, sessionId: guestSessionId },
+        select: { answers: true, score: true },
+      });
+      if (guestExisting) {
+        alreadySubmitted = true;
+        existingSubmission = guestExisting as { answers: string[]; score: number };
+      }
     }
 
     if (question.status === "revealed" || alreadySubmitted) {
@@ -68,6 +83,8 @@ export default async function FrequencyPage() {
           alreadySubmitted={alreadySubmitted}
           existingSubmission={existingSubmission as { answers: string[]; score: number } | null}
           initialResults={results}
+          sessionId={guestSessionId}
+          isGuest={isGuest}
         />
       </div>
       </main>

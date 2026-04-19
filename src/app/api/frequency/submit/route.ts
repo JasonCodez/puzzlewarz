@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "crypto";
 
 function normalizeAnswer(text: string): string {
   return text.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
@@ -50,6 +51,14 @@ export async function POST(request: Request) {
     if (existing) {
       return NextResponse.json({ error: "Already submitted" }, { status: 409 });
     }
+  } else if (sessionId) {
+    // Guest duplicate check via session cookie
+    const guestExisting = await prisma.frequencySubmission.findFirst({
+      where: { questionId, sessionId },
+    });
+    if (guestExisting) {
+      return NextResponse.json({ error: "Already submitted" }, { status: 409 });
+    }
   }
 
   // Upsert each answer into FrequencyAnswer and increment count
@@ -64,11 +73,13 @@ export async function POST(request: Request) {
   }
 
   // Create the submission (score = 0 until revealed/recalculated)
+  // For guests, ensure we have a session ID (generate one if the client didn't send one)
+  const effectiveSessionId = userId ? null : (sessionId || randomUUID());
   const submission = await prisma.frequencySubmission.create({
     data: {
       questionId,
       userId: userId ?? null,
-      sessionId: userId ? null : (sessionId ?? null),
+      sessionId: effectiveSessionId,
       answers: rawAnswers,
       score: 0,
     },
@@ -98,5 +109,17 @@ export async function POST(request: Request) {
     results = { answers: allAnswers, totalSubmissions };
   }
 
-  return NextResponse.json({ success: true, submissionId: submission.id, score, results });
+  const response = NextResponse.json({ success: true, submissionId: submission.id, score, results });
+
+  // Set a persistent guest session cookie so the page can detect returning guests
+  if (!userId && effectiveSessionId) {
+    response.cookies.set('pw_freq_session', effectiveSessionId, {
+      path: '/',
+      maxAge: 365 * 24 * 60 * 60, // 1 year
+      sameSite: 'lax',
+      httpOnly: false, // readable by client-side JS for dedup pre-submit
+    });
+  }
+
+  return response;
 }

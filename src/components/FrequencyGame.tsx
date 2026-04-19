@@ -27,7 +27,9 @@ interface FrequencyGameProps {
   /** Pre-fetched results (if revealed or already submitted) */
   initialResults?: { answers: FrequencyAnswer[]; totalSubmissions: number } | null;
   /** Session ID for guest tracking */
-  sessionId?: string;
+  sessionId?: string | null;
+  /** True when the user is not authenticated */
+  isGuest?: boolean;
 }
 
 const MAX_ANSWERS = 5;
@@ -39,6 +41,7 @@ export default function FrequencyGame({
   existingSubmission = null,
   initialResults = null,
   sessionId,
+  isGuest = false,
 }: FrequencyGameProps) {
   const [phase, setPhase] = useState<"input" | "submitted" | "reveal">(
     alreadySubmitted ? (initialResults ? "reveal" : "submitted") : "input"
@@ -176,6 +179,15 @@ export default function FrequencyGame({
             <p key={i} className="text-sm text-white py-0.5">{i + 1}. {a}</p>
           ))}
         </div>
+        {isGuest && (
+          <div className="rounded-xl p-4 border w-full max-w-sm text-center" style={{ background: "rgba(234,179,8,0.08)", borderColor: "rgba(234,179,8,0.25)" }}>
+            <p className="text-sm font-semibold text-white mb-1">💾 Your score isn&apos;t saved</p>
+            <p className="text-xs mb-3" style={{ color: "#94a3b8" }}>Create a free account to track your daily streak, save points, and appear on the leaderboard.</p>
+            <a href="/auth/register" className="inline-block rounded-lg px-4 py-2 text-sm font-bold" style={{ background: "rgba(234,179,8,0.2)", border: "1px solid rgba(234,179,8,0.4)", color: "#fde68a" }}>
+              Create Account — It&apos;s Free →
+            </a>
+          </div>
+        )}
       </div>
     );
   }
@@ -310,6 +322,17 @@ export default function FrequencyGame({
             </button>
           </div>
         </div>
+
+        {/* Sign-up nudge for guests */}
+        {isGuest && (
+          <div className="rounded-xl p-4 border text-center" style={{ background: "rgba(234,179,8,0.08)", borderColor: "rgba(234,179,8,0.25)" }}>
+            <p className="text-sm font-semibold text-white mb-1">💾 Your score isn&apos;t saved</p>
+            <p className="text-xs mb-3" style={{ color: "#94a3b8" }}>Create a free account to track your daily streak, save points, and appear on the leaderboard.</p>
+            <a href="/auth/register" className="inline-block rounded-lg px-4 py-2 text-sm font-bold" style={{ background: "rgba(234,179,8,0.2)", border: "1px solid rgba(234,179,8,0.4)", color: "#fde68a" }}>
+              Create Account — It&apos;s Free →
+            </a>
+          </div>
+        )}
       </div>
     );
   }
@@ -369,7 +392,7 @@ export default function FrequencyGame({
       </button>
 
       <p className="text-xs text-center" style={{ color: "#475569" }}>
-        Results revealed daily · No account required
+        Results revealed daily · Free to play
       </p>
     </div>
   );
