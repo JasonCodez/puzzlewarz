@@ -134,7 +134,7 @@ export default function ComingSoonPage() {
               animation: "pulse-dot 1.6s ease-in-out infinite",
             }} />
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#FFD700" }}>
-              {launched ? "We're Live!" : "Launching Soon"}
+              {launched ? "We're Live!" : "The File Opens May 1st"}
             </span>
           </div>
         </div>
