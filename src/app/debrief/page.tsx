@@ -782,10 +782,9 @@ function DocumentFireCanvas({ active }: { active: boolean }) {
 
 function WitnessHowToPlayModal({ onClose }: { onClose: () => void }) {
   const steps = [
-    { icon: "📄", title: "Read the report", body: `You have ${READ_SECONDS} seconds to memorise an incident report. Read carefully — it disappears once time is up.` },
-    { icon: "🧠", title: "Answer 5 questions", body: `Answer multiple-choice questions about the report. You have ${QUESTION_SECONDS} seconds per question. No going back.` },
-    { icon: "🔍", title: "Crack the Dead Drop", body: "After The Debrief stage, you'll enter a second challenge: decode three hidden words using cryptic clues. Use hints if you're stuck." },
-    { icon: "📊", title: "See how you compare", body: "Your recall score and percentile ranking are revealed at the end. The better your memory, the higher you place." },
+    { icon: "📄", title: "Read the report", body: `You have ${READ_SECONDS} seconds to memorise a classified incident report. Read every detail carefully — it self-destructs once time is up.` },
+    { icon: "🧠", title: "Answer recall questions", body: `Five multiple-choice questions test your memory of the report. You have ${QUESTION_SECONDS} seconds per question and cannot go back — trust your instincts.` },
+    { icon: "📊", title: "See how you compare", body: "Your recall score and accuracy rating are revealed at the end alongside your percentile ranking. The sharper your memory, the higher you place." },
   ];
 
   return (
