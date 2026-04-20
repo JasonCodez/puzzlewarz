@@ -35,6 +35,8 @@ interface GridlockFilePuzzleProps {
   guestMode?: boolean;
   /** When true: hides the internal file header (use when a parent wrapper already shows it) */
   hideHeader?: boolean;
+  /** When true: suppresses sign-up CTAs (used on pre-launch pages) */
+  prelaunch?: boolean;
 }
 
 // ── Server state ──────────────────────────────────────────────────────────────
@@ -776,7 +778,7 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = false, hideHeader = false }: GridlockFilePuzzleProps) {
+export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = false, hideHeader = false, prelaunch = false }: GridlockFilePuzzleProps) {
   const enqueueAchievement = useAchievementModalStore((s) => s.enqueueAchievement);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1028,6 +1030,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
             pointsEarned={guestRewardData.points}
             puzzleTitle={serverState.puzzle.fileTitle}
             onDismiss={() => setGuestRewardData(null)}
+            prelaunch={prelaunch}
           />
         )}
       </AnimatePresence>
@@ -1153,6 +1156,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
             streakCount={streak?.count ?? 0}
             arcSolvedDays={streak?.arcSolvedDays ?? []}
             guestMode={guestMode}
+            prelaunch={prelaunch}
           />
         </div>
       ) : (
@@ -1233,6 +1237,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
               streakCount={streak?.count ?? 0}
               arcSolvedDays={streak?.arcSolvedDays ?? []}
               guestMode={guestMode}
+              prelaunch={prelaunch}
             />
           )}
         </div>

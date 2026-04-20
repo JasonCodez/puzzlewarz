@@ -10,6 +10,8 @@ export interface GuestRewardModalProps {
   pointsEarned: number;
   puzzleTitle?: string;
   onDismiss: () => void;
+  /** When true, replaces sign-up CTAs with a "launching soon" message */
+  prelaunch?: boolean;
 }
 
 const COUNTER_DURATION = 1200; // ms
@@ -34,7 +36,7 @@ function useCountUp(target: number) {
   return display;
 }
 
-export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, onDismiss }: GuestRewardModalProps) {
+export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, onDismiss, prelaunch = false }: GuestRewardModalProps) {
   const displayXp = useCountUp(xpEarned);
   const displayPoints = useCountUp(pointsEarned);
 
@@ -121,28 +123,49 @@ export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, 
 
             {/* Locked message */}
             <p className="text-sm mb-6 leading-relaxed" style={{ color: '#9CA3AF' }}>
-              Your rewards are saved. Create a free account to{' '}
-              <span style={{ color: '#FFD700', fontWeight: 700 }}>unlock them permanently</span>{' '}
-              and track your progress.
+              {prelaunch
+                ? <>Your rewards are banked. When we launch on <span style={{ color: '#FFD700', fontWeight: 700 }}>May 1st</span>, sign up and confirm your email — they'll be deposited straight into your account.</>
+                : <>Your rewards are saved. Create a free account to{' '}<span style={{ color: '#FFD700', fontWeight: 700 }}>unlock them permanently</span>{' '}and track your progress.</>
+              }
             </p>
 
             {/* CTA buttons */}
             <div className="space-y-3">
-              <Link
-                href={signupUrl}
-                className="block w-full py-3 rounded-xl font-extrabold text-sm tracking-wide transition-all hover:brightness-110 active:scale-95"
-                style={{ background: 'linear-gradient(90deg, #FDE74C, #FFB86B)', color: '#020202' }}
-                onClick={onDismiss}
-              >
-                🎉 Create Free Account
-              </Link>
-              <button
-                onClick={onDismiss}
-                className="block w-full py-2.5 rounded-xl text-sm font-semibold transition-colors"
-                style={{ background: 'rgba(255,255,255,0.04)', color: '#6B7280', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                Maybe later — I'll keep playing as guest
-              </button>
+              {prelaunch ? (
+                <>
+                  <div
+                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-extrabold tracking-wide"
+                    style={{ background: 'rgba(255,208,0,0.1)', border: '1px solid rgba(255,208,0,0.3)', color: '#FFD700' }}
+                  >
+                    🗓 Launching May 1st — rewards are waiting!
+                  </div>
+                  <button
+                    onClick={onDismiss}
+                    className="block w-full py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.04)', color: '#6B7280', border: '1px solid rgba(255,255,255,0.08)' }}
+                  >
+                    Back to puzzle
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href={signupUrl}
+                    className="block w-full py-3 rounded-xl font-extrabold text-sm tracking-wide transition-all hover:brightness-110 active:scale-95"
+                    style={{ background: 'linear-gradient(90deg, #FDE74C, #FFB86B)', color: '#020202' }}
+                    onClick={onDismiss}
+                  >
+                    🎉 Create Free Account
+                  </Link>
+                  <button
+                    onClick={onDismiss}
+                    className="block w-full py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.04)', color: '#6B7280', border: '1px solid rgba(255,255,255,0.08)' }}
+                  >
+                    Maybe later — I'll keep playing as guest
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </motion.div>

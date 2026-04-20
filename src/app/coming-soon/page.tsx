@@ -323,6 +323,7 @@ export default function ComingSoonPage() {
           <GridlockFilePuzzle
             puzzleId={dailyPuzzleId}
             guestMode={true}
+            prelaunch={true}
             onSolved={() => setPuzzleSolved(true)}
           />
         </div>

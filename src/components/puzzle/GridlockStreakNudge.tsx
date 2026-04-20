@@ -10,6 +10,8 @@ interface GridlockStreakNudgeProps {
   streakCount: number;
   arcSolvedDays: number[];
   guestMode: boolean;
+  /** When true, suppresses the sign-up CTA links (used on pre-launch pages) */
+  prelaunch?: boolean;
 }
 
 type NudgeVariant = 'protect-streak' | 'protect-arc' | 'bank-xp' | 'day7';
@@ -66,6 +68,7 @@ export default function GridlockStreakNudge({
   streakCount,
   arcSolvedDays,
   guestMode,
+  prelaunch = false,
 }: GridlockStreakNudgeProps) {
   const [show, setShow] = useState(false);
 
@@ -86,7 +89,7 @@ export default function GridlockStreakNudge({
     dismissNudge(nudgeKey);
   };
 
-  if (!variant || !guestMode) return null;
+  if (!variant || !guestMode || prelaunch) return null;
 
   const config = NUDGE_CONFIG[variant];
   const xp = estimateArcXp(arcSolvedDays);
