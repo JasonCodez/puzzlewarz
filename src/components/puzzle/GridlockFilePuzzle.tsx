@@ -708,8 +708,7 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
   const steps = [
     { icon: "🗂️", title: "Study the grid", body: "A number or word grid is displayed with some cells missing. Your goal is to figure out the hidden rule and fill in the blanks correctly." },
     { icon: "🧠", title: "Declare the law (optional)", body: "Think you know the pattern? Declare the Rule Family and Axis for a rank bonus. Wrong declarations never penalise you." },
-    { icon: "📡", title: "Use signals wisely", body: "Signals (hints) cost tokens. Each one nudges you toward the pattern. You can earn more from the store." },
-    { icon: "🏆", title: "Earn your rank", body: "S = first try, no hints. Each extra attempt or hint lowers your rank. Fastest solvers top the standings." },
+    { icon: "🏆", title: "Earn your rank", body: "S = first try. Each extra attempt lowers your rank. Fastest solvers top the standings." },
   ];
 
   return (
