@@ -37,6 +37,8 @@ interface GridlockFilePuzzleProps {
   hideHeader?: boolean;
   /** When true: suppresses sign-up CTAs (used on pre-launch pages) */
   prelaunch?: boolean;
+  /** When true: shows a start overlay so the timer doesn't begin until the user clicks Start */
+  requireStart?: boolean;
 }
 
 // ── Server state ──────────────────────────────────────────────────────────────
@@ -778,7 +780,7 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = false, hideHeader = false, prelaunch = false }: GridlockFilePuzzleProps) {
+export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = false, hideHeader = false, prelaunch = false, requireStart = false }: GridlockFilePuzzleProps) {
   const enqueueAchievement = useAchievementModalStore((s) => s.enqueueAchievement);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -800,6 +802,9 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
   const [streak, setStreak] = useState<AnonStreakState | null>(null);
   const [arcCompleteVisible, setArcCompleteVisible] = useState(false);
   const [guestRewardData, setGuestRewardData] = useState<{ xp: number; points: number } | null>(null);
+
+  // ── Start gate (requireStart prop) ────────────────────────────────────────
+  const [started, setStarted] = useState(!requireStart);
 
   // ── Timer ────────────────────────────────────────────────────────────────────
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -863,14 +868,14 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
           setElapsedSeconds(record.elapsedSeconds);
           setIlluminated(true);
           // If already solved and it was today, re-surface the rule explanation via a fresh fetch
-        } else {
+        } else if (!requireStart) {
           startTimer();
         }
       } else {
         setServerState(data);
         if (data.solved) {
           setIlluminated(true);
-        } else {
+        } else if (!requireStart) {
           startTimer();
         }
       }
@@ -883,7 +888,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
     } finally {
       setLoading(false);
     }
-  }, [puzzleId, guestMode, startTimer]);
+  }, [puzzleId, guestMode, startTimer, requireStart]);
 
   useEffect(() => { loadState(); }, [loadState]);
 
@@ -1005,6 +1010,48 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
   const { puzzle } = serverState;
   const solved = serverState.solved;
   const streakAlive = streak ? isStreakAlive(streak.lastSolvedDate) : false;
+
+  // ── Start overlay (requireStart and not yet started, not already solved) ────
+  if (requireStart && !started && !solved) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center rounded-2xl p-10 text-center"
+        style={{
+          background: 'radial-gradient(ellipse at center, rgba(255,208,0,0.08) 0%, rgba(0,0,0,0) 70%), rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,208,0,0.2)',
+          minHeight: 260,
+        }}
+      >
+        <div style={{ fontSize: 40, marginBottom: 16 }}>🗂️</div>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#FFD700', marginBottom: 8 }}>
+          Gridlock File #{String(serverState.puzzle.fileNumber ?? '?').padStart(3, '0')}
+        </div>
+        <h3 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: '0 0 8px' }}>
+          {serverState.puzzle.fileTitle}
+        </h3>
+        <p style={{ fontSize: 13, color: '#6B7280', maxWidth: 340, lineHeight: 1.6, marginBottom: 28 }}>
+          Find the hidden rule in the grid and fill in the missing cells. Your timer starts when you hit the button below.
+        </p>
+        <button
+          onClick={() => { setStarted(true); startTimer(); }}
+          style={{
+            padding: '13px 36px',
+            borderRadius: 10,
+            background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+            color: '#000',
+            fontWeight: 800,
+            fontSize: 15,
+            border: 'none',
+            cursor: 'pointer',
+            letterSpacing: '0.06em',
+            boxShadow: '0 0 24px rgba(255,208,0,0.3)',
+          }}
+        >
+          ▶ Start the File
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ fontFamily: 'var(--font-geist-sans, system-ui, sans-serif)' }} className="space-y-6">

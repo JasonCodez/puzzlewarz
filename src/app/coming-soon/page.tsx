@@ -324,6 +324,7 @@ export default function ComingSoonPage() {
             puzzleId={dailyPuzzleId}
             guestMode={true}
             prelaunch={true}
+            requireStart={true}
             onSolved={() => setPuzzleSolved(true)}
           />
         </div>
