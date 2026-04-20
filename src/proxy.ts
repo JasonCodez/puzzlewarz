@@ -13,6 +13,7 @@ const COMING_SOON_ALLOWED = [
   '/coming-soon',
   '/api/auth',
   '/api/waitlist',
+  '/api/gridlock',
   '/_next',
   '/favicon',
   '/images',
