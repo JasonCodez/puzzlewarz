@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import dynamic from "next/dynamic";
+
+const GridlockFilePuzzle = dynamic(
+  () => import("@/components/puzzle/GridlockFilePuzzle"),
+  { ssr: false }
+);
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Change LAUNCH_DATE to the actual planned launch date/time (UTC).
@@ -30,10 +36,19 @@ export default function ComingSoonPage() {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [dailyPuzzleId, setDailyPuzzleId] = useState<string | null>(null);
+  const [puzzleSolved, setPuzzleSolved] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setTime(getTimeLeft()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/gridlock/daily")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.puzzleId) setDailyPuzzleId(d.puzzleId); })
+      .catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -264,6 +279,54 @@ export default function ComingSoonPage() {
           &copy; {new Date().getFullYear()} PuzzleWarz · All rights reserved
         </p>
       </div>
+
+      {/* Pre-launch Gridlock puzzle */}      {dailyPuzzleId && (
+        <div style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: 720,
+          marginTop: 64,
+          paddingBottom: 64,
+        }}>
+          {/* Section header */}
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "5px 16px", borderRadius: 999,
+              background: "rgba(255,208,0,0.07)", border: "1px solid rgba(255,208,0,0.22)",
+              marginBottom: 14,
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#FFD700" }}>
+                🗂 Get a Head Start
+              </span>
+            </div>
+            <h2 style={{ fontSize: "clamp(20px,5vw,28px)", fontWeight: 800, color: "#fff", margin: "0 0 8px" }}>
+              Solve Today&apos;s File
+            </h2>
+            <p style={{ fontSize: 14, color: "#6B7280", maxWidth: 480, margin: "0 auto", lineHeight: 1.65 }}>
+              Play now as a guest. Your rewards are saved — when you sign up on launch day and confirm
+              your email, they&apos;ll be deposited directly into your account.
+            </p>
+            {puzzleSolved && (
+              <div style={{
+                marginTop: 16,
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "8px 18px", borderRadius: 999,
+                background: "rgba(125,249,170,0.1)", border: "1px solid rgba(125,249,170,0.3)",
+                color: "#7DF9AA", fontSize: 13, fontWeight: 700,
+              }}>
+                ✅ File solved — rewards are waiting for your account!
+              </div>
+            )}
+          </div>
+
+          <GridlockFilePuzzle
+            puzzleId={dailyPuzzleId}
+            guestMode={true}
+            onSolved={() => setPuzzleSolved(true)}
+          />
+        </div>
+      )}
     </div>
   );
 }

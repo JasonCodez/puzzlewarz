@@ -153,17 +153,31 @@ export async function POST(request: NextRequest) {
         if (guestSolves.length > 0) {
           const totalXp = guestSolves.reduce((sum, s) => sum + (s.puzzle.xpReward ?? 100), 0);
           const totalPoints = guestSolves.length * 100;
-          const { level, title } = calcLevel(totalXp);
-          await prisma.$transaction([
-            prisma.user.update({
+
+          if (requireVerification) {
+            // Rewards are held until email is confirmed — store for later crediting
+            await prisma.user.update({
               where: { id: user.id },
-              data: { xp: totalXp, level, xpTitle: title, totalPoints },
-            }),
-            prisma.gridlockSolve.updateMany({
-              where: { anonId, userId: null },
-              data: { userId: user.id },
-            }),
-          ]);
+              data: {
+                prelaunchAnonId: anonId,
+                prelaunchRewardXp: totalXp,
+                prelaunchRewardPoints: totalPoints,
+              },
+            });
+          } else {
+            // Dev / non-production: credit immediately since email is auto-verified
+            const { level, title } = calcLevel(totalXp);
+            await prisma.$transaction([
+              prisma.user.update({
+                where: { id: user.id },
+                data: { xp: totalXp, level, xpTitle: title, totalPoints },
+              }),
+              prisma.gridlockSolve.updateMany({
+                where: { anonId, userId: null },
+                data: { userId: user.id },
+              }),
+            ]);
+          }
         }
       } catch (err) {
         console.error('[register] Failed to credit guest solves:', err);

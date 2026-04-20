@@ -57,15 +57,44 @@ export async function GET(
 
     const playerTierIndex = playerRank in rankIndex ? rankIndex[playerRank] : -1;
 
+    // Fetch faster/slower counts in the same tier up-front so we can derive
+    // both tierRank and an accurate ghost fraction in one pass.
+    let slowerInSameTier = 0;
+    let fasterInSameTier = 0;
+    if (playerTierIndex >= 0 && playerSeconds > 0) {
+      [slowerInSameTier, fasterInSameTier] = await Promise.all([
+        prisma.gridlockSolve.count({
+          where: { puzzleId, rank: playerRank, solvedAt: { gte: todayStart }, elapsedSeconds: { gt: playerSeconds } },
+        }),
+        prisma.gridlockSolve.count({
+          where: { puzzleId, rank: playerRank, solvedAt: { gte: todayStart }, elapsedSeconds: { lt: playerSeconds } },
+        }),
+      ]);
+    }
+
+    // tierRank: 1 = fastest in tier today
+    const tierRank: number | null = (playerTierIndex >= 0 && playerSeconds > 0)
+      ? fasterInSameTier + 1
+      : null;
+
+    // For ghost same-tier fraction: use the player's actual rank position so
+    // that rank-1 beats ~100% of ghost same-tier solvers, last place beats ~0%.
+    // Formula: (realCount - tierRank + 1) / realCount
+    // Falls back to 50% when there is no timing data.
+    const realTierCount = tierCounts[playerRank] ?? 0;
+    const sameTierGhostFraction = (tierRank !== null && realTierCount > 0)
+      ? (realTierCount - tierRank + 1) / realTierCount
+      : 0.5;
+
     if (playerTierIndex >= 0) {
-      // Baseline solvers beaten (ghost pool — worse or same tier but "slower")
+      // Baseline ghost solvers beaten — worse tiers
       for (const rank of RANK_ORDER) {
         if (rankIndex[rank] > playerTierIndex) {
           beaten += BASELINE_TIERS[rank];
         }
       }
-      // Partial credit within same baseline tier: assume median speed (50%)
-      beaten += Math.floor(BASELINE_TIERS[playerRank] * 0.5);
+      // Ghost solvers in same tier — fraction based on actual speed rank
+      beaten += Math.floor(BASELINE_TIERS[playerRank] * sameTierGhostFraction);
 
       // Real solvers beaten — worse tiers
       for (const rank of RANK_ORDER) {
@@ -75,38 +104,13 @@ export async function GET(
       }
 
       // Real solvers in same tier but slower
-      if (playerSeconds > 0) {
-        const slowerInSameTier = await prisma.gridlockSolve.count({
-          where: {
-            puzzleId,
-            rank: playerRank,
-            solvedAt: { gte: todayStart },
-            elapsedSeconds: { gt: playerSeconds },
-          },
-        });
-        beaten += slowerInSameTier;
-      }
+      beaten += slowerInSameTier;
     }
 
     // Percentile is always calculated against the full blended pool
     const percentile = playerTierIndex >= 0
       ? Math.min(99, Math.round((beaten / totalSolves) * 100))
       : null;
-
-    // Speed rank within the player's own tier (1 = fastest today)
-    // Only computed when the player has a valid time
-    let tierRank: number | null = null;
-    if (playerTierIndex >= 0 && playerSeconds > 0) {
-      const fasterInSameTier = await prisma.gridlockSolve.count({
-        where: {
-          puzzleId,
-          rank: playerRank,
-          solvedAt: { gte: todayStart },
-          elapsedSeconds: { lt: playerSeconds },
-        },
-      });
-      tierRank = fasterInSameTier + 1;
-    }
 
     return NextResponse.json({
       tierCounts: blendedTierCounts,

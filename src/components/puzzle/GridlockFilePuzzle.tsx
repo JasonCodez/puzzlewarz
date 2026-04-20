@@ -25,6 +25,7 @@ import GridlockArcComplete from '@/components/puzzle/GridlockArcComplete';
 import GridlockStandings from '@/components/puzzle/GridlockStandings';
 import GuestRewardModal from '@/components/puzzle/GuestRewardModal';
 import { useAchievementModalStore } from '@/lib/achievement-modal-store';
+import StreakTimer from '@/components/StreakTimer';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 interface GridlockFilePuzzleProps {
@@ -1071,17 +1072,11 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
             </div>
           )}
           {streak && streak.count > 0 && (
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
-              style={{
-                background: streakAlive ? 'rgba(255,208,0,0.1)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${streakAlive ? 'rgba(255,208,0,0.35)' : 'rgba(255,255,255,0.1)'}`,
-                color: streakAlive ? '#FFD700' : '#6b7280',
-              }}
-            >
-              <span>{streakAlive ? '🔥' : '💀'}</span>
-              <span>{streak.count}</span>
-            </div>
+            <StreakTimer
+              streak={streak.count}
+              solvedToday={solved}
+              size="sm"
+            />
           )}
           {!solved && (
             <div style={{ fontSize: '1rem', fontWeight: 900, color: '#7DF9AA', letterSpacing: '0.06em', fontVariantNumeric: 'tabular-nums' }}>

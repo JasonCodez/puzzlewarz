@@ -309,7 +309,7 @@ export function PuzzleTypeRenderer({
           anagramData={(puzzle.data ?? {}) as Record<string, unknown>}
           alreadySolved={progress?.solved ?? false}
           onSolved={() => onSolved()}
-          onFailed={() => onSolved()}
+          onFailed={() => {}}
         />
       </div>
     );

@@ -4,12 +4,18 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import dynamic from "next/dynamic";
+
+const PrelaunchRewardModal = dynamic(() => import("@/components/PrelaunchRewardModal"), { ssr: false });
+
+type PrelaunchRewards = { xp: number; points: number; solves: number } | null;
 
 function VerifyEmailInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState<string>("Verifying your email...");
+  const [prelaunchRewards, setPrelaunchRewards] = useState<PrelaunchRewards>(null);
 
   useEffect(() => {
     const email = searchParams.get("email") || "";
@@ -36,9 +42,17 @@ function VerifyEmailInner() {
           return;
         }
 
+        const data = await resp.json().catch(() => ({}));
         setStatus("success");
-        setMessage("Email verified! You can now sign in.");
-        setTimeout(() => router.push("/auth/signin"), 1500);
+
+        if (data?.prelaunchRewards?.xp > 0 || data?.prelaunchRewards?.points > 0) {
+          // Show the reward modal; redirect happens when the user dismisses it
+          setPrelaunchRewards(data.prelaunchRewards);
+          setMessage("Email verified! Your pre-launch rewards have been deposited.");
+        } else {
+          setMessage("Email verified! You can now sign in.");
+          setTimeout(() => router.push("/auth/signin"), 1500);
+        }
       } catch {
         setStatus("error");
         setMessage("Verification failed.");
@@ -78,6 +92,18 @@ function VerifyEmailInner() {
           </div>
         </div>
       </main>
+
+      {prelaunchRewards && (
+        <PrelaunchRewardModal
+          xp={prelaunchRewards.xp}
+          points={prelaunchRewards.points}
+          solves={prelaunchRewards.solves}
+          onDismiss={() => {
+            setPrelaunchRewards(null);
+            router.push("/auth/signin");
+          }}
+        />
+      )}
     </>
   );
 }

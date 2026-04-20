@@ -119,6 +119,11 @@ model User {
   // Admin stealth — hidden from all public lists, leaderboards, feeds, search
   isHidden               Boolean                    @default(false)
 
+  // Pre-launch guest rewards: banked at registration, credited at email verification
+  prelaunchAnonId        String?
+  prelaunchRewardXp      Int                        @default(0)
+  prelaunchRewardPoints  Int                        @default(0)
+
   @@map("users")
 }
 

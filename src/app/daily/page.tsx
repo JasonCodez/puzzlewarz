@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import Navbar from "@/components/Navbar";
+import StreakTimer from "@/components/StreakTimer";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const WORD_LEN = 5;
@@ -539,10 +540,11 @@ export default function DailyPage() {
           {/* Streak badge */}
           {dailyStreak > 0 && (
             <div className="flex justify-center mt-2">
-              <span className="text-xs font-bold px-3 py-1 rounded-full"
-                    style={{ backgroundColor: "rgba(56,145,166,0.15)", border: "1px solid rgba(56,145,166,0.3)", color: "#3891A6" }}>
-                🔥 {dailyStreak} day streak
-              </span>
+              <StreakTimer
+                streak={dailyStreak}
+                solvedToday={status === "won" || status === "lost"}
+                size="sm"
+              />
             </div>
           )}
 
