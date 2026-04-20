@@ -1195,15 +1195,6 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
             )}
           </AnimatePresence>
 
-          {/* Hints */}
-          <HintPanel
-            hints={puzzle.hints}
-            usedHintIds={usedHintIds}
-            onUse={id => setUsedHintIds(prev => new Set([...prev, id]))}
-            disabled={solved}
-            hintTokens={guestMode ? undefined : (serverState.hintTokens ?? 0)}
-          />
-
           {/* Submit */}
           <button
             onClick={handleSubmit}
