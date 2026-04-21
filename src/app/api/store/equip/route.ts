@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
       banner:     { teamBannerColor: "none" },
       name_color: { activeNameColor: "none" },
       anim:       { activeCompletionAnimation: "default" },
+      title:      { activeTitle: "none" },
     };
 
     for (const [subcat, update] of Object.entries(UNEQUIP_KEYS)) {
@@ -37,6 +38,19 @@ export async function POST(request: NextRequest) {
         await prisma.user.update({ where: { id: currentUser.id }, data: update });
         return NextResponse.json({ success: true });
       }
+    }
+
+    // Special: equip the Founder title (not a store item — granted at registration)
+    if (itemKey === "equip_founder_title") {
+      const user = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { isFounder: true },
+      });
+      if (!user?.isFounder) {
+        return NextResponse.json({ error: "You do not have the Founder title" }, { status: 403 });
+      }
+      await prisma.user.update({ where: { id: currentUser.id }, data: { activeTitle: "founder" } });
+      return NextResponse.json({ success: true, equipped: "founder" });
     }
 
     const item = await prisma.storeItem.findUnique({ where: { key: itemKey } });

@@ -56,9 +56,15 @@ export async function POST(request: NextRequest) {
     const wasAlreadyVerified = !!user.emailVerified;
 
     if (!wasAlreadyVerified) {
+      // Grant Founder badge to the first 1000 email-verified users
+      const verifiedCount = await prisma.user.count({
+        where: { isBot: false, emailVerified: { not: null } },
+      });
+      const isFounder = verifiedCount < 1000;
+
       await prisma.user.update({
         where: { id: user.id },
-        data: { emailVerified: new Date() },
+        data: { emailVerified: new Date(), ...(isFounder ? { isFounder: true } : {}) },
       });
     }
 

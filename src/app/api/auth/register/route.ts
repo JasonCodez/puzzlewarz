@@ -92,6 +92,17 @@ export async function POST(request: NextRequest) {
       process.env.NODE_ENV === "production" ||
       process.env.REQUIRE_EMAIL_VERIFICATION === "true";
 
+    // In dev (no email verification), grant founder badge immediately since the user
+    // is considered verified at registration. In production, this is handled in
+    // /api/auth/verify-email after the user confirms their email.
+    let isFounder = false;
+    if (!requireVerification) {
+      const verifiedCount = await prisma.user.count({
+        where: { isBot: false, emailVerified: { not: null } },
+      });
+      isFounder = verifiedCount < 1000;
+    }
+
     // Create user
     const user = await prisma.user.create({
       data: {
@@ -99,6 +110,7 @@ export async function POST(request: NextRequest) {
         email,
         password: hashedPassword,
         marketingOptIn: body.marketingOptIn === true,
+        isFounder,
         // In non-production, keep dev flow simple if SMTP isn't configured.
         ...(requireVerification ? {} : { emailVerified: new Date() }),
       },

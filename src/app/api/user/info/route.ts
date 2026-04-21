@@ -20,14 +20,14 @@ export async function GET(request: NextRequest) {
     try {
       user = await (prisma.user as any).findUnique({
         where: { email: session.user.email },
-        select: { id: true, role: true, image: true, nameChanged: true, xp: true, level: true, xpTitle: true, name: true, totalPoints: true, activeFlair: true, activeSkin: true },
+        select: { id: true, role: true, image: true, nameChanged: true, xp: true, level: true, xpTitle: true, name: true, totalPoints: true, activeFlair: true, activeSkin: true, activeTitle: true, isFounder: true },
       });
     } catch (e) {
       // Fallback to older schema without `nameChanged`
       try {
       user = await prisma.user.findUnique({
           where: { email: session.user.email },
-          select: { id: true, role: true, image: true, xp: true, level: true, xpTitle: true, name: true, totalPoints: true, activeFlair: true, activeSkin: true },
+          select: { id: true, role: true, image: true, xp: true, level: true, xpTitle: true, name: true, totalPoints: true, activeFlair: true, activeSkin: true, activeTitle: true, isFounder: true },
         });
       } catch (ee) {
         throw ee;
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       where: { userId: user.id, isPremium: true },
       select: { userId: true },
     });
-    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, totalPoints: user.totalPoints ?? 0, username: user.name ?? null, activeFlair: resolvedFlair, activeSkin: user.activeSkin ?? 'default', isPremium: !!premiumPass, ...calcLevel(user.xp ?? 0) });
+    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, totalPoints: user.totalPoints ?? 0, username: user.name ?? null, activeFlair: resolvedFlair, activeSkin: user.activeSkin ?? 'default', activeTitle: user.activeTitle ?? 'none', isFounder: user.isFounder ?? false, isPremium: !!premiumPass, ...calcLevel(user.xp ?? 0) });
   } catch (error) {
     console.error("Error fetching user info:", error);
     return NextResponse.json(

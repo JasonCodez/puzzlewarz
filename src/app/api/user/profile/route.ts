@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
         activeSkin: true,
         activeFlair: true,
         activeNameColor: true,
+        activeTitle: true,
+        isFounder: true,
         totalPoints: true,
         purchasedPoints: true,
       },

@@ -38,6 +38,7 @@ interface UserInfo {
   nextLevelXp?: number;
   progress?: number;
   activeFlair?: string | null;
+  activeTitle?: string | null;
   isPremium?: boolean;
 }
 
@@ -323,7 +324,7 @@ export default function Navbar() {
                               {userInfo?.activeFlair ? <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}> {userInfo.activeFlair}</span> : ""}
                             </p>
                             {userInfo?.level !== undefined ? (
-                              <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}</p>
+                              <p className="text-xs" style={{ color: "#818cf8" }}>Lv.{userInfo.level} · {userInfo.title}{userInfo.activeTitle === 'founder' ? ' · ⚜️ Founder' : ''}</p>
                             ) : (
                               <p className="text-xs" style={{ color: "#3891A6" }}>Player</p>
                             )}

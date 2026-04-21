@@ -14,6 +14,7 @@ const COMING_SOON_ALLOWED = [
   '/api/auth',
   '/api/waitlist',
   '/api/gridlock',
+  '/api/founder-count',
   '/_next',
   '/favicon',
   '/images',

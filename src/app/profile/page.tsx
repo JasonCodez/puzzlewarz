@@ -29,6 +29,8 @@ interface UserProfile {
   activeSkin: string;
   activeFlair: string;
   activeNameColor: string;
+  activeTitle: string;
+  isFounder: boolean;
 }
 
 // ─── Cosmetics Drawer ─────────────────────────────────────────────────────────
@@ -149,7 +151,7 @@ export default function ProfilePage() {
   const [showCosmeticsDrawer, setShowCosmeticsDrawer] = useState(false);
   const [drawerItems, setDrawerItems] = useState<DrawerItem[]>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'theme' | 'frame' | 'skin' | 'flair' | 'name_color' | 'exclusive'>('theme');
+  const [drawerTab, setDrawerTab] = useState<'theme' | 'frame' | 'skin' | 'flair' | 'name_color' | 'exclusive' | 'title'>('theme');
   const [drawerEquipping, setDrawerEquipping] = useState<string | null>(null);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
 
@@ -394,6 +396,11 @@ export default function ProfilePage() {
                   <span className="text-sm font-semibold px-3 py-1 rounded-full" style={{ backgroundColor: t.primaryMuted, color: t.primary, border: `1px solid ${t.primary}`, boxShadow: `0 0 8px ${t.avatarGlow}` }}>
                     LVL {profile?.level ?? 1} &middot; {profile?.xpTitle ?? 'Newcomer'}
                   </span>
+                  {profile?.activeTitle === 'founder' && (
+                    <span className="text-sm font-bold px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(253,231,76,0.12)', color: '#FDE74C', border: '1px solid rgba(253,231,76,0.4)', boxShadow: '0 0 8px rgba(253,231,76,0.25)' }}>
+                      ⚜️ Founder
+                    </span>
+                  )}
                   {profile?.role === 'admin' && (
                     <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(171,159,157,0.2)', color: '#c9b9b7' }}>Admin</span>
                   )}
@@ -719,10 +726,12 @@ export default function ProfilePage() {
 
             {/* Tabs */}
             <div className="flex gap-1 px-4 pt-3 pb-2 shrink-0 flex-wrap">
-              {(['theme', 'frame', 'skin', 'flair', 'name_color', 'exclusive'] as const).map((tab) => {
-                const icons: Record<string, string> = { theme: '🎨', frame: '🖼️', skin: '🎮', flair: '✨', name_color: '🌈', exclusive: '⭐' };
+              {(['theme', 'frame', 'skin', 'flair', 'name_color', 'exclusive', ...(profile?.isFounder ? ['title' as const] : [])] as const).map((tab) => {
+                const icons: Record<string, string> = { theme: '🎨', frame: '🖼️', skin: '🎮', flair: '✨', name_color: '🌈', exclusive: '⭐', title: '⚜️' };
                 const count = tab === 'exclusive'
                   ? drawerItems.filter(i => i.isExclusive).length
+                  : tab === 'title'
+                  ? (profile?.isFounder ? 1 : 0)
                   : drawerItems.filter(i => i.subcategory === tab && !i.isExclusive).length;
                 return (
                   <button
@@ -730,7 +739,7 @@ export default function ProfilePage() {
                     onClick={() => setDrawerTab(tab)}
                     className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
                     style={drawerTab === tab
-                      ? { backgroundColor: tab === 'exclusive' ? 'rgba(253,231,76,0.12)' : t.primaryMuted, color: tab === 'exclusive' ? '#FDE74C' : t.primary, border: `1px solid ${tab === 'exclusive' ? 'rgba(253,231,76,0.4)' : t.primaryBorder}` }
+                      ? { backgroundColor: (tab === 'exclusive' || tab === 'title') ? 'rgba(253,231,76,0.12)' : t.primaryMuted, color: (tab === 'exclusive' || tab === 'title') ? '#FDE74C' : t.primary, border: `1px solid ${(tab === 'exclusive' || tab === 'title') ? 'rgba(253,231,76,0.4)' : t.primaryBorder}` }
                       : { color: t.subtleText, backgroundColor: 'transparent', border: '1px solid transparent' }}
                   >
                     {icons[tab]}{count > 0 && <span className="ml-0.5 opacity-60">({count})</span>}
@@ -744,7 +753,39 @@ export default function ProfilePage() {
               {drawerLoading && (
                 <div className="text-center py-10 text-sm" style={{ color: t.subtleText }}>Loading…</div>
               )}
-              {!drawerLoading && (() => {
+
+              {/* ── Founder title card ── */}
+              {!drawerLoading && drawerTab === 'title' && profile?.isFounder && (() => {
+                const equipped = profile.activeTitle === 'founder';
+                return (
+                  <div className="rounded-xl border p-4 transition-colors"
+                    style={{ backgroundColor: equipped ? 'rgba(253,231,76,0.08)' : t.cardBg, borderColor: equipped ? 'rgba(253,231,76,0.4)' : `${t.primaryBorder}30` }}>
+                    <div className="h-10 flex items-center gap-2 mb-3 rounded-lg px-3"
+                      style={{ background: 'rgba(253,231,76,0.08)', border: '1px solid rgba(253,231,76,0.2)' }}>
+                      <span className="text-base">⚜️</span>
+                      <span className="text-sm font-extrabold" style={{ color: '#FDE74C' }}>Founder</span>
+                      <span className="text-xs ml-1 px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(253,231,76,0.15)', color: '#FDE74C' }}>#1–1000</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">Founder</p>
+                        <p className="text-xs" style={{ color: t.subtleText }}>One of the first 1,000 members</p>
+                        {equipped && <p className="text-xs font-bold mt-0.5" style={{ color: '#FDE74C' }}>● Equipped</p>}
+                      </div>
+                      <button
+                        onClick={() => handleDrawerEquip('equip_founder_title', 'title', equipped)}
+                        disabled={!!drawerEquipping}
+                        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 hover:opacity-90"
+                        style={{ background: equipped ? 'rgba(255,255,255,0.08)' : 'rgba(253,231,76,0.15)', color: equipped ? t.subtleText : '#FDE74C', border: `1px solid ${equipped ? 'transparent' : 'rgba(253,231,76,0.3)'}` }}
+                      >
+                        {drawerEquipping === 'equip_founder_title' ? '…' : equipped ? 'Unequip' : 'Equip'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {!drawerLoading && drawerTab !== 'title' && (() => {
                 const filtered = drawerTab === 'exclusive'
                   ? drawerItems.filter(i => i.isExclusive)
                   : drawerItems.filter(i => i.subcategory === drawerTab && !i.isExclusive);
@@ -766,7 +807,7 @@ export default function ProfilePage() {
                   </div>
                 ) : null;
               })()}
-              {!drawerLoading && (drawerTab === 'exclusive'
+              {!drawerLoading && drawerTab !== 'title' && (drawerTab === 'exclusive'
                 ? drawerItems.filter(i => i.isExclusive)
                 : drawerItems.filter(i => i.subcategory === drawerTab && !i.isExclusive)
               ).map(item => {

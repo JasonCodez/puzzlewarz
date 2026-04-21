@@ -125,6 +125,8 @@ export default function ComingSoonPage() {
         @keyframes orb2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-25px,15px)} }
         @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
         @keyframes tick { 0%{transform:scale(1.06)} 100%{transform:scale(1)} }
+        @keyframes founder-shimmer { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        @keyframes founder-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(253,231,76,0.25)} 50%{box-shadow:0 0 0 8px rgba(253,231,76,0)} }
       `}</style>
 
       <div style={{ position: "relative", maxWidth: 680, width: "100%", textAlign: "center" }}>
@@ -212,9 +214,63 @@ export default function ComingSoonPage() {
           </div>
         )}
 
+        {/* ── Founder Badge Section ────────────────────────────────────────── */}
+        <div style={{
+          background: "linear-gradient(135deg, rgba(253,231,76,0.06) 0%, rgba(255,165,0,0.04) 100%)",
+          border: "1px solid rgba(253,231,76,0.22)",
+          borderRadius: 20,
+          padding: "28px 28px 24px",
+          marginBottom: 28,
+          position: "relative",
+          overflow: "hidden",
+          animation: "founder-pulse 3s ease-in-out infinite",
+        }}>
+          {/* Background shimmer line */}
+          <div aria-hidden style={{
+            position: "absolute", top: 0, left: 0, right: 0, height: 2,
+            background: "linear-gradient(90deg, transparent, rgba(253,231,76,0.6), transparent)",
+            backgroundSize: "200% 100%",
+            animation: "founder-shimmer 2.5s linear infinite",
+          }} />
+
+          {/* Heading */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 20 }}>⚜️</span>
+            <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "#FFD700" }}>
+              Founder Title Badge
+            </span>
+            <span style={{ fontSize: 20 }}>⚜️</span>
+          </div>
+          <p style={{ color: "#9ca3af", fontSize: 14, lineHeight: 1.65, marginBottom: 20 }}>
+            The first <strong style={{ color: "#FFD700" }}>1,000 members</strong> to verify their email on launch day
+            will permanently unlock the exclusive <strong style={{ color: "#FFD700" }}>Founder</strong> title —
+            displayed next to their name across the entire site.
+          </p>
+
+          {/* Badge preview */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "8px 18px", borderRadius: 999,
+              background: "rgba(253,231,76,0.12)",
+              border: "1px solid rgba(253,231,76,0.45)",
+              boxShadow: "0 0 18px rgba(253,231,76,0.2)",
+            }}>
+              <span style={{ fontSize: 16 }}>⚜️</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#FFD700", letterSpacing: "0.04em" }}>Founder</span>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                background: "rgba(253,231,76,0.15)", color: "#FFD700",
+                border: "1px solid rgba(253,231,76,0.3)",
+              }}>#1–1000</span>
+            </div>
+          </div>
+
+
+        </div>
+
         {/* Email form */}
         <div style={{
-          background: "rgba(255,255,255,0.02)",
           border: "1px solid rgba(255,255,255,0.08)",
           borderRadius: 16, padding: "28px 28px",
           marginBottom: 24,

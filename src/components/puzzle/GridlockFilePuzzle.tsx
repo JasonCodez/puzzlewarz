@@ -576,7 +576,7 @@ function SolvedScreen({
           </div>
         )}
         <div className="text-sm font-mono text-gray-400">
-          {submissionCount} attempt{submissionCount !== 1 ? 's' : ''} · {hintsUsed} signal{hintsUsed !== 1 ? 's' : ''} used
+          {submissionCount} attempt{submissionCount !== 1 ? 's' : ''}
         </div>
         {lawResult && lawResult !== 'not-declared' && (
           <div className="text-xs font-mono" style={{ color: LAW_RESULT_COLOR[lawResult] }}>
@@ -691,7 +691,7 @@ function generateShareText(
     ``,
     `${rankEmoji[rank]} ${rank}-RANK — ${GRIDLOCK_RANK_LABELS[rank]}`,
     elapsedSeconds > 0 ? `⏱ Solved in ${formatTime(elapsedSeconds)}` : '',
-    `${submissionCount === 1 ? '🎯' : '🔁'} ${submissionCount} attempt${submissionCount !== 1 ? 's' : ''}${hintsUsed > 0 ? ` · ${hintsUsed} hint${hintsUsed !== 1 ? 's' : ''}` : ' · no hints'}`,
+    `${submissionCount === 1 ? '🎯' : '🔁'} ${submissionCount} attempt${submissionCount !== 1 ? 's' : ''}`,
     lawResult === 'confirmed' || lawResult === 'alternate'
       ? `🧠 Law declared correctly`
       : '',
@@ -1273,7 +1273,7 @@ export default function GridlockFilePuzzle({ puzzleId, onSolved, guestMode = fal
           </button>
 
           <div style={{ fontSize: 12, textAlign: 'center', color: '#9ca3af', fontFamily: 'inherit', letterSpacing: '0.04em' }}>
-            {serverState.submissionCount > 0 ? `${serverState.submissionCount} attempt${serverState.submissionCount !== 1 ? 's' : ''} · ${serverState.hintsUsed} signal${serverState.hintsUsed !== 1 ? 's' : ''} used` : 'No attempts yet'}
+            {serverState.submissionCount > 0 ? `${serverState.submissionCount} attempt${serverState.submissionCount !== 1 ? 's' : ''}` : 'No attempts yet'}
           </div>
 
           {/* Streak nudge (guest only, shows after a solve) */}

@@ -476,7 +476,7 @@ function WarzLobbyInner() {
           className="text-lg mb-8 max-w-lg mx-auto"
           style={{ color: "#AB9F9D" }}
         >
-          Solve a puzzle, set your wager, challenge another player. Fastest time wins the pot.
+          Pick your puzzle, set your wager, solve the puzzle, post your challenge. Fastest time wins the pot!
         </motion.p>
 
         {/* User balance */}

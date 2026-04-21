@@ -288,9 +288,10 @@ function GridPuzzleCard({ puzzle, totalUsers, onDescriptionExpand, onCardClick }
             {statusConfig[status].label}
           </span>
         </div>
-        {puzzle.pointsReward && (
-          <div style={{ color: '#FDE74C' }} className="text-xs font-semibold mb-2">
-            ⭐ {puzzle.pointsReward} points
+        {(puzzle.xpReward || puzzle.pointsReward) && (
+          <div className="flex items-center gap-3 text-xs font-semibold mb-2">
+            {puzzle.xpReward ? <span style={{ color: '#FDE74C' }}>✦ {puzzle.xpReward} XP</span> : null}
+            {puzzle.pointsReward ? <span style={{ color: '#38D399' }}>⭐ {puzzle.pointsReward} pts</span> : null}
           </div>
         )}
       </div>
@@ -358,9 +359,10 @@ function GridPuzzleCard({ puzzle, totalUsers, onDescriptionExpand, onCardClick }
             <p style={{ color: '#AB9F9D' }} className="text-xs mt-1">No ratings yet</p>
           )}
         </div>
-        {puzzle.pointsReward && (
-          <div style={{ color: '#FDE74C' }} className="text-xs font-semibold mb-2">
-            ⭐ {puzzle.pointsReward} points
+        {(puzzle.xpReward || puzzle.pointsReward) && (
+          <div className="flex items-center gap-3 text-xs font-semibold mb-2">
+            {puzzle.xpReward ? <span style={{ color: '#FDE74C' }}>✦ {puzzle.xpReward} XP</span> : null}
+            {puzzle.pointsReward ? <span style={{ color: '#38D399' }}>⭐ {puzzle.pointsReward} pts</span> : null}
           </div>
         )}
       </div>
@@ -490,11 +492,16 @@ function ListPuzzleCard({ puzzle, totalUsers, onDescriptionExpand, onCardClick }
               <span className="text-xs px-2 py-1 rounded font-medium whitespace-nowrap" style={{ backgroundColor: `${statusConfig[status].color}20`, color: statusConfig[status].color }}>
                 {statusConfig[status].label}
               </span>
-              {puzzle.pointsReward && (
-                <span className="text-xs px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(253, 231, 76, 0.2)', color: '#FDE74C' }}>
-                  ⭐ {puzzle.pointsReward} points
+              {puzzle.xpReward ? (
+                <span className="text-xs px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(253,231,76,0.12)', color: '#FDE74C', border: '1px solid rgba(253,231,76,0.25)' }}>
+                  ✦ {puzzle.xpReward} XP
                 </span>
-              )}
+              ) : null}
+              {puzzle.pointsReward ? (
+                <span className="text-xs px-2 py-1 rounded whitespace-nowrap" style={{ backgroundColor: 'rgba(56,201,153,0.12)', color: '#38D399', border: '1px solid rgba(56,201,153,0.25)' }}>
+                  ⭐ {puzzle.pointsReward} pts
+                </span>
+              ) : null}
             </div>
             <div className="mb-2">
               <StarRating

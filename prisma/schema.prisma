@@ -119,6 +119,11 @@ model User {
   // Admin stealth — hidden from all public lists, leaderboards, feeds, search
   isHidden               Boolean                    @default(false)
 
+  // Founder badge — granted to first 1000 registrations
+  isFounder              Boolean                    @default(false)
+  // Active title equipped by the user (e.g. "founder", or "none")
+  activeTitle            String                     @default("none")
+
   // Pre-launch guest rewards: banked at registration, credited at email verification
   prelaunchAnonId        String?
   prelaunchRewardXp      Int                        @default(0)
