@@ -17,6 +17,7 @@ interface Puzzle {
   rarity?: string;
   order: number;
   pointsReward?: number;
+  xpReward?: number;
   createdAt?: string;
   completionCount?: number;
   attemptCount?: number;

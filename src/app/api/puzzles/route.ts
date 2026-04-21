@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
         puzzleType: true,
         escapeRoom: { select: { id: true, roomTitle: true, roomDescription: true } },
         parts: isTeam === "true" ? { select: { id: true } } : false,
+        xpReward: true,
         solutions: {
           select: {
             points: true,
@@ -208,6 +209,7 @@ export async function GET(request: NextRequest) {
         detectiveCaseFailed: detectiveFail?.failed || false,
         detectiveCaseFailedReason: detectiveFail?.reason || null,
         pointsReward: p.solutions[0]?.points || 100,
+        xpReward: p.xpReward ?? 50,
         completionCount: stats?.completedCount || 0,
         attemptCount: stats?.totalAttempts || 0,
         averageRating: ratingsMap.get(p.id)?.averageRating ?? 0,
