@@ -40,6 +40,7 @@ interface UserInfo {
   activeFlair?: string | null;
   activeTitle?: string | null;
   isPremium?: boolean;
+  unclaimedSeasonRewards?: number;
 }
 
 /* Nav link config */
@@ -191,6 +192,9 @@ export default function Navbar() {
                 >
                   {link.emoji && <span className="text-sm">{link.emoji}</span>}
                   {link.label}
+                  {link.href === "/season-pass" && (userInfo?.unclaimedSeasonRewards ?? 0) > 0 && (
+                    <span className="ml-0.5 w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" title={`${userInfo!.unclaimedSeasonRewards} unclaimed reward${userInfo!.unclaimedSeasonRewards !== 1 ? 's' : ''}`} />
+                  )}
                   {/* Active indicator bar */}
                   {active && (
                     <span
@@ -499,6 +503,9 @@ export default function Navbar() {
                   >
                     {emoji && <span>{emoji}</span>}
                     {link.label}
+                    {link.href === "/season-pass" && (userInfo?.unclaimedSeasonRewards ?? 0) > 0 && (
+                      <span className="ml-auto w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
+                    )}
                   </Link>
                 );
               })}

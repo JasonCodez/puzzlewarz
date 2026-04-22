@@ -69,7 +69,35 @@ export async function GET(request: NextRequest) {
       where: { userId: user.id, isPremium: true },
       select: { userId: true },
     });
-    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, totalPoints: user.totalPoints ?? 0, username: user.name ?? null, activeFlair: resolvedFlair, activeSkin: user.activeSkin ?? 'default', activeTitle: user.activeTitle ?? 'none', isFounder: user.isFounder ?? false, isPremium: !!premiumPass, ...calcLevel(user.xp ?? 0) });
+
+    // Count unlocked-but-unclaimed season rewards for the nav badge
+    let unclaimedSeasonRewards = 0;
+    try {
+      const now = new Date();
+      const activeSeason = await prisma.season.findFirst({
+        where: { isActive: true, startDate: { lte: now }, endDate: { gte: now } },
+        select: { id: true, tiers: { select: { tierNumber: true, xpRequired: true, freeRewardType: true, premRewardType: true } } },
+      });
+      if (activeSeason) {
+        const pass = await prisma.userSeasonPass.findUnique({
+          where: { userId_seasonId: { userId: user.id, seasonId: activeSeason.id } },
+          select: { seasonXp: true, isPremium: true, claimedFree: true, claimedPrem: true },
+        });
+        if (pass) {
+          const claimedFreeSet = new Set(pass.claimedFree);
+          const claimedPremSet = new Set(pass.claimedPrem);
+          for (const tier of activeSeason.tiers) {
+            if (pass.seasonXp < tier.xpRequired) continue;
+            if (tier.freeRewardType && !claimedFreeSet.has(tier.tierNumber)) unclaimedSeasonRewards++;
+            if (tier.premRewardType && pass.isPremium && !claimedPremSet.has(tier.tierNumber)) unclaimedSeasonRewards++;
+          }
+        }
+      }
+    } catch {
+      // non-fatal — badge just won't show
+    }
+
+    return NextResponse.json({ id: user.id, role: user.role, image: user.image, nameChanged: user.nameChanged ?? false, totalXp: user.xp ?? 0, totalPoints: user.totalPoints ?? 0, username: user.name ?? null, activeFlair: resolvedFlair, activeSkin: user.activeSkin ?? 'default', activeTitle: user.activeTitle ?? 'none', isFounder: user.isFounder ?? false, isPremium: !!premiumPass, unclaimedSeasonRewards, ...calcLevel(user.xp ?? 0) });
   } catch (error) {
     console.error("Error fetching user info:", error);
     return NextResponse.json(

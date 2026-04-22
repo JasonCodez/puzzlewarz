@@ -32,7 +32,7 @@ interface FrequencyGameProps {
   isGuest?: boolean;
 }
 
-const MAX_ANSWERS = 5;
+const MAX_ANSWERS = 3;
 const TEAL = "#3891A6";
 
 export default function FrequencyGame({

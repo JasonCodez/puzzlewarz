@@ -893,11 +893,52 @@ export default function SeasonPassPage() {
   // Milestone tiers (cosmetic rewards)
   const milestoneTiers = new Set([5, 10, 15, 20, 25, 30]);
 
+  // Count claimable-but-unclaimed rewards for the alert banner
+  const unclaimedCount = tiers.reduce((count, t) => {
+    if (xp < t.xpRequired) return count;
+    let n = 0;
+    if (t.freeRewardType && !claimedFree.has(t.tierNumber)) n++;
+    if (t.premRewardType && isPremium && !claimedPrem.has(t.tierNumber)) n++;
+    return count + n;
+  }, 0);
+
   return (
     <div className="min-h-screen pb-20 pt-20" style={{ backgroundColor: "#020202" }}>
       {/* Claim celebration overlay */}
       {celebration && (
         <ClaimBurst celebration={celebration} onDone={() => setCelebration(null)} />
+      )}
+
+      {/* Unclaimed rewards alert banner */}
+      {unclaimedCount > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="sticky top-14 z-30 mx-auto max-w-2xl px-4 pt-3"
+        >
+          <div
+            className="flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm"
+            style={{
+              background: "linear-gradient(135deg, rgba(253,231,76,0.14), rgba(245,158,11,0.08))",
+              border: "1px solid rgba(253,231,76,0.35)",
+              boxShadow: "0 0 20px rgba(253,231,76,0.08)",
+            }}
+          >
+            <span className="text-xl flex-shrink-0">🎁</span>
+            <span className="text-yellow-200">
+              You have{" "}
+              <span className="font-black text-yellow-400">{unclaimedCount}</span>{" "}
+              unclaimed reward{unclaimedCount !== 1 ? "s" : ""}! Scroll down to claim.
+            </span>
+            <motion.span
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 0.8 }}
+              className="ml-auto text-yellow-400 font-black text-xs tracking-widest"
+            >
+              ↓ CLAIM
+            </motion.span>
+          </div>
+        </motion.div>
       )}
 
       {/* Header */}
