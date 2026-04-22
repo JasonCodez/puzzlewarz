@@ -290,7 +290,7 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
                         <Link href={`/profile/${comment.author.id}`} style={{ color: '#FFD700', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
                           {comment.author.name}
                         </Link>
-                        <span style={{ color: '#374151', margin: '0 6px' }}>·</span>
+                        <span style={{ color: '#4B5563', margin: '0 6px' }}>·</span>
                         <span style={{ color: '#4B5563', fontSize: 12 }}>
                           {new Date(comment.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </span>

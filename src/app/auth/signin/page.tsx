@@ -180,9 +180,9 @@ function SignInForm() {
           </div>
 
           <div style={{ textAlign: "center", marginTop: 20 }}>
-            <Link href="/" style={{ fontSize: 13, color: "#374151", textDecoration: "none" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "#6B7280")}
-              onMouseLeave={e => (e.currentTarget.style.color = "#374151")}>
+            <Link href="/" style={{ fontSize: 13, color: "#6B7280", textDecoration: "none" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#9CA3AF")}
+              onMouseLeave={e => (e.currentTarget.style.color = "#6B7280")}>
               ← Back to home
             </Link>
           </div>

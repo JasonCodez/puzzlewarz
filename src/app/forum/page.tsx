@@ -170,7 +170,7 @@ export default function ForumPage() {
                         <span style={{ fontSize: 15, fontWeight: 800, fontFamily: 'ui-monospace,monospace', color: net > 0 ? '#39D46E' : net < 0 ? '#f87171' : '#4B5563' }}>
                           {net > 0 ? `+${net}` : net}
                         </span>
-                        <span style={{ fontSize: 9, color: '#374151', letterSpacing: '0.06em', textTransform: 'uppercase' as const }}>pts</span>
+                        <span style={{ fontSize: 9, color: '#6B7280', letterSpacing: '0.06em', textTransform: 'uppercase' as const }}>pts</span>
                       </div>
 
                       {/* Content */}
@@ -189,11 +189,11 @@ export default function ForumPage() {
                           >
                             {post.author.name}
                           </span>
-                          <span style={{ color: '#2d3748' }}>·</span>
+                          <span style={{ color: '#4B5563' }}>·</span>
                           <span style={{ color: '#4B5563' }}>{timeAgo}</span>
                           {post.puzzle && (
                             <>
-                              <span style={{ color: '#2d3748' }}>·</span>
+                              <span style={{ color: '#4B5563' }}>·</span>
                               <span style={{ padding: '2px 8px', borderRadius: 999, background: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.25)', color: '#38bdf8', fontSize: 11 }}>
                                 {post.puzzle.title}
                               </span>
@@ -218,7 +218,7 @@ export default function ForumPage() {
               <button
                 onClick={() => fetchPosts(page - 1)}
                 disabled={page <= 1}
-                style={{ padding: '8px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: page <= 1 ? '#374151' : '#e5e7eb', fontSize: 13, cursor: page <= 1 ? 'default' : 'pointer' }}
+                style={{ padding: '8px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: page <= 1 ? '#4B5563' : '#e5e7eb', fontSize: 13, cursor: page <= 1 ? 'default' : 'pointer' }}
               >
                 ← Prev
               </button>
@@ -226,7 +226,7 @@ export default function ForumPage() {
               <button
                 onClick={() => fetchPosts(page + 1)}
                 disabled={page >= totalPages}
-                style={{ padding: '8px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: page >= totalPages ? '#374151' : '#e5e7eb', fontSize: 13, cursor: page >= totalPages ? 'default' : 'pointer' }}
+                style={{ padding: '8px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: page >= totalPages ? '#4B5563' : '#e5e7eb', fontSize: 13, cursor: page >= totalPages ? 'default' : 'pointer' }}
               >
                 Next →
               </button>

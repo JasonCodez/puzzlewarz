@@ -202,7 +202,7 @@ export default function ComingSoonPage() {
                     {pad(value)}
                   </span>
                 </div>
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.18em", color: "#374151", textTransform: "uppercase" as const }}>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.18em", color: "#6B7280", textTransform: "uppercase" as const }}>
                   {label}
                 </span>
               </div>
@@ -309,7 +309,7 @@ export default function ComingSoonPage() {
                   type="submit"
                   disabled={status === "loading"}
                   style={{
-                    padding: "12px 28px", borderRadius: 8,
+                    flex: "1 1 auto", padding: "12px 28px", borderRadius: 8,
                     background: status === "loading" ? "rgba(255,208,0,0.5)" : "#FFD700",
                     color: "#000", fontWeight: 800, fontSize: 14,
                     border: "none", cursor: status === "loading" ? "not-allowed" : "pointer",
@@ -323,7 +323,7 @@ export default function ComingSoonPage() {
               {status === "error" && (
                 <p style={{ color: "#f87171", fontSize: 13, marginTop: 10 }}>{message}</p>
               )}
-              <p style={{ color: "#374151", fontSize: 12, marginTop: 12 }}>
+              <p style={{ color: "#6B7280", fontSize: 12, marginTop: 12 }}>
                 No spam. One email, when we launch.
               </p>
             </>
@@ -331,7 +331,7 @@ export default function ComingSoonPage() {
         </div>
 
         {/* Footer */}
-        <p style={{ color: "#2d3748", fontSize: 12 }}>
+        <p style={{ color: "#4B5563", fontSize: 12 }}>
           &copy; {new Date().getFullYear()} PuzzleWarz · All rights reserved
         </p>
       </div>
