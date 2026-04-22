@@ -312,7 +312,7 @@ export default function WelcomeModal({ userName, userId, onTakeTour }: WelcomeMo
                 <button
                   onClick={dismiss}
                   className="text-xs transition-opacity duration-150 hover:opacity-100"
-                  style={{ color: "#374151", opacity: 0.7, background: "none", border: "none", cursor: "pointer" }}
+                  style={{ color: "#9ca3af", background: "none", border: "none", cursor: "pointer" }}
                 >
                   Skip tour — go to dashboard
                 </button>

@@ -258,7 +258,7 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
         </button>
 
         {/* Step counter */}
-        <div className="absolute top-4 left-5" style={{ fontSize: 11, color: "#374151", fontWeight: 600, letterSpacing: "0.06em" }}>
+        <div className="absolute top-4 left-5" style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, letterSpacing: "0.06em" }}>
           {step + 1} / {STEPS.length}
         </div>
 

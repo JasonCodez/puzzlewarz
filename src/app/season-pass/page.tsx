@@ -182,7 +182,7 @@ function CompactRewardCard({
 
   if (!type) {
     return (
-      <div className="min-h-[88px] rounded-xl border border-white/[0.04] flex items-center justify-center">
+      <div className="min-h-[96px] rounded-xl border border-white/[0.03] flex items-center justify-center">
         <span className="text-white/10 text-xs">—</span>
       </div>
     );
@@ -194,58 +194,106 @@ function CompactRewardCard({
   // Card style
   let borderColor: string;
   let bgStyle: React.CSSProperties;
+  let topBeamColor: string;
+  let iconGlowColor: string;
   if (claimed) {
-    borderColor = "rgba(52,211,153,0.5)";
-    bgStyle = { background: "rgba(52,211,153,0.09)" };
+    borderColor = "rgba(52,211,153,0.45)";
+    bgStyle = {
+      background: "linear-gradient(160deg, rgba(52,211,153,0.1) 0%, rgba(52,211,153,0.04) 100%)",
+      boxShadow: "inset 0 1px 0 rgba(52,211,153,0.55), 0 4px 16px rgba(52,211,153,0.06)",
+    };
+    topBeamColor = "rgba(52,211,153,0.7)";
+    iconGlowColor = "rgba(52,211,153,0.3)";
   } else if (isClaimable) {
-    borderColor = isPrem ? "rgba(192,132,252,0.55)" : "rgba(253,231,76,0.55)";
-    bgStyle = { background: isPrem ? "rgba(168,85,247,0.1)" : "rgba(253,231,76,0.09)" };
+    borderColor = isPrem ? "rgba(192,132,252,0.6)" : "rgba(253,231,76,0.6)";
+    bgStyle = {
+      background: isPrem
+        ? "linear-gradient(160deg, rgba(168,85,247,0.14) 0%, rgba(88,28,135,0.06) 100%)"
+        : "linear-gradient(160deg, rgba(253,231,76,0.12) 0%, rgba(245,158,11,0.04) 100%)",
+      boxShadow: isPrem
+        ? "inset 0 1px 0 rgba(192,132,252,0.8), 0 4px 20px rgba(168,85,247,0.1)"
+        : "inset 0 1px 0 rgba(253,231,76,0.85), 0 4px 20px rgba(253,231,76,0.1)",
+    };
+    topBeamColor = isPrem ? "rgba(192,132,252,0.9)" : "rgba(253,231,76,0.9)";
+    iconGlowColor = isPrem ? "rgba(168,85,247,0.35)" : "rgba(253,231,76,0.35)";
   } else if (locked) {
-    borderColor = "rgba(168,85,247,0.4)";
-    bgStyle = { background: "linear-gradient(160deg, rgba(88,28,135,0.18), rgba(168,85,247,0.08))" };
+    borderColor = "rgba(168,85,247,0.3)";
+    bgStyle = {
+      background: "linear-gradient(160deg, rgba(88,28,135,0.16) 0%, rgba(168,85,247,0.06) 100%)",
+      boxShadow: "inset 0 1px 0 rgba(168,85,247,0.25)",
+    };
+    topBeamColor = "rgba(168,85,247,0.35)";
+    iconGlowColor = "rgba(168,85,247,0.2)";
   } else {
-    // Upcoming free tier — teal matches site brand
-    borderColor = "rgba(56,145,166,0.4)";
-    bgStyle = { background: "linear-gradient(160deg, rgba(56,145,166,0.14), rgba(56,145,166,0.04))" };
+    borderColor = "rgba(56,145,166,0.35)";
+    bgStyle = {
+      background: "linear-gradient(160deg, rgba(56,145,166,0.12) 0%, rgba(56,145,166,0.03) 100%)",
+      boxShadow: "inset 0 1px 0 rgba(56,145,166,0.3)",
+    };
+    topBeamColor = "rgba(56,145,166,0.4)";
+    iconGlowColor = "rgba(56,145,166,0.2)";
   }
 
   return (
     <div
-      className="relative min-h-[88px] rounded-xl flex flex-col items-center justify-between gap-1.5 p-3 transition-all duration-300"
+      className="relative min-h-[96px] rounded-xl flex flex-col items-center justify-between gap-1.5 p-3 transition-all duration-300 overflow-hidden"
       style={{ border: `1px solid ${borderColor}`, ...bgStyle }}
     >
-      {/* Shimmer on claimable */}
+      {/* Top edge light beam */}
+      <div
+        className="absolute top-0 left-4 right-4 h-[1px] rounded-full pointer-events-none"
+        style={{ background: `linear-gradient(90deg, transparent, ${topBeamColor}, transparent)` }}
+      />
+
+      {/* Shimmer sweep on claimable */}
       {isClaimable && (
-        <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
           <div
             className="absolute inset-0 animate-shimmer"
             style={{
-              background: `linear-gradient(105deg, transparent 35%, ${isPrem ? "rgba(168,85,247,0.12)" : "rgba(253,231,76,0.12)"} 50%, transparent 65%)`,
+              background: `linear-gradient(105deg, transparent 30%, ${isPrem ? "rgba(168,85,247,0.15)" : "rgba(253,231,76,0.15)"} 50%, transparent 70%)`,
               backgroundSize: "250% 100%",
             }}
           />
         </div>
       )}
 
-      {/* Lock badge overlay (top-right) for locked states */}
+      {/* Lock badge overlay (top-right) */}
       {isLocked && !claimed && (
-        <div className="absolute top-1.5 right-1.5 text-[11px] leading-none opacity-70">
+        <div className="absolute top-1.5 right-1.5 text-[11px] leading-none opacity-60">
           {locked ? "✨" : "🔒"}
         </div>
       )}
 
-      {/* Icon — always full color */}
-      <span className="text-2xl leading-none mt-0.5">{icon}</span>
+      {/* Icon with radial glow spot + float on claimable */}
+      <div className="relative flex items-center justify-center mt-0.5">
+        {/* Radial glow spot behind icon */}
+        <div
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            width: 40, height: 40,
+            background: `radial-gradient(circle, ${iconGlowColor} 0%, transparent 70%)`,
+            left: "50%", top: "50%", transform: "translate(-50%, -50%)",
+          }}
+        />
+        <motion.span
+          className="relative text-2xl leading-none"
+          animate={isClaimable ? { y: [0, -4, 0] } : {}}
+          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          {icon}
+        </motion.span>
+      </div>
 
-      {/* Name — always clearly readable */}
+      {/* Name */}
       <p className={`text-[10px] font-bold text-center leading-tight w-full px-0.5 ${
         claimed
           ? "text-emerald-300"
           : isClaimable
           ? isPrem ? "text-purple-100" : "text-yellow-100"
           : locked
-          ? "text-purple-200"
-          : "text-white/90"
+          ? "text-purple-200/70"
+          : "text-white/80"
       }`}>
         {qty > 1 ? `${qty}× ` : ""}{displayName}
       </p>
@@ -255,28 +303,38 @@ function CompactRewardCard({
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-xs font-bold"
+          className="w-6 h-6 rounded-full flex items-center justify-center text-emerald-400 text-xs font-bold"
+          style={{ background: "rgba(52,211,153,0.15)", border: "1px solid rgba(52,211,153,0.45)" }}
         >
           ✓
         </motion.div>
       ) : isClaimable ? (
-        <button
+        <motion.button
           onClick={onClaim}
           disabled={claiming}
-          className={`w-full py-1 text-[10px] font-black rounded-lg transition-all disabled:opacity-40 active:scale-95 ${
+          whileHover={{ scale: 1.04, brightness: 1.1 } as any}
+          whileTap={{ scale: 0.95 }}
+          className={`w-full py-1 text-[10px] font-black rounded-lg transition-all disabled:opacity-40 ${
             isPrem
-              ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:brightness-110"
-              : "bg-gradient-to-r from-yellow-400 to-amber-500 text-black hover:brightness-110"
+              ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+              : "bg-gradient-to-r from-yellow-400 to-amber-500 text-black"
           }`}
+          style={{
+            boxShadow: isPrem
+              ? "0 2px 12px rgba(168,85,247,0.45)"
+              : "0 2px 12px rgba(253,231,76,0.4)",
+          }}
         >
           {claiming ? "···" : "CLAIM"}
-        </button>
+        </motion.button>
       ) : locked ? (
-        <span className="text-[9px] font-black text-purple-300/70 tracking-widest uppercase">Premium</span>
+        <span className="text-[9px] font-black text-purple-300/50 tracking-widest uppercase">Premium</span>
       ) : (
-        <div className="h-[22px] w-full rounded-lg flex items-center justify-center"
-          style={{ background: "rgba(56,145,166,0.1)", border: "1px solid rgba(56,145,166,0.25)" }}>
-          <span className="text-[9px] font-black tracking-widest" style={{ color: "rgba(56,145,166,0.85)" }}>EARN XP</span>
+        <div
+          className="h-[22px] w-full rounded-lg flex items-center justify-center"
+          style={{ background: "rgba(56,145,166,0.08)", border: "1px solid rgba(56,145,166,0.2)" }}
+        >
+          <span className="text-[9px] font-black tracking-widest" style={{ color: "rgba(56,145,166,0.75)" }}>EARN XP</span>
         </div>
       )}
     </div>
@@ -292,6 +350,9 @@ function TierRow({
   isMilestone,
   isCurrent,
   progressPct,
+  xp,
+  isLastUnlocked,
+  isLast,
   claimedFree,
   claimedPrem,
   isPremium,
@@ -304,7 +365,10 @@ function TierRow({
   isNext: boolean;
   isMilestone: boolean;
   isCurrent: boolean;
+  isLastUnlocked: boolean;
+  isLast: boolean;
   progressPct: number;
+  xp: number;
   claimedFree: Set<number>;
   claimedPrem: Set<number>;
   isPremium: boolean;
@@ -326,94 +390,212 @@ function TierRow({
   }, []);
 
   return (
-    <div ref={ref} className="grid grid-cols-[1fr_52px_1fr] items-start">
-      {/* ── Free reward (left) ── */}
-      <motion.div
-        initial={{ opacity: 0, x: -16 }}
-        animate={inView ? { opacity: 1, x: 0 } : {}}
-        transition={{ delay: 0.06, duration: 0.4, ease: "easeOut" }}
-        className="pr-3 pb-5"
-      >
-        <CompactRewardCard
-          type={tier.freeRewardType}
-          rewardKey={tier.freeRewardKey}
-          qty={tier.freeRewardQty}
-          claimed={claimedFree.has(tier.tierNumber)}
-          unlocked={unlocked}
-          locked={false}
-          track="free"
-          onClaim={(e) => onClaim(tier.tierNumber, "free", e)}
-          claiming={claiming === `free-${tier.tierNumber}`}
-        />
-      </motion.div>
-
-      {/* ── Center spine ── */}
-      <div className="flex flex-col items-center">
-        {/* Milestone / Next badge */}
-        <div className="h-5 flex items-center justify-center mb-0.5">
-          {isMilestone ? (
-            <span className="text-[7px] font-black text-purple-400/60 tracking-widest">◆ MILE</span>
-          ) : isNext ? (
-            <span className="text-[7px] font-black text-yellow-400/50 tracking-widest animate-pulse">▲ NEXT</span>
-          ) : null}
-        </div>
-
-        {/* Tier node */}
+    <div ref={ref}>
+      {/* ── Milestone banner ── */}
+      {isMilestone && (
         <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={inView ? { scale: 1, opacity: 1 } : {}}
-          transition={{ delay: 0.04, duration: 0.3, type: "spring", stiffness: 280, damping: 18 }}
-          className={`relative z-10 rounded-full flex items-center justify-center font-black transition-all duration-300 flex-shrink-0 ${
-            unlocked
-              ? isMilestone
-                ? "w-11 h-11 text-sm text-white shadow-[0_0_20px_rgba(168,85,247,0.45)]"
-                : "w-9 h-9 text-xs text-black shadow-[0_0_12px_rgba(253,231,76,0.4)]"
-              : isNext
-              ? "w-9 h-9 text-xs text-yellow-400/80 ring-2 ring-yellow-400/35 ring-offset-1 ring-offset-[#020202]"
-              : "w-8 h-8 text-xs text-white/20"
-          }`}
+          initial={{ opacity: 0, scaleX: 0.85 }}
+          animate={inView ? { opacity: 1, scaleX: 1 } : {}}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="relative mx-2 mb-2 rounded-lg overflow-hidden"
           style={{
-            background: unlocked
-              ? isMilestone
-                ? "linear-gradient(135deg, #a855f7, #ec4899)"
-                : "linear-gradient(135deg, #FDE74C, #f59e0b)"
-              : isNext
-              ? "rgba(253,231,76,0.07)"
-              : "rgba(255,255,255,0.04)",
-            border: unlocked ? "none" : isNext ? "1.5px solid rgba(253,231,76,0.25)" : "1.5px solid rgba(255,255,255,0.06)",
+            background: "linear-gradient(90deg, rgba(168,85,247,0.06) 0%, rgba(168,85,247,0.15) 50%, rgba(168,85,247,0.06) 100%)",
+            border: "1px solid rgba(168,85,247,0.25)",
           }}
         >
-          {isMilestone && unlocked ? "💎" : tier.tierNumber}
+          {/* Sweep shimmer — translateX avoids background-position loop stutter */}
+          <motion.div
+            className="absolute inset-y-0 pointer-events-none"
+            style={{
+              width: "40%",
+              background: "linear-gradient(90deg, transparent 0%, rgba(192,132,252,0.18) 50%, transparent 100%)",
+            }}
+            animate={{ x: ["-100%", "350%"] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: "linear", repeatDelay: 1.2 }}
+          />
+          <div className="relative flex items-center justify-center gap-2 py-1.5">
+            <span className="text-[9px] font-black tracking-[0.2em] text-purple-300/70 uppercase">◆ Milestone Tier {tier.tierNumber} ◆</span>
+          </div>
+        </motion.div>
+      )}
+
+      <div className="grid grid-cols-[1fr_52px_1fr] items-stretch">
+        {/* ── Free reward (left) ── */}
+        <motion.div
+          initial={{ opacity: 0, x: -16 }}
+          animate={inView ? { opacity: 1, x: 0 } : {}}
+          transition={{ delay: 0.06, duration: 0.4, ease: "easeOut" }}
+          className="pr-3 pb-5"
+        >
+          <CompactRewardCard
+            type={tier.freeRewardType}
+            rewardKey={tier.freeRewardKey}
+            qty={tier.freeRewardQty}
+            claimed={claimedFree.has(tier.tierNumber)}
+            unlocked={unlocked}
+            locked={false}
+            track="free"
+            onClaim={(e) => onClaim(tier.tierNumber, "free", e)}
+            claiming={claiming === `free-${tier.tierNumber}`}
+          />
         </motion.div>
 
-        {/* XP label */}
-        <span className={`text-[8px] mt-0.5 font-medium tabular-nums ${unlocked ? "text-white/20" : "text-white/10"}`}>
-          {tier.xpRequired >= 1000 ? `${(tier.xpRequired / 1000).toFixed(1)}k` : tier.xpRequired}
-        </span>
+        {/* ── Center spine ── */}
+        <div className="relative flex flex-col items-center">
+          {/* Pixel-accurate connectors — no percentage math, guaranteed aligned */}
+          {(() => {
+            const nodeRadius = unlocked ? (isMilestone ? 24 : 18) : isNext ? 18 : 16;
+            const nodeCenterY = 22 + nodeRadius;
+            const gold = "#f59e0b";
+            const dim = "rgba(255,255,255,0.07)";
+            const isFirst = index === 0;
+            return (
+              <>
+                {/* Top connector — skip for very first row */}
+                {!isFirst && (
+                  <div
+                    className="absolute left-1/2 top-0 pointer-events-none overflow-hidden"
+                    style={{ width: 4, marginLeft: -2, height: nodeCenterY, background: unlocked ? gold : dim, zIndex: 0, borderRadius: 2 }}
+                  >
+                    {unlocked && <div className="absolute inset-0 animate-track-bead" />}
+                  </div>
+                )}
+                {/* Bottom connector — skip for very last row */}
+                {!isLast && (
+                  <div
+                    className="absolute left-1/2 pointer-events-none overflow-hidden"
+                    style={{ width: 4, marginLeft: -2, top: nodeCenterY, bottom: 0, background: unlocked ? gold : dim, zIndex: 0, borderRadius: 2 }}
+                  >
+                    {unlocked && <div className="absolute inset-0 animate-track-bead" />}
+                  </div>
+                )}
+                {/* Pulsing frontier dot at the top of the next-to-unlock row */}
+                {isNext && (
+                  <motion.div
+                    className="absolute left-1/2 rounded-full pointer-events-none"
+                    style={{ width: 10, height: 10, marginLeft: -5, top: 0, background: "#FDE74C", boxShadow: "0 0 10px rgba(253,231,76,1), 0 0 22px rgba(253,231,76,0.5)", zIndex: 20 }}
+                    animate={{ scale: [1, 1.55, 1], opacity: [0.8, 1, 0.8] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                )}
+              </>
+            );
+          })()}
 
-        {/* Connector spacer — visual bar is the single absolute track behind all rows */}
-        <div className="flex-1 mt-1" style={{ minHeight: 20 }} />
+          {/* Milestone / Next badge */}
+          <div className="h-5 relative z-10 flex items-center justify-center mb-0.5">
+            {isNext && !isMilestone ? (
+              <span className="text-[7px] font-black text-yellow-400/60 tracking-widest animate-pulse">▲ NEXT</span>
+            ) : null}
+          </div>
+
+          {/* Tier node with glow rings */}
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={inView ? { scale: 1, opacity: 1 } : {}}
+            transition={{ delay: 0.04, duration: 0.3, type: "spring", stiffness: 280, damping: 18 }}
+            className="relative z-10 flex items-center justify-center flex-shrink-0"
+          >
+            {/* Pulsing ambient glow (unlocked) */}
+            {unlocked && (
+              <motion.div
+                className="absolute rounded-full pointer-events-none"
+                style={{
+                  inset: isMilestone ? -14 : -10,
+                  background: isMilestone
+                    ? "radial-gradient(circle, rgba(168,85,247,0.4) 0%, transparent 70%)"
+                    : "radial-gradient(circle, rgba(253,231,76,0.3) 0%, transparent 70%)",
+                }}
+                animate={{ opacity: [0.5, 1, 0.5], scale: [0.9, 1.1, 0.9] }}
+                transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+              />
+            )}
+
+            {/* "Next" pulsing ring */}
+            {isNext && (
+              <motion.div
+                className="absolute rounded-full pointer-events-none"
+                style={{
+                  inset: -6,
+                  border: "1.5px solid rgba(253,231,76,0.5)",
+                }}
+                animate={{ opacity: [0.3, 0.9, 0.3], scale: [1, 1.18, 1] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+              />
+            )}
+
+            {/* Node itself */}
+            <div
+              className={`relative z-10 rounded-full flex items-center justify-center font-black transition-all duration-300 ${
+                unlocked
+                  ? isMilestone
+                    ? "w-12 h-12 text-base text-white"
+                    : "w-9 h-9 text-xs text-black"
+                  : isNext
+                  ? "w-9 h-9 text-xs text-yellow-400/80"
+                  : "w-8 h-8 text-xs text-white/45"
+              }`}
+              style={{
+                background: unlocked
+                  ? isMilestone
+                    ? "linear-gradient(135deg, #a855f7, #ec4899)"
+                    : "linear-gradient(135deg, #FDE74C, #f59e0b)"
+                  : isNext
+                  ? "rgba(253,231,76,0.07)"
+                  : "rgba(255,255,255,0.04)",
+                border: unlocked
+                  ? isMilestone
+                    ? "2px solid rgba(192,132,252,0.6)"
+                    : "none"
+                  : isNext
+                  ? "1.5px solid rgba(253,231,76,0.3)"
+                  : "1.5px solid rgba(255,255,255,0.06)",
+                boxShadow: unlocked
+                  ? isMilestone
+                    ? "0 0 22px rgba(168,85,247,0.55), 0 0 8px rgba(168,85,247,0.8)"
+                    : "0 0 14px rgba(253,231,76,0.5), 0 0 5px rgba(253,231,76,0.8)"
+                  : "none",
+              }}
+            >
+              {isMilestone && unlocked ? "💎" : tier.tierNumber}
+            </div>
+          </motion.div>
+
+          {/* XP label — shows remaining XP for the next tier, threshold for future tiers */}
+          <span className={`relative z-10 text-[8px] mt-0.5 font-medium tabular-nums ${
+            unlocked ? "text-white/40" : isNext ? "text-yellow-400/80" : "text-white/25"
+          }`}>
+            {isNext
+              ? `+${(tier.xpRequired - xp).toLocaleString()} xp`
+              : tier.xpRequired >= 1000
+              ? `${(tier.xpRequired / 1000).toFixed(1)}k`
+              : tier.xpRequired}
+          </span>
+
+          {/* Connector spacer — grows to match card column height */}
+          <div className="flex-1 mt-1" style={{ minHeight: 20 }} />
+        </div>
+
+        {/* ── Premium reward (right) ── */}
+        <motion.div
+          initial={{ opacity: 0, x: 16 }}
+          animate={inView ? { opacity: 1, x: 0 } : {}}
+          transition={{ delay: 0.06, duration: 0.4, ease: "easeOut" }}
+          className="pl-3 pb-5"
+        >
+          <CompactRewardCard
+            type={tier.premRewardType}
+            rewardKey={tier.premRewardKey}
+            qty={tier.premRewardQty}
+            claimed={claimedPrem.has(tier.tierNumber)}
+            unlocked={unlocked}
+            locked={!isPremium}
+            track="premium"
+            onClaim={(e) => onClaim(tier.tierNumber, "premium", e)}
+            claiming={claiming === `premium-${tier.tierNumber}`}
+          />
+        </motion.div>
       </div>
-
-      {/* ── Premium reward (right) ── */}
-      <motion.div
-        initial={{ opacity: 0, x: 16 }}
-        animate={inView ? { opacity: 1, x: 0 } : {}}
-        transition={{ delay: 0.06, duration: 0.4, ease: "easeOut" }}
-        className="pl-3 pb-5"
-      >
-        <CompactRewardCard
-          type={tier.premRewardType}
-          rewardKey={tier.premRewardKey}
-          qty={tier.premRewardQty}
-          claimed={claimedPrem.has(tier.tierNumber)}
-          unlocked={unlocked}
-          locked={!isPremium}
-          track="premium"
-          onClaim={(e) => onClaim(tier.tierNumber, "premium", e)}
-          claiming={claiming === `premium-${tier.tierNumber}`}
-        />
-      </motion.div>
     </div>
   );
 }
@@ -727,7 +909,7 @@ function PremiumUnlockModal({ seasonName, onDone }: { seasonName: string; onDone
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1.1 }}
-            className="text-[11px] text-white/20 mt-3"
+            className="text-[11px] text-white/50 mt-3"
           >
             Click anywhere to dismiss
           </motion.p>
@@ -822,6 +1004,9 @@ export default function SeasonPassPage() {
       const label = REWARD_LABELS[rewardType] || rewardType;
       setCelebration({ icon, label, qty: data.reward?.qty || 1, x: cx, y: cy });
 
+      // Refresh navbar badge
+      window.dispatchEvent(new Event("puzzlewarz:xp-updated"));
+
       await fetchSeason();
     } catch {
       setError("Claim failed");
@@ -884,11 +1069,10 @@ export default function SeasonPassPage() {
   const progressPct =
     nextTierXp > prevTierXp ? Math.min(100, Math.round(((xp - prevTierXp) / (nextTierXp - prevTierXp)) * 100)) : 100;
 
-  // Total track fill for the single gold bar (0-100%)
+  // Total track fill — only reaches the last *unlocked* node; never visually crosses a locked node
   const unlockedCount = tiers.filter((t) => xp >= t.xpRequired).length;
-  const hasNextTier = tiers.some((t) => xp < t.xpRequired);
-  const totalTrackFillPct = tiers.length === 0 ? 0
-    : Math.min(100, (unlockedCount + (hasNextTier ? progressPct / 100 : 0)) / tiers.length * 100);
+  // Last unlocked tier number (used to stop the per-row gold connector at the right node)
+  const lastUnlockedTierNumber = tiers.reduce<number>((last, t) => xp >= t.xpRequired ? t.tierNumber : last, -1);
 
   // Milestone tiers (cosmetic rewards)
   const milestoneTiers = new Set([5, 10, 15, 20, 25, 30]);
@@ -1094,7 +1278,7 @@ export default function SeasonPassPage() {
         {/* Section header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white/60 tracking-wider uppercase">Season Rewards</h2>
-          <div className="flex gap-3 text-[10px] text-white/30">
+          <div className="flex gap-3 text-[10px] text-white/55">
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-400/70" /> Unlocked</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500/70" /> Claimed</span>
           </div>
@@ -1102,7 +1286,7 @@ export default function SeasonPassPage() {
 
         {/* Track column headers */}
         <div className="grid grid-cols-[1fr_52px_1fr] mb-3">
-          <div className="pr-3 flex justify-end">
+          <div className="pr-3 flex justify-start">
             <span className="text-[11px] font-black tracking-widest uppercase text-yellow-400/55">🆓 Free</span>
           </div>
           <div />
@@ -1123,42 +1307,21 @@ export default function SeasonPassPage() {
 
         {/* Vertical timeline */}
         <div className="relative">
-          {/* ── Single gold progression bar ── */}
+          {/* ── Premium column ambient purple haze ── */}
           <div
-            className="absolute z-0 pointer-events-none"
-            style={{ left: "calc(50% - 2px)", width: 4, top: 38, bottom: 24 }}
-          >
-            {/* Dim track (full height) */}
-            <div className="absolute inset-0" style={{ borderRadius: 2, background: "rgba(255,255,255,0.05)" }} />
-            {/* Animated gold fill */}
-            <motion.div
-              className="absolute top-0 left-0 right-0"
-              style={{
-                borderRadius: 2,
-                background: "linear-gradient(180deg, #FDE74C 0%, #f59e0b 55%, #ca8a04 100%)",
-                boxShadow: "0 0 8px rgba(253,231,76,0.55), 0 0 18px rgba(253,231,76,0.22)",
-              }}
-              initial={{ height: "0%" }}
-              animate={{ height: `${totalTrackFillPct}%` }}
-              transition={{ duration: 1.8, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.5 }}
-            />
-            {/* Pulsing glow tip at the fill frontier */}
-            {totalTrackFillPct > 1 && totalTrackFillPct < 99 && (
-              <motion.div
-                className="absolute left-1/2 rounded-full"
-                style={{
-                  width: 10, height: 10,
-                  marginLeft: -5, marginTop: -5,
-                  top: `${totalTrackFillPct}%`,
-                  background: "#FDE74C",
-                  boxShadow: "0 0 12px rgba(253,231,76,1), 0 0 24px rgba(253,231,76,0.55), 0 0 40px rgba(253,231,76,0.2)",
-                }}
-                animate={{ scale: [1, 1.5, 1], opacity: [1, 0.6, 1] }}
-                transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-              />
-            )}
-          </div>
-
+            className="absolute inset-y-0 right-0 pointer-events-none z-0"
+            style={{
+              width: "calc(50% - 26px)",
+              background: "linear-gradient(180deg, rgba(88,28,135,0.0) 0%, rgba(88,28,135,0.07) 20%, rgba(88,28,135,0.07) 80%, rgba(88,28,135,0.0) 100%)",
+            }}
+          />
+          {/* Right edge soft glow line */}
+          <div
+            className="absolute inset-y-0 right-0 w-[2px] pointer-events-none z-0"
+            style={{
+              background: "linear-gradient(180deg, transparent, rgba(168,85,247,0.18) 20%, rgba(168,85,247,0.18) 80%, transparent)",
+            }}
+          />
           {tiers.map((tier, i) => {
             const unlocked = xp >= tier.xpRequired;
             const isNext = !unlocked && (i === 0 || xp >= tiers[i - 1].xpRequired);
@@ -1174,7 +1337,10 @@ export default function SeasonPassPage() {
                 isNext={isNext}
                 isMilestone={isMilestone}
                 isCurrent={isCurrent}
+                isLastUnlocked={tier.tierNumber === lastUnlockedTierNumber}
+                isLast={i === tiers.length - 1}
                 progressPct={progressPct}
+                xp={xp}
                 claimedFree={claimedFree}
                 claimedPrem={claimedPrem}
                 isPremium={isPremium}
@@ -1186,14 +1352,29 @@ export default function SeasonPassPage() {
         </div>
       </div>
 
-      {/* Shimmer keyframe */}
+      {/* Keyframes */}
       <style jsx global>{`
         @keyframes shimmer {
           0% { background-position: 200% 0; }
           100% { background-position: -200% 0; }
         }
         .animate-shimmer {
-          animation: shimmer 3s infinite linear;
+          animation: shimmer 2.8s infinite linear;
+        }
+        /* Track bead — all segments share the same duration+no delay so bead is continuous across rows */
+        @keyframes track-bead {
+          0%   { background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 12%, rgba(255,255,255,0) 24%); background-position: 0 -100%; }
+          100% { background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 12%, rgba(255,255,255,0) 24%); background-position: 0 500%; }
+        }
+        .animate-track-bead {
+          background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0) 100%);
+          background-size: 100% 40px;
+          background-repeat: no-repeat;
+          animation: track-bead-move 2.4s linear infinite;
+        }
+        @keyframes track-bead-move {
+          0%   { background-position: 0 -40px; }
+          100% { background-position: 0 400px; }
         }
       `}</style>
     </div>

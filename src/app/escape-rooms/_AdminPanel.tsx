@@ -45,7 +45,7 @@ export default function AdminEscapeRoomsPanel() {
                 className="text-lg font-semibold hover:underline">
                 {room.roomTitle}
               </Link>
-              <div className="text-sm text-gray-600">{room.roomDescription}</div>
+              <div className="text-sm text-white/65">{room.roomDescription}</div>
               <div className="flex items-center gap-3 mt-2">
                 <span className="text-xs">Multiplayer team puzzle</span>
                 <Link

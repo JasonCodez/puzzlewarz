@@ -581,7 +581,7 @@ export default function AdminAnalyticsPage() {
             {/* Recent solves feed */}
             <p className="text-xs font-mono text-yellow-500/70 tracking-widest uppercase mb-3">Recent Solves (last 50)</p>
             {gridlockSolves.length === 0 ? (
-              <p className="text-center py-6 text-gray-600 text-sm font-mono">No solves recorded yet</p>
+              <p className="text-center py-6 text-white/55 text-sm font-mono">No solves recorded yet</p>
             ) : (
               <div className="space-y-1.5 max-h-80 overflow-y-auto">
                 {gridlockSolves.map((s) => (

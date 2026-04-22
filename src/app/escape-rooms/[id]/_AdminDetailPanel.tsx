@@ -52,7 +52,7 @@ export default function AdminEscapeRoomDetailPanel({ id }: { id: string }) {
       ) : (
         <>
           <h1 className="text-2xl font-bold mb-2">{room.roomTitle} (Admin)</h1>
-          <div className="mb-4 text-gray-700">{room.roomDescription}</div>
+          <div className="mb-4 text-white/70">{room.roomDescription}</div>
           <div className="mb-2 text-sm">Multiplayer team puzzle</div>
           <div className="mb-2 text-sm">Time limit: {room.timeLimitSeconds} seconds</div>
           <div className="mt-4 text-xs text-gray-500">Room ID: {room.id}</div>

@@ -121,9 +121,9 @@ export default function AdminWaitlistPage() {
 
         {/* Table */}
         {loading ? (
-          <div className="text-white/30 text-sm text-center py-20">Loading…</div>
+          <div className="text-white/55 text-sm text-center py-20">Loading…</div>
         ) : filtered.length === 0 ? (
-          <div className="text-white/20 text-sm text-center py-20">
+          <div className="text-white/55 text-sm text-center py-20">
             {search ? "No emails match your search." : "No waitlist submissions yet."}
           </div>
         ) : (
@@ -137,7 +137,7 @@ export default function AdminWaitlistPage() {
               style={{
                 background: "rgba(255,255,255,0.03)",
                 borderBottom: "1px solid rgba(255,255,255,0.06)",
-                color: "rgba(255,255,255,0.3)",
+                color: "rgba(255,255,255,0.55)",
               }}
             >
               <span>Email</span>
@@ -159,7 +159,7 @@ export default function AdminWaitlistPage() {
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
                   <span className="text-sm text-white font-medium truncate pr-4">{entry.email}</span>
-                  <span className="text-xs text-white/30 tabular-nums">
+                  <span className="text-xs text-white/55 tabular-nums">
                     {new Date(entry.createdAt).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
@@ -169,7 +169,7 @@ export default function AdminWaitlistPage() {
                   <button
                     onClick={() => handleDelete(entry.id)}
                     disabled={deleting === entry.id}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white/15 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white/45 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-50"
                     title="Remove"
                   >
                     {deleting === entry.id ? "…" : "✕"}

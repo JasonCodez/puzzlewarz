@@ -127,7 +127,7 @@ export function AssignPuzzleParts({
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <p className="text-gray-600 text-sm">
+        <p className="text-white/60 text-sm">
           Each team member will solve their assigned part. All parts must be
           solved correctly for the team to complete the puzzle.
         </p>

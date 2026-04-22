@@ -184,7 +184,7 @@ export default function AchievementNotification({
         {/* Close */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-600 hover:text-white transition z-10 text-lg leading-none"
+          className="absolute top-4 right-4 text-white/50 hover:text-white transition z-10 text-lg leading-none"
         >
           ✕
         </button>
@@ -259,7 +259,7 @@ export default function AchievementNotification({
               onClick={onClose}
               disabled={isCollecting}
               className="flex-1 px-4 py-2.5 rounded-lg font-semibold text-sm border transition-colors"
-              style={{ backgroundColor: "transparent", color: "#6b7280", borderColor: "#374151" }}
+              style={{ backgroundColor: "transparent", color: "#d1d5db", borderColor: "rgba(255,255,255,0.18)" }}
             >
               Dismiss
             </button>

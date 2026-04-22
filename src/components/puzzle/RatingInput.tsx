@@ -78,7 +78,7 @@ export function RatingInput({
     <div className="space-y-4">
       {/* Star Rating Input */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-white/80">
           Rate this puzzle
         </label>
         <div className="flex gap-2 text-3xl">
@@ -104,7 +104,7 @@ export function RatingInput({
           ))}
         </div>
         {selectedRating > 0 && (
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-white/60">
             {selectedRating} star{selectedRating !== 1 ? "s" : ""} selected
           </p>
         )}
@@ -112,7 +112,7 @@ export function RatingInput({
 
       {/* Review Text (Optional) */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-white/80">
           Write a review (optional)
         </label>
         <textarea
