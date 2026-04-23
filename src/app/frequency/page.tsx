@@ -52,7 +52,7 @@ export default async function FrequencyPage() {
       }
     }
 
-    if (question.status === "revealed" || alreadySubmitted) {
+    if (question.status === "revealed") {
       const answers = await prisma.frequencyAnswer.findMany({
         where: { questionId: question.id },
         orderBy: { count: "desc" },

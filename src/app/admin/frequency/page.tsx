@@ -124,9 +124,9 @@ export default function AdminFrequencyPage() {
 
   return (
     <main className="min-h-screen pt-24 pb-10 px-4 bg-slate-900 text-white">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <h1 className="text-2xl font-black mb-2">📡 Frequency Admin</h1>
-        <p className="text-sm text-slate-400 mb-8">Schedule questions, reveal results, merge answers.</p>
+        <p className="text-sm text-slate-400 mb-8">Schedule questions, define canonical groups, and reveal results cleanly.</p>
 
         {/* Schedule new question */}
         <div className="bg-slate-800 rounded-2xl p-5 mb-8 border border-slate-700">
@@ -184,67 +184,72 @@ export default function AdminFrequencyPage() {
                 weekday: "short", month: "short", day: "numeric",
               });
               return (
-                <div key={q.id} className="bg-slate-800 rounded-xl p-4 border border-slate-700 flex flex-col sm:flex-row sm:items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white truncate">{q.question}</p>
-                    <div className="flex gap-3 mt-1 text-xs text-slate-400">
-                      <span>📅 {dateStr}</span>
-                      <span>💬 {q._count.submissions} submissions</span>
-                      <span>🗂 {q._count.answers} answer groups</span>
+                <div key={q.id} className="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-sm">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold leading-relaxed text-white break-words">{q.question}</p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
+                        <span className="inline-flex items-center rounded-full bg-slate-700/80 px-2.5 py-1">📅 {dateStr}</span>
+                        <span className="inline-flex items-center rounded-full bg-slate-700/80 px-2.5 py-1">💬 {q._count.submissions} submissions</span>
+                        <span className="inline-flex items-center rounded-full bg-slate-700/80 px-2.5 py-1">🗂 {q._count.answers} answer groups</span>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <span
+                          className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                          style={{
+                            background: q.status === "revealed" ? "rgba(34,197,94,0.15)" : "rgba(234,179,8,0.15)",
+                            color: q.status === "revealed" ? "#4ade80" : "#fbbf24",
+                          }}
+                        >
+                          {q.status}
+                        </span>
+                        {q.status === "pending" && (
+                          <button
+                            onClick={() => setConfirmRevealId(q.id)}
+                            className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-teal-700 hover:bg-teal-600 transition-colors"
+                          >
+                            Reveal ✓
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setConfirmDeleteId(q.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-red-800 hover:bg-red-700 transition-colors"
+                        >
+                          Delete
+                        </button>
+                        <a
+                          href={`/api/frequency/results/${q.id}`}
+                          target="_blank"
+                          className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-slate-700 hover:bg-slate-600 transition-colors"
+                        >
+                          Results ↗
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span
-                      className="text-xs font-semibold px-2 py-1 rounded-full"
-                      style={{
-                        background: q.status === "revealed" ? "rgba(34,197,94,0.15)" : "rgba(234,179,8,0.15)",
-                        color: q.status === "revealed" ? "#4ade80" : "#fbbf24",
-                      }}
-                    >
-                      {q.status}
-                    </span>
-                    {q.status === "pending" && (
-                      <button
-                        onClick={() => setConfirmRevealId(q.id)}
-                        className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-teal-700 hover:bg-teal-600 transition-colors"
-                      >
-                        Reveal ✓
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setConfirmDeleteId(q.id)}
-                      className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-red-800 hover:bg-red-700 transition-colors"
-                    >
-                      Delete
-                    </button>
-                    <a
-                      href={`/api/frequency/results/${q.id}`}
-                      target="_blank"
-                      className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-slate-700 hover:bg-slate-600 transition-colors"
-                    >
-                      Results ↗
-                    </a>
-                  </div>
-                  <div className="w-full border-t border-slate-700 pt-3 mt-1">
-                    <p className="text-xs font-semibold text-slate-300 mb-2">Canonical groups</p>
-                    <textarea
-                      value={groupDrafts[q.id] ?? ""}
-                      onChange={(e) => setGroupDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                      placeholder={"television: tv, tvs\nhamburger: burger, cheeseburger"}
-                      rows={4}
-                      className="w-full bg-slate-700 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-500 outline-none border border-slate-600 focus:border-teal-500 resize-y"
-                    />
-                    <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <p className="text-xs text-slate-400">
-                        Save before reveal to merge wording like “tv” and “television” into one answer bucket.
-                      </p>
-                      <button
-                        onClick={() => saveCanonicalGroups(q.id)}
-                        disabled={savingGroupsId === q.id}
-                        className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-sky-700 hover:bg-sky-600 disabled:opacity-50 transition-colors"
-                      >
-                        {savingGroupsId === q.id ? "Saving…" : "Save groups"}
-                      </button>
+                    <div className="rounded-xl border border-slate-700 bg-slate-900/35 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300 mb-2">Canonical groups</p>
+                      <textarea
+                        value={groupDrafts[q.id] ?? ""}
+                        onChange={(e) => setGroupDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                        placeholder={"television: tv, tvs\nhamburger: burger, cheeseburger"}
+                        rows={5}
+                        className="min-h-[152px] w-full bg-slate-700 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-500 outline-none border border-slate-600 focus:border-teal-500 resize-y"
+                      />
+                      <div className="mt-3 flex flex-col gap-3">
+                        <p className="text-xs leading-5 text-slate-400">
+                          Save before reveal to merge wording like “tv” and “television” into one answer bucket.
+                        </p>
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => saveCanonicalGroups(q.id)}
+                            disabled={savingGroupsId === q.id}
+                            className="w-full sm:w-auto text-xs px-3 py-1.5 rounded-lg font-semibold bg-sky-700 hover:bg-sky-600 disabled:opacity-50 transition-colors"
+                          >
+                            {savingGroupsId === q.id ? "Saving…" : "Save groups"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
