@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseFrequencyCanonicalGroupsInput } from "@/lib/frequency";
+import { rebuildFrequencyAnswerGroups, recalculateFrequencyScores } from "@/lib/frequency-service";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -27,6 +30,7 @@ export async function GET() {
       question: true,
       scheduledFor: true,
       status: true,
+      canonicalGroups: true,
       _count: { select: { submissions: true, answers: true } },
     },
   });
@@ -41,7 +45,11 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { question, scheduledFor } = body as { question: string; scheduledFor: string };
+  const { question, scheduledFor, canonicalGroupsText = "" } = body as {
+    question: string;
+    scheduledFor: string;
+    canonicalGroupsText?: string;
+  };
 
   if (!question?.trim() || !scheduledFor) {
     return NextResponse.json({ error: "question and scheduledFor are required" }, { status: 400 });
@@ -49,9 +57,23 @@ export async function POST(request: Request) {
 
   const [y, m, d] = scheduledFor.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
+  let canonicalGroups;
+
+  try {
+    canonicalGroups = parseFrequencyCanonicalGroupsInput(canonicalGroupsText);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid canonical groups" }, { status: 400 });
+  }
 
   const created = await prisma.frequencyQuestion.create({
-    data: { question: question.trim(), scheduledFor: date, status: "pending" },
+    data: {
+      question: question.trim(),
+      scheduledFor: date,
+      status: "pending",
+      ...(canonicalGroups.length > 0
+        ? { canonicalGroups: canonicalGroups as unknown as Prisma.InputJsonValue }
+        : {}),
+    },
   });
 
   return NextResponse.json({ question: created });
@@ -70,46 +92,62 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "questionId required" }, { status: 400 });
   }
 
-  // Mark as revealed
   await prisma.frequencyQuestion.update({
     where: { id: questionId },
     data: { status: "revealed" },
   });
 
-  // Recalculate scores for all submissions
-  const submissions = await prisma.frequencySubmission.findMany({
-    where: { questionId },
-    select: { id: true, answers: true },
-  });
+  await rebuildFrequencyAnswerGroups(questionId);
+  const recalculated = await recalculateFrequencyScores(questionId);
 
-  const allAnswers = await prisma.frequencyAnswer.findMany({
-    where: { questionId },
-    select: { text: true, count: true },
-  });
+  return NextResponse.json({ success: true, recalculated });
+}
 
-  const totalSubmissions = submissions.length;
-
-  function normalizeAnswer(text: string): string {
-    return text.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+// PUT /api/admin/frequency — update canonical answer groups for a question
+export async function PUT(request: Request) {
+  if (!(await requireAdmin())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  for (const sub of submissions) {
-    const rawAnswers = sub.answers as string[];
-    let score = 0;
-    for (const raw of rawAnswers) {
-      const normalized = normalizeAnswer(raw);
-      const match = allAnswers.find((a) => a.text === normalized);
-      if (match && totalSubmissions > 0) {
-        score += Math.round((match.count / totalSubmissions) * 100);
-      }
-    }
-    await prisma.frequencySubmission.update({
-      where: { id: sub.id },
-      data: { score },
-    });
+  const body = await request.json();
+  const { questionId, canonicalGroupsText = "" } = body as {
+    questionId: string;
+    canonicalGroupsText?: string;
+  };
+
+  if (!questionId) {
+    return NextResponse.json({ error: "questionId required" }, { status: 400 });
   }
 
-  return NextResponse.json({ success: true, recalculated: submissions.length });
+  let canonicalGroups;
+  try {
+    canonicalGroups = parseFrequencyCanonicalGroupsInput(canonicalGroupsText);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid canonical groups" }, { status: 400 });
+  }
+
+  const updated = await prisma.frequencyQuestion.update({
+    where: { id: questionId },
+    data: {
+      canonicalGroups:
+        canonicalGroups.length > 0
+          ? (canonicalGroups as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+    },
+    select: { id: true, status: true },
+  });
+
+  const rebuild = await rebuildFrequencyAnswerGroups(questionId);
+  const recalculated = updated.status === "revealed"
+    ? await recalculateFrequencyScores(questionId)
+    : 0;
+
+  return NextResponse.json({
+    success: true,
+    groups: canonicalGroups.length,
+    answerGroups: rebuild.answers.length,
+    recalculated,
+  });
 }
 
 // DELETE /api/admin/frequency — delete a question and all its data

@@ -1803,6 +1803,7 @@ model FrequencyQuestion {
   question     String
   scheduledFor DateTime              @db.Date
   status       String                @default("pending") // pending | revealed
+  canonicalGroups Json?
   createdAt    DateTime              @default(now())
   answers      FrequencyAnswer[]
   submissions  FrequencySubmission[]

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rebuildFrequencyAnswerGroups, recalculateFrequencyScores } from "@/lib/frequency-service";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -15,7 +16,7 @@ async function requireAdmin() {
 
 // POST /api/admin/frequency/merge
 // Body: { questionId, keepId, mergeIds: string[] }
-// Merges answer rows into the keep row, recalculates counts + scores
+// Merges answer rows into the keep row, then rebuilds answer buckets from submissions.
 export async function POST(request: Request) {
   if (!(await requireAdmin())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,30 +33,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "questionId, keepId, mergeIds required" }, { status: 400 });
   }
 
-  // Get total count from answers being merged
   const toMerge = await prisma.frequencyAnswer.findMany({
     where: { id: { in: mergeIds }, questionId },
     select: { id: true, count: true, text: true },
   });
-
-  const extraCount = toMerge.reduce((sum, a) => sum + a.count, 0);
   const mergedTexts = toMerge.map((a) => a.text);
-
-  // Add count to the keeper
-  await prisma.frequencyAnswer.update({
-    where: { id: keepId },
-    data: { count: { increment: extraCount } },
-  });
-
-  // Delete merged rows
-  await prisma.frequencyAnswer.deleteMany({
-    where: { id: { in: mergeIds } },
-  });
 
   // Update all submissions that contained the merged answer texts to use the keeper's text
   const keep = await prisma.frequencyAnswer.findUnique({
     where: { id: keepId },
-    select: { text: true },
+    select: { text: true, question: { select: { status: true } } },
   });
 
   if (keep) {
@@ -78,5 +65,10 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ success: true, mergedCount: mergeIds.length, extraCount });
+  await rebuildFrequencyAnswerGroups(questionId);
+  if (keep?.question.status === "revealed") {
+    await recalculateFrequencyScores(questionId);
+  }
+
+  return NextResponse.json({ success: true, mergedCount: mergeIds.length, extraCount: toMerge.reduce((sum, a) => sum + a.count, 0) });
 }

@@ -26,7 +26,7 @@ export default async function FrequencyPage() {
   const question = await prisma.frequencyQuestion.findFirst({
     where: { scheduledFor: { gte: yesterday, lte: today } },
     orderBy: { scheduledFor: "desc" },
-    select: { id: true, question: true, status: true, scheduledFor: true },
+    select: { id: true, question: true, status: true, scheduledFor: true, canonicalGroups: true },
   });
 
   let alreadySubmitted = false;

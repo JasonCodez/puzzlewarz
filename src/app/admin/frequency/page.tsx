@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { formatFrequencyCanonicalGroupsInput } from "@/lib/frequency";
 
 interface FrequencyQuestion {
   id: string;
   question: string;
   scheduledFor: string;
   status: string;
+  canonicalGroups?: unknown;
   _count: { submissions: number; answers: number };
 }
 
@@ -14,19 +16,28 @@ export default function AdminFrequencyPage() {
   const [questions, setQuestions] = useState<FrequencyQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [newQuestion, setNewQuestion] = useState("");
+  const [newCanonicalGroupsText, setNewCanonicalGroupsText] = useState("");
   const [scheduledFor, setScheduledFor] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingGroupsId, setSavingGroupsId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [confirmRevealId, setConfirmRevealId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     const resp = await fetch("/api/admin/frequency");
     if (resp.status === 401) { setError("Access denied. Admin only."); setLoading(false); return; }
     const data = await resp.json();
-    setQuestions(data.questions ?? []);
+    const nextQuestions = data.questions ?? [];
+    setQuestions(nextQuestions);
+    setGroupDrafts(
+      Object.fromEntries(
+        nextQuestions.map((question: FrequencyQuestion) => [question.id, formatFrequencyCanonicalGroupsInput(question.canonicalGroups)])
+      )
+    );
     setLoading(false);
   }, []);
 
@@ -41,13 +52,42 @@ export default function AdminFrequencyPage() {
     const resp = await fetch("/api/admin/frequency", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: newQuestion.trim(), scheduledFor }),
+      body: JSON.stringify({
+        question: newQuestion.trim(),
+        scheduledFor,
+        canonicalGroupsText: newCanonicalGroupsText,
+      }),
     });
     const data = await resp.json();
     if (!resp.ok) { setError(data.error ?? "Failed to create"); setSaving(false); return; }
     setSuccessMsg("Question scheduled!");
-    setNewQuestion(""); setScheduledFor("");
+    setNewQuestion(""); setNewCanonicalGroupsText(""); setScheduledFor("");
     setSaving(false);
+    setTimeout(() => setSuccessMsg(null), 3000);
+    load();
+  };
+
+  const saveCanonicalGroups = async (questionId: string) => {
+    setSavingGroupsId(questionId);
+    setError(null);
+
+    const resp = await fetch("/api/admin/frequency", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questionId, canonicalGroupsText: groupDrafts[questionId] ?? "" }),
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      setError(data.error ?? "Failed to save canonical groups");
+      setSavingGroupsId(null);
+      return;
+    }
+
+    setSuccessMsg(data.recalculated > 0
+      ? `Canonical groups saved. Recalculated ${data.recalculated} submissions.`
+      : "Canonical groups saved.");
+    setSavingGroupsId(null);
     setTimeout(() => setSuccessMsg(null), 3000);
     load();
   };
@@ -115,6 +155,16 @@ export default function AdminFrequencyPage() {
                 {saving ? "Saving…" : "Schedule"}
               </button>
             </div>
+            <textarea
+              value={newCanonicalGroupsText}
+              onChange={(e) => setNewCanonicalGroupsText(e.target.value)}
+              placeholder={"Optional canonical groups\ntelevision: tv, tvs\nhamburger: burger, cheeseburger"}
+              rows={4}
+              className="w-full bg-slate-700 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-500 outline-none border border-slate-600 focus:border-teal-500 resize-y"
+            />
+            <p className="text-xs text-slate-400">
+              One group per line. Format: canonical answer, then aliases after a colon.
+            </p>
             {error && <p className="text-red-400 text-sm">{error}</p>}
             {successMsg && <p className="text-green-400 text-sm">{successMsg}</p>}
           </div>
@@ -174,6 +224,28 @@ export default function AdminFrequencyPage() {
                     >
                       Results ↗
                     </a>
+                  </div>
+                  <div className="w-full border-t border-slate-700 pt-3 mt-1">
+                    <p className="text-xs font-semibold text-slate-300 mb-2">Canonical groups</p>
+                    <textarea
+                      value={groupDrafts[q.id] ?? ""}
+                      onChange={(e) => setGroupDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                      placeholder={"television: tv, tvs\nhamburger: burger, cheeseburger"}
+                      rows={4}
+                      className="w-full bg-slate-700 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-500 outline-none border border-slate-600 focus:border-teal-500 resize-y"
+                    />
+                    <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <p className="text-xs text-slate-400">
+                        Save before reveal to merge wording like “tv” and “television” into one answer bucket.
+                      </p>
+                      <button
+                        onClick={() => saveCanonicalGroups(q.id)}
+                        disabled={savingGroupsId === q.id}
+                        className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-sky-700 hover:bg-sky-600 disabled:opacity-50 transition-colors"
+                      >
+                        {savingGroupsId === q.id ? "Saving…" : "Save groups"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

@@ -2,6 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  buildFrequencyCanonicalConfig,
+  canonicalizeFrequencyAnswer,
+  MAX_FREQUENCY_ANSWERS,
+} from "@/lib/frequency";
 
 interface FrequencyAnswer {
   id: string;
@@ -15,6 +20,7 @@ interface Question {
   question: string;
   status: string;
   scheduledFor: string;
+  canonicalGroups?: unknown;
 }
 
 interface FrequencyGameProps {
@@ -32,8 +38,8 @@ interface FrequencyGameProps {
   isGuest?: boolean;
 }
 
-const MAX_ANSWERS = 3;
 const TEAL = "#3891A6";
+const EMPTY_INPUTS = Array.from({ length: MAX_FREQUENCY_ANSWERS }, () => "");
 
 export default function FrequencyGame({
   question,
@@ -47,7 +53,9 @@ export default function FrequencyGame({
     alreadySubmitted ? (initialResults ? "reveal" : "submitted") : "input"
   );
   const [inputs, setInputs] = useState<string[]>(
-    alreadySubmitted && existingSubmission ? existingSubmission.answers : ["", "", "", "", ""]
+    alreadySubmitted && existingSubmission
+      ? existingSubmission.answers.slice(0, MAX_FREQUENCY_ANSWERS)
+      : EMPTY_INPUTS
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -67,6 +75,7 @@ export default function FrequencyGame({
   const [notifyDone, setNotifyDone] = useState(false);
   const [notifyError, setNotifyError] = useState<string | null>(null);
   const justSubmitted = useRef(false);
+  const canonicalConfig = buildFrequencyCanonicalConfig(question?.canonicalGroups ?? null);
 
   // Show the CTA a moment after a fresh submission (not on page reload)
   useEffect(() => {
@@ -142,7 +151,7 @@ export default function FrequencyGame({
     if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
       const next = idx + 1;
-      if (next < MAX_ANSWERS) {
+      if (next < MAX_FREQUENCY_ANSWERS) {
         setActiveIndex(next);
         inputRefs.current[next]?.focus();
       }
@@ -191,9 +200,9 @@ export default function FrequencyGame({
 
   // Which of the user's submitted answers matched a result bar
   const userNormalized = new Set(
-    filledAnswers.map((a) =>
-      a.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ")
-    )
+    filledAnswers
+      .map((answer) => canonicalizeFrequencyAnswer(answer, canonicalConfig))
+      .filter(Boolean)
   );
 
   function getShareText() {
@@ -512,7 +521,7 @@ export default function FrequencyGame({
 
       {/* Instructions */}
       <p className="text-sm text-center" style={{ color: "#94a3b8" }}>
-        Name up to {MAX_ANSWERS} things you think the crowd will say.
+        Name up to {MAX_FREQUENCY_ANSWERS} things you think the crowd will say.
         Score = % of players who agreed with you.
       </p>
 
