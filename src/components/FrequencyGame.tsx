@@ -60,6 +60,61 @@ export default function FrequencyGame({
   const [freqCopied, setFreqCopied] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  // ── Launch notification CTA ─────────────────────────────────────────────
+  const [showLaunchCta, setShowLaunchCta] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState("");
+  const [notifySubmitting, setNotifySubmitting] = useState(false);
+  const [notifyDone, setNotifyDone] = useState(false);
+  const [notifyError, setNotifyError] = useState<string | null>(null);
+  const justSubmitted = useRef(false);
+
+  // Show the CTA a moment after a fresh submission (not on page reload)
+  useEffect(() => {
+    if (!justSubmitted.current) return;
+    if (phase !== "submitted" && phase !== "reveal") return;
+    try { if (localStorage.getItem("pw_launch_notify_done")) return; } catch { /* ignore */ }
+    const delay = phase === "reveal" ? 2000 : 700;
+    const timer = setTimeout(() => {
+      setShowLaunchCta(true);
+      justSubmitted.current = false;
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  const handleDismissLaunchCta = () => {
+    setShowLaunchCta(false);
+    try { localStorage.setItem("pw_launch_notify_done", "1"); } catch { /* ignore */ }
+  };
+
+  const handleNotifySubmit = useCallback(async () => {
+    if (!notifyEmail.trim() || notifySubmitting) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notifyEmail.trim())) {
+      setNotifyError("Please enter a valid email.");
+      return;
+    }
+    setNotifySubmitting(true);
+    setNotifyError(null);
+    try {
+      const resp = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: notifyEmail.trim(), sessionId }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setNotifyError(data.error ?? "Something went wrong.");
+      } else {
+        setNotifyDone(true);
+        try { localStorage.setItem("pw_launch_notify_done", "1"); } catch { /* ignore */ }
+        setTimeout(() => setShowLaunchCta(false), 3000);
+      }
+    } catch {
+      setNotifyError("Network error. Please try again.");
+    } finally {
+      setNotifySubmitting(false);
+    }
+  }, [notifyEmail, notifySubmitting, sessionId]);
+
   // Auto-reveal bars one by one after results arrive
   useEffect(() => {
     if (phase !== "reveal" || !results) return;
@@ -117,6 +172,7 @@ export default function FrequencyGame({
         return;
       }
       setScore(data.score ?? 0);
+      justSubmitted.current = true;
       if (data.results) {
         setResults(data.results);
         setPhase("reveal");
@@ -162,33 +218,138 @@ export default function FrequencyGame({
     );
   }
 
+  // ── Launch notification CTA modal (shared across submitted + reveal phases) ──
+  const launchCtaModal = (
+    <AnimatePresence>
+      {showLaunchCta && (
+        <motion.div
+          key="launch-cta-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(2,2,2,0.88)", backdropFilter: "blur(6px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) handleDismissLaunchCta(); }}
+        >
+          <motion.div
+            key="launch-cta-card"
+            initial={{ scale: 0.88, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.88, opacity: 0, y: 16 }}
+            transition={{ type: "spring", stiffness: 220, damping: 20 }}
+            className="relative w-full max-w-sm rounded-2xl"
+            style={{ background: "#0c1520", border: "1px solid rgba(56,145,166,0.45)", boxShadow: "0 0 48px rgba(56,145,166,0.15), 0 24px 80px rgba(0,0,0,0.8)" }}
+          >
+            {/* Top shimmer */}
+            <div className="absolute top-0 left-0 right-0 h-px rounded-t-2xl" style={{ background: "linear-gradient(90deg, transparent, rgba(56,145,166,0.8), transparent)" }} />
+
+            {/* Close button */}
+            <button
+              onClick={handleDismissLaunchCta}
+              className="absolute top-3 right-3 flex items-center justify-center w-7 h-7 rounded-full transition-colors"
+              style={{ background: "rgba(255,255,255,0.06)", color: "#64748b", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+
+            <div className="p-6">
+              {notifyDone ? (
+                <div className="text-center py-4">
+                  <p className="text-4xl mb-3">✅</p>
+                  <p className="text-lg font-bold text-white">You&apos;re on the list!</p>
+                  <p className="text-sm mt-1.5" style={{ color: "#94a3b8" }}>
+                    {isGuest && score > 0
+                      ? `Your ${score} pts are banked and will be credited to your account on launch day.`
+                      : "We'll ping you the moment Puzzle Warz officially launches."}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center mb-5">
+                    <p className="text-3xl mb-2">🔔</p>
+                    <p className="text-lg font-bold text-white leading-snug">
+                      {isGuest ? "Save your points & get notified" : "Get notified on launch day"}
+                    </p>
+                    <p className="text-sm mt-2" style={{ color: "#94a3b8" }}>
+                      {isGuest
+                        ? score > 0
+                          ? <span>We&apos;ll bank your <span style={{ color: TEAL, fontWeight: 700 }}>{score} pts</span> and credit them to your account when you sign up on launch day.</span>
+                          : "Your answers are saved. Points will be credited to your account when you sign up on launch day."
+                        : "Enter your email and we'll ping you the moment Puzzle Warz officially launches."}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <input
+                      type="email"
+                      value={notifyEmail}
+                      onChange={(e) => { setNotifyEmail(e.target.value); setNotifyError(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleNotifySubmit(); }}
+                      placeholder="your@email.com"
+                      autoComplete="email"
+                      className="w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition-all"
+                      style={{
+                        background: "rgba(56,145,166,0.1)",
+                        border: `1px solid ${notifyError ? "rgba(239,68,68,0.6)" : "rgba(56,145,166,0.35)"}`,
+                      }}
+                    />
+                    {notifyError && <p className="text-xs text-red-400">{notifyError}</p>}
+                    <button
+                      onClick={handleNotifySubmit}
+                      disabled={notifySubmitting || !notifyEmail.trim()}
+                      className="w-full py-3 rounded-xl font-bold text-white text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:scale-100"
+                      style={{ background: TEAL }}
+                    >
+                      {notifySubmitting ? "Saving…" : "Notify Me on Launch Day →"}
+                    </button>
+                    <button
+                      onClick={handleDismissLaunchCta}
+                      className="text-xs text-center py-1"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#475569" }}
+                    >
+                      Maybe later
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   // ── Submitted but not yet revealed ──────────────────────────────────────
   if (phase === "submitted") {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
-        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring" }}>
-          <p className="text-5xl">📡</p>
-        </motion.div>
-        <p className="text-xl font-bold text-white">Answers locked in!</p>
-        <p className="text-sm" style={{ color: "#94a3b8" }}>
-          Results will be revealed once the question closes. Come back later to see how the crowd thinks!
-        </p>
-        <div className="mt-4 rounded-xl p-4 border w-full max-w-sm" style={{ background: "rgba(56,145,166,0.08)", borderColor: "rgba(56,145,166,0.3)" }}>
-          <p className="text-xs font-semibold mb-2" style={{ color: TEAL }}>YOUR ANSWERS</p>
-          {filledAnswers.map((a, i) => (
-            <p key={i} className="text-sm text-white py-0.5">{i + 1}. {a}</p>
-          ))}
-        </div>
-        {isGuest && (
-          <div className="rounded-xl p-4 border w-full max-w-sm text-center" style={{ background: "rgba(234,179,8,0.08)", borderColor: "rgba(234,179,8,0.25)" }}>
-            <p className="text-sm font-semibold text-white mb-1">💾 Your score isn&apos;t saved</p>
-            <p className="text-xs mb-3" style={{ color: "#94a3b8" }}>Create a free account to track your daily streak, save points, and appear on the leaderboard.</p>
-            <a href="/auth/register" className="inline-block rounded-lg px-4 py-2 text-sm font-bold" style={{ background: "rgba(234,179,8,0.2)", border: "1px solid rgba(234,179,8,0.4)", color: "#fde68a" }}>
-              Create Account — It&apos;s Free →
-            </a>
+      <>
+        <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring" }}>
+            <p className="text-5xl">📡</p>
+          </motion.div>
+          <p className="text-xl font-bold text-white">Answers locked in!</p>
+          <p className="text-sm" style={{ color: "#94a3b8" }}>
+            Results will be revealed once the question closes. Come back later to see how the crowd thinks!
+          </p>
+          <div className="mt-4 rounded-xl p-4 border w-full max-w-sm" style={{ background: "rgba(56,145,166,0.08)", borderColor: "rgba(56,145,166,0.3)" }}>
+            <p className="text-xs font-semibold mb-2" style={{ color: TEAL }}>YOUR ANSWERS</p>
+            {filledAnswers.map((a, i) => (
+              <p key={i} className="text-sm text-white py-0.5">{i + 1}. {a}</p>
+            ))}
           </div>
-        )}
-      </div>
+          {isGuest && (
+            <div className="rounded-xl p-4 border w-full max-w-sm text-center" style={{ background: "rgba(234,179,8,0.08)", borderColor: "rgba(234,179,8,0.25)" }}>
+              <p className="text-sm font-semibold text-white mb-1">💾 Your score isn&apos;t saved</p>
+              <p className="text-xs mb-3" style={{ color: "#94a3b8" }}>Create a free account to track your daily streak, save points, and appear on the leaderboard.</p>
+              <a href="/auth/register" className="inline-block rounded-lg px-4 py-2 text-sm font-bold" style={{ background: "rgba(234,179,8,0.2)", border: "1px solid rgba(234,179,8,0.4)", color: "#fde68a" }}>
+                Create Account — It&apos;s Free →
+              </a>
+            </div>
+          )}
+        </div>
+        {launchCtaModal}
+      </>
     );
   }
 
@@ -198,27 +359,28 @@ export default function FrequencyGame({
     const pct = Math.min(Math.round((score / maxScore) * 100), 100);
 
     return (
-      <div className="flex flex-col gap-5 w-full max-w-lg mx-auto">
-        {/* Score card */}
-        <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl p-5 text-center border"
-          style={{ background: "rgba(56,145,166,0.1)", borderColor: "rgba(56,145,166,0.4)" }}
-        >
-          <p className="text-sm font-semibold mb-1" style={{ color: TEAL }}>YOUR SCORE</p>
-          <p className="text-5xl font-black text-white">{score}</p>
-          <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>out of ~{maxScore} · {pct}% crowd match</p>
-          <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-            <motion.div
-              className="h-full rounded-full"
-              style={{ background: TEAL }}
-              initial={{ width: 0 }}
-              animate={{ width: `${pct}%` }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-            />
-          </div>
-        </motion.div>
+      <>
+        <div className="flex flex-col gap-5 w-full max-w-lg mx-auto">
+          {/* Score card */}
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl p-5 text-center border"
+            style={{ background: "rgba(56,145,166,0.1)", borderColor: "rgba(56,145,166,0.4)" }}
+          >
+            <p className="text-sm font-semibold mb-1" style={{ color: TEAL }}>YOUR SCORE</p>
+            <p className="text-5xl font-black text-white">{score}</p>
+            <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>out of ~{maxScore} · {pct}% crowd match</p>
+            <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+              <motion.div
+                className="h-full rounded-full"
+                style={{ background: TEAL }}
+                initial={{ width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+              />
+            </div>
+          </motion.div>
 
         {/* Bar chart */}
         <div className="flex flex-col gap-2">
@@ -323,17 +485,19 @@ export default function FrequencyGame({
           </div>
         </div>
 
-        {/* Sign-up nudge for guests */}
-        {isGuest && (
-          <div className="rounded-xl p-4 border text-center" style={{ background: "rgba(234,179,8,0.08)", borderColor: "rgba(234,179,8,0.25)" }}>
-            <p className="text-sm font-semibold text-white mb-1">💾 Your score isn&apos;t saved</p>
-            <p className="text-xs mb-3" style={{ color: "#94a3b8" }}>Create a free account to track your daily streak, save points, and appear on the leaderboard.</p>
-            <a href="/auth/register" className="inline-block rounded-lg px-4 py-2 text-sm font-bold" style={{ background: "rgba(234,179,8,0.2)", border: "1px solid rgba(234,179,8,0.4)", color: "#fde68a" }}>
-              Create Account — It&apos;s Free →
-            </a>
-          </div>
-        )}
-      </div>
+          {/* Sign-up nudge for guests */}
+          {isGuest && (
+            <div className="rounded-xl p-4 border text-center" style={{ background: "rgba(234,179,8,0.08)", borderColor: "rgba(234,179,8,0.25)" }}>
+              <p className="text-sm font-semibold text-white mb-1">💾 Your score isn&apos;t saved</p>
+              <p className="text-xs mb-3" style={{ color: "#94a3b8" }}>Create a free account to track your daily streak, save points, and appear on the leaderboard.</p>
+              <a href="/auth/register" className="inline-block rounded-lg px-4 py-2 text-sm font-bold" style={{ background: "rgba(234,179,8,0.2)", border: "1px solid rgba(234,179,8,0.4)", color: "#fde68a" }}>
+                Create Account — It&apos;s Free →
+              </a>
+            </div>
+          )}
+        </div>
+        {launchCtaModal}
+      </>
     );
   }
 

@@ -1549,6 +1549,7 @@ model PuzzleSchedule {
 model WaitlistEmail {
   id        String   @id @default(cuid())
   email     String   @unique
+  sessionId String?  // guest pw_freq_session ID — used to credit frequency XP on email verify
   createdAt DateTime @default(now())
 
   @@map("waitlist_emails")

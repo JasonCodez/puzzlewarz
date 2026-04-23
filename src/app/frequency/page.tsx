@@ -5,6 +5,7 @@ import FrequencyGame from "@/components/FrequencyGame";
 import Navbar from "@/components/Navbar";
 import { cookies } from "next/headers";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Frequency | PuzzleWarz" };
 
 export default async function FrequencyPage() {
@@ -17,9 +18,14 @@ export default async function FrequencyPage() {
 
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  // Look back 1 UTC day so that users in negative-offset timezones (e.g. UTC-5
+  // where midnight hasn't hit yet) still see the question they scheduled for
+  // their "today" even after UTC has already rolled over to the next day.
+  const yesterday = new Date(today.getTime() - 86_400_000);
 
   const question = await prisma.frequencyQuestion.findFirst({
-    where: { scheduledFor: today },
+    where: { scheduledFor: { gte: yesterday, lte: today } },
+    orderBy: { scheduledFor: "desc" },
     select: { id: true, question: true, status: true, scheduledFor: true },
   });
 

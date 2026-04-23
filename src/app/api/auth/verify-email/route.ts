@@ -141,6 +141,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Credit pre-launch frequency puzzle points tied to a waitlist/notify signup
+    // Only once, only after first email confirmation
+    if (!wasAlreadyVerified) {
+      try {
+        const waitlistEntry = await prisma.waitlistEmail.findUnique({
+          where: { email },
+          select: { sessionId: true },
+        });
+        if (waitlistEntry?.sessionId) {
+          const freqSessionId = waitlistEntry.sessionId;
+          const freqSubmissions = await prisma.frequencySubmission.findMany({
+            where: { sessionId: freqSessionId, userId: null },
+            select: { score: true },
+          });
+          const totalScore = freqSubmissions.reduce((sum, s) => sum + (s.score ?? 0), 0);
+          if (totalScore > 0) {
+            // Re-read XP (may have been updated by the gridlock prelaunch block above)
+            const userNow = await prisma.user.findUnique({
+              where: { id: user.id },
+              select: { xp: true },
+            });
+            const newXp = (userNow?.xp ?? 0) + totalScore;
+            const { level, title } = calcLevel(newXp);
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { xp: newXp, level, xpTitle: title, totalPoints: { increment: totalScore } },
+            });
+            // Merge into prelaunchRewards so the reward modal shows on verify page
+            if (prelaunchRewards) {
+              prelaunchRewards.xp += totalScore;
+              prelaunchRewards.points += totalScore;
+            } else {
+              prelaunchRewards = { xp: totalScore, points: totalScore, solves: 0 };
+            }
+          }
+          // Clear sessionId to prevent double-crediting
+          await prisma.waitlistEmail.update({
+            where: { email },
+            data: { sessionId: null },
+          });
+        }
+      } catch (err) {
+        console.error("[verify-email] Failed to credit frequency pre-launch rewards:", err);
+        // Non-fatal — don't block verification
+      }
+    }
+
     return NextResponse.json({ ok: true, prelaunchRewards });
   } catch (error) {
     if (error instanceof z.ZodError) {
