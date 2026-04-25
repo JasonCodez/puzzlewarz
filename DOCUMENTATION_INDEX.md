@@ -57,6 +57,7 @@ This file maps the documentation that should still be treated as current and sep
 ### Escape Rooms and Special Modes
 
 - `ESCAPE_ROOM_CHAINING_GUIDE.md`
+- `BLENDER_NODE_ESCAPE_ROOM_SPEC.md`
 - `INTERACTIVE_WITNESS_SETUP.md`
 - `SUDOKU_ENGINE_README.md`
 

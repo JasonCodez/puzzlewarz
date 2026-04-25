@@ -23,6 +23,8 @@ function makeDesignerItemKey(escapeRoomId: string, designerItemId: string) {
 }
 
 type SceneState = {
+  currentSceneId?: string | null;
+  flags?: string[];
   hiddenItemIds?: string[];
   shownItemIds?: string[];
   disabledHotspotIds?: string[];
@@ -78,6 +80,8 @@ function normalizeSceneState(raw: unknown): Required<SceneState> {
   ) as Record<string, string>;
 
   return {
+    currentSceneId: typeof base.currentSceneId === 'string' && base.currentSceneId.trim().length > 0 ? base.currentSceneId.trim() : null,
+    flags: Array.isArray(base.flags) ? base.flags.filter((x) => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim()) : [],
     hiddenItemIds: Array.isArray(base.hiddenItemIds) ? base.hiddenItemIds.filter((x) => typeof x === 'string') : [],
     shownItemIds: Array.isArray(base.shownItemIds) ? base.shownItemIds.filter((x) => typeof x === 'string') : [],
     disabledHotspotIds: Array.isArray(base.disabledHotspotIds) ? base.disabledHotspotIds.filter((x) => typeof x === 'string') : [],
@@ -92,6 +96,52 @@ function normalizeSceneState(raw: unknown): Required<SceneState> {
       ? (base.stageContributions as Record<string, Record<string, number>>)
       : {},
   };
+}
+
+async function resolveTargetLayoutIdForScene(
+  puzzleId: string,
+  escapeRoomId: string,
+  targetSceneId: string
+): Promise<string | null> {
+  const trimmedTarget = targetSceneId.trim();
+  if (!trimmedTarget) return null;
+
+  const [puzzle, layouts] = await Promise.all([
+    prisma.puzzle.findUnique({ where: { id: puzzleId }, select: { data: true } }),
+    prisma.roomLayout.findMany({
+      where: { escapeRoomId },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, title: true, backgroundUrl: true },
+    }),
+  ]);
+
+  if (!layouts.length) return null;
+
+  const pAny: any = puzzle;
+  const escapeRoomData = pAny?.data && typeof pAny.data === 'object' && 'escapeRoomData' in pAny.data
+    ? pAny.data.escapeRoomData
+    : null;
+  const scenes = Array.isArray(escapeRoomData?.scenes) ? escapeRoomData.scenes : [];
+
+  const targetSceneIdx = scenes.findIndex((scene: any) => {
+    const sceneId = typeof scene?.id === 'string' ? scene.id.trim() : '';
+    return sceneId === trimmedTarget;
+  });
+
+  if (targetSceneIdx >= 0 && layouts[targetSceneIdx]?.id) {
+    return layouts[targetSceneIdx].id;
+  }
+
+  const byDirectId = layouts.find((layout) => layout.id === trimmedTarget);
+  if (byDirectId?.id) return byDirectId.id;
+
+  const byTitle = layouts.find((layout) => (layout.title || '').trim() === trimmedTarget);
+  if (byTitle?.id) return byTitle.id;
+
+  const byBackground = layouts.find((layout) => (layout.backgroundUrl || '').trim() === trimmedTarget);
+  if (byBackground?.id) return byBackground.id;
+
+  return null;
 }
 
 async function emitEscapeSession(teamId: string, puzzleId: string, payload: any) {
@@ -509,6 +559,7 @@ export async function POST(
         const strict = useEffect?.strict === true;
 
         const baseSceneState = normalizeSceneState(safeJsonParse<Record<string, any>>((progress as any)?.sceneState, {}));
+        const flags = new Set(baseSceneState.flags || []);
         const hiddenItemIds = new Set(baseSceneState.hiddenItemIds);
         const shownItemIds = new Set(baseSceneState.shownItemIds);
         const disabledHotspotIds = new Set(baseSceneState.disabledHotspotIds);
@@ -524,6 +575,8 @@ export async function POST(
         const showItemIds: string[] = Array.isArray(useEffect.showItemIds) ? useEffect.showItemIds.filter((x: any) => typeof x === 'string') : [];
         const disableHotspotIds: string[] = Array.isArray(useEffect.disableHotspotIds) ? useEffect.disableHotspotIds.filter((x: any) => typeof x === 'string') : [];
         const enableHotspotIds: string[] = Array.isArray(useEffect.enableHotspotIds) ? useEffect.enableHotspotIds.filter((x: any) => typeof x === 'string') : [];
+        const grantFlags: string[] = Array.isArray(useEffect.grantFlags) ? useEffect.grantFlags.filter((x: any) => typeof x === 'string' && x.trim().length > 0).map((x: string) => x.trim()) : [];
+        const revokeFlags: string[] = Array.isArray(useEffect.revokeFlags) ? useEffect.revokeFlags.filter((x: any) => typeof x === 'string' && x.trim().length > 0).map((x: string) => x.trim()) : [];
         const grantItemKeys: string[] = Array.isArray(useEffect.grantItemKeys) ? useEffect.grantItemKeys.filter((x: any) => typeof x === 'string') : [];
         const setItemStateById: Record<string, string> = Object.fromEntries(
           Object.entries((useEffect?.setItemStateById && typeof useEffect.setItemStateById === 'object') ? useEffect.setItemStateById : {}).filter(
@@ -635,6 +688,12 @@ export async function POST(
           enabledHotspotIds.add(id);
           disabledHotspotIds.delete(id);
         }
+        for (const flag of grantFlags) {
+          flags.add(flag);
+        }
+        for (const flag of revokeFlags) {
+          flags.delete(flag);
+        }
         for (const [itemId, state] of Object.entries(setItemStateById)) {
           itemStates[itemId] = state;
         }
@@ -707,6 +766,8 @@ export async function POST(
         const nextInventory = Array.from(nextInventorySet);
         const sceneStateWithContribution = recordStageContribution({
           sceneStateRaw: {
+            currentSceneId: baseSceneState.currentSceneId,
+            flags: Array.from(flags),
             hiddenItemIds: Array.from(hiddenItemIds),
             shownItemIds: Array.from(shownItemIds),
             disabledHotspotIds: Array.from(disabledHotspotIds),
@@ -724,6 +785,8 @@ export async function POST(
         });
 
         const nextSceneState: Required<SceneState> = {
+          currentSceneId: baseSceneState.currentSceneId,
+          flags: Array.from(flags),
           hiddenItemIds: Array.from(hiddenItemIds),
           shownItemIds: Array.from(shownItemIds),
           disabledHotspotIds: Array.from(disabledHotspotIds),
@@ -785,6 +848,8 @@ export async function POST(
                 showItemIds,
                 disableHotspotIds,
                 enableHotspotIds,
+                grantFlags,
+                revokeFlags,
                 setItemStateById,
                 setItemImageById,
                 setItemAlphaById,
@@ -964,6 +1029,13 @@ export async function POST(
     if (action === 'trigger') {
       // Trigger/door hotspot: advance rooms or complete the run.
       const meta = safeJsonParse<Record<string, any>>(hotspot.meta, {});
+      const triggerUseEffect = (meta && typeof meta.useEffect === 'object' && meta.useEffect) ? (meta.useEffect as any) : null;
+      const grantFlags: string[] = Array.isArray(triggerUseEffect?.grantFlags)
+        ? triggerUseEffect.grantFlags.filter((x: any) => typeof x === 'string' && x.trim().length > 0).map((x: string) => x.trim())
+        : [];
+      const revokeFlags: string[] = Array.isArray(triggerUseEffect?.revokeFlags)
+        ? triggerUseEffect.revokeFlags.filter((x: any) => typeof x === 'string' && x.trim().length > 0).map((x: string) => x.trim())
+        : [];
 
       const triggerSfx = extractSfx(meta, 'trigger');
 
@@ -994,6 +1066,75 @@ export async function POST(
         }
       }
 
+      const cur = Math.max(1, Number(progress.currentStageIndex || 1));
+      const targetSceneId = typeof meta.targetSceneId === 'string' ? meta.targetSceneId.trim() : '';
+      if (targetSceneId) {
+        const targetLayoutId = await resolveTargetLayoutIdForScene(puzzleId, escapeRoom.id, targetSceneId);
+        if (!targetLayoutId) {
+          return NextResponse.json({ error: `Target scene not found: ${targetSceneId}` }, { status: 400 });
+        }
+
+        const baseSceneState = normalizeSceneState(safeJsonParse<Record<string, any>>((progress as any)?.sceneState, {}));
+        const nextFlags = new Set(baseSceneState.flags || []);
+        for (const flag of grantFlags) nextFlags.add(flag);
+        for (const flag of revokeFlags) nextFlags.delete(flag);
+        const nextSceneState = recordStageContribution({
+          sceneStateRaw: {
+            ...baseSceneState,
+            currentSceneId: targetLayoutId,
+            flags: Array.from(nextFlags),
+          },
+          stageIndex: cur,
+          userId: ctx.userId,
+        });
+
+        const updated = await (prisma as any).teamEscapeProgress.update({
+          where: { id: progress.id },
+          data: {
+            sceneState: JSON.stringify(nextSceneState),
+          },
+          select: { currentStageIndex: true, solvedStages: true, completedAt: true, sceneState: true },
+        });
+
+        await emitEscapeSession(ctx.teamId, puzzleId, {
+          teamId: ctx.teamId,
+          puzzleId,
+          currentStageIndex: updated.currentStageIndex,
+          solvedStages: updated.solvedStages,
+          completedAt: updated.completedAt,
+          sceneState: normalizeSceneState(safeJsonParse<Record<string, any>>(updated.sceneState, {})),
+        });
+
+        await emitEscapeActivity(ctx.teamId, puzzleId, {
+          teamId: ctx.teamId,
+          puzzleId,
+          entry: {
+            id: makeActivityId(),
+            ts: new Date().toISOString(),
+            type: 'navigate',
+            title: (typeof meta.label === 'string' && meta.label.trim()) ? meta.label.trim() : 'Moved to another room view',
+            actor: { id: user.id, name: user.name || user.email || 'Teammate' },
+            meta: {
+              hotspotId,
+              targetSceneId,
+              targetLayoutId,
+              ...(grantFlags.length > 0 ? { grantFlags } : {}),
+              ...(revokeFlags.length > 0 ? { revokeFlags } : {}),
+              ...(triggerSfx ? { sfx: triggerSfx } : {}),
+            },
+          },
+        });
+
+        return NextResponse.json({
+          success: true,
+          currentStageIndex: updated.currentStageIndex,
+          solvedStages: updated.solvedStages,
+          completedAt: updated.completedAt,
+          sceneState: normalizeSceneState(safeJsonParse<Record<string, any>>(updated.sceneState, {})),
+          ...(triggerSfx ? { sfx: triggerSfx } : {}),
+        });
+      }
+
       // Determine total rooms/scenes so we can decide whether this is the final door.
       let totalRooms = 0;
       try {
@@ -1014,9 +1155,16 @@ export async function POST(
         }
       }
 
-      const cur = Math.max(1, Number(progress.currentStageIndex || 1));
+      const baseSceneStateForTrigger = normalizeSceneState(safeJsonParse<Record<string, any>>((progress as any)?.sceneState, {}));
+      const nextTriggerFlags = new Set(baseSceneStateForTrigger.flags || []);
+      for (const flag of grantFlags) nextTriggerFlags.add(flag);
+      for (const flag of revokeFlags) nextTriggerFlags.delete(flag);
+
       const sceneStateForTriggerAdvance = recordStageContribution({
-        sceneStateRaw: normalizeSceneState(safeJsonParse<Record<string, any>>((progress as any)?.sceneState, {})),
+        sceneStateRaw: {
+          ...baseSceneStateForTrigger,
+          flags: Array.from(nextTriggerFlags),
+        },
         stageIndex: cur,
         userId: ctx.userId,
       });
@@ -1101,6 +1249,8 @@ export async function POST(
               nextStageIndex,
               completed: isComplete,
               hotspotId,
+              ...(grantFlags.length > 0 ? { grantFlags } : {}),
+              ...(revokeFlags.length > 0 ? { revokeFlags } : {}),
               ...(triggerSfx ? { sfx: triggerSfx } : {}),
             },
           },

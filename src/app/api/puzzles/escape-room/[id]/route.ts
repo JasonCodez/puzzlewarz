@@ -106,6 +106,8 @@ export async function GET(
               id: l.id,
               title: l.title || null,
               backgroundUrl: l.backgroundUrl || null,
+              foregroundUrl: null,
+              stateVariants: [],
               width: l.width || null,
               height: l.height || null,
               hotspots: (l.hotspots || []).map((h: any) => ({ id: h.id, x: h.x, y: h.y, w: h.w, h: h.h, type: h.type, meta: h.meta, targetId: h.targetId || null })),
@@ -135,10 +137,10 @@ export async function GET(
       if (stored && Array.isArray(stored.layouts) && stored.layouts.length > 0) {
         layouts = stored.layouts.map((l: any, idx: number) => {
           // Try to attach designer items (positions + imageUrl) when available in the original designer payload
+          let srcScene: any = null;
           let items: any[] = [];
           try {
             const scenes = escapeRoomData && escapeRoomData.scenes && Array.isArray(escapeRoomData.scenes) ? escapeRoomData.scenes : null;
-            let srcScene: any = null;
             if (scenes) {
               // Prefer same-index mapping, otherwise match by title
               srcScene =
@@ -178,6 +180,10 @@ export async function GET(
             id: l.id,
             title: l.title || null,
             backgroundUrl: l.backgroundUrl || null,
+            foregroundUrl: (srcScene && typeof srcScene.foregroundUrl === 'string') ? srcScene.foregroundUrl : null,
+            stateVariants: (srcScene && Array.isArray(srcScene.stateVariants))
+              ? srcScene.stateVariants
+              : ((srcScene && Array.isArray(srcScene.variants)) ? srcScene.variants : []),
             width: l.width || null,
             height: l.height || null,
             hotspots: (l.hotspots || []).map((h: any) => ({ id: h.id, x: h.x, y: h.y, w: h.w, h: h.h, type: h.type, meta: h.meta, targetId: h.targetId || null })),

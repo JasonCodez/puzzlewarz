@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "experienceType": "blender-node",
+  "renderMode": "fixed-node",
+  "navigationMode": "shared",
+  "inventoryMode": "shared",
+  "startSceneId": "foyer_wide",
+  "defaultReturnSceneId": "foyer_wide",
+  "renderProfile": {
+    "baseWidth": 1920,
+    "baseHeight": 1080,
+    "aspectRatio": "16:9",
+    "masterFormat": "webp",
+    "overlayFormat": "png",
+    "thumbnailFormat": "webp",
+    "colorSpace": "sRGB"
+  },
+  "scenes": [
+    {
+      "id": "foyer_wide",
+      "name": "Foyer Wide",
+      "sceneType": "room",
+      "cameraName": "CAM__foyer_wide",
+      "thumbnailUrl": "/content/escape-rooms/iron-ward/nodes/foyer_wide/node.foyer_wide.thumb.webp",
+      "backgroundUrl": "/content/escape-rooms/iron-ward/nodes/foyer_wide/node.foyer_wide.base.webp",
+      "foregroundUrl": "/content/escape-rooms/iron-ward/nodes/foyer_wide/node.foyer_wide.fg.png",
+      "description": "The room opens on a rusted security door, a desk, and a glowing keypad.",
+      "items": [
+        {
+          "id": "itm_foyer_door_light",
+          "name": "Door status lamp",
+          "imageUrl": "/content/escape-rooms/iron-ward/overlays/door_light_red.png",
+          "description": "A red access light above the exit.",
+          "x": 1220,
+          "y": 156,
+          "w": 60,
+          "h": 60,
+          "properties": {}
+        }
+      ],
+      "interactiveZones": [
+        {
+          "id": "hs_foyer_exit",
+          "label": "Exit door",
+          "x": 1058,
+          "y": 182,
+          "width": 274,
+          "height": 772,
+          "actionType": "navigate",
+          "hotspotStyle": "nav",
+          "targetSceneId": "corridor_left",
+          "transitionHint": "fade",
+          "preloadTargets": [
+            "corridor_left"
+          ],
+          "allFlags": [
+            "door_unlocked"
+          ]
+        },
+        {
+          "id": "hs_foyer_keypad",
+          "label": "Keypad",
+          "x": 1352,
+          "y": 356,
+          "width": 146,
+          "height": 246,
+          "actionType": "navigate",
+          "hotspotStyle": "inspect",
+          "targetSceneId": "foyer_keypad_close",
+          "transitionHint": "zoomIn",
+          "preloadTargets": [
+            "foyer_keypad_close"
+          ]
+        },
+        {
+          "id": "hs_foyer_plaque",
+          "label": "Wall plaque",
+          "x": 402,
+          "y": 248,
+          "width": 220,
+          "height": 132,
+          "actionType": "modal",
+          "hotspotStyle": "inspect",
+          "modalContent": "Iron Ward Secure Archive. Sector C. Access restricted.",
+          "imageUrl": "/content/escape-rooms/iron-ward/nodes/foyer_wide/node.foyer_wide.inspect.plaque.webp"
+        }
+      ],
+      "stateVariants": [
+        {
+          "id": "door_locked",
+          "label": "Door locked",
+          "backgroundUrl": "/content/escape-rooms/iron-ward/nodes/foyer_wide/node.foyer_wide.variant.door_locked.webp",
+          "noneFlags": [
+            "door_unlocked"
+          ]
+        },
+        {
+          "id": "door_unlocked",
+          "label": "Door unlocked",
+          "backgroundUrl": "/content/escape-rooms/iron-ward/nodes/foyer_wide/node.foyer_wide.variant.door_unlocked.webp",
+          "allFlags": [
+            "door_unlocked"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "foyer_keypad_close",
+      "name": "Keypad Closeup",
+      "sceneType": "inspect",
+      "cameraName": "CAM__foyer_keypad_close",
+      "thumbnailUrl": "/content/escape-rooms/iron-ward/nodes/foyer_keypad_close/node.foyer_keypad_close.thumb.webp",
+      "backgroundUrl": "/content/escape-rooms/iron-ward/nodes/foyer_keypad_close/node.foyer_keypad_close.base.webp",
+      "description": "The keypad surface is scratched, but the keys still glow.",
+      "items": [],
+      "interactiveZones": [
+        {
+          "id": "hs_keypad_entry",
+          "label": "Enter code",
+          "x": 640,
+          "y": 260,
+          "width": 602,
+          "height": 636,
+          "actionType": "codeEntry",
+          "hotspotStyle": "trigger",
+          "codeEntry": {
+            "correctCode": "2741",
+            "errorMessage": "The keypad flashes red.",
+            "cooldownSeconds": 2,
+            "maxAttempts": 6
+          },
+          "useEffect": {
+            "grantFlags": [
+              "door_unlocked"
+            ],
+            "setItemImageById": {
+              "itm_foyer_door_light": "/content/escape-rooms/iron-ward/overlays/door_light_green.png"
+            },
+            "completesRoom": false
+          }
+        },
+        {
+          "id": "hs_keypad_back",
+          "label": "Back to foyer",
+          "x": 82,
+          "y": 858,
+          "width": 260,
+          "height": 142,
+          "actionType": "navigate",
+          "hotspotStyle": "nav",
+          "targetSceneId": "foyer_wide",
+          "transitionHint": "fade"
+        }
+      ]
+    },
+    {
+      "id": "corridor_left",
+      "name": "Left Corridor",
+      "sceneType": "room",
+      "cameraName": "CAM__corridor_left",
+      "thumbnailUrl": "/content/escape-rooms/iron-ward/nodes/corridor_left/node.corridor_left.thumb.webp",
+      "backgroundUrl": "/content/escape-rooms/iron-ward/nodes/corridor_left/node.corridor_left.base.webp",
+      "description": "A narrow corridor stretches left into the archive sector.",
+      "items": [],
+      "interactiveZones": [
+        {
+          "id": "hs_corridor_return",
+          "label": "Back to foyer",
+          "x": 120,
+          "y": 312,
+          "width": 252,
+          "height": 566,
+          "actionType": "navigate",
+          "hotspotStyle": "nav",
+          "targetSceneId": "foyer_wide",
+          "transitionHint": "slideRight"
+        }
+      ]
+    }
+  ]
+}

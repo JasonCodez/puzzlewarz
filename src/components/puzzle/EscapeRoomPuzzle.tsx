@@ -17,6 +17,24 @@ const isVideoUrl = (url: string | undefined | null): boolean => {
   return /\.(mp4|webm|mov|avi)$/.test(clean);
 };
 
+const normalizeStringList = (raw: unknown): string[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => (typeof x === 'string' ? x.trim() : ''))
+    .filter(Boolean);
+};
+
+const sceneVariantMatches = (variant: any, flags: Set<string>): boolean => {
+  const allFlags = normalizeStringList(variant?.allFlags);
+  const anyFlags = normalizeStringList(variant?.anyFlags);
+  const noneFlags = normalizeStringList(variant?.noneFlags);
+
+  if (allFlags.length > 0 && !allFlags.every((flag) => flags.has(flag))) return false;
+  if (anyFlags.length > 0 && !anyFlags.some((flag) => flags.has(flag))) return false;
+  if (noneFlags.length > 0 && noneFlags.some((flag) => flags.has(flag))) return false;
+  return true;
+};
+
 // IMPORTANT: keep this at module scope.
 // Defining React.lazy() inside the component recreates a new component type on every render,
 // which causes repeated unmount/mount cycles (flicker + lost pointer interaction).
@@ -95,6 +113,8 @@ type EscapeRoomResponse = {
     id: string;
     title?: string | null;
     backgroundUrl?: string | null;
+    foregroundUrl?: string | null;
+    stateVariants?: Array<any>;
     width?: number | null;
     height?: number | null;
     hotspots?: Array<any>;
@@ -656,16 +676,37 @@ export function EscapeRoomPuzzle({
 
   const baseLayout = useMemo(() => {
     if (!data?.layouts || data.layouts.length === 0) return null;
+    const currentSceneId = typeof (sceneState as any)?.currentSceneId === 'string'
+      ? String((sceneState as any).currentSceneId).trim()
+      : '';
+    if (currentSceneId) {
+      const sceneLayout = data.layouts.find((candidate) => candidate?.id === currentSceneId) || null;
+      if (sceneLayout) return sceneLayout;
+    }
     // Best-effort: align stage 1 -> layout[0], stage 2 -> layout[1], etc.
     const idx = Math.max(0, Math.min(stageIndex - 1, data.layouts.length - 1));
     return data.layouts[idx];
-  }, [data, stageIndex]);
+  }, [data, sceneState, stageIndex]);
 
   const layout = useMemo(() => {
     if (!baseLayout) return null;
 
     const itemsRaw = Array.isArray((baseLayout as any)?.items) ? ((baseLayout as any).items as any[]) : [];
     const hotspotsRaw = Array.isArray((baseLayout as any)?.hotspots) ? ((baseLayout as any).hotspots as any[]) : [];
+    const flags = new Set<string>(normalizeStringList((sceneState as any)?.flags));
+    const stateVariantsRaw = Array.isArray((baseLayout as any)?.stateVariants)
+      ? ((baseLayout as any).stateVariants as any[])
+      : (Array.isArray((baseLayout as any)?.variants) ? ((baseLayout as any).variants as any[]) : []);
+    const activeVariant = stateVariantsRaw.find((candidate) => sceneVariantMatches(candidate, flags)) || null;
+
+    const resolvedBackgroundUrl =
+      (typeof activeVariant?.backgroundUrl === 'string' && activeVariant.backgroundUrl.trim())
+        ? activeVariant.backgroundUrl.trim()
+        : ((baseLayout as any)?.backgroundUrl || null);
+    const resolvedForegroundUrl =
+      (typeof activeVariant?.foregroundUrl === 'string' && activeVariant.foregroundUrl.trim())
+        ? activeVariant.foregroundUrl.trim()
+        : ((baseLayout as any)?.foregroundUrl || null);
 
     // Collected scene items (admin/designer items) are stored in inventory by key format: item_<escapeRoomId>_<designerItemId>
     const collected = new Set<string>();
@@ -781,6 +822,9 @@ export function EscapeRoomPuzzle({
 
     return {
       ...(baseLayout as any),
+      backgroundUrl: resolvedBackgroundUrl,
+      foregroundUrl: resolvedForegroundUrl,
+      ...(activeVariant?.id ? { activeVariantId: activeVariant.id } : {}),
       items: resolvedItems,
       hotspots: filteredHotspots,
     };
@@ -1110,7 +1154,11 @@ export function EscapeRoomPuzzle({
         const hasRequiredId = typeof hsMeta?.requiredItemId === 'string' && hsMeta.requiredItemId;
         const hasUseEffect = !!hsMeta?.useEffect;
         const canUseOnCollect = hasUseEffect || requiresItems || hasRequiredKey || hasRequiredId;
-        const shouldAttemptUse = actionType !== 'collect' || canUseOnCollect;
+        const shouldAttemptUse = actionType === 'collect'
+          ? canUseOnCollect
+          : actionType === 'navigate'
+          ? canUseOnCollect
+          : actionType !== 'modal' && actionType !== 'codeEntry' && actionType !== 'miniPuzzle';
 
         if (shouldAttemptUse) {
           const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/action`, {
@@ -1217,7 +1265,7 @@ export function EscapeRoomPuzzle({
         return;
       }
 
-      if (actionType === 'trigger') {
+      if (actionType === 'trigger' || actionType === 'navigate') {
         const r = await fetch(`/api/puzzles/escape-room/${puzzleId}/action`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1227,8 +1275,8 @@ export function EscapeRoomPuzzle({
         if (!r.ok) {
           triggerSceneShake();
           if (jb?.penaltyApplied > 0) showPenaltyToast(jb.penaltyApplied, jb?.newRunExpiresAt);
-          setActionModalTitle(hsMeta?.label || 'Locked');
-          setActionModalMessage(jb?.error || 'Unable to open.' );
+          setActionModalTitle(hsMeta?.label || (actionType === 'navigate' ? 'Cannot Move' : 'Locked'));
+          setActionModalMessage(jb?.error || (actionType === 'navigate' ? 'Unable to move to that scene.' : 'Unable to open.'));
           setActionModalOpen(true);
           return;
         }
@@ -1918,6 +1966,29 @@ export function EscapeRoomPuzzle({
                         />
                       ))}
                   </div>
+                )}
+
+                {(layout as any)?.foregroundUrl && (
+                  isVideoUrl((layout as any).foregroundUrl)
+                    ? (
+                      <video
+                        src={(layout as any).foregroundUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                        style={{ zIndex: 6 }}
+                      />
+                    )
+                    : (
+                      <img
+                        src={(layout as any).foregroundUrl}
+                        alt="Scene foreground"
+                        className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                        style={{ zIndex: 6 }}
+                      />
+                    )
                 )}
 
                 {/* Scene transition overlay — fires when stageIndex changes */}

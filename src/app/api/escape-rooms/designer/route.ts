@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
     const data = await req.json();
     // Destructure the designer config
-    const { title, description, timeLimit, scenes, userSpecialties } = data;
+    const { title, description, timeLimit, startMode, minTeamSize, playerMode, intro, outro, scenes, userSpecialties } = data;
     // For now, require a dummy puzzleId (should be replaced with real puzzle linkage)
     const dummyPuzzle = await prisma.puzzle.findFirst({ where: { isActive: false, puzzleType: 'escape_room' } })
       || await prisma.puzzle.findFirst();
@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
             type: zone.actionType,
             targetId: zone.collectItemId || null,
             meta: JSON.stringify({
+              zoneId: typeof zone?.id === 'string' ? zone.id : undefined,
               label: zone.label,
               modalContent: zone.modalContent,
               itemId: (zone as any).itemId,
@@ -68,7 +69,19 @@ export async function POST(req: NextRequest) {
               interactions: (zone as any).interactions,
               linkedPuzzleId: zone.linkedPuzzleId,
               eventId: zone.eventId,
-              pickupAnimationPreset: (zone as any).pickupAnimationPreset,              sfx: (zone as any).sfx || undefined,              penaltySeconds: (zone as any).penaltySeconds || undefined,              miniPuzzle: (zone as any).miniPuzzle || undefined,            }),
+              targetSceneId: (zone as any).targetSceneId,
+              pickupAnimationPreset: (zone as any).pickupAnimationPreset,
+              pickupAnimationUrl: (zone as any).pickupAnimationUrl,
+              sfx: (zone as any).sfx || undefined,
+              penaltySeconds: (zone as any).penaltySeconds || undefined,
+              miniPuzzle: (zone as any).miniPuzzle || undefined,
+              codeEntry: (zone as any).codeEntry || undefined,
+              requiredItemId: (zone as any).requiredItemId,
+              consumeItemOnUse: (zone as any).consumeItemOnUse,
+              disabledByDefault: (zone as any).disabledByDefault,
+              useEffect: (zone as any).useEffect,
+              actionType: zone.actionType,
+            }),
           },
         });
       }
@@ -83,6 +96,32 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+
+    // Persist full designer payload for runtime reconstruction (item positions, variants, foreground, etc).
+    const puzzle = await prisma.puzzle.findUnique({ where: { id: dummyPuzzle.id }, select: { data: true } });
+    const curData: any = puzzle?.data && typeof puzzle.data === 'object' ? puzzle.data : {};
+    const nextData = {
+      ...curData,
+      escapeRoomData: {
+        title,
+        description,
+        timeLimit,
+        startMode: startMode || 'leader-start',
+        minTeamSize: (typeof minTeamSize === 'number' && minTeamSize > 0) ? minTeamSize : 1,
+        playerMode: playerMode || 'shared',
+        intro: intro || undefined,
+        outro: outro || undefined,
+        scenes,
+      },
+    };
+    await prisma.puzzle.update({
+      where: { id: dummyPuzzle.id },
+      data: {
+        data: nextData,
+        minTeamSize: (typeof minTeamSize === 'number' && minTeamSize > 0) ? minTeamSize : 1,
+      },
+    });
+
     // Optionally: Save userSpecialties (not implemented here)
     return NextResponse.json({ success: true, escapeRoomId: escapeRoom.id });
   } catch (error: any) {

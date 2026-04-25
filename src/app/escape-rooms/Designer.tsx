@@ -5,11 +5,26 @@ import StageCelebration from '@/components/puzzle/StageCelebration';
 const PixiRoom = React.lazy(() => import('@/components/puzzle/PixiRoom'));
 
 // Types for the escape room builder
+interface SceneVariantCondition {
+  allFlags?: string[];
+  anyFlags?: string[];
+  noneFlags?: string[];
+}
+
+interface SceneVisualVariant extends SceneVariantCondition {
+  id: string;
+  label: string;
+  backgroundUrl?: string;
+  foregroundUrl?: string;
+}
+
 interface EscapeRoomScene {
   id: string;
   name: string;
   backgroundUrl: string;
+  foregroundUrl?: string;
   description: string;
+  stateVariants?: SceneVisualVariant[];
   items: EscapeRoomItem[];
   interactiveZones: InteractiveZone[];
   // Player assignment: which player slots (1-4) start in this scene.
@@ -66,7 +81,9 @@ interface InteractiveZone {
   y: number;
   width: number;
   height: number;
-  actionType: "modal" | "collect" | "trigger" | "codeEntry" | "miniPuzzle" | "triggerItemAnimation";
+  actionType: "modal" | "collect" | "trigger" | "navigate" | "codeEntry" | "miniPuzzle" | "triggerItemAnimation";
+  // For scene navigation zones.
+  targetSceneId?: string;
   // Optional: override whether the dragged/used item is consumed when using it on this zone.
   // Default behavior is to consume the item; set to false to keep the item.
   consumeItemOnUse?: boolean;
@@ -97,6 +114,8 @@ interface InteractiveZone {
     showItemIds?: string[];
     disableHotspotIds?: string[];
     enableHotspotIds?: string[];
+    grantFlags?: string[];
+    revokeFlags?: string[];
     setItemStateById?: Record<string, string>;
     setItemImageById?: Record<string, string>;
     setItemAlphaById?: Record<string, number>;
@@ -226,6 +245,47 @@ const isVideoUrl = (url: string | undefined | null): boolean => {
   // Strip query string / hash, then check extension
   const clean = url.split(/[?#]/)[0].toLowerCase();
   return /\.(mp4|webm|mov|avi)$/.test(clean);
+};
+
+const normalizeStringList = (raw: unknown): string[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => (typeof x === 'string' ? x.trim() : ''))
+    .filter(Boolean);
+};
+
+const sceneVariantMatches = (variant: SceneVisualVariant | null | undefined, flags: Set<string>): boolean => {
+  if (!variant) return false;
+  const allFlags = normalizeStringList(variant.allFlags);
+  const anyFlags = normalizeStringList(variant.anyFlags);
+  const noneFlags = normalizeStringList(variant.noneFlags);
+
+  if (allFlags.length > 0 && !allFlags.every((f) => flags.has(f))) return false;
+  if (anyFlags.length > 0 && !anyFlags.some((f) => flags.has(f))) return false;
+  if (noneFlags.length > 0 && noneFlags.some((f) => flags.has(f))) return false;
+  return true;
+};
+
+const resolveSceneVisuals = (
+  scene: EscapeRoomScene | null | undefined,
+  sceneState: { flags?: string[] } | null | undefined
+): { backgroundUrl: string; foregroundUrl: string; activeVariantId?: string } => {
+  if (!scene) return { backgroundUrl: '', foregroundUrl: '' };
+  const flags = new Set(normalizeStringList(sceneState?.flags));
+  const variants = Array.isArray(scene.stateVariants) ? scene.stateVariants : [];
+  const active = variants.find((v) => sceneVariantMatches(v, flags));
+
+  return {
+    backgroundUrl:
+      (typeof active?.backgroundUrl === 'string' && active.backgroundUrl.trim())
+        ? active.backgroundUrl.trim()
+        : (scene.backgroundUrl || ''),
+    foregroundUrl:
+      (typeof active?.foregroundUrl === 'string' && active.foregroundUrl.trim())
+        ? active.foregroundUrl.trim()
+        : (scene.foregroundUrl || ''),
+    ...(active?.id ? { activeVariantId: active.id } : {}),
+  };
 };
 
 interface EscapeRoomDesignerProps {
@@ -405,6 +465,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
   // Per-scene states: track cross-scene effect results.
   const [playtestPerSceneStates, setPlaytestPerSceneStates] = useState<Record<string, { shownItemIds: string[]; hiddenItemIds: string[]; enabledHotspotIds: string[]; disabledHotspotIds: string[] }>>({});
   const [playtestSceneState, setPlaytestSceneState] = useState<{
+    flags: string[];
     hiddenItemIds: string[];
     shownItemIds: string[];
     disabledHotspotIds: string[]; // stores designer zone ids in playtest
@@ -415,7 +476,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
     itemScaleOverrides: Record<string, number>;
     itemRotationOverrides: Record<string, number>;
     itemTintOverrides: Record<string, string>;
-  }>({ hiddenItemIds: [], shownItemIds: [], disabledHotspotIds: [], enabledHotspotIds: [], itemStates: {}, itemImageOverrides: {}, itemAlphaOverrides: {}, itemScaleOverrides: {}, itemRotationOverrides: {}, itemTintOverrides: {} });
+  }>({ flags: [], hiddenItemIds: [], shownItemIds: [], disabledHotspotIds: [], enabledHotspotIds: [], itemStates: {}, itemImageOverrides: {}, itemAlphaOverrides: {}, itemScaleOverrides: {}, itemRotationOverrides: {}, itemTintOverrides: {} });
   const [playtestModal, setPlaytestModal] = useState<null | {
     title: string;
     content: string;
@@ -437,6 +498,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
   // Track upload status for sprite state images: key is `sprite-${sceneIdx}-${itemIdx}-${stateIdx}`
   const [spriteStateUploadState, setSpriteStateUploadState] = useState<Record<string, { uploading: boolean; error: string }>>({});
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const manifestInputRef = useRef<HTMLInputElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const playtestInventoryRef = useRef<HTMLDivElement | null>(null);
   const playtestPickupTimerRef = useRef<number | null>(null);
@@ -531,6 +593,145 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
       setAudioUploadState(prev => ({ ...prev, [stateKey]: { uploading: false, error: err instanceof Error ? err.message : 'Upload failed' } }));
     }
   }, [editId, MAX_CLIENT_UPLOAD]);
+
+  const parseManifestScenes = useCallback((manifestRaw: unknown): EscapeRoomScene[] => {
+    const manifest = (manifestRaw && typeof manifestRaw === 'object') ? (manifestRaw as Record<string, any>) : {};
+    const scenesRaw = Array.isArray(manifest.scenes) ? manifest.scenes : [];
+    if (scenesRaw.length === 0) {
+      throw new Error('Manifest has no scenes array.');
+    }
+
+    const toActionType = (value: unknown): InteractiveZone['actionType'] => {
+      const raw = typeof value === 'string' ? value.trim() : '';
+      if (raw === 'modal' || raw === 'collect' || raw === 'trigger' || raw === 'navigate' || raw === 'codeEntry' || raw === 'miniPuzzle' || raw === 'triggerItemAnimation') {
+        return raw;
+      }
+      return 'modal';
+    };
+
+    return scenesRaw.map((sceneRaw, idx) => {
+      const sceneObj = (sceneRaw && typeof sceneRaw === 'object') ? (sceneRaw as Record<string, any>) : {};
+      const sceneId = typeof sceneObj.id === 'string' && sceneObj.id.trim() ? sceneObj.id.trim() : `scene_${idx + 1}`;
+      const variantsRaw = Array.isArray(sceneObj.stateVariants)
+        ? sceneObj.stateVariants
+        : (Array.isArray(sceneObj.variants) ? sceneObj.variants : []);
+
+      const stateVariants: SceneVisualVariant[] = variantsRaw
+        .map((variantRaw: any, variantIdx: number) => {
+          const v = (variantRaw && typeof variantRaw === 'object') ? (variantRaw as Record<string, any>) : {};
+          const variantId = typeof v.id === 'string' && v.id.trim() ? v.id.trim() : `${sceneId}_variant_${variantIdx + 1}`;
+          const variantLabel = typeof v.label === 'string' && v.label.trim() ? v.label.trim() : `Variant ${variantIdx + 1}`;
+          return {
+            id: variantId,
+            label: variantLabel,
+            backgroundUrl: typeof v.backgroundUrl === 'string' ? v.backgroundUrl : '',
+            foregroundUrl: typeof v.foregroundUrl === 'string' ? v.foregroundUrl : '',
+            allFlags: normalizeStringList(v.allFlags),
+            anyFlags: normalizeStringList(v.anyFlags),
+            noneFlags: normalizeStringList(v.noneFlags),
+          };
+        })
+        .filter((v) => !!v.id);
+
+      const itemsRaw = Array.isArray(sceneObj.items) ? sceneObj.items : [];
+      const items: EscapeRoomItem[] = itemsRaw.map((itemRaw: any, itemIdx: number) => {
+        const it = (itemRaw && typeof itemRaw === 'object') ? (itemRaw as Record<string, any>) : {};
+        return {
+          id: typeof it.id === 'string' && it.id.trim() ? it.id.trim() : `${sceneId}_item_${itemIdx + 1}`,
+          name: typeof it.name === 'string' ? it.name : '',
+          imageUrl: typeof it.imageUrl === 'string' ? it.imageUrl : '',
+          description: typeof it.description === 'string' ? it.description : '',
+          x: Number.isFinite(Number(it.x)) ? Number(it.x) : 50,
+          y: Number.isFinite(Number(it.y)) ? Number(it.y) : 50,
+          w: Number.isFinite(Number(it.w)) ? Number(it.w) : 48,
+          h: Number.isFinite(Number(it.h)) ? Number(it.h) : 48,
+          properties: (it.properties && typeof it.properties === 'object') ? (it.properties as Record<string, any>) : {},
+          ambientEffect: (it.ambientEffect === 'glow' || it.ambientEffect === 'pulse' || it.ambientEffect === 'float' || it.ambientEffect === 'sparkle' || it.ambientEffect === 'shimmer')
+            ? it.ambientEffect
+            : undefined,
+        };
+      });
+
+      const zonesRaw = Array.isArray(sceneObj.interactiveZones) ? sceneObj.interactiveZones : [];
+      const interactiveZones: InteractiveZone[] = zonesRaw.map((zoneRaw: any, zoneIdx: number) => {
+        const z = (zoneRaw && typeof zoneRaw === 'object') ? (zoneRaw as Record<string, any>) : {};
+        const useEffectRaw = (z.useEffect && typeof z.useEffect === 'object') ? (z.useEffect as Record<string, any>) : null;
+
+        const useEffect = useEffectRaw
+          ? {
+              hideItemIds: normalizeStringList(useEffectRaw.hideItemIds),
+              showItemIds: normalizeStringList(useEffectRaw.showItemIds),
+              disableHotspotIds: normalizeStringList(useEffectRaw.disableHotspotIds),
+              enableHotspotIds: normalizeStringList(useEffectRaw.enableHotspotIds),
+              grantFlags: normalizeStringList(useEffectRaw.grantFlags),
+              revokeFlags: normalizeStringList(useEffectRaw.revokeFlags),
+              setItemStateById: (useEffectRaw.setItemStateById && typeof useEffectRaw.setItemStateById === 'object') ? useEffectRaw.setItemStateById as Record<string, string> : undefined,
+              setItemImageById: (useEffectRaw.setItemImageById && typeof useEffectRaw.setItemImageById === 'object') ? useEffectRaw.setItemImageById as Record<string, string> : undefined,
+              setItemAlphaById: (useEffectRaw.setItemAlphaById && typeof useEffectRaw.setItemAlphaById === 'object') ? useEffectRaw.setItemAlphaById as Record<string, number> : undefined,
+              setItemScaleById: (useEffectRaw.setItemScaleById && typeof useEffectRaw.setItemScaleById === 'object') ? useEffectRaw.setItemScaleById as Record<string, number> : undefined,
+              setItemRotationById: (useEffectRaw.setItemRotationById && typeof useEffectRaw.setItemRotationById === 'object') ? useEffectRaw.setItemRotationById as Record<string, number> : undefined,
+              setItemTintById: (useEffectRaw.setItemTintById && typeof useEffectRaw.setItemTintById === 'object') ? useEffectRaw.setItemTintById as Record<string, string> : undefined,
+              crossSceneEffects: Array.isArray(useEffectRaw.crossSceneEffects) ? useEffectRaw.crossSceneEffects as any : undefined,
+              completesRoom: useEffectRaw.completesRoom === true,
+              completionVariant: typeof useEffectRaw.completionVariant === 'string' ? useEffectRaw.completionVariant : undefined,
+            }
+          : undefined;
+
+        return {
+          id: typeof z.id === 'string' && z.id.trim() ? z.id.trim() : `${sceneId}_zone_${zoneIdx + 1}`,
+          label: typeof z.label === 'string' ? z.label : '',
+          x: Number.isFinite(Number(z.x)) ? Number(z.x) : 0,
+          y: Number.isFinite(Number(z.y)) ? Number(z.y) : 0,
+          width: Number.isFinite(Number(z.width)) ? Number(z.width) : 100,
+          height: Number.isFinite(Number(z.height)) ? Number(z.height) : 100,
+          actionType: toActionType(z.actionType),
+          targetSceneId: typeof z.targetSceneId === 'string' ? z.targetSceneId : undefined,
+          itemId: typeof z.itemId === 'string' ? z.itemId : undefined,
+          imageUrl: typeof z.imageUrl === 'string' ? z.imageUrl : undefined,
+          modalContent: typeof z.modalContent === 'string' ? z.modalContent : '',
+          interactions: Array.isArray(z.interactions) ? z.interactions as any : undefined,
+          linkedPuzzleId: typeof z.linkedPuzzleId === 'string' ? z.linkedPuzzleId : undefined,
+          eventId: typeof z.eventId === 'string' ? z.eventId : undefined,
+          collectItemId: typeof z.collectItemId === 'string' ? z.collectItemId : undefined,
+          pickupAnimationPreset: (z.pickupAnimationPreset === 'cinematic' || z.pickupAnimationPreset === 'quickSpin' || z.pickupAnimationPreset === 'floatIn' || z.pickupAnimationPreset === 'powerDrop' || z.pickupAnimationPreset === 'spiral' || z.pickupAnimationPreset === 'bounce' || z.pickupAnimationPreset === 'glitch' || z.pickupAnimationPreset === 'flash')
+            ? z.pickupAnimationPreset
+            : undefined,
+          pickupAnimationUrl: typeof z.pickupAnimationUrl === 'string' ? z.pickupAnimationUrl : undefined,
+          sfx: (z.sfx && typeof z.sfx === 'object') ? z.sfx as any : undefined,
+          penaltySeconds: Number.isFinite(Number(z.penaltySeconds)) ? Number(z.penaltySeconds) : undefined,
+          miniPuzzle: (z.miniPuzzle && typeof z.miniPuzzle === 'object') ? z.miniPuzzle as any : undefined,
+          codeEntry: (z.codeEntry && typeof z.codeEntry === 'object') ? z.codeEntry as any : undefined,
+          requiredItemId: typeof z.requiredItemId === 'string' ? z.requiredItemId : undefined,
+          consumeItemOnUse: typeof z.consumeItemOnUse === 'boolean' ? z.consumeItemOnUse : undefined,
+          disabledByDefault: typeof z.disabledByDefault === 'boolean' ? z.disabledByDefault : undefined,
+          useEffect,
+        };
+      });
+
+      return {
+        id: sceneId,
+        name: typeof sceneObj.name === 'string' && sceneObj.name.trim() ? sceneObj.name.trim() : `Scene ${idx + 1}`,
+        backgroundUrl: typeof sceneObj.backgroundUrl === 'string' ? sceneObj.backgroundUrl : '',
+        foregroundUrl: typeof sceneObj.foregroundUrl === 'string' ? sceneObj.foregroundUrl : '',
+        description: typeof sceneObj.description === 'string' ? sceneObj.description : '',
+        stateVariants,
+        items,
+        interactiveZones,
+      };
+    });
+  }, []);
+
+  const handleManifestImport = useCallback(async (file: File) => {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const importedScenes = parseManifestScenes(parsed);
+    if (!Array.isArray(importedScenes) || importedScenes.length === 0) {
+      throw new Error('No scenes could be imported from this manifest.');
+    }
+    setScenes(importedScenes);
+    setPreviewSceneIdx(0);
+    setValidationError(`Imported ${importedScenes.length} scene(s) from Blender manifest.`);
+  }, [parseManifestScenes]);
 
   // selection & resizing state for items/zones in the canvas preview
   const [selectedItem, setSelectedItem] = useState<{ sceneIdx: number; itemIdx: number } | null>(null);
@@ -741,7 +942,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
     setPlaytestInventoryItemIds([]);
     setPlaytestInventoryImages({});
     setPlaytestSelectedInventoryItemId(null);
-    setPlaytestSceneState({ hiddenItemIds: [], shownItemIds: [], disabledHotspotIds: [], enabledHotspotIds: [], itemStates: {}, itemImageOverrides: {}, itemAlphaOverrides: {}, itemScaleOverrides: {}, itemRotationOverrides: {}, itemTintOverrides: {} });
+    setPlaytestSceneState({ flags: [], hiddenItemIds: [], shownItemIds: [], disabledHotspotIds: [], enabledHotspotIds: [], itemStates: {}, itemImageOverrides: {}, itemAlphaOverrides: {}, itemScaleOverrides: {}, itemRotationOverrides: {}, itemTintOverrides: {} });
     setPlaytestMessage('');
     setPlaytestCompleted(false);
     setPlaytestModal(null);
@@ -795,12 +996,14 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
   // ── PixiRoom-powered edit preview ──────────────────────────────────────────
   // Build the layout object PixiRoom expects from the currently previewed scene.
   // We use width:600, height:320 so that item/zone preview coords map 1:1.
+  const editSceneVisual = useMemo(() => resolveSceneVisuals(scenes[previewSceneIdx], { flags: [] }), [scenes, previewSceneIdx]);
+
   const pixiEditLayout = useMemo(() => {
     if (!scenes[previewSceneIdx]) return null;
     const s = scenes[previewSceneIdx];
     return {
       id: s.id,
-      backgroundUrl: s.backgroundUrl || null,
+      backgroundUrl: editSceneVisual.backgroundUrl || null,
       width: 600,
       height: 320,
       items: (s.items || []).map((it: any) => ({
@@ -822,7 +1025,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
         properties: it.properties,
       })),
     };
-  }, [scenes, previewSceneIdx]);
+  }, [scenes, previewSceneIdx, editSceneVisual]);
 
   const pixiEditHotspots = useMemo(() => {
     if (!scenes[previewSceneIdx]) return [];
@@ -836,6 +1039,11 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
       meta: z.label || null,
     }));
   }, [scenes, previewSceneIdx]);
+
+  const playtestSceneVisual = useMemo(() => {
+    if (previewMode !== 'playtest') return { backgroundUrl: '', foregroundUrl: '' };
+    return resolveSceneVisuals(scenes[playtestSceneIdx], playtestSceneState);
+  }, [previewMode, scenes, playtestSceneIdx, playtestSceneState]);
 
   // Selected item ID string for PixiRoom highlight
   const pixiSelectedItemId = useMemo(() => {
@@ -1323,16 +1531,43 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
         <h2 className="text-xl font-semibold mb-2">Scenes/Rooms</h2>
         {/* List and add/remove scenes (rooms) */}
         <div className="mb-2">
+          <input
+            ref={manifestInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              try {
+                await handleManifestImport(file);
+              } catch (err) {
+                setValidationError(`Manifest import failed: ${err instanceof Error ? err.message : String(err)}`);
+              }
+            }}
+          />
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded"
             type="button"
             onClick={e => {
               e.preventDefault();
               e.stopPropagation();
-              setScenes([...scenes, { id: Date.now().toString(), name: '', backgroundUrl: '', description: '', items: [], interactiveZones: [] }]);
+              setScenes([...scenes, { id: Date.now().toString(), name: '', backgroundUrl: '', foregroundUrl: '', description: '', stateVariants: [], items: [], interactiveZones: [] }]);
             }}
           >
             + Add Scene
+          </button>
+          <button
+            className="bg-indigo-600 text-white px-4 py-2 rounded ml-2"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              manifestInputRef.current?.click();
+            }}
+          >
+            Import Blender Manifest
           </button>
         </div>
         {/* Scene selector for preview */}
@@ -1405,10 +1640,10 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
               }}
             >
               {/* Background image */}
-              {scenes[playtestSceneIdx]?.backgroundUrl ? (
+              {playtestSceneVisual.backgroundUrl ? (
                 <>
                   <img
-                    src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(scenes[playtestSceneIdx].backgroundUrl)}` : scenes[playtestSceneIdx].backgroundUrl}
+                    src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(playtestSceneVisual.backgroundUrl)}` : playtestSceneVisual.backgroundUrl}
                     alt="Background"
                     style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }}
                     onLoad={() => {
@@ -1427,6 +1662,26 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     <div style={{ padding: 8, color: '#ff7b7b', fontSize: 12 }}>{previewImageError}</div>
                   )}
                 </>
+              ) : null}
+
+              {/* Foreground overlay (glass, bars, fog, etc.) */}
+              {playtestSceneVisual.foregroundUrl ? (
+                isVideoUrl(playtestSceneVisual.foregroundUrl) ? (
+                  <video
+                    src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(playtestSceneVisual.foregroundUrl)}` : playtestSceneVisual.foregroundUrl}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: 320, objectFit: 'cover', pointerEvents: 'none', zIndex: 60 }}
+                  />
+                ) : (
+                  <img
+                    src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(playtestSceneVisual.foregroundUrl)}` : playtestSceneVisual.foregroundUrl}
+                    alt="Foreground"
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: 320, objectFit: 'cover', pointerEvents: 'none', zIndex: 60 }}
+                  />
+                )
               ) : null}
 
               {/* Scene transition overlay */}
@@ -1526,6 +1781,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                   const showItemIds: string[] = Array.isArray(useEffect?.showItemIds) ? useEffect.showItemIds.filter((x: any) => typeof x === 'string') : [];
                   const disableHotspotIds: string[] = Array.isArray(useEffect?.disableHotspotIds) ? useEffect.disableHotspotIds.filter((x: any) => typeof x === 'string') : [];
                   const enableHotspotIds: string[] = Array.isArray(useEffect?.enableHotspotIds) ? useEffect.enableHotspotIds.filter((x: any) => typeof x === 'string') : [];
+                  const grantFlags: string[] = normalizeStringList(useEffect?.grantFlags);
+                  const revokeFlags: string[] = normalizeStringList(useEffect?.revokeFlags);
                   const setItemStateByIdEntries: Array<[string, string]> = useEffect?.setItemStateById && typeof useEffect.setItemStateById === 'object'
                     ? Object.entries(useEffect.setItemStateById).filter(([itemId, value]) => typeof itemId === 'string' && typeof value === 'string') as Array<[string, string]>
                     : [];
@@ -1552,6 +1809,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     : [];
 
                   setPlaytestSceneState(prev => {
+                    const nextFlags = new Set<string>(Array.isArray(prev.flags) ? prev.flags : []);
                     const nextHidden = new Set<string>(Array.isArray(prev.hiddenItemIds) ? prev.hiddenItemIds : []);
                     const nextShown = new Set<string>(Array.isArray(prev.shownItemIds) ? prev.shownItemIds : []);
                     const nextDisabled = new Set<string>(Array.isArray(prev.disabledHotspotIds) ? prev.disabledHotspotIds : []);
@@ -1579,6 +1837,12 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                       nextEnabled.add(id);
                       nextDisabled.delete(id);
                     }
+                    for (const flag of grantFlags) {
+                      nextFlags.add(flag);
+                    }
+                    for (const flag of revokeFlags) {
+                      nextFlags.delete(flag);
+                    }
                     for (const [itemId, stateValue] of setItemStateByIdEntries) {
                       const trimmed = stateValue.trim();
                       if (trimmed) nextItemStates[itemId] = trimmed;
@@ -1605,6 +1869,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     }
 
                     return {
+                      flags: Array.from(nextFlags),
                       hiddenItemIds: Array.from(nextHidden),
                       shownItemIds: Array.from(nextShown),
                       disabledHotspotIds: Array.from(nextDisabled),
@@ -1688,15 +1953,28 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                       return;
                     }
 
-                    // Fallback: trigger semantics
-                    if ((z?.actionType || '') === 'trigger') {
-                      const nextIdx = playtestSceneIdx + 1;
-                      if (nextIdx >= scenes.length) {
-                        setPlaytestCompleted(true);
-                        setPlaytestMessage('Completed (playtest).');
+                    // Fallback: trigger / navigate semantics
+                    if ((z?.actionType || '') === 'trigger' || (z?.actionType || '') === 'navigate') {
+                      const targetSceneId = typeof z?.targetSceneId === 'string' ? z.targetSceneId : '';
+                      if (targetSceneId) {
+                        const targetIdx = scenes.findIndex(s => s.id === targetSceneId);
+                        if (targetIdx >= 0) {
+                          setPlaytestSceneIdx(targetIdx);
+                          setPlaytestMessage(`Moved to ${scenes[targetIdx]?.name || `scene ${targetIdx + 1}`}.`);
+                        } else {
+                          setPlaytestMessage(`Target scene not found: ${targetSceneId}`);
+                        }
+                      } else if ((z?.actionType || '') === 'navigate') {
+                        setPlaytestMessage('Navigate zone has no destination scene configured.');
                       } else {
-                        setPlaytestSceneIdx(nextIdx);
-                        setPlaytestMessage(`Moved to scene ${nextIdx + 1}.`);
+                        const nextIdx = playtestSceneIdx + 1;
+                        if (nextIdx >= scenes.length) {
+                          setPlaytestCompleted(true);
+                          setPlaytestMessage('Completed (playtest).');
+                        } else {
+                          setPlaytestSceneIdx(nextIdx);
+                          setPlaytestMessage(`Moved to scene ${nextIdx + 1}.`);
+                        }
                       }
                       const consume = z?.consumeItemOnUse !== false;
                       if (consume) {
@@ -1811,6 +2089,26 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                       const targetIdx = scenes.findIndex(s => s.id === z.targetSceneId);
                       if (targetIdx >= 0) setPlaytestSceneIdx(targetIdx);
                     }
+                    return;
+                  }
+
+                  if ((z?.actionType || '') === 'navigate') {
+                    if (z?.sfx?.trigger) { try { new Audio(z.sfx.trigger).play().catch(() => {}); } catch {} }
+                    if (z?.useEffect && typeof z.useEffect === 'object') {
+                      applyUseEffect(z.useEffect, z);
+                    }
+                    const targetSceneId = typeof z?.targetSceneId === 'string' ? z.targetSceneId : '';
+                    if (!targetSceneId) {
+                      setPlaytestMessage('Navigate zone has no destination scene configured.');
+                      return;
+                    }
+                    const targetIdx = scenes.findIndex(s => s.id === targetSceneId);
+                    if (targetIdx < 0) {
+                      setPlaytestMessage(`Target scene not found: ${targetSceneId}`);
+                      return;
+                    }
+                    setPlaytestSceneIdx(targetIdx);
+                    setPlaytestMessage(`Moved to ${scenes[targetIdx]?.name || `scene ${targetIdx + 1}`}.`);
                     return;
                   }
 
@@ -2457,7 +2755,27 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                 selectedItemId={pixiSelectedItemId}
               />
             </Suspense>
-            {!scenes[previewSceneIdx]?.backgroundUrl && (
+            {editSceneVisual.foregroundUrl && (
+              isVideoUrl(editSceneVisual.foregroundUrl) ? (
+                <video
+                  src={editSceneVisual.foregroundUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                  style={{ zIndex: 12 }}
+                />
+              ) : (
+                <img
+                  src={editSceneVisual.foregroundUrl}
+                  alt="Foreground overlay"
+                  className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                  style={{ zIndex: 12 }}
+                />
+              )
+            )}
+            {!editSceneVisual.backgroundUrl && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 20 }}>
                 <span className="text-gray-500 text-sm">No background set — drag an image URL into the scene settings</span>
               </div>
@@ -2490,9 +2808,9 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
               style={{ width: 600, height: 320, position: 'relative', overflow: 'hidden', transform: `scale(${fsScale})`, transformOrigin: 'center center', flexShrink: 0, pointerEvents: 'none' }}
               onClick={(e) => e.stopPropagation()}
             >
-              {scenes[previewSceneIdx].backgroundUrl && (
+              {editSceneVisual.backgroundUrl && (
                 <img
-                  src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(scenes[previewSceneIdx].backgroundUrl)}` : scenes[previewSceneIdx].backgroundUrl}
+                  src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(editSceneVisual.backgroundUrl)}` : editSceneVisual.backgroundUrl}
                   alt="Background"
                   style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }}
                 />
@@ -2512,6 +2830,24 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                   {zone.label && <span style={{ fontSize: 9, color: 'rgba(200,200,255,0.85)', padding: '0 2px', background: 'rgba(0,0,0,0.4)', borderRadius: 2, lineHeight: 1 }}>{zone.label}</span>}
                 </div>
               ))}
+              {editSceneVisual.foregroundUrl && (
+                isVideoUrl(editSceneVisual.foregroundUrl) ? (
+                  <video
+                    src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(editSceneVisual.foregroundUrl)}` : editSceneVisual.foregroundUrl}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: 320, objectFit: 'cover', pointerEvents: 'none' }}
+                  />
+                ) : (
+                  <img
+                    src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(editSceneVisual.foregroundUrl)}` : editSceneVisual.foregroundUrl}
+                    alt="Foreground"
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: 320, objectFit: 'cover', pointerEvents: 'none' }}
+                  />
+                )
+              )}
             </div>
           </div>
         )}
@@ -3028,6 +3364,193 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     </div>
                   </div>
                 </div>
+                <div className="mb-2">
+                  <label className="block text-sm">Foreground Overlay (optional)</label>
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <input
+                      type="text"
+                      value={scene.foregroundUrl || ''}
+                      onChange={e => {
+                        const updated = [...scenes];
+                        updated[idx].foregroundUrl = e.target.value;
+                        setScenes(updated);
+                      }}
+                      placeholder="Paste an external image/video URL"
+                      className="border rounded px-2 py-1 text-xs w-64"
+                    />
+                    {scene.foregroundUrl && (
+                      isVideoUrl(scene.foregroundUrl)
+                        ? <video src={scene.foregroundUrl} autoPlay loop muted playsInline className="h-10 w-14 object-cover rounded" />
+                        : <img src={scene.foregroundUrl} alt="fg" className="h-10 w-10 object-cover rounded" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1">Use this for glass reflections, fog, bars, or grime layered above hotspots/items.</p>
+                </div>
+
+                <div className="mb-3 rounded border border-indigo-700/40 bg-indigo-950/20 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-semibold text-indigo-300">Scene Variants</div>
+                    <button
+                      type="button"
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded text-xs"
+                      onClick={() => {
+                        const updated = [...scenes];
+                        const curVariants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                        const fallbackId = `${updated[idx].id || 'scene'}_variant_${curVariants.length + 1}`;
+                        curVariants.push({
+                          id: fallbackId,
+                          label: `Variant ${curVariants.length + 1}`,
+                          backgroundUrl: '',
+                          foregroundUrl: '',
+                          allFlags: [],
+                          anyFlags: [],
+                          noneFlags: [],
+                        });
+                        updated[idx].stateVariants = curVariants;
+                        setScenes(updated);
+                      }}
+                    >
+                      + Add Variant
+                    </button>
+                  </div>
+
+                  {(!scene.stateVariants || scene.stateVariants.length === 0) ? (
+                    <p className="text-[11px] text-gray-400">No variants yet. Add one to swap visuals based on scene flags (e.g. door_unlocked).</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {(scene.stateVariants || []).map((variant, variantIdx) => (
+                        <div key={`${variant.id || 'variant'}-${variantIdx}`} className="border border-indigo-700/40 rounded p-2 bg-slate-900/40">
+                          <div className="flex items-center gap-2 mb-2">
+                            <input
+                              value={variant.label || ''}
+                              onChange={(e) => {
+                                const updated = [...scenes];
+                                const variants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                                variants[variantIdx] = { ...variants[variantIdx], label: e.target.value };
+                                updated[idx].stateVariants = variants;
+                                setScenes(updated);
+                              }}
+                              placeholder="Variant label"
+                              className="border rounded px-2 py-1 text-xs"
+                            />
+                            <input
+                              value={variant.id || ''}
+                              onChange={(e) => {
+                                const updated = [...scenes];
+                                const variants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                                variants[variantIdx] = { ...variants[variantIdx], id: e.target.value.trim() };
+                                updated[idx].stateVariants = variants;
+                                setScenes(updated);
+                              }}
+                              placeholder="variant_id"
+                              className="border rounded px-2 py-1 text-xs"
+                            />
+                            <button
+                              type="button"
+                              className="text-red-400 text-xs ml-auto"
+                              onClick={() => {
+                                const updated = [...scenes];
+                                const variants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                                variants.splice(variantIdx, 1);
+                                updated[idx].stateVariants = variants;
+                                setScenes(updated);
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                            <input
+                              value={variant.backgroundUrl || ''}
+                              onChange={(e) => {
+                                const updated = [...scenes];
+                                const variants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                                variants[variantIdx] = { ...variants[variantIdx], backgroundUrl: e.target.value };
+                                updated[idx].stateVariants = variants;
+                                setScenes(updated);
+                              }}
+                              placeholder="Variant background URL (optional)"
+                              className="border rounded px-2 py-1 text-xs"
+                            />
+                            <input
+                              value={variant.foregroundUrl || ''}
+                              onChange={(e) => {
+                                const updated = [...scenes];
+                                const variants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                                variants[variantIdx] = { ...variants[variantIdx], foregroundUrl: e.target.value };
+                                updated[idx].stateVariants = variants;
+                                setScenes(updated);
+                              }}
+                              placeholder="Variant foreground URL (optional)"
+                              className="border rounded px-2 py-1 text-xs"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[11px] text-gray-300 mb-0.5">All Flags</label>
+                              <input
+                                value={(variant.allFlags || []).join(', ')}
+                                onChange={(e) => {
+                                  const updated = [...scenes];
+                                  const variants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                                  variants[variantIdx] = {
+                                    ...variants[variantIdx],
+                                    allFlags: e.target.value.split(',').map(x => x.trim()).filter(Boolean),
+                                  };
+                                  updated[idx].stateVariants = variants;
+                                  setScenes(updated);
+                                }}
+                                placeholder="door_unlocked, power_on"
+                                className="border rounded px-2 py-1 text-xs w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] text-gray-300 mb-0.5">Any Flags</label>
+                              <input
+                                value={(variant.anyFlags || []).join(', ')}
+                                onChange={(e) => {
+                                  const updated = [...scenes];
+                                  const variants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                                  variants[variantIdx] = {
+                                    ...variants[variantIdx],
+                                    anyFlags: e.target.value.split(',').map(x => x.trim()).filter(Boolean),
+                                  };
+                                  updated[idx].stateVariants = variants;
+                                  setScenes(updated);
+                                }}
+                                placeholder="alarm_disabled"
+                                className="border rounded px-2 py-1 text-xs w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] text-gray-300 mb-0.5">None Flags</label>
+                              <input
+                                value={(variant.noneFlags || []).join(', ')}
+                                onChange={(e) => {
+                                  const updated = [...scenes];
+                                  const variants = Array.isArray(updated[idx].stateVariants) ? updated[idx].stateVariants!.slice() : [];
+                                  variants[variantIdx] = {
+                                    ...variants[variantIdx],
+                                    noneFlags: e.target.value.split(',').map(x => x.trim()).filter(Boolean),
+                                  };
+                                  updated[idx].stateVariants = variants;
+                                  setScenes(updated);
+                                }}
+                                placeholder="door_unlocked"
+                                className="border rounded px-2 py-1 text-xs w-full"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-indigo-300/70 mt-2">Variants are checked top-to-bottom; the first match wins. Use zone Use Effects to grant/revoke flags.</p>
+                </div>
+
                 <div className="mb-2">
                   <label className="block text-sm">Description</label>
                   <input value={scene.description} onChange={e => {
@@ -3655,11 +4178,12 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                 zone.actionType === 'collect' ? 'bg-green-900/60 text-green-300' :
                                 zone.actionType === 'trigger' ? 'bg-amber-900/60 text-amber-300' :
+                                zone.actionType === 'navigate' ? 'bg-teal-900/60 text-teal-300' :
                                 zone.actionType === 'triggerItemAnimation' ? 'bg-orange-900/60 text-orange-300' :
                                 zone.actionType === 'codeEntry' ? 'bg-cyan-900/60 text-cyan-300' :
                                 zone.actionType === 'miniPuzzle' ? 'bg-purple-900/60 text-purple-300' :
                                 'bg-blue-900/60 text-blue-300'
-                              }`}>{zone.actionType === 'codeEntry' ? 'code entry' : zone.actionType === 'miniPuzzle' ? 'mini puzzle' : zone.actionType === 'triggerItemAnimation' ? 'item animation' : zone.actionType}</span>
+                              }`}>{zone.actionType === 'codeEntry' ? 'code entry' : zone.actionType === 'miniPuzzle' ? 'mini puzzle' : zone.actionType === 'triggerItemAnimation' ? 'item animation' : zone.actionType === 'navigate' ? 'navigate' : zone.actionType}</span>
                               <span className="text-[10px] text-gray-400">▸ edit</span>
                             </summary>
                             <div className="px-2 pb-2 border-t border-slate-700/50">
@@ -3677,6 +4201,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                               <option value="modal">Modal</option>
                               <option value="collect">Collect Item</option>
                               <option value="trigger">Trigger / Advance Scene</option>
+                              <option value="navigate">Navigate To Scene</option>
                               <option value="triggerItemAnimation">▶ Play Item Animation (in-place)</option>
                               <option value="codeEntry">Code Entry (Combination Lock)</option>
                               <option value="miniPuzzle">🎮 Mini Puzzle (Keypad / Wire / Dial)</option>
@@ -3775,6 +4300,47 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                             <div className="mt-2 grid grid-cols-1 gap-2">
                               <div className="text-xs text-gray-500">
                                 Use effects: hide/show items, enable zones, switch item sprite states, or override item image URLs.
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-xs font-semibold">Grant Flag(s)</label>
+                                  <input
+                                    type="text"
+                                    value={Array.isArray(zone.useEffect?.grantFlags) ? zone.useEffect!.grantFlags!.join(', ') : ''}
+                                    onChange={(e) => {
+                                      const updated = [...scenes];
+                                      const z = updated[idx].interactiveZones[zoneIdx];
+                                      const ue = { ...(z.useEffect || {}) } as any;
+                                      const next = e.target.value.split(',').map(x => x.trim()).filter(Boolean);
+                                      ue.grantFlags = next.length > 0 ? next : undefined;
+                                      z.useEffect = ue;
+                                      updated[idx].interactiveZones[zoneIdx] = { ...z };
+                                      setScenes(updated);
+                                    }}
+                                    placeholder="door_unlocked, lights_on"
+                                    className="border rounded px-2 py-1 text-xs w-full"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold">Revoke Flag(s)</label>
+                                  <input
+                                    type="text"
+                                    value={Array.isArray(zone.useEffect?.revokeFlags) ? zone.useEffect!.revokeFlags!.join(', ') : ''}
+                                    onChange={(e) => {
+                                      const updated = [...scenes];
+                                      const z = updated[idx].interactiveZones[zoneIdx];
+                                      const ue = { ...(z.useEffect || {}) } as any;
+                                      const next = e.target.value.split(',').map(x => x.trim()).filter(Boolean);
+                                      ue.revokeFlags = next.length > 0 ? next : undefined;
+                                      z.useEffect = ue;
+                                      updated[idx].interactiveZones[zoneIdx] = { ...z };
+                                      setScenes(updated);
+                                    }}
+                                    placeholder="alarm_active"
+                                    className="border rounded px-2 py-1 text-xs w-full"
+                                  />
+                                </div>
                               </div>
 
                               <div className="flex flex-wrap gap-6">
@@ -4615,13 +5181,58 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                             </div>
                           )}
                           {zone.actionType === 'trigger' && (
-                            <div className="mb-1">
-                              <label className="block text-xs">Event/Action Name</label>
-                              <input value={zone.eventId || ''} onChange={e => {
-                                const updated = [...scenes];
-                                updated[idx].interactiveZones[zoneIdx].eventId = e.target.value;
-                                setScenes(updated);
-                              }} placeholder="Event Name" className="border rounded px-2 py-1 text-xs" />
+                            <div className="mb-2 space-y-2">
+                              <div>
+                                <label className="block text-xs">Event/Action Name</label>
+                                <input value={zone.eventId || ''} onChange={e => {
+                                  const updated = [...scenes];
+                                  updated[idx].interactiveZones[zoneIdx].eventId = e.target.value;
+                                  setScenes(updated);
+                                }} placeholder="Event Name" className="border rounded px-2 py-1 text-xs" />
+                              </div>
+                              <div>
+                                <label className="block text-xs">Optional Destination Scene</label>
+                                <select
+                                  value={zone.targetSceneId || ''}
+                                  onChange={e => {
+                                    const updated = [...scenes];
+                                    updated[idx].interactiveZones[zoneIdx].targetSceneId = e.target.value || undefined;
+                                    setScenes(updated);
+                                  }}
+                                  className="border rounded px-2 py-1 text-xs w-full"
+                                >
+                                  <option value="">None (advance by stage logic)</option>
+                                  {scenes.map((sceneOpt) => (
+                                    <option key={sceneOpt.id} value={sceneOpt.id}>{sceneOpt.name || `Scene (${sceneOpt.id.slice(-6)})`}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          )}
+
+                          {zone.actionType === 'navigate' && (
+                            <div className="mb-2 space-y-2 rounded border border-teal-700/50 bg-teal-950/20 p-3">
+                              <div className="text-xs font-semibold text-teal-300">Navigate Configuration</div>
+                              <div>
+                                <label className="block text-xs">Destination Scene</label>
+                                <select
+                                  value={zone.targetSceneId || ''}
+                                  onChange={e => {
+                                    const updated = [...scenes];
+                                    updated[idx].interactiveZones[zoneIdx].targetSceneId = e.target.value || undefined;
+                                    setScenes(updated);
+                                  }}
+                                  className="border rounded px-2 py-1 text-xs w-full bg-slate-700 text-white"
+                                >
+                                  <option value="">Select destination…</option>
+                                  {scenes.map((sceneOpt) => (
+                                    <option key={sceneOpt.id} value={sceneOpt.id}>{sceneOpt.name || `Scene (${sceneOpt.id.slice(-6)})`}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              {!zone.targetSceneId && (
+                                <p className="text-[11px] text-yellow-400">Choose a destination scene for this navigate hotspot.</p>
+                              )}
                             </div>
                           )}
 
@@ -5072,7 +5683,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                           </div>
 
                           {/* ── Time Penalty ── */}
-                          {(zone.actionType === 'trigger' || zone.actionType === 'modal') && (
+                          {(zone.actionType === 'trigger' || zone.actionType === 'navigate' || zone.actionType === 'modal') && (
                             <div className="mt-3 rounded border border-red-700/40 bg-red-950/20 p-3">
                               <div className="text-xs font-semibold text-red-300 mb-2">⏱ Time Penalty</div>
                               <div className="flex items-center gap-3">
