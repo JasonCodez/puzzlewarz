@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, context: { params: { id: string
 		}
 
 		// Enforce 3-attempt limit for applicable puzzle types (not gridlock, sudoku, jigsaw, escape_room)
-		const attemptLimitTypes = ["riddle", "general", "math", "code_master", "arg", "blackout", "anagram_blitz", "word_search"];
+		const attemptLimitTypes = ["riddle", "general", "math", "code_master", "arg", "blackout", "anagram_blitz", "word_search", "vault"];
 		if (attemptLimitTypes.includes(puzzle.puzzleType)) {
 			const accessState = await getPuzzleAccessState(currentUser.id, puzzleId);
 			if (accessState.isAttemptLocked) {

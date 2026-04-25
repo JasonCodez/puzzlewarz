@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getGridlockFileData } from "@/lib/gridlockFile";
+import { getVaultPuzzleData } from "@/lib/vault";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -102,7 +103,7 @@ export async function PUT(
       ? sudokuDifficulty.toLowerCase()
       : (difficulty && validDifficulties.includes(difficulty) ? difficulty : "medium");
 
-  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg", "gridlock_file", "debrief", "parasite_code"].includes(puzzleType);
+  const isSpecialType = ["sudoku", "jigsaw", "escape_room", "code_master", "detective_case", "crime_rpg", "gridlock_file", "debrief", "parasite_code", "vault"].includes(puzzleType);
 
   if (puzzleType === 'gridlock_file') {
     const parsed = getGridlockFileData(puzzleData);
@@ -112,6 +113,14 @@ export async function PUT(
         { status: 400 }
       );
     }
+  }
+
+  const vaultData = puzzleType === 'vault' ? getVaultPuzzleData(puzzleData) : null;
+  if (puzzleType === 'vault' && !vaultData) {
+    return NextResponse.json(
+      { error: 'Vault puzzles require puzzleData.vault with a valid 3x3 configuration.' },
+      { status: 400 }
+    );
   }
 
   await prisma.$transaction(async (tx) => {
@@ -131,6 +140,10 @@ export async function PUT(
     }
     if (["escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file", "debrief"].includes(puzzleType) && puzzleData != null) {
       puzzleUpdateData.data = puzzleData;
+    }
+    if (puzzleType === 'vault' && vaultData) {
+      puzzleUpdateData.data = { vault: vaultData };
+      puzzleUpdateData.riddleAnswer = vaultData.finalCode;
     }
     if (puzzleType === 'jigsaw' && puzzleData) {
       const shapeData: Record<string, unknown> = {};
@@ -175,6 +188,27 @@ export async function PUT(
           data: {
             puzzleId,
             answer: correctAnswer,
+            isCorrect: true,
+            points: pointsReward || 100,
+            ignoreCase: true,
+            ignoreWhitespace: false,
+          },
+        });
+      }
+    }
+
+    if (puzzleType === 'vault') {
+      const sol = await tx.puzzleSolution.findFirst({ where: { puzzleId } });
+      if (sol) {
+        await tx.puzzleSolution.update({
+          where: { id: sol.id },
+          data: { answer: '__VAULT__', points: pointsReward || 100 },
+        });
+      } else {
+        await tx.puzzleSolution.create({
+          data: {
+            puzzleId,
+            answer: '__VAULT__',
             isCorrect: true,
             points: pointsReward || 100,
             ignoreCase: true,

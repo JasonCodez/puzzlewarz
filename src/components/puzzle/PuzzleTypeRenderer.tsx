@@ -13,6 +13,7 @@ import CrosswordPuzzle from "@/components/puzzle/CrosswordPuzzle";
 import AnagramBlitz from "@/components/puzzle/AnagramBlitz";
 import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
 import BlackoutPuzzle from "@/components/puzzle/BlackoutPuzzle";
+import VaultPuzzle from "@/components/puzzle/VaultPuzzle";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import type { JigsawPuzzle as JigsawPuzzleType } from "@/lib/puzzle-types";
 
@@ -347,6 +348,26 @@ export function PuzzleTypeRenderer({
           puzzleId={puzzleId}
           blackoutData={(puzzle.data ?? {}) as Record<string, unknown>}
           alreadySolved={progress?.solved ?? false}
+          onSolved={() => onSolved()}
+        />
+      </div>
+    );
+  }
+
+  if (puzzle.puzzleType === 'vault') {
+    return (
+      <div className="mb-8">
+        {progress?.solved && (
+          <div className="mb-6 p-4 rounded-lg border text-white"
+               style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
+            You already opened this vault.
+          </div>
+        )}
+        <VaultPuzzle
+          puzzleId={puzzleId}
+          vaultData={puzzle.data ?? {}}
+          alreadySolved={progress?.solved ?? false}
+          failedAttempts={progress?.failedAttempts ?? 0}
           onSolved={() => onSolved()}
         />
       </div>

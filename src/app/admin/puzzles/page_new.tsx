@@ -67,6 +67,7 @@ const PUZZLE_TYPES = [
   { value: 'crossword', label: 'Crossword ✏️' },
   { value: 'anagram_blitz', label: 'Anagram Blitz 🔀' },
   { value: 'blackout', label: 'Blackout ⬛' },
+  { value: 'vault', label: 'The Vault 🔐' },
   { value: 'arg', label: 'ARG' },
   { value: 'escape_room', label: 'Escape Room' },
 ];
@@ -712,6 +713,9 @@ export default function AdminPuzzlesPage() {
       }
       if (formData.puzzleType === 'crack_safe') {
         // Code is stored in puzzleData.safecode — no separate correctAnswer needed
+        delete submitBody.correctAnswer;
+      }
+      if (formData.puzzleType === 'vault') {
         delete submitBody.correctAnswer;
       }
       if (formData.puzzleType === 'gridlock_file') {
@@ -1494,7 +1498,7 @@ export default function AdminPuzzlesPage() {
                   )}
 
                   {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
-                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && formData.puzzleType !== 'debrief' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && formData.puzzleType !== 'anagram_blitz' && formData.puzzleType !== 'blackout' && (
+                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && formData.puzzleType !== 'debrief' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && formData.puzzleType !== 'anagram_blitz' && formData.puzzleType !== 'blackout' && formData.puzzleType !== 'vault' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">
                         Correct Answer *

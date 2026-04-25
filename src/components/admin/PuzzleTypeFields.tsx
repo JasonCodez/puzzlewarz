@@ -3,6 +3,7 @@
 import React, { JSX, useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { createDefaultGridlockFileData, getGridlockFileData } from '@/lib/gridlockFile';
+import { createDefaultVaultData, getVaultDerivedLetters, getVaultPuzzleData } from '@/lib/vault';
 // Dynamically import the advanced Escape Room Designer (client-side only)
 const EscapeRoomDesigner = dynamic(() => import("@/app/escape-rooms/Designer"), { ssr: false });
 
@@ -1093,6 +1094,8 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
   const [parasiteCodeJsonError, setParasiteCodeJsonError] = useState<string>('');
   const [gridlockFileJson, setGridlockFileJson] = useState<string>('');
   const [gridlockFileJsonError, setGridlockFileJsonError] = useState<string>('');
+  const [vaultJson, setVaultJson] = useState<string>('');
+  const [vaultJsonError, setVaultJsonError] = useState<string>('');
   const [debriefJson, setDebriefJson] = useState<string>('');
   const [debriefJsonError, setDebriefJsonError] = useState<string>('');
   const [templateId, setTemplateId] = useState<string>('');
@@ -2112,6 +2115,67 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
       {gridlockFileJsonError ? <div className="text-sm text-red-300">{gridlockFileJsonError}</div> : null}
     </div>
   );
+
+  useEffect(() => {
+    if (puzzleType !== 'vault') return;
+    const existing = getVaultPuzzleData((puzzleData as any)?.vault ?? puzzleData);
+    const template = createDefaultVaultData();
+    const initial = existing ?? template;
+    setVaultJson(JSON.stringify(initial, null, 2));
+    setVaultJsonError('');
+    onDataChange('vault', initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzleType]);
+
+  const renderVaultFields = () => {
+    const parsed = getVaultPuzzleData((puzzleData as any)?.vault ?? puzzleData);
+    const derived = parsed ? getVaultDerivedLetters(parsed) : [];
+
+    return (
+      <div className="space-y-4">
+        <div className="text-sm text-gray-300">
+          Configure <span className="font-semibold">The Vault</span> as a three-stage logic puzzle. The default template includes a full grid pattern, letter clue chain, and final extraction code.
+        </div>
+        <div className="text-xs text-gray-500 space-y-1">
+          <div><span className="text-yellow-400 font-semibold">grid</span> — a 3x3 array of three-digit numbers.</div>
+          <div><span className="text-yellow-400 font-semibold">missing</span> — the hidden row and column players must solve in Stage 1.</div>
+          <div><span className="text-yellow-400 font-semibold">clueLines</span> — ordered row/column totals converted to letters for Stage 2.</div>
+          <div><span className="text-yellow-400 font-semibold">targetWord</span> — the instruction word players must unscramble.</div>
+          <div><span className="text-yellow-400 font-semibold">extraction</span> — ordered cell positions used to build the final code. Each step can use either <code>cell</code> for a named corner or explicit <code>row</code>/<code>col</code> coordinates.</div>
+          <div><span className="text-yellow-400 font-semibold">finalCode</span> — optional override; if blank, the app computes it from the extraction steps.</div>
+        </div>
+        <textarea
+          value={vaultJson}
+          onChange={(e) => {
+            const next = e.target.value;
+            setVaultJson(next);
+            try {
+              const parsedJson = getVaultPuzzleData(JSON.parse(next));
+              if (!parsedJson) {
+                setVaultJsonError('Vault JSON must include a valid 3x3 grid and extraction settings.');
+                return;
+              }
+              onDataChange('vault', parsedJson);
+              setVaultJsonError('');
+            } catch {
+              setVaultJsonError('Invalid JSON — fix before saving.');
+            }
+          }}
+          className="w-full px-4 py-2 rounded-lg bg-slate-900/40 border border-slate-600 text-white font-mono text-xs h-96"
+          spellCheck={false}
+        />
+        {vaultJsonError ? <div className="text-sm text-red-300">{vaultJsonError}</div> : null}
+        {parsed ? (
+          <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-2 text-sm text-slate-200">
+            <div className="font-semibold text-white">Preview</div>
+            <div>Hidden center: <span className="font-mono text-amber-300">{parsed.grid[parsed.missing.row][parsed.missing.col]}</span></div>
+            <div>Stage 2 letters: <span className="font-mono text-amber-300">{derived.map((entry) => entry.letter).join(' ')}</span> -&gt; {parsed.targetWord}</div>
+            <div>Final code: <span className="font-mono text-emerald-300">{parsed.finalCode}</span></div>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   // ── The Debrief initializer ───────────────────────────────────────────────
   const DEBRIEF_TEMPLATE = {
@@ -4239,6 +4303,7 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
     blackout: renderBlackoutFields,
     arg: renderArgFields,
     crossword: renderCrosswordFields,
+    vault: renderVaultFields,
   };
 
   const renderer = typeSpecificRenders[puzzleType];

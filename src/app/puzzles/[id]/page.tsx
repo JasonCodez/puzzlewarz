@@ -1099,7 +1099,7 @@ export default function PuzzleDetailPage() {
     e.preventDefault();
     
     // Skip if this is a Sudoku puzzle
-    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw' || puzzle?.puzzleType === 'detective_case' || puzzle?.puzzleType === 'crack_safe' || puzzle?.puzzleType === 'crime_rpg' || puzzle?.puzzleType === 'parasite_code' || puzzle?.puzzleType === 'gridlock_file') {
+    if (puzzle?.puzzleType === 'sudoku' || puzzle?.puzzleType === 'jigsaw' || puzzle?.puzzleType === 'detective_case' || puzzle?.puzzleType === 'crack_safe' || puzzle?.puzzleType === 'crime_rpg' || puzzle?.puzzleType === 'parasite_code' || puzzle?.puzzleType === 'gridlock_file' || puzzle?.puzzleType === 'vault') {
       return;
     }
 
@@ -1618,7 +1618,7 @@ export default function PuzzleDetailPage() {
             />
 
             {/* Default form — text / sudoku / code_master puzzle types */}
-            {!['jigsaw','escape_room','detective_case','crime_rpg','parasite_code','gridlock_file','crack_safe','word_crack','crossword','word_search','anagram_blitz','arg','blackout'].includes(puzzle?.puzzleType ?? '') && (
+            {!['jigsaw','escape_room','detective_case','crime_rpg','parasite_code','gridlock_file','crack_safe','word_crack','crossword','word_search','anagram_blitz','arg','blackout','vault'].includes(puzzle?.puzzleType ?? '') && (
               <form onSubmit={handleSubmit} className="mb-8">
                 {progress?.solved && (
                   <div className="mb-6 p-4 rounded-lg border text-white" style={{ backgroundColor: "rgba(76, 91, 92, 0.3)", borderColor: "#3891A6" }}>

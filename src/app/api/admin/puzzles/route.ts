@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { notifyPuzzleRelease } from "@/lib/notification-service";
 import { getDetectiveCaseData } from "@/lib/detectiveCase";
 import { getGridlockFileData } from "@/lib/gridlockFile";
+import { getVaultPuzzleData } from "@/lib/vault";
 
 type MultiPartInput = {
   title?: string;
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate input - title is required for most puzzle types but optional for Sudoku, Escape Room, and Word Crack
-    if (!title && puzzleType !== 'sudoku' && puzzleType !== 'escape_room' && puzzleType !== 'word_crack' && puzzleType !== 'word_search' && puzzleType !== 'anagram_blitz' && puzzleType !== 'arg') {
+    if (!title && puzzleType !== 'sudoku' && puzzleType !== 'escape_room' && puzzleType !== 'word_crack' && puzzleType !== 'word_search' && puzzleType !== 'anagram_blitz' && puzzleType !== 'arg' && puzzleType !== 'vault') {
       return NextResponse.json(
         { error: "Missing required field: title" },
         { status: 400 }
@@ -190,6 +191,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const vaultData = puzzleType === 'vault' ? getVaultPuzzleData(puzzleData) : null;
+    if (puzzleType === 'vault' && !vaultData) {
+      return NextResponse.json(
+        { error: 'Vault puzzles require puzzleData.vault with a valid 3x3 configuration.' },
+        { status: 400 }
+      );
+    }
+
     // Validate difficulty value
     // For sudoku puzzles, the canonical difficulty comes from sudokuDifficulty (set in the
     // generator), not the generic difficulty field which defaults to 'medium' in the form.
@@ -236,6 +245,7 @@ export async function POST(request: NextRequest) {
       puzzleType === 'word_search' ? 'Word Search' :
       puzzleType === 'anagram_blitz' ? 'Anagram Blitz' :
       puzzleType === 'arg' ? 'ARG' :
+      puzzleType === 'vault' ? 'The Vault' :
       'Untitled Puzzle');
 
     // Create puzzle
@@ -257,7 +267,7 @@ export async function POST(request: NextRequest) {
             minTeamSize: (() => { const v = puzzleData?.minTeamSize ?? (puzzleData as any)?.escapeRoomData?.minTeamSize; return (typeof v === 'number' && v > 0) ? v : 1; })(),
           }
         : {}),
-      riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case' && puzzleType !== 'crime_rpg' && puzzleType !== 'blackout' && puzzleType !== 'gridlock_file' && puzzleType !== 'debrief' && puzzleType !== 'parasite_code' && puzzleType !== 'crossword' ? correctAnswer : undefined,
+      riddleAnswer: !isMultiPart && puzzleType !== 'sudoku' && puzzleType !== 'jigsaw' && puzzleType !== 'escape_room' && puzzleType !== 'code_master' && puzzleType !== 'detective_case' && puzzleType !== 'crime_rpg' && puzzleType !== 'blackout' && puzzleType !== 'gridlock_file' && puzzleType !== 'debrief' && puzzleType !== 'parasite_code' && puzzleType !== 'crossword' && puzzleType !== 'vault' ? correctAnswer : undefined,
       jigsaw:
         puzzleType === 'jigsaw'
           ? {
@@ -314,7 +324,7 @@ export async function POST(request: NextRequest) {
         : undefined,
     };
 
-    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search' || puzzleType === 'anagram_blitz' || puzzleType === 'arg' || puzzleType === 'blackout' || puzzleType === 'gridlock_file' || puzzleType === 'debrief' || puzzleType === 'crossword') && typeof puzzleData !== 'undefined') {
+    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search' || puzzleType === 'anagram_blitz' || puzzleType === 'arg' || puzzleType === 'blackout' || puzzleType === 'gridlock_file' || puzzleType === 'debrief' || puzzleType === 'crossword' || puzzleType === 'vault') && typeof puzzleData !== 'undefined') {
       createData.data = puzzleData;
     }
     // Persist jigsaw shape params (piece designer) into puzzle.data JSON
@@ -348,6 +358,22 @@ export async function POST(request: NextRequest) {
         create: [
           {
             answer: '__CRACK_SAFE__',
+            isCorrect: true,
+            points: pointsReward || 100,
+            ignoreCase: true,
+            ignoreWhitespace: false,
+          },
+        ],
+      };
+    }
+
+    if (puzzleType === 'vault' && vaultData) {
+      createData.data = { vault: vaultData };
+      createData.riddleAnswer = vaultData.finalCode;
+      createData.solutions = {
+        create: [
+          {
+            answer: '__VAULT__',
             isCorrect: true,
             points: pointsReward || 100,
             ignoreCase: true,
