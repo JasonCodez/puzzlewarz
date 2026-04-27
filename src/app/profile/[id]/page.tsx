@@ -10,6 +10,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import { Rarity, rarityColors } from '@/lib/rarity';
 import { THEME_CONFIGS, FRAME_CONFIGS, getThemeConfig, getTopBarGradient } from '@/lib/profileThemes';
 import AvatarFrame from '@/components/AvatarFrame';
+import { normalizeUserImageUrl } from '@/lib/userImage';
 import {
   UserPlus,
   UserMinus,
@@ -26,7 +27,7 @@ import {
 interface UserProfile {
   id: string;
   name: string;
-  image: string;
+  image: string | null;
   createdAt: string;
   xp: number;
   level: number;
@@ -370,6 +371,7 @@ export default function PublicProfilePage() {
   const btnStyle = t.btnPrimary.startsWith('linear')
     ? { background: t.btnPrimary, color: t.btnPrimaryText }
     : { backgroundColor: t.btnPrimary, color: t.btnPrimaryText };
+  const avatarSrc = normalizeUserImageUrl(profile.image);
 
   // Render avatar (shared helper)
   const renderAvatar = (sizeClass: string) => {
@@ -381,8 +383,8 @@ export default function PublicProfilePage() {
           size={sizePx}
           pageBg={t.pageBg}
         >
-          {profile.image
-            ? <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
+          {avatarSrc
+            ? <img src={avatarSrc} alt={profile.name} className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
             : <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: t.primaryMuted }}>👤</div>}
         </AvatarFrame>
       );
@@ -392,8 +394,8 @@ export default function PublicProfilePage() {
         className={`${sizeClass} rounded-full overflow-hidden border-[3px] flex-shrink-0 flex items-center justify-center`}
         style={{ borderColor: t.primary, boxShadow: `0 0 18px ${t.avatarGlow}, 0 0 40px ${t.avatarGlow}` }}
       >
-        {profile.image
-          ? <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
+        {avatarSrc
+          ? <img src={avatarSrc} alt={profile.name} className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.onerror = null; img.src = '/images/default-avatar.svg'; }} />
           : <div className="w-full h-full flex items-center justify-center text-4xl" style={{ backgroundColor: t.primaryMuted }}>👤</div>}
       </div>
     );

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { normalizeUserImageUrl } from "@/lib/userImage";
 
 import { calcLevel } from "@/lib/levels";
 
@@ -131,6 +132,7 @@ export async function GET(
 
     return NextResponse.json({
       ...publicUser,
+      image: normalizeUserImageUrl(publicUser.image),
       activeFlair: resolveFlair(user.activeFlair),
       isPremium: !!premiumPass,
       level,
