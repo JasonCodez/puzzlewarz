@@ -36,12 +36,22 @@ export default function NotificationsPanel({
 }: NotificationsPanelProps) {
   const [notifications, setNotifications] = useState<Activity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState<Record<string, "join" | "decline" | null>>({});
   const router = useRouter();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
   const [modalMessage, setModalMessage] = useState<string | undefined>(undefined);
   const [modalVariant, setModalVariant] = useState<"success" | "error" | "info">("info");
+
+  const parseTeamLobbyRelatedId = (relatedId?: string | null): { teamId: string; puzzleId: string } | null => {
+    if (!relatedId) return null;
+    const parts = relatedId.split("::");
+    if (parts.length < 2) return null;
+    const [teamId, puzzleId] = parts;
+    if (!teamId || !puzzleId) return null;
+    return { teamId, puzzleId };
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -100,6 +110,90 @@ export default function NotificationsPanel({
       console.error("Failed to delete notification:", error);
       // Revert on error
       await fetchNotifications();
+    }
+  };
+
+  const handleJoinLobbyInvite = async (notification: Activity) => {
+    const parsed = parseTeamLobbyRelatedId(notification.relatedId);
+    if (!parsed) {
+      setModalTitle("Invalid invite");
+      setModalMessage("This invite is missing lobby details.");
+      setModalVariant("error");
+      setModalOpen(true);
+      return;
+    }
+
+    setInviteBusy((prev) => ({ ...prev, [notification.id]: "join" }));
+    try {
+      const res = await fetch("/api/team/lobby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create", teamId: parsed.teamId, puzzleId: parsed.puzzleId }),
+      });
+
+      const payload = await res.json().catch(() => ({} as any));
+      if (!res.ok && payload?.activePuzzleId) {
+        onClose();
+        router.push(`/teams/${parsed.teamId}/lobby?puzzleId=${encodeURIComponent(payload.activePuzzleId)}&notice=${encodeURIComponent(payload?.error || 'Only the lobby leader can change the team puzzle.')}`);
+        return;
+      }
+
+      if (!res.ok) {
+        setModalTitle("Unable to join lobby");
+        setModalMessage(payload?.error || "Failed to join this lobby invite.");
+        setModalVariant("error");
+        setModalOpen(true);
+        return;
+      }
+
+      try {
+        window.dispatchEvent(new Event("notificationsRead"));
+      } catch {
+        // ignore
+      }
+
+      setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+      onClose();
+      router.push(`/teams/${parsed.teamId}/lobby?puzzleId=${encodeURIComponent(parsed.puzzleId)}`);
+    } catch {
+      setModalTitle("Unable to join lobby");
+      setModalMessage("Network error while joining this lobby invite.");
+      setModalVariant("error");
+      setModalOpen(true);
+    } finally {
+      setInviteBusy((prev) => ({ ...prev, [notification.id]: null }));
+    }
+  };
+
+  const handleDeclineLobbyInvite = async (notification: Activity) => {
+    const parsed = parseTeamLobbyRelatedId(notification.relatedId);
+    if (!parsed) {
+      await handleDeleteNotification(notification.id);
+      return;
+    }
+
+    setInviteBusy((prev) => ({ ...prev, [notification.id]: "decline" }));
+    try {
+      await fetch("/api/team/lobby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "declineInvite", teamId: parsed.teamId, puzzleId: parsed.puzzleId }),
+      });
+
+      try {
+        window.dispatchEvent(new Event("notificationsRead"));
+      } catch {
+        // ignore
+      }
+
+      setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+    } catch {
+      setModalTitle("Unable to decline invite");
+      setModalMessage("Network error while declining this lobby invite.");
+      setModalVariant("error");
+      setModalOpen(true);
+    } finally {
+      setInviteBusy((prev) => ({ ...prev, [notification.id]: null }));
     }
   };
 
@@ -219,7 +313,32 @@ export default function NotificationsPanel({
                           </a>
                         )}
 
-                        {/* Team lobby invites disabled until team puzzles are ready */}
+                        {notification.type === "team_lobby_invite" && notification.relatedId && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDeclineLobbyInvite(notification);
+                              }}
+                              className="px-2 py-0.5 text-xs rounded bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-60"
+                              title="Decline lobby invite"
+                              disabled={inviteBusy[notification.id] !== undefined && inviteBusy[notification.id] !== null}
+                            >
+                              {inviteBusy[notification.id] === "decline" ? "Declining…" : "Decline"}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleJoinLobbyInvite(notification);
+                              }}
+                              className="px-2 py-0.5 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
+                              title="Join team lobby"
+                              disabled={inviteBusy[notification.id] !== undefined && inviteBusy[notification.id] !== null}
+                            >
+                              {inviteBusy[notification.id] === "join" ? "Joining…" : "Join"}
+                            </button>
+                          </>
+                        )}
 
                         <button
                           onClick={(e) => {

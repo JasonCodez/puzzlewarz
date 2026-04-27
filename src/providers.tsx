@@ -182,8 +182,7 @@ function AuthenticatedEffects() {
   }, [isAuthenticated]);
 
   if (!isAuthenticated) return null;
-  // Team lobbies disabled — skip invite modal until team puzzles are ready
-  return null;
+  return <TeamLobbyInviteModalProvider />;
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
