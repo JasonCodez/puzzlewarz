@@ -771,6 +771,51 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
     }
   }
 
+  async function launchTeamPuzzle(puzzle: Puzzle) {
+    try {
+      const response = await fetch(`/api/user/team-admin?puzzleId=${encodeURIComponent(puzzle.id)}`);
+
+      if (response.status === 401) {
+        router.push('/auth/signin');
+        return;
+      }
+
+      const teamInfo = (await response.json().catch(() => null)) as {
+        isMember?: boolean;
+        teamId?: string | null;
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(teamInfo?.error || response.statusText || 'Failed to verify team access.');
+      }
+
+      if (!teamInfo?.isMember || !teamInfo?.teamId) {
+        setTeamModalTitle('Team Required');
+        setTeamModalConfirmText('Go to Teams');
+        setTeamModalCancelText('Cancel');
+        setTeamModalConfirmAction(() => {
+          return () => {
+            router.push('/teams');
+          };
+        });
+        setTeamModalMessage('This puzzle requires a team. Join or create a team first, then launch it from your team lobby.');
+        setShowTeamModal(true);
+        return;
+      }
+
+      router.push(`/teams/${teamInfo.teamId}/lobby?puzzleId=${encodeURIComponent(puzzle.id)}`);
+    } catch (error) {
+      console.error('Failed to launch team puzzle:', error);
+      setTeamModalTitle('Unable to Launch');
+      setTeamModalConfirmText('OK');
+      setTeamModalCancelText(null);
+      setTeamModalConfirmAction(null);
+      setTeamModalMessage("We couldn't launch this team puzzle right now. Please try again.");
+      setShowTeamModal(true);
+    }
+  }
+
   async function handlePuzzleClick(puzzle: Puzzle, opts?: { skipWebGLCheck?: boolean }) {
     const isEscapeRoom = puzzle?.puzzleType === 'escape_room' || !!puzzle?.escapeRoom;
 
@@ -820,13 +865,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
       return;
     }
 
-    // Team puzzles/lobbies disabled — coming soon
-    setTeamModalTitle('Coming Soon');
-    setTeamModalConfirmText('OK');
-    setTeamModalCancelText(null);
-    setTeamModalConfirmAction(null);
-    setTeamModalMessage("Team puzzles are coming soon! For now, solve solo puzzles to earn points for your team leaderboard.");
-    setShowTeamModal(true);
+    await launchTeamPuzzle(puzzle);
   }
 
   function closeTeamModal() {
