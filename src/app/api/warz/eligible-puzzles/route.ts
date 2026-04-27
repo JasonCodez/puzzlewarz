@@ -9,13 +9,14 @@ const ALLOWED_TYPES = ["sudoku", "word_crack", "word_search", "jigsaw"];
 //   - allowed puzzle type
 //   - active
 //   - user has NOT previously solved OR failed this puzzle
+//   - user has NOT previously participated in Warz on this puzzle
 export async function GET(_request: NextRequest) {
   try {
     const currentUser = await requireAuthenticatedUser();
     if (currentUser instanceof NextResponse) return currentUser;
 
     // Find puzzles the user has any progress on (solved or had attempts)
-    const [userProgress, openChallenges] = await Promise.all([
+    const [userProgress, openChallenges, warzParticipation] = await Promise.all([
       prisma.userPuzzleProgress.findMany({
         where: { userId: currentUser.id },
         select: { puzzleId: true, solved: true, attempts: true },
@@ -24,12 +25,22 @@ export async function GET(_request: NextRequest) {
         where: { challengerId: currentUser.id, status: "OPEN" },
         select: { puzzleId: true },
       }),
+      prisma.puzzleWarzChallenge.findMany({
+        where: {
+          OR: [
+            { challengerId: currentUser.id },
+            { opponentId: currentUser.id },
+          ],
+        },
+        select: { puzzleId: true },
+      }),
     ]);
     const ineligibleIds = new Set([
       ...userProgress
         .filter((p) => p.solved || p.attempts > 0)
         .map((p) => p.puzzleId),
       ...openChallenges.map((c) => c.puzzleId),
+      ...warzParticipation.map((c) => c.puzzleId),
     ]);
 
     const puzzles = await prisma.puzzle.findMany({

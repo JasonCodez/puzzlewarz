@@ -55,13 +55,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Eligibility check — opponent may not have any prior progress on this puzzle
-    const existingProgress = await prisma.userPuzzleProgress.findUnique({
-      where: { userId_puzzleId: { userId: currentUser.id, puzzleId: challenge.puzzleId } },
-    });
+    // Eligibility checks:
+    // - no prior normal puzzle progress
+    // - no prior Warz participation on this puzzle (as challenger or opponent)
+    const [existingProgress, priorWarzParticipation] = await Promise.all([
+      prisma.userPuzzleProgress.findUnique({
+        where: { userId_puzzleId: { userId: currentUser.id, puzzleId: challenge.puzzleId } },
+      }),
+      prisma.puzzleWarzChallenge.findFirst({
+        where: {
+          puzzleId: challenge.puzzleId,
+          OR: [
+            { challengerId: currentUser.id },
+            { opponentId: currentUser.id },
+          ],
+        },
+        select: { id: true },
+      }),
+    ]);
     if (existingProgress && (existingProgress.solved || existingProgress.attempts > 0)) {
       return NextResponse.json(
         { error: "You have already attempted this puzzle and cannot accept this challenge" },
+        { status: 409 }
+      );
+    }
+
+    if (priorWarzParticipation) {
+      return NextResponse.json(
+        { error: "You have already played this puzzle in Warz and cannot accept this challenge" },
         { status: 409 }
       );
     }

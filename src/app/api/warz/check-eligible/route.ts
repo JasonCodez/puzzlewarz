@@ -11,6 +11,7 @@ import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
  * Ineligible when:
  *  - User has prior progress (solved or any attempts) on this puzzle
  *  - User already has an OPEN challenge on this puzzle
+ *  - User has already participated in Warz on this puzzle (challenger or opponent)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -23,13 +24,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "puzzleId required" }, { status: 400 });
     }
 
-    const [progress, openChallenge] = await Promise.all([
+    const [progress, openChallenge, priorWarzParticipation] = await Promise.all([
       prisma.userPuzzleProgress.findUnique({
         where: { userId_puzzleId: { userId: currentUser.id, puzzleId } },
         select: { solved: true, attempts: true },
       }),
       prisma.puzzleWarzChallenge.findFirst({
         where: { challengerId: currentUser.id, puzzleId, status: "OPEN" },
+        select: { id: true },
+      }),
+      prisma.puzzleWarzChallenge.findFirst({
+        where: {
+          puzzleId,
+          OR: [
+            { challengerId: currentUser.id },
+            { opponentId: currentUser.id },
+          ],
+        },
         select: { id: true },
       }),
     ]);
@@ -45,6 +56,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         eligible: false,
         reason: "You already have an open challenge on this puzzle. It will expire in 24 hours if no one accepts.",
+      });
+    }
+
+    if (priorWarzParticipation) {
+      return NextResponse.json({
+        eligible: false,
+        reason: "You have already played this puzzle in Warz and cannot challenge on it again.",
       });
     }
 

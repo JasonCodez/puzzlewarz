@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
       timeLimitSeconds,
       puzzleData,
       isWarzExclusive,
+      isActive,
       gridlockReleaseAt,
       debriefReleaseAt,
     } = body;
@@ -263,7 +264,9 @@ export async function POST(request: NextRequest) {
       ...(puzzleType === 'escape_room'
         ? {
             isTeamPuzzle: true,
-            isActive: false,
+            // Escape rooms created from the admin maker should be immediately playable.
+            // Allow explicit override via payload when needed.
+            isActive: typeof isActive === 'boolean' ? isActive : true,
             minTeamSize: (() => { const v = puzzleData?.minTeamSize ?? (puzzleData as any)?.escapeRoomData?.minTeamSize; return (typeof v === 'number' && v > 0) ? v : 1; })(),
           }
         : {}),

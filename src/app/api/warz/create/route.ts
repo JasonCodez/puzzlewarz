@@ -59,10 +59,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Puzzle type not allowed in Warz" }, { status: 400 });
     }
 
-    // Check eligibility — no prior progress (solved or any attempt)
-    const existing = await prisma.userPuzzleProgress.findUnique({
-      where: { userId_puzzleId: { userId: currentUser.id, puzzleId } },
-    });
+    // Check eligibility:
+    // - no prior normal puzzle progress
+    // - no already-open challenge by this user on this puzzle
+    // - user has never participated in Warz on this puzzle (as challenger or opponent)
+    const [existing, duplicateChallenge, priorWarzParticipation] = await Promise.all([
+      prisma.userPuzzleProgress.findUnique({
+        where: { userId_puzzleId: { userId: currentUser.id, puzzleId } },
+      }),
+      prisma.puzzleWarzChallenge.findFirst({
+        where: { challengerId: currentUser.id, puzzleId, status: "OPEN" },
+      }),
+      prisma.puzzleWarzChallenge.findFirst({
+        where: {
+          puzzleId,
+          OR: [
+            { challengerId: currentUser.id },
+            { opponentId: currentUser.id },
+          ],
+        },
+        select: { id: true },
+      }),
+    ]);
+
     if (existing && (existing.solved || existing.attempts > 0)) {
       return NextResponse.json(
         { error: "You have already attempted this puzzle and cannot challenge on it" },
@@ -70,13 +89,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for an already-open challenge by this user on this puzzle
-    const duplicateChallenge = await prisma.puzzleWarzChallenge.findFirst({
-      where: { challengerId: currentUser.id, puzzleId, status: "OPEN" },
-    });
     if (duplicateChallenge) {
       return NextResponse.json(
         { error: "You already have an open challenge on this puzzle" },
+        { status: 409 }
+      );
+    }
+
+    if (priorWarzParticipation) {
+      return NextResponse.json(
+        { error: "You have already played this puzzle in Warz and cannot challenge on it again" },
         { status: 409 }
       );
     }
