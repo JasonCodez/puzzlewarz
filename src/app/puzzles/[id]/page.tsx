@@ -236,6 +236,7 @@ export default function PuzzleDetailPage() {
   const sudokuStartRef = useRef<number | null>(null);
   const sudokuTimerRef = useRef<number | null>(null);
   const sudokuLockSentRef = useRef(false);
+  const puzzleTypeCompletionInFlightRef = useRef(false);
   const [sudokuElapsed, setSudokuElapsed] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -954,9 +955,24 @@ export default function PuzzleDetailPage() {
     return 0;
   };
 
-  const handlePuzzleTypeComplete = (elapsed?: number, xp?: number) => {
-    setSuccess(true);
-    recordCompletionAndShowModal(elapsed, xp);
+  const handlePuzzleTypeComplete = async (elapsed?: number, xp?: number) => {
+    if (progress?.solved) {
+      return;
+    }
+    if (puzzleTypeCompletionInFlightRef.current) {
+      return;
+    }
+
+    puzzleTypeCompletionInFlightRef.current = true;
+    setError("");
+    try {
+      const committed = await recordCompletionAndShowModal(elapsed, xp);
+      if (committed) {
+        setSuccess(true);
+      }
+    } finally {
+      puzzleTypeCompletionInFlightRef.current = false;
+    }
   };
 
   const handleSkipPuzzle = async () => {
@@ -989,10 +1005,45 @@ export default function PuzzleDetailPage() {
   };
 
   // Used by non-sudoku puzzle types: computes elapsed, fetches updated points, then shows modals.
-  const recordCompletionAndShowModal = async (elapsedOverride?: number, xpOverride?: number) => {
+  const recordCompletionAndShowModal = async (elapsedOverride?: number, xpOverride?: number): Promise<boolean> => {
     const prevPoints = progress?.pointsEarned || 0;
     const elapsed = elapsedOverride ?? (sessionStartRef.current ? Math.round((Date.now() - sessionStartRef.current.getTime()) / 1000) : null);
     setCompletionSeconds(elapsed);
+
+    if (!progress?.solved) {
+      try {
+        const completionResponse = await fetch(`/api/puzzles/${puzzleId}/progress`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'attempt_success',
+            ...(typeof elapsed === 'number' ? { durationSeconds: elapsed } : {}),
+          }),
+        });
+
+        if (!completionResponse.ok) {
+          let bodyText = '';
+          try {
+            bodyText = await completionResponse.text();
+          } catch {
+            bodyText = '<unreadable response body>';
+          }
+          console.error('Failed to record puzzle success:', completionResponse.status, bodyText);
+          setError('Failed to record puzzle completion. Please try again.');
+          return false;
+        }
+
+        const updatedProgress = await completionResponse.json();
+        setProgress(updatedProgress);
+        const newPoints = updatedProgress?.pointsEarned ?? prevPoints;
+        setJustAwardedPoints(Math.max(0, newPoints - prevPoints));
+      } catch (err) {
+        console.error('Failed to record puzzle success:', err);
+        setError('Failed to record puzzle completion. Please try again.');
+        return false;
+      }
+    }
+
     try {
       const progressResponse = await fetch(`/api/puzzles/${puzzleId}/progress`);
       if (progressResponse.ok) {
@@ -1005,6 +1056,7 @@ export default function PuzzleDetailPage() {
       console.error("Failed to refresh progress for completion modal:", err);
     }
     handlePuzzleSolved(xpOverride);
+    return true;
   };
 
   const handleSudokuSubmit = async (submittedGrid: number[][]) => {

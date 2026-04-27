@@ -968,14 +968,33 @@ export default function SeasonPassPage() {
   // Handle Stripe return URL params
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (status !== "authenticated") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("purchase") === "success") {
       setPurchaseSuccess(true);
       window.history.replaceState({}, "", "/season-pass");
+      const sessionId = params.get("session_id");
+      (async () => {
+        try {
+          const res = await fetch("/api/season/verify-purchase", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sessionId ? { sessionId } : {}),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setError(data.error || "Premium purchase verification failed");
+          }
+        } catch {
+          setError("Premium purchase verification failed");
+        } finally {
+          await fetchSeason();
+        }
+      })();
     } else if (params.get("purchase") === "cancelled") {
       window.history.replaceState({}, "", "/season-pass");
     }
-  }, []);
+  }, [status, fetchSeason]);
 
   const handleClaim = async (tierNumber: number, track: "free" | "premium", e: React.MouseEvent) => {
     const key = `${track}-${tierNumber}`;

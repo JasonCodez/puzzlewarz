@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: "payment",
-      success_url: `${baseUrl}/season-pass?purchase=success`,
+      success_url: `${baseUrl}/season-pass?purchase=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/season-pass?purchase=cancelled`,
       metadata: {
         type: "season_pass",

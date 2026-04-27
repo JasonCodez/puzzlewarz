@@ -1,7 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
+
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  return new Stripe(key, { apiVersion: "2026-03-25.dahlia" });
+}
+
+async function reconcilePremiumIfPurchased(userId: string, seasonId: string): Promise<boolean> {
+  const stripe = getStripe();
+  if (!stripe) return false;
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { stripeCustomerId: true },
+  });
+  if (!dbUser?.stripeCustomerId) return false;
+
+  const sessions = await stripe.checkout.sessions.list({
+    customer: dbUser.stripeCustomerId,
+    limit: 25,
+  });
+
+  const paidSeasonPass = sessions.data.find((s) => {
+    const meta = s.metadata ?? {};
+    return (
+      s.payment_status === "paid" &&
+      meta.type === "season_pass" &&
+      meta.userId === userId &&
+      meta.seasonId === seasonId
+    );
+  });
+
+  if (!paidSeasonPass) return false;
+
+  await prisma.userSeasonPass.upsert({
+    where: { userId_seasonId: { userId, seasonId } },
+    create: { userId, seasonId, isPremium: true, purchasedAt: new Date() },
+    update: { isPremium: true, purchasedAt: new Date() },
+  });
+
+  return true;
+}
 
 /**
  * POST /api/season/claim
@@ -54,8 +97,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not enough season XP for this tier" }, { status: 400 });
     }
 
-    // Check premium requirement
-    if (track === "premium" && !userPass.isPremium) {
+    // Check premium requirement (with fallback reconciliation in case webhook was delayed)
+    let hasPremium = userPass.isPremium;
+    if (track === "premium" && !hasPremium) {
+      try {
+        hasPremium = await reconcilePremiumIfPurchased(currentUser.id, season.id);
+      } catch (reconcileError) {
+        console.error("[SEASON CLAIM] premium reconcile failed", reconcileError);
+      }
+    }
+    if (track === "premium" && !hasPremium) {
       return NextResponse.json({ error: "Premium pass required" }, { status: 400 });
     }
 
