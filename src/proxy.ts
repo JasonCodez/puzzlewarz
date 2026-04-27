@@ -5,7 +5,7 @@ import { getToken } from "next-auth/jwt";
 // ── Coming-soon gate ──────────────────────────────────────────────────────────
 // Set COMING_SOON=true in env to redirect all visitors to /coming-soon.
 // Bypass: append ?preview=<PREVIEW_SECRET> to any URL; stores a session cookie.
-const COMING_SOON_ACTIVE = process.env.COMING_SOON === 'true';
+const COMING_SOON_ACTIVE = false;
 const PREVIEW_SECRET     = process.env.PREVIEW_SECRET ?? '';
 const BYPASS_COOKIE      = 'pw_preview_bypass';
 
