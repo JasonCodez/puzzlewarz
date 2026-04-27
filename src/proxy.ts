@@ -11,8 +11,13 @@ const BYPASS_COOKIE      = 'pw_preview_bypass';
 
 const COMING_SOON_ALLOWED = [
   '/coming-soon',
+  '/auth',
+  '/dashboard',
   '/frequency',
   '/api/auth',
+  '/api/user',
+  '/api/admin/check',
+  '/api/debrief/today',
   '/api/waitlist',
   '/api/gridlock',
   '/api/founder-count',
