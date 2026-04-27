@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import {
+  aggregateTeamScoreFromMembershipWindow,
+  buildMembershipStartByUserId,
+  filterProgressByMembershipWindow,
+  indexProgressByUserId,
+  summarizeProgressRows,
+} from "@/lib/team-membership-scoring";
 
 export async function GET(
   request: NextRequest,
@@ -24,8 +31,6 @@ export async function GET(
                 id: true,
                 name: true,
                 image: true,
-                totalPoints: true,
-                purchasedPoints: true,
               },
             },
           },
@@ -38,10 +43,20 @@ export async function GET(
     }
 
     const memberIds = team.members.map((m) => m.userId);
+    const membershipStartByUserId = buildMembershipStartByUserId(
+      team.members.map((member) => ({
+        userId: member.userId,
+        joinedAt: member.joinedAt,
+      }))
+    );
 
-    // Get puzzles solved by each member
+    // Only count puzzle solves earned while the member was actively on this team.
     const memberProgress = await prisma.userPuzzleProgress.findMany({
-      where: { userId: { in: memberIds }, solved: true },
+      where: {
+        userId: { in: memberIds },
+        solved: true,
+        solvedAt: { not: null },
+      },
       select: {
         userId: true,
         pointsEarned: true,
@@ -57,10 +72,16 @@ export async function GET(
       },
     });
 
+    const eligibleMemberProgress = filterProgressByMembershipWindow(
+      memberProgress,
+      membershipStartByUserId
+    );
+    const eligibleProgressByUserId = indexProgressByUserId(eligibleMemberProgress);
+
     // Build per-member stats
     const memberStats = team.members.map((m) => {
-      const solved = memberProgress.filter((p) => p.userId === m.userId);
-      const earnedPoints = (m.user.totalPoints ?? 0) - (m.user.purchasedPoints ?? 0);
+      const solved = eligibleProgressByUserId.get(m.userId) ?? [];
+      const { totalPoints: earnedPoints } = summarizeProgressRows(solved);
       return {
         userId: m.userId,
         name: m.user.name,
@@ -76,35 +97,53 @@ export async function GET(
     const topContributors = [...memberStats].sort((a, b) => b.earnedPoints - a.earnedPoints);
 
     // Total team stats
-    const totalEarnedPoints = memberStats.reduce((sum, m) => sum + m.earnedPoints, 0);
-    const totalPuzzlesSolved = memberProgress.length;
+    const { totalPoints: totalEarnedPoints, totalSolved: totalPuzzlesSolved } = summarizeProgressRows(eligibleMemberProgress);
     const avgPointsPerMember = memberIds.length > 0 ? Math.round(totalEarnedPoints / memberIds.length) : 0;
 
-    // Team rank — get all teams' earned points and find position
+    // Team rank — apply the same membership-window rule to all teams.
     const allTeams = await prisma.team.findMany({
       select: {
         id: true,
         members: {
           select: {
-            user: {
-              select: {
-                totalPoints: true,
-                purchasedPoints: true,
-              },
-            },
+            userId: true,
+            joinedAt: true,
           },
         },
       },
     });
 
+    const allUserIds = Array.from(
+      new Set(
+        allTeams.flatMap((t) => t.members.map((m) => m.userId))
+      )
+    );
+
+    const allProgress = allUserIds.length
+      ? await prisma.userPuzzleProgress.findMany({
+          where: {
+            userId: { in: allUserIds },
+            solved: true,
+            solvedAt: { not: null },
+          },
+          select: {
+            userId: true,
+            pointsEarned: true,
+            solvedAt: true,
+          },
+        })
+      : [];
+
+    const progressByUserId = indexProgressByUserId(allProgress);
+
     const teamScores = allTeams
       .filter((t) => t.members.length > 0)
       .map((t) => ({
         teamId: t.id,
-        totalEarned: t.members.reduce(
-          (sum, m) => sum + ((m.user.totalPoints ?? 0) - (m.user.purchasedPoints ?? 0)),
-          0
-        ),
+        totalEarned: aggregateTeamScoreFromMembershipWindow(
+          t.members,
+          progressByUserId
+        ).totalPoints,
       }))
       .sort((a, b) => b.totalEarned - a.totalEarned);
 
@@ -112,7 +151,7 @@ export async function GET(
     const totalTeams = teamScores.length;
 
     // Recent activity — last 20 puzzles solved by team members
-    const recentSolves = memberProgress
+    const recentSolves = eligibleMemberProgress
       .filter((p) => p.solvedAt)
       .sort((a, b) => new Date(b.solvedAt!).getTime() - new Date(a.solvedAt!).getTime())
       .slice(0, 20)

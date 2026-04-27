@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import {
+  aggregateTeamScoreFromMembershipWindow,
+  indexProgressByUserId,
+} from "@/lib/team-membership-scoring";
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,43 +18,71 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get all teams with their members and stats
+    // Get all teams with current members.
     const teams = await prisma.team.findMany({
       select: {
         id: true,
         name: true,
         isPublic: true,
+        members: {
+          select: {
+            userId: true,
+            joinedAt: true,
+            user: {
+              select: {
+                teamBannerColor: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    // Calculate team rankings
-    const entries = await Promise.all(
-      teams.map(async (team: { id: string; name?: string | null; isPublic: boolean }) => {
-        // Get team members with their persistent point totals
-        const members = await prisma.teamMember.findMany({
-          where: { teamId: team.id },
-          select: { userId: true, user: { select: { totalPoints: true, purchasedPoints: true, teamBannerColor: true, activeFlair: true } } },
-        });
+    const allUserIds = Array.from(
+      new Set(
+        teams.flatMap((team) => team.members.map((member) => member.userId))
+      )
+    );
 
-        const puzzlesSolved = members.reduce(
-          (sum: number, m: { user?: { totalPoints?: number | null; purchasedPoints?: number | null } }) =>
-            sum + Math.floor(((m.user?.totalPoints ?? 0) - (m.user?.purchasedPoints ?? 0)) / 100),
-          0
+    const allProgress = allUserIds.length
+      ? await prisma.userPuzzleProgress.findMany({
+          where: {
+            userId: { in: allUserIds },
+            solved: true,
+            solvedAt: { not: null },
+          },
+          select: {
+            userId: true,
+            pointsEarned: true,
+            solvedAt: true,
+          },
+        })
+      : [];
+
+    const progressByUserId = indexProgressByUserId(allProgress);
+
+    // Calculate team rankings
+    const entries = teams.map(
+      (team: { id: string; name?: string | null; isPublic: boolean; members: Array<{ userId: string; joinedAt: Date; user: { teamBannerColor: string | null } }> }) => {
+        const members = team.members;
+        const { totalPoints, totalSolved } = aggregateTeamScoreFromMembershipWindow(
+          members,
+          progressByUserId
         );
 
         // Use the first member's banner color as the team banner (or "none" if not set)
-        const bannerColor = members.find((m: any) => m.user?.teamBannerColor && m.user.teamBannerColor !== "none")?.user?.teamBannerColor ?? "none";
+        const bannerColor = members.find((m) => m.user?.teamBannerColor && m.user.teamBannerColor !== "none")?.user?.teamBannerColor ?? "none";
         return {
           teamId: team.id,
           teamName: team.name,
           isPublic: team.isPublic,
           bannerColor,
-          totalPoints: members.reduce((sum: number, m: { user?: { totalPoints?: number | null } }) => sum + (m.user?.totalPoints ?? 0), 0),
-          totalPuzzlesSolved: puzzlesSolved,
+          totalPoints,
+          totalPuzzlesSolved: totalSolved,
           memberCount: members.length,
           rank: 0,
         };
-      })
+      }
     );
 
     // Sort and rank — exclude disbanded teams (no members)

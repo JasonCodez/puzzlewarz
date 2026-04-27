@@ -31,12 +31,6 @@ interface Team {
   createdAt: string;
 }
 
-interface TeamProgress {
-  puzzleId: string;
-  solved: boolean;
-  pointsEarned: number;
-}
-
 function formatTimeAgo(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -288,11 +282,6 @@ export default function TeamDetailPage() {
       </div>
     );
   }
-
-  const totalPoints = team.members.reduce((sum, member) => {
-    // This would need progress data - for now just show member count
-    return sum;
-  }, 0);
 
   // Resolve team theme
   const t = getThemeConfig(team.activeTheme);

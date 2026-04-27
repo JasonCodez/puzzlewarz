@@ -4,6 +4,9 @@ module.exports = {
   modulePathIgnorePatterns: ['<rootDir>/kryptyk_labs_arg.git/'],
   testPathIgnorePatterns: ['<rootDir>/kryptyk_labs_arg.git/'],
   watchPathIgnorePatterns: ['<rootDir>/kryptyk_labs_arg.git/'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+  },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
   },
