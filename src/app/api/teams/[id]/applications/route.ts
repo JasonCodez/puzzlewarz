@@ -26,7 +26,7 @@ export async function GET(
     const members = await prisma.teamMember.findMany({ where: { teamId }, select: { userId: true } });
     const memberIds = members.map((m) => m.userId);
 
-    const applications = await prisma.teamInvite.findMany({
+    const pendingRows = await prisma.teamInvite.findMany({
       where: {
         teamId,
         status: "pending",
@@ -35,6 +35,9 @@ export async function GET(
       include: { user: { select: { id: true, name: true, image: true, email: true } } },
       orderBy: { createdAt: "desc" },
     });
+
+    // An application is a self-submitted row: invitedBy === userId.
+    const applications = pendingRows.filter((row) => row.invitedBy === row.userId);
 
     return NextResponse.json(applications);
   } catch (error) {

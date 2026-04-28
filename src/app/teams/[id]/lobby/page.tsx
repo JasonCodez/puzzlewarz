@@ -366,7 +366,14 @@ export default function TeamLobbyPage() {
         socket.on('lobbyState', (state: any) => {
           if (!mounted) return;
           // merge into local lobby shape minimally
-          setLobby((prev: any) => ({ ...(prev || {}), participants: (state.participants || []).map((p: any) => p.userId), ready: state.ready }));
+          setLobby((prev: any) => ({
+            ...(prev || {}),
+            participants: (state.participants || []).map((p: any) => p.userId),
+            ready: state.ready,
+            leaderId: state.leaderId ?? prev?.leaderId,
+            started: state.started ?? prev?.started,
+            puzzleOpenedAt: state.puzzleOpenedAt ?? prev?.puzzleOpenedAt,
+          }));
         });
 
         socket.on('chatMessage', (msg: any) => {
@@ -588,6 +595,29 @@ export default function TeamLobbyPage() {
   const hasEnoughPlayers = !!selectedPuzzle && requiredPlayers > 0 && participantsCount >= requiredPlayers;
   const hasExactPlayers = !!selectedPuzzle && requiredPlayers > 0 && participantsCount === requiredPlayers;
   const allReady = participantsCount > 0 && participantIds.every((id: string) => !!(lobby?.ready && lobby.ready[id]));
+
+  // Fallback redirect for cases where realtime socket events are delayed/missed.
+  // If the lobby has started and this user is a participant, move them to the puzzle page.
+  useEffect(() => {
+    if (!teamId || !puzzleId || !currentUserId) return;
+    if (skipLeaveOnUnmountRef.current) return;
+
+    const hasStarted = !!lobby?.started || !!lobby?.puzzleOpenedAt;
+    if (!hasStarted) return;
+
+    if (!participantIds.includes(currentUserId)) return;
+
+    skipLeaveOnUnmountRef.current = true;
+    router.push(`/puzzles/${puzzleId}?teamId=${encodeURIComponent(teamId)}`);
+  }, [
+    teamId,
+    puzzleId,
+    currentUserId,
+    lobby?.started,
+    lobby?.puzzleOpenedAt,
+    participantIds,
+    router,
+  ]);
 
   const openActionModal = (variant: "success" | "error" | "info", title?: string, message?: string) => {
     setActionModalVariant(variant);

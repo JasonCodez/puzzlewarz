@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
       where: { id: currentUser.id },
       select: {
         totalPoints: true,
+        purchasedPoints: true,
         warzChallengeSlots: true,
         streakShields: true,
         hintTokens: true,
@@ -64,6 +65,9 @@ export async function POST(request: NextRequest) {
     // Build user update
     const userUpdate: Record<string, unknown> = {
       totalPoints: { decrement: item.price },
+      // Keep leaderboard-earned points stable when spending in the store.
+      // Any ranking formula based on totalPoints - purchasedPoints stays unchanged.
+      purchasedPoints: { decrement: item.price },
     };
 
     if (itemKey === "streak_shield") userUpdate.streakShields = { increment: 1 };

@@ -44,8 +44,10 @@ export async function GET(request: NextRequest) {
 
     // Earned points = total - purchased (consistent with leaderboard)
     const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
-    // Derived from earned points (100 pts/solve) — consistent with leaderboard display
-    const solvedCount = Math.floor(earnedPoints / 100);
+    // Solve count must come from solved puzzle records so spending points never lowers it.
+    const solvedCount = await prisma.userPuzzleProgress.count({
+      where: { userId: user.id, solved: true },
+    });
 
     // Get user's global rank (based on earned points, excluding purchased)
     const allUsers = await prisma.user.findMany({
@@ -147,7 +149,9 @@ export async function PUT(request: NextRequest) {
       select: { totalPoints: true, purchasedPoints: true },
     });
     const earnedPoints = ((freshUser?.totalPoints ?? 0) - (freshUser?.purchasedPoints ?? 0));
-    const solvedCount = Math.floor(earnedPoints / 100);
+    const solvedCount = await prisma.userPuzzleProgress.count({
+      where: { userId: user.id, solved: true },
+    });
 
     // Get updated rank
     const allUsers = await prisma.user.findMany({

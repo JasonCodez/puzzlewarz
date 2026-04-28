@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
       where: {
         userId: user.id,
         status: "pending",
+        // Applications are stored as teamInvite rows where invitedBy === userId.
+        // Only show leader-sent invites in the invitations tray.
+        NOT: { invitedBy: user.id },
       },
       include: {
         team: {

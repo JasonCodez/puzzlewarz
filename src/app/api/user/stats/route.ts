@@ -28,8 +28,10 @@ export async function GET(request: NextRequest) {
 
     // Get total points earned (from user record — includes puzzle + daily + other rewards)
     const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
-    // Derived from earned points (100 pts/solve) — consistent with leaderboard display
-    const solvedCount = Math.floor(earnedPoints / 100);
+    // Solve count must come from solved puzzle records so spending points never lowers it.
+    const solvedCount = await prisma.userPuzzleProgress.count({
+      where: { userId: user.id, solved: true },
+    });
 
     // Get number of teams the user is in
     const teamCount = await prisma.teamMember.count({

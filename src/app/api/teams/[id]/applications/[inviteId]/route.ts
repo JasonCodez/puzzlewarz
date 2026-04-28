@@ -38,6 +38,9 @@ export async function POST(
     const invite = await prisma.teamInvite.findUnique({ where: { id: inviteId } });
     if (!invite || invite.teamId !== teamId) return NextResponse.json({ error: "Application not found" }, { status: 404 });
     if (invite.status !== "pending") return NextResponse.json({ error: "Application is not pending" }, { status: 400 });
+    if (invite.invitedBy !== invite.userId) {
+      return NextResponse.json({ error: "This pending record is an invitation, not an application" }, { status: 400 });
+    }
 
     const applicant = await prisma.user.findUnique({ where: { id: invite.userId }, select: { id: true, name: true, email: true } });
 

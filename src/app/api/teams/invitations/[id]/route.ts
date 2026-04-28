@@ -54,6 +54,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Applications are represented by teamInvite rows where invitedBy === userId.
+    // Those must be processed only by team admins/moderators via the applications endpoint.
+    if (invitation.invitedBy === invitation.userId) {
+      return NextResponse.json(
+        { error: "This record is an application and must be reviewed by team leadership" },
+        { status: 400 }
+      );
+    }
+
     // Verify invitation hasn't expired
     if (new Date() > invitation.expiresAt) {
       return NextResponse.json(

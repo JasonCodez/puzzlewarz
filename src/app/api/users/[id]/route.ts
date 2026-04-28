@@ -84,10 +84,12 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Get user stats
-    // Derived from earned points (100 pts/solve) — consistent with leaderboard display
+    // Get user stats.
+    // Solve count must come from solved puzzle records so spending points never lowers it.
     const earnedPoints = (user.totalPoints ?? 0) - (user.purchasedPoints ?? 0);
-    const solvedPuzzles = Math.floor(earnedPoints / 100);
+    const solvedPuzzles = await prisma.userPuzzleProgress.count({
+      where: { userId, solved: true },
+    });
 
     // Get follower counts
     const followerCount = await prisma.follow.count({
