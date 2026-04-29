@@ -5,6 +5,19 @@ import prisma from "@/lib/prisma";
 import { getGridlockFileData } from "@/lib/gridlockFile";
 import { getVaultPuzzleData } from "@/lib/vault";
 
+const toPositiveInt = (...values: unknown[]): number | undefined => {
+  for (const raw of values) {
+    const n =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string" && raw.trim() !== ""
+          ? Number(raw)
+          : NaN;
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  }
+  return undefined;
+};
+
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return null;
@@ -67,6 +80,8 @@ export async function PUT(
     sudokuSolution,
     sudokuDifficulty,
     timeLimitSeconds,
+    minTeamSize,
+    maxTeamSize,
     isWarzExclusive,
     gridlockReleaseAt,
     debriefReleaseAt,
@@ -123,6 +138,16 @@ export async function PUT(
     );
   }
 
+  const escapeMinTeamSize = puzzleType === 'escape_room'
+    ? (toPositiveInt(minTeamSize, (puzzleData as any)?.minTeamSize, (puzzleData as any)?.escapeRoomData?.minTeamSize) ?? 1)
+    : undefined;
+  const escapeMaxTeamSize = puzzleType === 'escape_room'
+    ? toPositiveInt(maxTeamSize, (puzzleData as any)?.maxTeamSize, (puzzleData as any)?.escapeRoomData?.maxTeamSize)
+    : undefined;
+  const escapeTimeLimitSeconds = puzzleType === 'escape_room'
+    ? toPositiveInt(timeLimitSeconds, (puzzleData as any)?.timeLimitSeconds, (puzzleData as any)?.escapeRoomData?.timeLimit)
+    : undefined;
+
   await prisma.$transaction(async (tx) => {
     // 1. Update core puzzle fields
     const puzzleUpdateData: Record<string, unknown> = {
@@ -134,6 +159,10 @@ export async function PUT(
     };
     if (categoryRecord) {
       puzzleUpdateData.categoryId = categoryRecord.id;
+    }
+    if (puzzleType === 'escape_room' && typeof escapeMinTeamSize === 'number') {
+      puzzleUpdateData.isTeamPuzzle = true;
+      puzzleUpdateData.minTeamSize = escapeMinTeamSize;
     }
     if (!isSpecialType) {
       puzzleUpdateData.riddleAnswer = correctAnswer;
@@ -254,6 +283,30 @@ export async function PUT(
           gridCols: Number(puzzleData.gridCols) || 4,
           snapTolerance: Number(puzzleData.snapTolerance) || 12,
           rotationEnabled: Boolean(puzzleData.rotationEnabled),
+        },
+      });
+    }
+
+    // 6. Keep escape-room settings in sync with puzzle settings when editing via admin puzzle maker.
+    if (puzzleType === 'escape_room') {
+      const resolvedMin = typeof escapeMinTeamSize === 'number' ? escapeMinTeamSize : 1;
+      const resolvedMax = Math.max(resolvedMin, escapeMaxTeamSize ?? 8);
+      await tx.escapeRoomPuzzle.upsert({
+        where: { puzzleId },
+        update: {
+          roomTitle: ((puzzleData as any)?.roomTitle || title || "Untitled Puzzle"),
+          roomDescription: ((puzzleData as any)?.roomDescription || description || ""),
+          minTeamSize: resolvedMin,
+          maxTeamSize: resolvedMax,
+          ...(typeof escapeTimeLimitSeconds === 'number' ? { timeLimitSeconds: escapeTimeLimitSeconds } : {}),
+        },
+        create: {
+          puzzleId,
+          roomTitle: ((puzzleData as any)?.roomTitle || title || "Untitled Puzzle"),
+          roomDescription: ((puzzleData as any)?.roomDescription || description || ""),
+          minTeamSize: resolvedMin,
+          maxTeamSize: resolvedMax,
+          ...(typeof escapeTimeLimitSeconds === 'number' ? { timeLimitSeconds: escapeTimeLimitSeconds } : {}),
         },
       });
     }

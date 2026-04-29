@@ -109,7 +109,8 @@ export const config = {
     /*
      * Match all paths except Next.js internals and static assets.
      * Required so the coming-soon gate can intercept every route.
+     * Exclude /api/auth so NextAuth action routes are resolved directly.
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/auth).*)',
   ],
 };

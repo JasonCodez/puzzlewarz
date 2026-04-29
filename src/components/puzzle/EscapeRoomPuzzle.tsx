@@ -158,6 +158,11 @@ export function EscapeRoomPuzzle({
   const [inventoryLocks, setInventoryLocks] = useState<InventoryLocksMap>({});
   const [sceneState, setSceneState] = useState<Record<string, any>>({});
   const [sideTab, setSideTab] = useState<'inventory' | 'activity'>('inventory');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'inventory' | 'chat'>('inventory');
+  const [immersiveMode, setImmersiveMode] = useState(false);
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const [activity, setActivity] = useState<EscapeActivityEntry[]>([]);
   const [runStartedAt, setRunStartedAt] = useState<string | null>(null);
   const [runExpiresAt, setRunExpiresAt] = useState<string | null>(null);
@@ -186,9 +191,135 @@ export function EscapeRoomPuzzle({
   const currentUserNameRef = useRef<string>('');
   const isLeaderRef = useRef<boolean>(false);
 
+  const isFullscreenView = immersiveMode || isNativeFullscreen;
+  const isPhoneViewport = viewportWidth > 0 && viewportWidth < 640;
+  const isTabletViewport = viewportWidth >= 640 && viewportWidth < 1100;
+  const canvasHeight = isFullscreenView
+    ? isPhoneViewport
+      ? 'calc(100dvh - 96px)'
+      : 'calc(100dvh - 112px)'
+    : isPhoneViewport
+      ? 'min(60dvh, 460px)'
+      : isTabletViewport
+        ? 'min(70dvh, 760px)'
+        : 'min(80dvh, 920px)';
+  const drawerWidth = isPhoneViewport ? 'min(94vw, 420px)' : isTabletViewport ? '420px' : '460px';
+
   useEffect(() => {
     soundEnabledRef.current = !!soundEnabled;
   }, [soundEnabled]);
+
+  useEffect(() => {
+    const syncViewportWidth = () => {
+      setViewportWidth(window.innerWidth || 0);
+    };
+    syncViewportWidth();
+    window.addEventListener('resize', syncViewportWidth);
+    return () => {
+      window.removeEventListener('resize', syncViewportWidth);
+    };
+  }, []);
+
+  const openDrawer = useCallback((tab: 'inventory' | 'chat') => {
+    setDrawerTab(tab);
+    setDrawerOpen(true);
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    const host = playAreaHostRef.current;
+    if (!host) return;
+
+    const docAny = document as any;
+    const hostAny = host as any;
+    const fullscreenElement =
+      document.fullscreenElement || docAny.webkitFullscreenElement || docAny.msFullscreenElement;
+
+    if (fullscreenElement) {
+      try {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+          return;
+        }
+        if (docAny.webkitExitFullscreen) {
+          await docAny.webkitExitFullscreen();
+          return;
+        }
+        if (docAny.msExitFullscreen) {
+          await docAny.msExitFullscreen();
+          return;
+        }
+      } catch {
+        // Fall through to immersive mode fallback.
+      }
+      setImmersiveMode(false);
+      return;
+    }
+
+    try {
+      if (hostAny.requestFullscreen) {
+        await hostAny.requestFullscreen();
+        return;
+      }
+      if (hostAny.webkitRequestFullscreen) {
+        await hostAny.webkitRequestFullscreen();
+        return;
+      }
+      if (hostAny.msRequestFullscreen) {
+        await hostAny.msRequestFullscreen();
+        return;
+      }
+    } catch {
+      // Fall back to immersive mode if fullscreen API fails or is blocked.
+    }
+
+    setImmersiveMode((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const docAny = document as any;
+      const active = !!(document.fullscreenElement || docAny.webkitFullscreenElement || docAny.msFullscreenElement);
+      setIsNativeFullscreen(active);
+      if (active) setImmersiveMode(false);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange as EventListener);
+    document.addEventListener('msfullscreenchange', handleFullscreenChange as EventListener);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange as EventListener);
+      document.removeEventListener('msfullscreenchange', handleFullscreenChange as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!immersiveMode) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setImmersiveMode(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [immersiveMode]);
+
+  useEffect(() => {
+    const shouldLockBodyScroll = drawerOpen || immersiveMode;
+    if (!shouldLockBodyScroll) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [drawerOpen, immersiveMode]);
 
   const playSfx = useCallback((raw: any) => {
     try {
@@ -388,6 +519,7 @@ export function EscapeRoomPuzzle({
             if (!payload) return;
             if (payload.teamId && payload.teamId !== sessionId) return;
             if (payload.puzzleId && payload.puzzleId !== puzzleId) return;
+            if (payload.briefingAcks !== undefined) setBriefingAcks(payload.briefingAcks || {});
             if (payload.inventoryLocks) setInventoryLocks(payload.inventoryLocks || {});
             if (payload.runStartedAt !== undefined) setRunStartedAt(payload.runStartedAt ? String(payload.runStartedAt) : null);
             if (payload.runExpiresAt !== undefined) setRunExpiresAt(payload.runExpiresAt ? String(payload.runExpiresAt) : null);
@@ -497,6 +629,29 @@ export function EscapeRoomPuzzle({
       socketRef.current = null;
     };
   }, [sessionId, puzzleId, currentUserId, router, playSfx, lobbyId, teamId]);
+
+  // Fallback sync before the run starts. This prevents clients from getting stuck
+  // on the briefing screen if a realtime event is delayed or missed.
+  useEffect(() => {
+    if (!sessionId) return;
+    if (runStartedAt || failedAt || completedAt) return;
+
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await refreshState();
+    };
+
+    void tick();
+    const t = setInterval(() => {
+      void tick();
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [sessionId, runStartedAt, failedAt, completedAt, refreshState]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -975,6 +1130,7 @@ export function EscapeRoomPuzzle({
     }
   }, [soundEnabled]);
 
+  const playAreaHostRef = useRef<HTMLDivElement | null>(null);
   const stageDropRef = useRef<HTMLDivElement | null>(null);
   const inventoryPanelRef = useRef<HTMLDivElement | null>(null);
   const pickupAnimTimerRef = useRef<number | null>(null);
@@ -1438,6 +1594,8 @@ export function EscapeRoomPuzzle({
       }
 
       setSideTab('inventory');
+      setDrawerTab('inventory');
+      setDrawerOpen(true);
       playBuiltinSfx('inventory');
       setInventoryPulse(true);
 
@@ -1903,342 +2061,446 @@ export function EscapeRoomPuzzle({
       {/* Stage answer input removed — not used for these puzzles */}
 
       {layout ? (
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-center" style={{ position: 'relative' }}>
-              <div
-                className={`w-full bg-slate-950${sceneShake ? ' scene-shake' : ''}`}
-                ref={stageDropRef}
-                style={{
-                  position: 'relative',
-                  // Let the canvas grow on larger screens while preserving the room ratio.
-                  // Match the Designer's logical coordinate space when layout dimensions are missing.
-                  aspectRatio: stageAspect || `${(layout as any)?.width || 600} / ${(layout as any)?.height || 320}`,
-                  overflow: 'hidden',
-                  borderRadius: 8,
-                  cursor: isActionInFlight ? 'wait' : undefined,
-                }}
-              >
-                <React.Suspense fallback={<div className="text-gray-400">Loading room...</div>}>
-                  <PixiRoom
-                    puzzleId={puzzleId}
-                    layout={layout}
-                    hotspots={hotspots}
-                    onHotspotAction={onHotspotAction}
-                    onEffectiveLayoutSize={onEffectiveLayoutSize}
-                    triggeredItemIds={triggeredItemIds}
-                  />
-                </React.Suspense>
+        <div
+          ref={playAreaHostRef}
+          className={(isFullscreenView ? "fixed inset-0 z-[72] bg-neutral-950 p-2 sm:p-4 overflow-hidden" : "mt-4") + " relative"}
+        >
+          <div className={isFullscreenView ? "h-full" : ""}>
+            <div className="relative h-full">
+              <div className="flex justify-center" style={{ position: 'relative', height: isFullscreenView ? '100%' : undefined }}>
+                <div
+                  className={`bg-slate-950${sceneShake ? ' scene-shake' : ''}`}
+                  ref={stageDropRef}
+                  style={{
+                    position: 'relative',
+                    aspectRatio: stageAspect || `${(layout as any)?.width || 600} / ${(layout as any)?.height || 320}`,
+                    overflow: 'hidden',
+                    borderRadius: 8,
+                    cursor: isActionInFlight ? 'wait' : undefined,
+                    height: canvasHeight,
+                    maxHeight: canvasHeight,
+                    width: 'auto',
+                    maxWidth: '100%',
+                  }}
+                >
+                  <React.Suspense fallback={<div className="text-gray-400">Loading room...</div>}>
+                    <PixiRoom
+                      puzzleId={puzzleId}
+                      layout={layout}
+                      hotspots={hotspots}
+                      onHotspotAction={onHotspotAction}
+                      onEffectiveLayoutSize={onEffectiveLayoutSize}
+                      triggeredItemIds={triggeredItemIds}
+                    />
+                  </React.Suspense>
 
-                {/* Atmospheric vignette — dark edge framing around the scene */}
-                <div className="escape-vignette absolute inset-0 pointer-events-none" style={{ zIndex: 2, borderRadius: 'inherit' }} />
+                  {/* Atmospheric vignette — dark edge framing around the scene */}
+                  <div className="escape-vignette absolute inset-0 pointer-events-none" style={{ zIndex: 2, borderRadius: 'inherit' }} />
 
-                {/* Ambient item effect overlays — glowing auras positioned over items */}
-                {effectiveLayoutSize && (layout as any)?.items?.some((it: any) => it.ambientEffect && it.ambientEffect !== 'none') && (
-                  <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 5 }}>
-                    {((layout as any).items as any[])
-                      .filter((it: any) => it.ambientEffect && it.ambientEffect !== 'none')
-                      .map((it: any) => (
-                        <div
-                          key={`ambient-${it.id}`}
-                          className={`escape-ambient-${it.ambientEffect}`}
-                          style={{
-                            position: 'absolute',
-                            left: `${(it.x / effectiveLayoutSize.w) * 100}%`,
-                            top: `${(it.y / effectiveLayoutSize.h) * 100}%`,
-                            width: `${((it.w || 48) / effectiveLayoutSize.w) * 100}%`,
-                            height: `${((it.h || 48) / effectiveLayoutSize.h) * 100}%`,
-                            borderRadius: 4,
-                            transform: (() => {
-                              const hasPt3D = it.perspectiveRotateX || it.perspectiveRotateY;
-                              return [
-                                hasPt3D ? `perspective(${it.perspectiveDistance ?? 600}px)` : '',
-                                it.scale != null && it.scale !== 1 ? `scale(${it.scale})` : '',
-                                it.rotation ? `rotate(${it.rotation}deg)` : '',
-                                hasPt3D && it.perspectiveRotateX ? `rotateX(${it.perspectiveRotateX}deg)` : '',
-                                hasPt3D && it.perspectiveRotateY ? `rotateY(${it.perspectiveRotateY}deg)` : '',
-                                it.skewX ? `skewX(${it.skewX}deg)` : '',
-                                it.skewY ? `skewY(${it.skewY}deg)` : '',
-                              ].filter(Boolean).join(' ') || undefined;
-                            })(),
-                            transformOrigin: it.transformOrigin || 'center center',
-                          }}
-                        />
-                      ))}
-                  </div>
-                )}
-
-                {(layout as any)?.foregroundUrl && (
-                  isVideoUrl((layout as any).foregroundUrl)
-                    ? (
-                      <video
-                        src={(layout as any).foregroundUrl}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        className="absolute inset-0 h-full w-full object-cover pointer-events-none"
-                        style={{ zIndex: 6 }}
-                      />
-                    )
-                    : (
-                      <img
-                        src={(layout as any).foregroundUrl}
-                        alt="Scene foreground"
-                        className="absolute inset-0 h-full w-full object-cover pointer-events-none"
-                        style={{ zIndex: 6 }}
-                      />
-                    )
-                )}
-
-                {/* Scene transition overlay — fires when stageIndex changes */}
-                {sceneTransitionPhase === 'in' && (
-                  <div
-                    className={`absolute inset-0 pointer-events-none z-20 scene-transition-${sceneTransitionType}`}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-gradient-to-r from-amber-900 via-amber-700 to-amber-950 p-[3px]">
-              <div
-                ref={inventoryPanelRef}
-                className={
-                  'rounded-[14px] bg-neutral-950/90 ring-1 ring-amber-500/20 border border-amber-900/40 p-3 ' +
-                  (inventoryPulse ? 'pickup-inventory-pulse' : '')
-                }
-                style={{ maxHeight: 650, overflowY: 'auto' }}
-              >
-            <div className="mb-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setSideTab('inventory')}
-                className={
-                  'flex-1 rounded px-3 py-2 text-sm border ' +
-                  (sideTab === 'inventory'
-                    ? 'bg-amber-700/30 border-amber-500/50 text-amber-50'
-                    : 'bg-neutral-900/50 border-amber-700/30 text-amber-100/80 hover:bg-neutral-900/80')
-                }
-              >
-                Inventory
-              </button>
-              <button
-                type="button"
-                onClick={() => setSideTab('activity')}
-                className={
-                  'flex-1 rounded px-3 py-2 text-sm border ' +
-                  (sideTab === 'activity'
-                    ? 'bg-amber-700/30 border-amber-500/50 text-amber-50'
-                    : 'bg-neutral-900/50 border-amber-700/30 text-amber-100/80 hover:bg-neutral-900/80')
-                }
-              >
-                Activity
-              </button>
-            </div>
-
-            {sideTab === 'inventory' ? (
-              <>
-                <div className="text-sm text-amber-200/90 mb-2 font-semibold tracking-wide">Inventory</div>
-                {selectedInventoryKey ? (
-                  <div className="mb-2 rounded border border-emerald-700/40 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-100/90">
-                    Selected: <span className="font-semibold">{inventoryItems?.[selectedInventoryKey]?.name || selectedInventoryKey}</span>
-                    <span className="opacity-80"> — click a hotspot to use it, or click the item again to deselect.</span>
-                  </div>
-                ) : null}
-                {inventory.length === 0 ? (
-                  <div className="text-sm text-amber-200/60">No items yet.</div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {inventory.map((key) => {
-                      const lock = inventoryLocks?.[key];
-                      const lockedByMe = !!lock && !!currentUserId && lock.lockedBy === currentUserId;
-                      const item = inventoryItems?.[key];
-                      const displayName = item?.name || key;
-                      const imageUrl = item?.imageUrl || null;
-                      const selected = selectedInventoryKey === key;
-                      return (
-                        <div
-                          key={key}
-                          onClick={() => {
-                            if (!canInteract) return;
-                            if (sessionBusy) return;
-                            if (lock && !lockedByMe) {
-                              setActionModalTitle('Item in use');
-                              setActionModalMessage(`This item is being used by ${lock.lockedByName || 'a teammate'}.`);
-                              setActionModalOpen(true);
-                              return;
-                            }
-
-                            // Toggle selection; acquire lock when selecting.
-                            if (selected) {
-                              setSelectedInventoryKey(null);
-                              if (lockedByMe) void releaseLock(key);
-                              return;
-                            }
-
-                            void (async () => {
-                              if (lock && lockedByMe) {
-                                setSelectedInventoryKey(key);
-                                return;
-                              }
-                              const ok = await acquireLock(key);
-                              if (ok) setSelectedInventoryKey(key);
-                            })();
-                          }}
-                          className={
-                            "rounded-lg border border-amber-800/30 bg-neutral-950/40 px-3 py-2 text-sm text-amber-50/90 " +
-                            (canInteract && !sessionBusy && (!lock || lockedByMe) ? "cursor-pointer" : "cursor-default") +
-                            (selected ? " ring-2 ring-emerald-500/60" : "")
-                          }
-                          title={selected ? 'Selected' : 'Click to select'}
-                        >
-                          <div className="flex items-center gap-2">
-                            {imageUrl ? (
-                              isVideoUrl(imageUrl) ? (
-                                // eslint-disable-next-line jsx-a11y/media-has-caption
-                                <video src={imageUrl} autoPlay loop muted playsInline className="h-9 w-9 rounded object-contain bg-neutral-900/60 border border-amber-600/25" />
-                              ) : (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={imageUrl} alt={displayName} className="h-9 w-9 rounded object-contain bg-neutral-900/60 border border-amber-600/25" />
-                              )
-                            ) : (
-                              <div className="h-9 w-9 rounded bg-neutral-900/60 border border-amber-600/25" />
-                            )}
-                            <div className="min-w-0">
-                              <div className="font-semibold truncate">{displayName}</div>
-                              {lock ? (
-                                <div className="text-xs text-amber-100/70">In use by {lock.lockedByName || 'a teammate'}</div>
-                              ) : (
-                                <div className="text-xs text-amber-200/50">Available</div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="mt-2 flex gap-2">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (item) setInspectingItem(item);
-                              }}
-                              className="px-2 py-1 rounded border border-amber-700/50 bg-neutral-900/60 text-amber-50/90 hover:bg-neutral-900/80"
-                            >
-                              View
-                            </button>
-                            <button
-                              type="button"
-                              disabled={!canInteract || sessionBusy || (!!lock && !lockedByMe)}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (selected) {
-                                  setSelectedInventoryKey(null);
-                                  if (lockedByMe) void releaseLock(key);
-                                  return;
-                                }
-                                void (async () => {
-                                  const ok = lock && lockedByMe ? true : await acquireLock(key);
-                                  if (ok) setSelectedInventoryKey(key);
-                                })();
-                              }}
-                              className="px-2 py-1 rounded bg-amber-700 text-amber-50 hover:bg-amber-600 disabled:opacity-50"
-                            >
-                              {selected ? 'Selected' : 'Select'}
-                            </button>
-                            {lockedByMe || isLeader ? (
-                              <button
-                                type="button"
-                                disabled={!canInteract || sessionBusy || !lock}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (selected) setSelectedInventoryKey(null);
-                                  void releaseLock(key);
-                                }}
-                                className="px-2 py-1 rounded border border-amber-700/50 bg-neutral-900/60 text-amber-50/90 hover:bg-neutral-900/80 disabled:opacity-50"
-                              >
-                                Release
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="text-sm text-amber-200/90 mb-2 font-semibold tracking-wide">Team activity</div>
-                {activity.length === 0 ? (
-                  <div className="text-sm text-amber-200/60">No activity yet.</div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {activity.map((a) => (
-                      <div key={a.id} className="rounded-lg border border-amber-800/25 bg-neutral-950/30 px-3 py-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="text-sm text-amber-50/90">
-                            <span className="text-amber-100/60">{a.actor?.name ? a.actor.name : 'Teammate'}:</span>{' '}
-                            <span className="font-semibold text-amber-50">{a.title}</span>
-                          </div>
-                          <div className="text-xs text-amber-200/40 whitespace-nowrap">{formatActivityTime(a.ts)}</div>
-                        </div>
-                        {a.meta?.label ? (
-                          <div className="mt-1 text-xs text-amber-200/45">{String(a.meta.label)}</div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-gradient-to-r from-amber-900 via-amber-700 to-amber-950 p-[3px]">
-            <div className="rounded-[14px] bg-neutral-950/90 ring-1 ring-amber-500/20 border border-amber-900/40 p-3 flex flex-col" style={{ maxHeight: 650 }}>
-            <div className="text-sm text-amber-200/90 mb-2 font-semibold tracking-wide">Team Chat</div>
-            <div className="flex-1 overflow-y-auto mb-3 space-y-3 rounded-lg bg-neutral-950/60 ring-1 ring-amber-500/15 p-2">
-              {chatMessages.length === 0 ? (
-                <div className="text-sm text-amber-200/60">No messages yet — say hello!</div>
-              ) : null}
-              {chatMessages.map((m, idx) => {
-                const senderLabel =
-                  (m?.user?.name as string | undefined) ||
-                  (m?.user?.email as string | undefined) ||
-                  (m?.userId as string | undefined) ||
-                  'Unknown';
-                const key = m?.id ?? `${m?.userId ?? 'u'}:${m?.createdAt ?? idx}:${idx}`;
-                return (
-                  <div key={key} className="rounded-lg w-full px-1 py-1 border border-amber-800/25 bg-neutral-950/30">
-                    <div className="px-3">
-                      <div className="text-sm text-amber-50/90">
-                        <strong className="text-amber-50">{senderLabel}</strong>{' '}
-                        <span className="text-xs text-amber-200/40">{m?.createdAt ? new Date(m.createdAt).toLocaleTimeString() : ''}</span>
-                      </div>
-                      <div className="text-sm text-amber-100/70 break-words mt-1">{m?.content}</div>
+                  {/* Ambient item effect overlays — glowing auras positioned over items */}
+                  {effectiveLayoutSize && (layout as any)?.items?.some((it: any) => it.ambientEffect && it.ambientEffect !== 'none') && (
+                    <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 5 }}>
+                      {((layout as any).items as any[])
+                        .filter((it: any) => it.ambientEffect && it.ambientEffect !== 'none')
+                        .map((it: any) => (
+                          <div
+                            key={`ambient-${it.id}`}
+                            className={`escape-ambient-${it.ambientEffect}`}
+                            style={{
+                              position: 'absolute',
+                              left: `${(it.x / effectiveLayoutSize.w) * 100}%`,
+                              top: `${(it.y / effectiveLayoutSize.h) * 100}%`,
+                              width: `${((it.w || 48) / effectiveLayoutSize.w) * 100}%`,
+                              height: `${((it.h || 48) / effectiveLayoutSize.h) * 100}%`,
+                              borderRadius: 4,
+                              transform: (() => {
+                                const hasPt3D = it.perspectiveRotateX || it.perspectiveRotateY;
+                                return [
+                                  hasPt3D ? `perspective(${it.perspectiveDistance ?? 600}px)` : '',
+                                  it.scale != null && it.scale !== 1 ? `scale(${it.scale})` : '',
+                                  it.rotation ? `rotate(${it.rotation}deg)` : '',
+                                  hasPt3D && it.perspectiveRotateX ? `rotateX(${it.perspectiveRotateX}deg)` : '',
+                                  hasPt3D && it.perspectiveRotateY ? `rotateY(${it.perspectiveRotateY}deg)` : '',
+                                  it.skewX ? `skewX(${it.skewX}deg)` : '',
+                                  it.skewY ? `skewY(${it.skewY}deg)` : '',
+                                ].filter(Boolean).join(' ') || undefined;
+                              })(),
+                              transformOrigin: it.transformOrigin || 'center center',
+                            }}
+                          />
+                        ))}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  )}
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void postChatMessage(chatInput);
-              }}
-              className="flex gap-2"
-            >
-              <input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 min-w-0 px-3 py-2 rounded bg-neutral-900/60 text-amber-50 placeholder:text-amber-200/40 border border-amber-700/40"
+                  {(layout as any)?.foregroundUrl && (
+                    isVideoUrl((layout as any).foregroundUrl)
+                      ? (
+                        <video
+                          src={(layout as any).foregroundUrl}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                          style={{ zIndex: 6 }}
+                        />
+                      )
+                      : (
+                        <img
+                          src={(layout as any).foregroundUrl}
+                          alt="Scene foreground"
+                          className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                          style={{ zIndex: 6 }}
+                        />
+                      )
+                  )}
+
+                  {/* Scene transition overlay — fires when stageIndex changes */}
+                  {sceneTransitionPhase === 'in' && (
+                    <div
+                      className={`absolute inset-0 pointer-events-none z-20 scene-transition-${sceneTransitionType}`}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="absolute right-3 top-3 z-30 flex max-w-[85vw] flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="rounded-lg border border-amber-600/50 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
+                >
+                  {isFullscreenView ? 'Exit Fullscreen' : 'Fullscreen'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openDrawer('inventory')}
+                  className="rounded-lg border border-amber-700/45 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
+                >
+                  Inventory
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openDrawer('chat')}
+                  className="rounded-lg border border-amber-700/45 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
+                >
+                  Chat
+                </button>
+              </div>
+
+              {!drawerOpen ? (
+                <button
+                  type="button"
+                  onClick={() => openDrawer('inventory')}
+                  className="absolute right-0 top-1/2 z-30 -translate-y-1/2 rounded-l-xl border border-r-0 border-amber-700/45 bg-neutral-950/85 px-2 py-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100 hover:bg-neutral-900"
+                >
+                  Panels
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {drawerOpen ? (
+            <div className="fixed inset-0 z-[86]">
+              <button
+                type="button"
+                onClick={closeDrawer}
+                className="escape-drawer-backdrop absolute inset-0 bg-black/55 backdrop-blur-[1px]"
+                aria-label="Close drawer"
               />
-              <button type="submit" className="px-4 py-2 rounded bg-amber-700 text-amber-50 hover:bg-amber-600">Send</button>
-            </form>
-          </div>
-          </div>
+
+              <aside
+                className="escape-side-drawer absolute right-0 top-0 h-full border-l border-amber-700/40 bg-neutral-950/96 shadow-[0_0_35px_rgba(0,0,0,0.8)]"
+                style={{ width: drawerWidth, maxWidth: '94vw' }}
+              >
+                <div className="flex items-center justify-between border-b border-amber-700/30 px-3 py-3">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDrawerTab('inventory')}
+                      className={
+                        'rounded px-3 py-2 text-xs font-semibold border ' +
+                        (drawerTab === 'inventory'
+                          ? 'bg-amber-700/35 border-amber-500/50 text-amber-50'
+                          : 'bg-neutral-900/50 border-amber-700/30 text-amber-100/80 hover:bg-neutral-900/80')
+                      }
+                    >
+                      Inventory
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerTab('chat')}
+                      className={
+                        'rounded px-3 py-2 text-xs font-semibold border ' +
+                        (drawerTab === 'chat'
+                          ? 'bg-amber-700/35 border-amber-500/50 text-amber-50'
+                          : 'bg-neutral-900/50 border-amber-700/30 text-amber-100/80 hover:bg-neutral-900/80')
+                      }
+                    >
+                      Chat
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeDrawer}
+                    className="rounded border border-amber-700/40 bg-neutral-900/60 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-neutral-900"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="h-[calc(100%-62px)] overflow-y-auto p-3">
+                  {drawerTab === 'inventory' ? (
+                    <div className="rounded-2xl bg-gradient-to-r from-amber-900 via-amber-700 to-amber-950 p-[3px]">
+                      <div
+                        ref={inventoryPanelRef}
+                        className={
+                          'rounded-[14px] bg-neutral-950/90 ring-1 ring-amber-500/20 border border-amber-900/40 p-3 ' +
+                          (inventoryPulse ? 'pickup-inventory-pulse' : '')
+                        }
+                        style={{
+                          maxHeight: isFullscreenView
+                            ? 'calc(100dvh - 164px)'
+                            : isPhoneViewport
+                              ? 'calc(100dvh - 152px)'
+                              : 'calc(100dvh - 188px)',
+                          overflowY: 'auto',
+                        }}
+                      >
+                        <div className="mb-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSideTab('inventory')}
+                            className={
+                              'flex-1 rounded px-3 py-2 text-sm border ' +
+                              (sideTab === 'inventory'
+                                ? 'bg-amber-700/30 border-amber-500/50 text-amber-50'
+                                : 'bg-neutral-900/50 border-amber-700/30 text-amber-100/80 hover:bg-neutral-900/80')
+                            }
+                          >
+                            Inventory
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSideTab('activity')}
+                            className={
+                              'flex-1 rounded px-3 py-2 text-sm border ' +
+                              (sideTab === 'activity'
+                                ? 'bg-amber-700/30 border-amber-500/50 text-amber-50'
+                                : 'bg-neutral-900/50 border-amber-700/30 text-amber-100/80 hover:bg-neutral-900/80')
+                            }
+                          >
+                            Activity
+                          </button>
+                        </div>
+
+                        {sideTab === 'inventory' ? (
+                          <>
+                            <div className="text-sm text-amber-200/90 mb-2 font-semibold tracking-wide">Inventory</div>
+                            {selectedInventoryKey ? (
+                              <div className="mb-2 rounded border border-emerald-700/40 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-100/90">
+                                Selected: <span className="font-semibold">{inventoryItems?.[selectedInventoryKey]?.name || selectedInventoryKey}</span>
+                                <span className="opacity-80"> — click a hotspot to use it, or click the item again to deselect.</span>
+                              </div>
+                            ) : null}
+                            {inventory.length === 0 ? (
+                              <div className="text-sm text-amber-200/60">No items yet.</div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                {inventory.map((key) => {
+                                  const lock = inventoryLocks?.[key];
+                                  const lockedByMe = !!lock && !!currentUserId && lock.lockedBy === currentUserId;
+                                  const item = inventoryItems?.[key];
+                                  const displayName = item?.name || key;
+                                  const imageUrl = item?.imageUrl || null;
+                                  const selected = selectedInventoryKey === key;
+                                  return (
+                                    <div
+                                      key={key}
+                                      onClick={() => {
+                                        if (!canInteract) return;
+                                        if (sessionBusy) return;
+                                        if (lock && !lockedByMe) {
+                                          setActionModalTitle('Item in use');
+                                          setActionModalMessage(`This item is being used by ${lock.lockedByName || 'a teammate'}.`);
+                                          setActionModalOpen(true);
+                                          return;
+                                        }
+
+                                        if (selected) {
+                                          setSelectedInventoryKey(null);
+                                          if (lockedByMe) void releaseLock(key);
+                                          return;
+                                        }
+
+                                        void (async () => {
+                                          if (lock && lockedByMe) {
+                                            setSelectedInventoryKey(key);
+                                            return;
+                                          }
+                                          const ok = await acquireLock(key);
+                                          if (ok) setSelectedInventoryKey(key);
+                                        })();
+                                      }}
+                                      className={
+                                        "rounded-lg border border-amber-800/30 bg-neutral-950/40 px-3 py-2 text-sm text-amber-50/90 " +
+                                        (canInteract && !sessionBusy && (!lock || lockedByMe) ? "cursor-pointer" : "cursor-default") +
+                                        (selected ? " ring-2 ring-emerald-500/60" : "")
+                                      }
+                                      title={selected ? 'Selected' : 'Click to select'}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        {imageUrl ? (
+                                          isVideoUrl(imageUrl) ? (
+                                            // eslint-disable-next-line jsx-a11y/media-has-caption
+                                            <video src={imageUrl} autoPlay loop muted playsInline className="h-9 w-9 rounded object-contain bg-neutral-900/60 border border-amber-600/25" />
+                                          ) : (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={imageUrl} alt={displayName} className="h-9 w-9 rounded object-contain bg-neutral-900/60 border border-amber-600/25" />
+                                          )
+                                        ) : (
+                                          <div className="h-9 w-9 rounded bg-neutral-900/60 border border-amber-600/25" />
+                                        )}
+                                        <div className="min-w-0">
+                                          <div className="font-semibold truncate">{displayName}</div>
+                                          {lock ? (
+                                            <div className="text-xs text-amber-100/70">In use by {lock.lockedByName || 'a teammate'}</div>
+                                          ) : (
+                                            <div className="text-xs text-amber-200/50">Available</div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-2 flex gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (item) setInspectingItem(item);
+                                          }}
+                                          className="px-2 py-1 rounded border border-amber-700/50 bg-neutral-900/60 text-amber-50/90 hover:bg-neutral-900/80"
+                                        >
+                                          View
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={!canInteract || sessionBusy || (!!lock && !lockedByMe)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (selected) {
+                                              setSelectedInventoryKey(null);
+                                              if (lockedByMe) void releaseLock(key);
+                                              return;
+                                            }
+                                            void (async () => {
+                                              const ok = lock && lockedByMe ? true : await acquireLock(key);
+                                              if (ok) setSelectedInventoryKey(key);
+                                            })();
+                                          }}
+                                          className="px-2 py-1 rounded bg-amber-700 text-amber-50 hover:bg-amber-600 disabled:opacity-50"
+                                        >
+                                          {selected ? 'Selected' : 'Select'}
+                                        </button>
+                                        {lockedByMe || isLeader ? (
+                                          <button
+                                            type="button"
+                                            disabled={!canInteract || sessionBusy || !lock}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (selected) setSelectedInventoryKey(null);
+                                              void releaseLock(key);
+                                            }}
+                                            className="px-2 py-1 rounded border border-amber-700/50 bg-neutral-900/60 text-amber-50/90 hover:bg-neutral-900/80 disabled:opacity-50"
+                                          >
+                                            Release
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-sm text-amber-200/90 mb-2 font-semibold tracking-wide">Team activity</div>
+                            {activity.length === 0 ? (
+                              <div className="text-sm text-amber-200/60">No activity yet.</div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                {activity.map((a) => (
+                                  <div key={a.id} className="rounded-lg border border-amber-800/25 bg-neutral-950/30 px-3 py-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="text-sm text-amber-50/90">
+                                        <span className="text-amber-100/60">{a.actor?.name ? a.actor.name : 'Teammate'}:</span>{' '}
+                                        <span className="font-semibold text-amber-50">{a.title}</span>
+                                      </div>
+                                      <div className="text-xs text-amber-200/40 whitespace-nowrap">{formatActivityTime(a.ts)}</div>
+                                    </div>
+                                    {a.meta?.label ? (
+                                      <div className="mt-1 text-xs text-amber-200/45">{String(a.meta.label)}</div>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl bg-gradient-to-r from-amber-900 via-amber-700 to-amber-950 p-[3px] h-full">
+                      <div className="rounded-[14px] bg-neutral-950/90 ring-1 ring-amber-500/20 border border-amber-900/40 p-3 flex h-full min-h-[50dvh] sm:min-h-[55dvh] flex-col">
+                        <div className="text-sm text-amber-200/90 mb-2 font-semibold tracking-wide">Team Chat</div>
+                        <div className="flex-1 min-h-0 overflow-y-auto mb-3 space-y-3 rounded-lg bg-neutral-950/60 ring-1 ring-amber-500/15 p-2">
+                          {chatMessages.length === 0 ? (
+                            <div className="text-sm text-amber-200/60">No messages yet — say hello!</div>
+                          ) : null}
+                          {chatMessages.map((m, idx) => {
+                            const senderLabel =
+                              (m?.user?.name as string | undefined) ||
+                              (m?.user?.email as string | undefined) ||
+                              (m?.userId as string | undefined) ||
+                              'Unknown';
+                            const key = m?.id ?? `${m?.userId ?? 'u'}:${m?.createdAt ?? idx}:${idx}`;
+                            return (
+                              <div key={key} className="rounded-lg w-full px-1 py-1 border border-amber-800/25 bg-neutral-950/30">
+                                <div className="px-3">
+                                  <div className="text-sm text-amber-50/90">
+                                    <strong className="text-amber-50">{senderLabel}</strong>{' '}
+                                    <span className="text-xs text-amber-200/40">{m?.createdAt ? new Date(m.createdAt).toLocaleTimeString() : ''}</span>
+                                  </div>
+                                  <div className="text-sm text-amber-100/70 break-words mt-1">{m?.content}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            void postChatMessage(chatInput);
+                          }}
+                          className="flex gap-2"
+                        >
+                          <input
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            placeholder="Type a message..."
+                            className="flex-1 min-w-0 px-3 py-2 rounded bg-neutral-900/60 text-amber-50 placeholder:text-amber-200/40 border border-amber-700/40"
+                          />
+                          <button type="submit" className="px-4 py-2 rounded bg-amber-700 text-amber-50 hover:bg-amber-600">Send</button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </aside>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -2448,6 +2710,22 @@ export function EscapeRoomPuzzle({
             0 0 0 1px rgba(120, 60, 0, 0.25),
             0 8px 60px rgba(0, 0, 0, 0.85),
             inset 0 0 120px rgba(0, 0, 0, 0.5);
+        }
+
+        .escape-drawer-backdrop {
+          animation: escapeDrawerBackdropIn 180ms ease-out forwards;
+        }
+        .escape-side-drawer {
+          animation: escapeDrawerIn 240ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+          will-change: transform, opacity;
+        }
+        @keyframes escapeDrawerBackdropIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes escapeDrawerIn {
+          from { transform: translateX(24px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
 
         /* ── Scene canvas vignette ── */
