@@ -23,7 +23,7 @@ interface Puzzle {
   attemptCount?: number;
   puzzleType?: string;
   escapeRoom?: { id: string; roomTitle?: string; roomDescription?: string } | null;
-  // server-reported escape-room lockout state
+  // server-reported escape-room history state
   escapeRoomFailed?: boolean;
   escapeRoomFailedReason?: string | null;
   // server-reported detective-case lockout state
@@ -734,14 +734,13 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
 
       if (puzzlesRes.ok) {
         const puzzlesData = await puzzlesRes.json();
-        // Annotate puzzles with local failed flag/reason (Sudoku) plus server-reported escape-room lockout.
+        // Annotate puzzles with lockout state for puzzle types that remain permanently locked on failure.
         const annotated = puzzlesData.map((p: any) => {
-          const escapeRoomFailed = p?.escapeRoomFailed === true;
           const detectiveCaseFailed = p?.detectiveCaseFailed === true;
-          const baseFailedFlag = escapeRoomFailed || detectiveCaseFailed;
-          const baseFailedReason: string | null = escapeRoomFailed
-            ? (p?.escapeRoomFailedReason ?? null)
-            : (detectiveCaseFailed ? (p?.detectiveCaseFailedReason ?? 'incorrect_submission') : null);
+          const baseFailedFlag = detectiveCaseFailed;
+          const baseFailedReason: string | null = detectiveCaseFailed
+            ? (p?.detectiveCaseFailedReason ?? 'incorrect_submission')
+            : null;
           let failedFlag = baseFailedFlag;
           let failedReason: string | null = baseFailedReason;
           return { ...p, failed: failedFlag, failedReason };
@@ -836,16 +835,6 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
         setShowTeamModal(true);
         return;
       }
-    }
-
-    if (isEscapeRoom && puzzle.escapeRoomFailed) {
-      setTeamModalTitle('Locked');
-      setTeamModalConfirmText('OK');
-      setTeamModalCancelText(null);
-      setTeamModalConfirmAction(null);
-      setTeamModalMessage("You already failed this escape room. It is locked and cannot be replayed.");
-      setShowTeamModal(true);
-      return;
     }
 
     const isDetectiveCase = puzzle?.puzzleType === 'detective_case';

@@ -70,6 +70,32 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ teamId, puzzleId, ready: {}, started: false, exists: false });
     }
 
+    // Safety: if this lobby points at an escape room run that is already terminal,
+    // clear in-memory started/open flags so clients can retry from lobby instead of
+    // being auto-redirected back into a stale failed/completed run.
+    try {
+      if (lobby.started || lobby.puzzleOpenedAt) {
+        const puzzle = await prisma.puzzle.findUnique({
+          where: { id: puzzleId },
+          select: { escapeRoom: { select: { id: true } } },
+        });
+        const escapeRoomId = puzzle?.escapeRoom?.id;
+        if (escapeRoomId) {
+          const progress = await (prisma as any).teamEscapeProgress.findFirst({
+            where: { teamId, escapeRoomId },
+            select: { failedAt: true, completedAt: true },
+          });
+          if (progress?.failedAt || progress?.completedAt) {
+            lobby.started = false;
+            delete lobby.puzzleOpenedAt;
+            lobby.enteredPuzzleAt = {};
+          }
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+
     const sanitizedInvites = Array.isArray(lobby.invites)
       ? lobby.invites.map((invite) => ({
           id: invite.id,
@@ -158,28 +184,6 @@ export async function POST(req: NextRequest) {
       const membership = await prisma.teamMember.findUnique({ where: { teamId_userId: { teamId, userId } }, select: { id: true } });
       if (!membership) {
         return NextResponse.json({ error: 'You must be a member of this team to use the lobby' }, { status: 403 });
-      }
-    }
-
-    // Escape-room lockout: once a player fails an escape room, they cannot create/join another lobby for it.
-    if (action === 'create' || action === 'join') {
-      try {
-        const puzzle = await prisma.puzzle.findUnique({ where: { id: puzzleId }, include: { escapeRoom: true } });
-        const escapeRoomId = puzzle?.escapeRoom?.id;
-        if (escapeRoomId) {
-          const userProgress = await prisma.userEscapeProgress.findUnique({
-            where: { userId_escapeRoomId: { userId, escapeRoomId } },
-            select: { failedAt: true },
-          });
-          if (userProgress?.failedAt) {
-            return NextResponse.json(
-              { error: 'You have already failed this escape room and can no longer join a lobby for it.' },
-              { status: 403 }
-            );
-          }
-        }
-      } catch {
-        // ignore lookup failures
       }
     }
 

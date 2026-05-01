@@ -6,11 +6,12 @@ export interface PuzzleModalProps {
   open: boolean;
   type: PuzzleModalType;
   config?: any;
+  zIndex?: number;
   onClose: () => void;
   onComplete?: (result?: any) => void;
 }
 
-export default function PuzzleModal({ open, type, config, onClose, onComplete }: PuzzleModalProps) {
+export default function PuzzleModal({ open, type, config, zIndex = 50, onClose, onComplete }: PuzzleModalProps) {
   if (!open) return null;
 
   let content: React.ReactNode = null;
@@ -29,7 +30,7 @@ export default function PuzzleModal({ open, type, config, onClose, onComplete }:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+    <div className="fixed inset-0 flex items-center justify-center bg-black/60" style={{ zIndex }}>
       <div className="bg-white rounded-lg shadow-lg p-6 min-w-[320px] max-w-full relative">
         <button
           className="absolute top-2 right-2 text-gray-500 hover:text-black"

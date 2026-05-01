@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import ActionModal from "@/components/ActionModal";
 import PuzzleModal from "@/components/puzzle/PuzzleModal";
@@ -163,6 +164,7 @@ export function EscapeRoomPuzzle({
   const [immersiveMode, setImmersiveMode] = useState(false);
   const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   const [activity, setActivity] = useState<EscapeActivityEntry[]>([]);
   const [runStartedAt, setRunStartedAt] = useState<string | null>(null);
   const [runExpiresAt, setRunExpiresAt] = useState<string | null>(null);
@@ -194,15 +196,18 @@ export function EscapeRoomPuzzle({
   const isFullscreenView = immersiveMode || isNativeFullscreen;
   const isPhoneViewport = viewportWidth > 0 && viewportWidth < 640;
   const isTabletViewport = viewportWidth >= 640 && viewportWidth < 1100;
-  const canvasHeight = isFullscreenView
-    ? isPhoneViewport
-      ? 'calc(100dvh - 96px)'
-      : 'calc(100dvh - 112px)'
-    : isPhoneViewport
-      ? 'min(60dvh, 460px)'
-      : isTabletViewport
-        ? 'min(70dvh, 760px)'
-        : 'min(80dvh, 920px)';
+  const isLandscapeViewport = viewportWidth > 0 && viewportHeight > 0 && viewportWidth > viewportHeight;
+  const isCompactMobileViewport = isPhoneViewport || (isLandscapeViewport && viewportHeight > 0 && viewportHeight <= 560);
+  const isMobileFullscreen = isFullscreenView && isCompactMobileViewport;
+  const shouldStretchFullscreenCanvas =
+    isFullscreenView &&
+    isLandscapeViewport &&
+    (isPhoneViewport || viewportHeight <= 560);
+  const canvasHeight = isPhoneViewport
+    ? 'min(60dvh, 460px)'
+    : isTabletViewport
+      ? 'min(70dvh, 760px)'
+      : 'min(80dvh, 920px)';
   const drawerWidth = isPhoneViewport ? 'min(94vw, 420px)' : isTabletViewport ? '420px' : '460px';
 
   useEffect(() => {
@@ -210,13 +215,23 @@ export function EscapeRoomPuzzle({
   }, [soundEnabled]);
 
   useEffect(() => {
-    const syncViewportWidth = () => {
-      setViewportWidth(window.innerWidth || 0);
+    const syncViewport = () => {
+      const vv = window.visualViewport;
+      const nextW = Math.round(vv?.width ?? window.innerWidth ?? 0);
+      const nextH = Math.round(vv?.height ?? window.innerHeight ?? 0);
+      setViewportWidth(nextW);
+      setViewportHeight(nextH);
     };
-    syncViewportWidth();
-    window.addEventListener('resize', syncViewportWidth);
+
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    window.addEventListener('orientationchange', syncViewport);
+    window.visualViewport?.addEventListener('resize', syncViewport);
+
     return () => {
-      window.removeEventListener('resize', syncViewportWidth);
+      window.removeEventListener('resize', syncViewport);
+      window.removeEventListener('orientationchange', syncViewport);
+      window.visualViewport?.removeEventListener('resize', syncViewport);
     };
   }, []);
 
@@ -1131,6 +1146,7 @@ export function EscapeRoomPuzzle({
   }, [soundEnabled]);
 
   const playAreaHostRef = useRef<HTMLDivElement | null>(null);
+  const fullscreenOverlayPortalRef = useRef<HTMLDivElement | null>(null);
   const stageDropRef = useRef<HTMLDivElement | null>(null);
   const inventoryPanelRef = useRef<HTMLDivElement | null>(null);
   const pickupAnimTimerRef = useRef<number | null>(null);
@@ -1743,23 +1759,17 @@ export function EscapeRoomPuzzle({
     [canInteract, handleHotspotAction]
   );
 
-  const contributionProgress = useMemo(() => {
-    const stageKey = String(Math.max(1, Number(stageIndex || 1)));
-    const stageMapRaw = (sceneState as any)?.stageContributions?.[stageKey];
-    const stageMap = (stageMapRaw && typeof stageMapRaw === 'object') ? (stageMapRaw as Record<string, unknown>) : {};
-    const counts = Object.values(stageMap).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
-    const distinct = counts.length;
-    const requiredDistinct = (data?.minTeamSize ?? minTeamSizeRef.current ?? 1);
-    const minActionsPerPlayer = 1;
-    const metMinimum = counts.filter((n) => n >= minActionsPerPlayer).length;
-    return {
-      distinct,
-      requiredDistinct,
-      metMinimum,
-      minActionsPerPlayer,
-      complete: distinct >= requiredDistinct && metMinimum >= requiredDistinct,
-    };
-  }, [sceneState, stageIndex, data]);
+  const renderFullscreenOverlay = useCallback(
+    (overlay: React.ReactNode) => {
+      if (!overlay) return null;
+      const target = fullscreenOverlayPortalRef.current || playAreaHostRef.current;
+      if (isNativeFullscreen && target) {
+        return createPortal(overlay, target);
+      }
+      return overlay;
+    },
+    [isNativeFullscreen]
+  );
 
   if (loading) return <div className="text-gray-300">Loading escape room…</div>;
   if (error) return <div className="text-red-300">{error}</div>;
@@ -1767,6 +1777,7 @@ export function EscapeRoomPuzzle({
 
   const ackCount = Object.keys(briefingAcks || {}).length;
   const allAcked = ackCount >= (data?.minTeamSize ?? minTeamSizeRef.current ?? 1);
+  const showRunTimer = !!(runStartedAt && runExpiresAt && !failedAt && !completedAt);
 
   const fmtRemaining = (ms: number | null) => {
     if (ms === null) return null;
@@ -1908,34 +1919,36 @@ export function EscapeRoomPuzzle({
         />
       )}
 
-      {timeExpiredModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/70" />
-          <div className="relative w-full max-w-xl mx-4 rounded-lg shadow-xl overflow-hidden border border-red-800/60">
-            <div className="bg-red-700 px-6 py-4">
-              <h3 className="text-white text-lg font-semibold">Time’s up</h3>
-            </div>
-            <div className="bg-slate-950 p-6">
-              <p className="text-slate-200 mb-4">
-                The last grains of sand slip through the hourglass. The lights flicker, the locks reset, and the room seals itself once more.
-              </p>
-              <p className="text-slate-300 mb-6">
-                This run has ended due to the time limit.
-                This escape room is now marked as failed for your account and can no longer be replayed.
-              </p>
-              <div className="flex flex-wrap justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={exitToDashboard}
-                  className="px-4 py-2 rounded bg-slate-700 text-white hover:opacity-90"
-                >
-                  Dashboard
-                </button>
+      {renderFullscreenOverlay(
+        timeExpiredModalOpen ? (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/70" />
+            <div className="relative w-full max-w-xl mx-4 rounded-lg shadow-xl overflow-hidden border border-red-800/60">
+              <div className="bg-red-700 px-6 py-4">
+                <h3 className="text-white text-lg font-semibold">Time’s up</h3>
+              </div>
+              <div className="bg-slate-950 p-6">
+                <p className="text-slate-200 mb-4">
+                  The last grains of sand slip through the hourglass. The lights flicker, the locks reset, and the room seals itself once more.
+                </p>
+                <p className="text-slate-300 mb-6">
+                  This run has ended due to the time limit.
+                  You can start a fresh run from the lobby when you are ready to try again.
+                </p>
+                <div className="flex flex-wrap justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={exitToDashboard}
+                    className="px-4 py-2 rounded bg-slate-700 text-white hover:opacity-90"
+                  >
+                    Dashboard
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null
+      )}
 
       {isPaused && lobbyId ? (
         <div className="mb-3 rounded-lg border border-amber-700/60 bg-amber-950/30 p-5 text-amber-100 shadow-[0_0_30px_rgba(180,120,0,0.2)] space-y-3">
@@ -1953,7 +1966,7 @@ export function EscapeRoomPuzzle({
       {failedAt ? (
         <div className="mb-3 rounded-lg border border-red-700/50 bg-red-950/25 p-4 text-red-200 shadow-[0_0_30px_rgba(180,0,0,0.18)]">
           <div className="font-semibold tracking-wide uppercase text-xs text-red-400/80 mb-1">Run Failed</div>
-          <div className="text-sm leading-relaxed opacity-80">{failedReason || 'The run ended and cannot be retried.'}</div>
+          <div className="text-sm leading-relaxed opacity-80">{failedReason || 'The run ended. You can restart this escape room from the lobby.'}</div>
         </div>
       ) : null}
 
@@ -1964,7 +1977,7 @@ export function EscapeRoomPuzzle({
         </div>
       ) : null}
 
-      {runStartedAt && runExpiresAt && !failedAt && !completedAt ? (
+      {showRunTimer ? (
         <div className={`mb-3 flex items-center justify-between rounded-lg px-4 py-2.5 ${(timeRemainingMs ?? 0) <= 60_000 ? 'escape-timer-critical' : 'escape-timer-running'}`}>
           <div className="text-xs uppercase tracking-widest text-amber-300/60 font-medium">⧗ Timer</div>
           <div className={`font-mono text-base font-bold tracking-wider ${ (timeRemainingMs ?? 0) <= 30_000 ? 'text-red-300 escape-timer-text-pulse' : (timeRemainingMs ?? 0) <= 60_000 ? 'text-amber-400' : 'text-amber-100'}`}>
@@ -1972,22 +1985,6 @@ export function EscapeRoomPuzzle({
           </div>
         </div>
       ) : null}
-
-      <div className="mb-3 rounded-lg border border-amber-900/30 bg-neutral-950/50 p-3">
-        <div className="text-amber-100/80 font-semibold text-xs uppercase tracking-widest">Team Collaboration</div>
-        <div className="mt-2 text-sm text-amber-200/65">
-          Stage {stageIndex}: {contributionProgress.distinct}/{contributionProgress.requiredDistinct} players have contributed.
-        </div>
-        <div className="mt-1 text-xs text-amber-200/40">
-          Each player must contribute at least {contributionProgress.minActionsPerPlayer} action to advance.
-        </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-900/80">
-          <div
-            className={"h-full transition-all rounded-full " + (contributionProgress.complete ? 'bg-emerald-500/80 shadow-[0_0_8px_rgba(0,255,128,0.4)]' : 'bg-amber-600/80 shadow-[0_0_6px_rgba(251,191,36,0.3)]')}
-            style={{ width: `${Math.max(0, Math.min(100, (contributionProgress.distinct / Math.max(1, contributionProgress.requiredDistinct)) * 100))}%` }}
-          />
-        </div>
-      </div>
 
       {!runStartedAt && !failedAt && !completedAt ? (
         <div className="mb-3 rounded-lg border border-amber-800/35 bg-neutral-950/55 p-4">
@@ -2063,9 +2060,9 @@ export function EscapeRoomPuzzle({
       {layout ? (
         <div
           ref={playAreaHostRef}
-          className={(isFullscreenView ? "fixed inset-0 z-[72] bg-neutral-950 p-2 sm:p-4 overflow-hidden" : "mt-4") + " relative"}
+          className={(isFullscreenView ? "fixed inset-0 z-[72] bg-neutral-950 overflow-hidden" : "mt-4") + " relative"}
         >
-          <div className={isFullscreenView ? "h-full" : ""}>
+          <div className={isFullscreenView ? "h-full w-full" : ""}>
             <div className="relative h-full">
               <div className="flex justify-center" style={{ position: 'relative', height: isFullscreenView ? '100%' : undefined }}>
                 <div
@@ -2073,13 +2070,15 @@ export function EscapeRoomPuzzle({
                   ref={stageDropRef}
                   style={{
                     position: 'relative',
-                    aspectRatio: stageAspect || `${(layout as any)?.width || 600} / ${(layout as any)?.height || 320}`,
+                    aspectRatio: shouldStretchFullscreenCanvas
+                      ? undefined
+                      : (stageAspect || `${(layout as any)?.width || 600} / ${(layout as any)?.height || 320}`),
                     overflow: 'hidden',
-                    borderRadius: 8,
+                    borderRadius: shouldStretchFullscreenCanvas ? 0 : 8,
                     cursor: isActionInFlight ? 'wait' : undefined,
-                    height: canvasHeight,
-                    maxHeight: canvasHeight,
-                    width: 'auto',
+                    height: isFullscreenView ? '100%' : canvasHeight,
+                    maxHeight: isFullscreenView ? '100%' : canvasHeight,
+                    width: shouldStretchFullscreenCanvas ? '100%' : 'auto',
                     maxWidth: '100%',
                   }}
                 >
@@ -2164,37 +2163,50 @@ export function EscapeRoomPuzzle({
                 </div>
               </div>
 
-              <div className="absolute right-3 top-3 z-30 flex max-w-[85vw] flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  className="rounded-lg border border-amber-600/50 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
-                >
-                  {isFullscreenView ? 'Exit Fullscreen' : 'Fullscreen'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openDrawer('inventory')}
-                  className="rounded-lg border border-amber-700/45 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
-                >
-                  Inventory
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openDrawer('chat')}
-                  className="rounded-lg border border-amber-700/45 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
-                >
-                  Chat
-                </button>
-              </div>
+              {!isMobileFullscreen ? (
+                <div className="absolute right-3 top-3 z-30 flex max-w-[85vw] flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleFullscreen}
+                    className="rounded-lg border border-amber-600/50 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
+                  >
+                    {isFullscreenView ? 'Exit Fullscreen' : 'Fullscreen'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDrawer('inventory')}
+                    className="rounded-lg border border-amber-700/45 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
+                  >
+                    Inventory
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDrawer('chat')}
+                    className="rounded-lg border border-amber-700/45 bg-neutral-950/85 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:bg-neutral-900 sm:px-3 sm:py-2 sm:text-xs"
+                  >
+                    Chat
+                  </button>
+                </div>
+              ) : null}
 
-              {!drawerOpen ? (
+              {isMobileFullscreen && !drawerOpen ? (
                 <button
                   type="button"
                   onClick={() => openDrawer('inventory')}
-                  className="absolute right-0 top-1/2 z-30 -translate-y-1/2 rounded-l-xl border border-r-0 border-amber-700/45 bg-neutral-950/85 px-2 py-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100 hover:bg-neutral-900"
+                  className="absolute right-2 top-2 z-30 rounded-md border border-amber-700/45 bg-neutral-950/85 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100 hover:bg-neutral-900"
                 >
-                  Panels
+                  <span className="block leading-none">Menu</span>
+                  {showRunTimer ? (
+                    <span className={`mt-0.5 block normal-case tracking-normal font-mono text-[10px] ${
+                      (timeRemainingMs ?? 0) <= 30_000
+                        ? 'text-red-300'
+                        : (timeRemainingMs ?? 0) <= 60_000
+                          ? 'text-amber-400'
+                          : 'text-amber-100'
+                    }`}>
+                      {fmtRemaining(timeRemainingMs)}
+                    </span>
+                  ) : null}
                 </button>
               ) : null}
             </div>
@@ -2215,6 +2227,18 @@ export function EscapeRoomPuzzle({
               >
                 <div className="flex items-center justify-between border-b border-amber-700/30 px-3 py-3">
                   <div className="flex gap-2">
+                    {isMobileFullscreen ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeDrawer();
+                          void toggleFullscreen();
+                        }}
+                        className="rounded px-3 py-2 text-xs font-semibold border bg-neutral-900/50 border-amber-700/30 text-amber-100/80 hover:bg-neutral-900/80"
+                      >
+                        Exit Fullscreen
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => setDrawerTab('inventory')}
@@ -2241,13 +2265,26 @@ export function EscapeRoomPuzzle({
                     </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={closeDrawer}
-                    className="rounded border border-amber-700/40 bg-neutral-900/60 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-neutral-900"
-                  >
-                    Close
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {showRunTimer ? (
+                      <div className={`rounded border px-2 py-1 font-mono text-xs font-semibold tracking-wider ${
+                        (timeRemainingMs ?? 0) <= 30_000
+                          ? 'border-red-700/60 bg-red-950/35 text-red-200'
+                          : (timeRemainingMs ?? 0) <= 60_000
+                            ? 'border-amber-600/60 bg-amber-950/35 text-amber-300'
+                            : 'border-amber-700/40 bg-neutral-900/60 text-amber-100'
+                      }`}>
+                        {fmtRemaining(timeRemainingMs)}
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={closeDrawer}
+                      className="rounded border border-amber-700/40 bg-neutral-900/60 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-neutral-900"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
 
                 <div className="h-[calc(100%-62px)] overflow-y-auto p-3">
@@ -2501,207 +2538,260 @@ export function EscapeRoomPuzzle({
               </aside>
             </div>
           ) : null}
+
+          <div ref={fullscreenOverlayPortalRef} />
         </div>
       ) : null}
 
-      {inspectingItem ? (
-        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/70 backdrop-blur-[2px]" onClick={() => setInspectingItem(null)}>
-          <div className="relative w-full max-w-xl mx-4 rounded-2xl border border-amber-500/40 bg-neutral-950/95 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 pt-5 pb-2 text-center">
-              <h3 className="text-2xl font-bold text-amber-50">{inspectingItem.name}</h3>
-            </div>
-            <div className="relative py-6 flex items-center justify-center">
-              {inspectingItem.imageUrl ? (
-                isVideoUrl(inspectingItem.imageUrl) ? (
-                  <video src={inspectingItem.imageUrl} autoPlay loop muted playsInline className="max-h-96 max-w-full object-contain rounded-xl border border-amber-400/30 bg-neutral-900/80 p-3 shadow-[0_0_35px_rgba(251,191,36,0.25)]" />
-                ) : (
-                  <img src={inspectingItem.imageUrl} alt={inspectingItem.name} className="max-h-96 max-w-full object-contain rounded-xl border border-amber-400/30 bg-neutral-900/80 p-3 shadow-[0_0_35px_rgba(251,191,36,0.25)]" />
-                )
-              ) : (
-                <div className="h-36 w-36 rounded-lg border border-amber-500/25 bg-neutral-900/80 flex items-center justify-center text-amber-200/50 text-sm">No image</div>
-              )}
-            </div>
-            <div className="px-5 pb-5 pt-1 flex justify-center">
-              <button type="button" onClick={() => setInspectingItem(null)} className="px-4 py-2 rounded font-semibold text-white bg-amber-600 hover:bg-amber-500 text-sm">Close</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {pendingPickup ? (
-        /* Single fixed overlay used for ALL phases — reveal, video, and toInventory.
-           Keeping everything in one container means the visual center never jumps. */
-        <div className={`fixed inset-0 z-[70] flex flex-col ${
-          pendingPickup.pickupAnimationUrl && (pickupPhase === 'ready' || pickupPhase === 'toInventory') ? '' : 'bg-black/65 backdrop-blur-[1px] items-center justify-center'
-        }`}>
-          {pendingPickup.pickupAnimationUrl && (pickupPhase === 'ready' || pickupPhase === 'toInventory') ? (
-            /* Video phase — transparent background, video plays over the scene */
-            <>
-              {/* Title bar at top */}
-              <div style={{ position: 'relative', zIndex: 4, padding: '20px 24px 12px', background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                {pendingPickup.imageUrl && !isVideoUrl(pendingPickup.imageUrl) && (
-                  <img src={pendingPickup.imageUrl} alt="" aria-hidden style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(0,0,0,0.4)' }} />
-                )}
-                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#fef3c7', textShadow: '0 2px 8px rgba(0,0,0,0.8)', margin: 0 }}>You found <span style={{ color: '#fbbf24' }}>{pendingPickup.itemName}</span></h3>
+      {renderFullscreenOverlay(
+        inspectingItem ? (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 backdrop-blur-[2px]" onClick={() => setInspectingItem(null)}>
+            <div
+              className="relative w-full mx-3 sm:mx-4 rounded-2xl border border-amber-500/40 bg-neutral-950/95 shadow-2xl overflow-hidden"
+              style={{ maxWidth: 'min(94vw, 900px)', maxHeight: 'min(92dvh, 960px)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 sm:px-6 pt-5 pb-2 text-center">
+                <h3 className="text-2xl sm:text-3xl font-bold text-amber-50">{inspectingItem.name}</h3>
               </div>
-              {/* Video area */}
-              <div style={{
-                flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-                transition: 'opacity 0.5s ease-out, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-                ...(pickupPhase === 'toInventory' && pickupFlight ? {
-                  opacity: 0,
-                  transform: `translate(${pickupFlight.dx}px, ${pickupFlight.dy}px) scale(${pickupFlight.scale})`,
-                } : {}),
-              }}>
-                <video
-                  key={pendingPickup.itemId}
-                  src={/^https?:\/\//i.test(pendingPickup.pickupAnimationUrl) ? `/api/image-proxy?url=${encodeURIComponent(pendingPickup.pickupAnimationUrl)}` : pendingPickup.pickupAnimationUrl}
-                  autoPlay
-                  muted
-                  playsInline
-                  style={{
-                    maxHeight: '100%',
-                    maxWidth: '90%',
-                    objectFit: 'contain',
-                    borderRadius: 16,
-                    boxShadow: '0 8px 80px rgba(251,191,36,0.25), 0 2px 24px rgba(0,0,0,0.8)',
-                    ...({
-                      animation: 'pickupVideoFadeGrow 0.35s cubic-bezier(0.22,0.7,0.2,1) forwards',
-                    } as React.CSSProperties),
-                  }}
-                />
-              </div>
-              {/* Button at bottom */}
-              <div style={{ position: 'relative', zIndex: 4, padding: '12px 24px 20px', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', justifyContent: 'center', flexShrink: 0, transition: 'opacity 0.3s', opacity: pickupPhase === 'toInventory' ? 0 : 1 }}>
-                <button type="button" onClick={() => void confirmPendingPickup()} className="px-3 py-1.5 text-sm rounded font-semibold text-white bg-amber-600 hover:bg-amber-500">Add to Inventory</button>
-              </div>
-            </>
-          ) : (
-          <div className="relative w-full max-w-lg mx-4 rounded-2xl border border-amber-500/40 bg-neutral-950/95 shadow-2xl overflow-hidden">
-            <div className="px-5 pt-5 pb-2 text-center">
-              <div className="text-xs uppercase tracking-[0.18em] text-amber-300/70">Discovery</div>
-              <h3 className="mt-1 text-2xl font-bold text-amber-50">You found {pendingPickup.itemName}</h3>
-              <p className="mt-2 text-sm text-amber-100/70">Secure it now and add it to your inventory.</p>
-            </div>
-
-            <div className="relative py-8 flex items-center justify-center">
-              <div
-                className={
-                  'pickup-cinematic-item rounded-xl border border-amber-400/30 bg-neutral-900/80 p-4 shadow-[0_0_35px_rgba(251,191,36,0.35)] ' +
-                  (pickupPhase === 'reveal' ? pickupRevealClass : '') +
-                  (pickupPhase === 'toInventory' ? ` ${pickupToInventoryClass}` : '')
-                }
-                style={
-                  pickupPhase === 'toInventory' && pickupFlight
-                    ? ({
-                        ['--pickup-dx' as any]: `${pickupFlight.dx}px`,
-                        ['--pickup-dy' as any]: `${pickupFlight.dy}px`,
-                        ['--pickup-scale' as any]: `${pickupFlight.scale}`,
-                      } as React.CSSProperties)
-                    : undefined
-                }
-              >
-                {pendingPickup.imageUrl ? (
-                  isVideoUrl(pendingPickup.imageUrl) ? (
-                    // eslint-disable-next-line jsx-a11y/media-has-caption
-                    <video src={pendingPickup.imageUrl} autoPlay loop muted playsInline className="h-36 w-36 object-contain" />
+              <div className="px-5 sm:px-6 pb-5 overflow-y-auto" style={{ maxHeight: 'calc(min(92dvh, 960px) - 94px)' }}>
+                <div className="relative py-4 sm:py-6 flex items-center justify-center">
+                  {inspectingItem.imageUrl ? (
+                    isVideoUrl(inspectingItem.imageUrl) ? (
+                      <video
+                        src={inspectingItem.imageUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full object-contain rounded-xl border border-amber-400/30 bg-neutral-900/80 p-3 shadow-[0_0_35px_rgba(251,191,36,0.25)]"
+                        style={{ maxHeight: 'min(56dvh, 620px)' }}
+                      />
+                    ) : (
+                      <img
+                        src={inspectingItem.imageUrl}
+                        alt={inspectingItem.name}
+                        className="w-full object-contain rounded-xl border border-amber-400/30 bg-neutral-900/80 p-3 shadow-[0_0_35px_rgba(251,191,36,0.25)]"
+                        style={{ maxHeight: 'min(56dvh, 620px)' }}
+                      />
+                    )
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={pendingPickup.imageUrl} alt={pendingPickup.itemName} className="h-36 w-36 object-contain" />
-                  )
-                ) : (
-                  <div className="h-36 w-36 rounded-lg border border-amber-500/25 bg-neutral-900/80" />
-                )}
+                    <div className="h-48 w-48 rounded-lg border border-amber-500/25 bg-neutral-900/80 flex items-center justify-center text-amber-200/50 text-base">No image</div>
+                  )}
+                </div>
+                <div className="pt-1 flex justify-center">
+                  <button type="button" onClick={() => setInspectingItem(null)} className="px-5 py-2.5 rounded font-semibold text-white bg-amber-600 hover:bg-amber-500 text-sm sm:text-base">Close</button>
+                </div>
               </div>
             </div>
-
-            <div className="mx-5 border-t border-amber-500/20" />
-            <div className="px-5 pb-5 pt-3 flex justify-center">
-              <button
-                type="button"
-                onClick={() => void confirmPendingPickup()}
-                disabled={pickupPhase !== 'ready'}
-                className={
-                  'px-3 py-1.5 text-sm rounded font-semibold text-white transition ' +
-                  (pickupPhase === 'ready' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-amber-900/70 cursor-not-allowed')
-                }
-              >
-                {pickupPhase === 'committing' ? 'Adding…' : pickupPhase === 'toInventory' ? 'Storing…' : 'Add to Inventory'}
-              </button>
-            </div>
           </div>
-          )}
-        </div>
-      ) : null}
+        ) : null
+      )}
 
-      <ActionModal
-        isOpen={actionModalOpen}
-        title={actionModalTitle}
-        message={actionModalMessage}
-        imageUrl={actionModalImageUrl}
-        description={actionModalDescription}
-        choices={actionModalChoices ? actionModalChoices.map((c) => ({ label: c.label })) : undefined}
-        onChoice={handleActionModalChoice}
-        theme={actionModalTheme}
-        onClose={() => {
-          setActionModalOpen(false);
-          setActionModalChoices(null);
-          setActionModalChoiceIndex(0);
-          setActionModalImageUrl(null);
-          setActionModalDescription(undefined);
-        }}
-      />
-      <PuzzleModal
-        open={puzzleModal.open}
-        type={puzzleModal.type}
-        config={{
-          ...puzzleModal.config,
-          updateBackgroundImage, // Pass the handler to the modal for use in interactions
-        }}
-        onClose={() => setPuzzleModal({ ...puzzleModal, open: false })}
-        onComplete={() => setPuzzleModal({ ...puzzleModal, open: false })}
-      />
-      {/* Stage solve celebration overlay */}
-      {celebration && (
-        <StageCelebration
-          key={celebration.key}
-          variant={celebration.variant as any}
-          onDone={() => setCelebration(null)}
+      {renderFullscreenOverlay(
+        pendingPickup ? (
+          /* Single fixed overlay used for ALL phases — reveal, video, and toInventory.
+             Keeping everything in one container means the visual center never jumps. */
+          <div className={`fixed inset-0 z-[145] flex flex-col ${
+            pendingPickup.pickupAnimationUrl && (pickupPhase === 'ready' || pickupPhase === 'toInventory') ? '' : 'bg-black/65 backdrop-blur-[1px] items-center justify-center'
+          }`}>
+            {pendingPickup.pickupAnimationUrl && (pickupPhase === 'ready' || pickupPhase === 'toInventory') ? (
+              /* Video phase — transparent background, video plays over the scene */
+              <>
+                {/* Title bar at top */}
+                <div style={{ position: 'relative', zIndex: 4, padding: '20px 24px 12px', background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  {pendingPickup.imageUrl && !isVideoUrl(pendingPickup.imageUrl) && (
+                    <img src={pendingPickup.imageUrl} alt="" aria-hidden style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(0,0,0,0.4)' }} />
+                  )}
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: '#fef3c7', textShadow: '0 2px 8px rgba(0,0,0,0.8)', margin: 0 }}>You found <span style={{ color: '#fbbf24' }}>{pendingPickup.itemName}</span></h3>
+                </div>
+                {/* Video area */}
+                <div style={{
+                  flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                  transition: 'opacity 0.5s ease-out, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                  ...(pickupPhase === 'toInventory' && pickupFlight ? {
+                    opacity: 0,
+                    transform: `translate(${pickupFlight.dx}px, ${pickupFlight.dy}px) scale(${pickupFlight.scale})`,
+                  } : {}),
+                }}>
+                  <video
+                    key={pendingPickup.itemId}
+                    src={/^https?:\/\//i.test(pendingPickup.pickupAnimationUrl) ? `/api/image-proxy?url=${encodeURIComponent(pendingPickup.pickupAnimationUrl)}` : pendingPickup.pickupAnimationUrl}
+                    autoPlay
+                    muted
+                    playsInline
+                    style={{
+                      maxHeight: '100%',
+                      maxWidth: '90%',
+                      objectFit: 'contain',
+                      borderRadius: 16,
+                      boxShadow: '0 8px 80px rgba(251,191,36,0.25), 0 2px 24px rgba(0,0,0,0.8)',
+                      ...({
+                        animation: 'pickupVideoFadeGrow 0.35s cubic-bezier(0.22,0.7,0.2,1) forwards',
+                      } as React.CSSProperties),
+                    }}
+                  />
+                </div>
+                {/* Button at bottom */}
+                <div style={{ position: 'relative', zIndex: 4, padding: '12px 24px 20px', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', display: 'flex', justifyContent: 'center', flexShrink: 0, transition: 'opacity 0.3s', opacity: pickupPhase === 'toInventory' ? 0 : 1 }}>
+                  <button type="button" onClick={() => void confirmPendingPickup()} className="px-3 py-1.5 text-sm rounded font-semibold text-white bg-amber-600 hover:bg-amber-500">Add to Inventory</button>
+                </div>
+              </>
+            ) : (
+            <div
+              className="relative w-full mx-3 sm:mx-4 rounded-2xl border border-amber-500/40 bg-neutral-950/95 shadow-2xl overflow-hidden"
+              style={{ maxWidth: 'min(94vw, 880px)', maxHeight: 'min(92dvh, 920px)' }}
+            >
+              <div className="px-5 pt-5 pb-2 text-center">
+                <div className="text-xs uppercase tracking-[0.18em] text-amber-300/70">Discovery</div>
+                <h3 className="mt-1 text-2xl sm:text-3xl font-bold text-amber-50">You found {pendingPickup.itemName}</h3>
+                <p className="mt-2 text-sm sm:text-base text-amber-100/70">Secure it now and add it to your inventory.</p>
+              </div>
+
+              <div className="relative py-6 sm:py-8 flex items-center justify-center overflow-y-auto" style={{ maxHeight: 'calc(min(92dvh, 920px) - 168px)' }}>
+                <div
+                  className={
+                    'pickup-cinematic-item rounded-xl border border-amber-400/30 bg-neutral-900/80 p-4 shadow-[0_0_35px_rgba(251,191,36,0.35)] ' +
+                    (pickupPhase === 'reveal' ? pickupRevealClass : '') +
+                    (pickupPhase === 'toInventory' ? ` ${pickupToInventoryClass}` : '')
+                  }
+                  style={
+                    pickupPhase === 'toInventory' && pickupFlight
+                      ? ({
+                          ['--pickup-dx' as any]: `${pickupFlight.dx}px`,
+                          ['--pickup-dy' as any]: `${pickupFlight.dy}px`,
+                          ['--pickup-scale' as any]: `${pickupFlight.scale}`,
+                        } as React.CSSProperties)
+                      : undefined
+                  }
+                >
+                  {pendingPickup.imageUrl ? (
+                    isVideoUrl(pendingPickup.imageUrl) ? (
+                      // eslint-disable-next-line jsx-a11y/media-has-caption
+                      <video
+                        src={pendingPickup.imageUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="object-contain"
+                        style={{ width: 'clamp(11rem, 40vw, 20rem)', height: 'clamp(11rem, 40vw, 20rem)', maxHeight: 'min(48dvh, 26rem)', maxWidth: '100%' }}
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={pendingPickup.imageUrl}
+                        alt={pendingPickup.itemName}
+                        className="object-contain"
+                        style={{ width: 'clamp(11rem, 40vw, 20rem)', height: 'clamp(11rem, 40vw, 20rem)', maxHeight: 'min(48dvh, 26rem)', maxWidth: '100%' }}
+                      />
+                    )
+                  ) : (
+                    <div className="rounded-lg border border-amber-500/25 bg-neutral-900/80" style={{ width: 'clamp(11rem, 40vw, 20rem)', height: 'clamp(11rem, 40vw, 20rem)', maxHeight: 'min(48dvh, 26rem)', maxWidth: '100%' }} />
+                  )}
+                </div>
+              </div>
+
+              <div className="mx-5 border-t border-amber-500/20" />
+              <div className="px-5 pb-5 pt-3 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => void confirmPendingPickup()}
+                  disabled={pickupPhase !== 'ready'}
+                  className={
+                    'px-3 py-1.5 text-sm rounded font-semibold text-white transition ' +
+                    (pickupPhase === 'ready' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-amber-900/70 cursor-not-allowed')
+                  }
+                >
+                  {pickupPhase === 'committing' ? 'Adding…' : pickupPhase === 'toInventory' ? 'Storing…' : 'Add to Inventory'}
+                </button>
+              </div>
+            </div>
+            )}
+          </div>
+        ) : null
+      )}
+
+      {renderFullscreenOverlay(
+        <ActionModal
+          isOpen={actionModalOpen}
+          title={actionModalTitle}
+          message={actionModalMessage}
+          imageUrl={actionModalImageUrl}
+          description={actionModalDescription}
+          choices={actionModalChoices ? actionModalChoices.map((c) => ({ label: c.label })) : undefined}
+          onChoice={handleActionModalChoice}
+          theme={actionModalTheme}
+          zIndex={160}
+          onClose={() => {
+            setActionModalOpen(false);
+            setActionModalChoices(null);
+            setActionModalChoiceIndex(0);
+            setActionModalImageUrl(null);
+            setActionModalDescription(undefined);
+          }}
         />
+      )}
+      {renderFullscreenOverlay(
+        <PuzzleModal
+          open={puzzleModal.open}
+          type={puzzleModal.type}
+          zIndex={160}
+          config={{
+            ...puzzleModal.config,
+            updateBackgroundImage, // Pass the handler to the modal for use in interactions
+          }}
+          onClose={() => setPuzzleModal({ ...puzzleModal, open: false })}
+          onComplete={() => setPuzzleModal({ ...puzzleModal, open: false })}
+        />
+      )}
+      {/* Stage solve celebration overlay */}
+      {renderFullscreenOverlay(
+        celebration ? (
+          <StageCelebration
+            key={celebration.key}
+            variant={celebration.variant as any}
+            onDone={() => setCelebration(null)}
+          />
+        ) : null
       )}
       {/* Time penalty toast — shown when a wrong action costs run time */}
-      {penaltyToast && (
-        <div
-          className="penalty-toast"
-          aria-live="assertive"
-          style={{
-            position: 'fixed',
-            top: '72px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 9999,
-            pointerEvents: 'none',
-          }}
-        >
-          <div className="penalty-toast-inner">
-            ⏱ {penaltyToast}
+      {renderFullscreenOverlay(
+        penaltyToast ? (
+          <div
+            className="penalty-toast"
+            aria-live="assertive"
+            style={{
+              position: 'fixed',
+              top: '72px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 9999,
+              pointerEvents: 'none',
+            }}
+          >
+            <div className="penalty-toast-inner">
+              ⏱ {penaltyToast}
+            </div>
           </div>
-        </div>
+        ) : null
       )}
       {/* Mini-puzzle modal (keypad / wire / dial) */}
-      {miniPuzzleState?.open && miniPuzzleState.config && (
-        <MiniPuzzleModal
-          open={miniPuzzleState.open}
-          puzzleType={miniPuzzleState.puzzleType}
-          config={miniPuzzleState.config}
-          label={miniPuzzleState.label}
-          hotspotId={miniPuzzleState.hotspotId}
-          puzzleId={puzzleId}
-          teamId={teamId || ''}
-          onSolve={handleMiniPuzzleSolve}
-          onPenalty={showPenaltyToast}
-          onClose={() => setMiniPuzzleState(null)}
-        />
+      {renderFullscreenOverlay(
+        miniPuzzleState?.open && miniPuzzleState.config ? (
+          <MiniPuzzleModal
+            open={miniPuzzleState.open}
+            puzzleType={miniPuzzleState.puzzleType}
+            config={miniPuzzleState.config}
+            label={miniPuzzleState.label}
+            hotspotId={miniPuzzleState.hotspotId}
+            puzzleId={puzzleId}
+            teamId={teamId || ''}
+            onSolve={handleMiniPuzzleSolve}
+            onPenalty={showPenaltyToast}
+            onClose={() => setMiniPuzzleState(null)}
+          />
+        ) : null
       )}
       <style jsx global>{`
         /* ── Atmospheric player shell ── */

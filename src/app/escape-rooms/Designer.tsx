@@ -305,6 +305,7 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
   // — the parent already has initialData, so calling onChange immediately would
   // trigger a setFormData → re-render → effect loop).
   const notifyMountedRef = useRef(false);
+  const notifyDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [title, setTitle] = useState(initialData?.title || "");
   const [description, setDescription] = useState(initialData?.description || "");
@@ -989,7 +990,17 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
       notifyMountedRef.current = true;
       return;
     }
-    notifyParent();
+    if (notifyDebounceTimerRef.current) clearTimeout(notifyDebounceTimerRef.current);
+    notifyDebounceTimerRef.current = setTimeout(() => {
+      notifyParent();
+      notifyDebounceTimerRef.current = null;
+    }, 120);
+    return () => {
+      if (notifyDebounceTimerRef.current) {
+        clearTimeout(notifyDebounceTimerRef.current);
+        notifyDebounceTimerRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, description, timeLimit, startMode, minTeamSize, playerMode, scenes, userSpecialties, intro, outro]);
 
@@ -1645,7 +1656,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                   <img
                     src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(playtestSceneVisual.backgroundUrl)}` : playtestSceneVisual.backgroundUrl}
                     alt="Background"
-                    style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }}
+                    // Match editor canvas projection (fixed 600×320) to keep authored coords stable.
+                    style={{ width: '100%', height: 320, objectFit: 'fill', display: 'block' }}
                     onLoad={() => {
                       setPreviewImageError(null);
                     }}
@@ -1673,13 +1685,13 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                     loop
                     muted
                     playsInline
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: 320, objectFit: 'cover', pointerEvents: 'none', zIndex: 60 }}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: 320, objectFit: 'fill', pointerEvents: 'none', zIndex: 60 }}
                   />
                 ) : (
                   <img
                     src={previewProxying ? `/api/image-proxy?url=${encodeURIComponent(playtestSceneVisual.foregroundUrl)}` : playtestSceneVisual.foregroundUrl}
                     alt="Foreground"
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: 320, objectFit: 'cover', pointerEvents: 'none', zIndex: 60 }}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: 320, objectFit: 'fill', pointerEvents: 'none', zIndex: 60 }}
                   />
                 )
               ) : null}
@@ -2185,6 +2197,11 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                         style={(() => {
                           const ptBaseW = item.w ?? 48;
                           const ptBaseH = item.h ?? 48;
+                          // Keep authored top-left stable across both playtest paths:
+                          // - normal path: wrapper uses CSS transform(scale) around center
+                          // - reveal path: child image size is directly scaled (no wrapper transform)
+                          const ptScaleOffsetX = (ptBaseW * visual.scale - ptBaseW) / 2;
+                          const ptScaleOffsetY = (ptBaseH * visual.scale - ptBaseH) / 2;
                           const hasPt3D = visual.perspectiveRotateX || visual.perspectiveRotateY;
                           const ptWrapperTransform = isPickupRevealItem ? undefined : [
                             hasPt3D ? `perspective(${visual.perspectiveDistance}px)` : '',
@@ -2197,8 +2214,8 @@ export default function EscapeRoomDesigner({ initialData, editId, onChange }: Es
                           ].filter(Boolean).join(' ') || undefined;
                           return {
                             position: 'absolute' as const,
-                            left: isPickupRevealItem ? (item.x ?? (20 + i * 60)) - (ptBaseW * visual.scale - ptBaseW) / 2 : (item.x ?? (20 + i * 60)),
-                            top: isPickupRevealItem ? (item.y ?? 20) - (ptBaseH * visual.scale - ptBaseH) / 2 : (item.y ?? 20),
+                            left: isPickupRevealItem ? (item.x ?? (20 + i * 60)) - ptScaleOffsetX : (item.x ?? (20 + i * 60)) + ptScaleOffsetX,
+                            top: isPickupRevealItem ? (item.y ?? 20) - ptScaleOffsetY : (item.y ?? 20) + ptScaleOffsetY,
                             width: ptBaseW,
                             height: ptBaseH,
                             zIndex: isPickupRevealItem ? 80 : 2,

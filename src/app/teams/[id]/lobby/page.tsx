@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
 import ActionModal from "@/components/ActionModal";
+import { AlertTriangle, CheckCircle2, Crown, LogOut, Mail, MessageSquareText, Play, Power, RefreshCw, Send, Shield, Sparkles, UserPlus, Users } from "lucide-react";
 
 function getPuzzleDisplayTitle(p: any): string {
   const escapeTitle = typeof p?.escapeRoom?.roomTitle === 'string' ? p.escapeRoom.roomTitle.trim() : '';
@@ -41,7 +42,7 @@ export default function TeamLobbyPage() {
   const skipLeaveOnUnmountRef = useRef(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<null | "create" | "ready" | "unready" | "start" | "refresh" | "invite" | "leave" | "destroy">(null);
+  const [confirmAction, setConfirmAction] = useState<null | "ready" | "unready" | "start" | "refresh" | "invite" | "leave" | "destroy">(null);
   const [actionModalOpen, setActionModalOpen] = useState(false);
   const [actionModalVariant, setActionModalVariant] = useState<"success" | "error" | "info">("info");
   const [actionModalTitle, setActionModalTitle] = useState<string | undefined>(undefined);
@@ -124,13 +125,12 @@ export default function TeamLobbyPage() {
         const isEscapeRoom = p?.puzzleType === 'escape_room' || !!p?.escapeRoom;
         const escaperoomMinPlayers = typeof p?.minTeamSize === 'number' && p.minTeamSize > 0 ? p.minTeamSize : 1;
         const requiredPlayers = isEscapeRoom ? escaperoomMinPlayers : (minTeamSize > 0 ? minTeamSize : (partsCount > 0 ? partsCount : 1));
-        const isLocked = isEscapeRoom && p?.escapeRoomFailed === true;
-        return { ...p, partsCount, requiredPlayers, isLocked };
+        return { ...p, partsCount, requiredPlayers };
       });
       setTeamPuzzles(normalized);
       if (!puzzleId) {
-        const fromQuery = puzzleIdFromQuery && normalized.find((p: any) => p.id === puzzleIdFromQuery && !p.isLocked);
-        const pick = fromQuery || normalized.find((p: any) => !p.isLocked) || normalized[0];
+        const fromQuery = puzzleIdFromQuery && normalized.find((p: any) => p.id === puzzleIdFromQuery);
+        const pick = fromQuery || normalized[0];
         if (pick) {
           setPuzzleId(pick.id);
           setSelectedPuzzle(pick);
@@ -626,12 +626,6 @@ export default function TeamLobbyPage() {
     setActionModalOpen(true);
   };
 
-  const onCreateClick = () => {
-    if (!puzzleId.trim()) return openActionModal("error", "Missing Puzzle", "Select a puzzle to create a lobby.");
-    setConfirmAction("create");
-    setConfirmOpen(true);
-  };
-
   const onInviteClick = () => {
     if (!inviteEmail.trim()) return openActionModal("error", "Missing email", "Enter an email to invite");
     if (!puzzleId.trim()) return openActionModal("error", "Missing Puzzle", "Select a puzzle before inviting");
@@ -671,22 +665,16 @@ export default function TeamLobbyPage() {
     if (!confirmAction) return;
 
     try {
-      if (confirmAction === "create") {
-        const res = await fetch("/api/team/lobby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", teamId, puzzleId }) });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok) return openActionModal("error", "Create Lobby Failed", j?.error || res.statusText);
-        await fetchLobby();
-        await fetchMembers();
-        return openActionModal("success", "Lobby Created", "Lobby created — members can now ready up.");
-      }
-
       if (confirmAction === "ready" || confirmAction === "unready") {
         const action = confirmAction === "ready" ? "ready" : "unready";
         const res = await fetch("/api/team/lobby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, teamId, puzzleId }) });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) return openActionModal("error", "Failed", j?.error || res.statusText);
         await fetchLobby();
-        return openActionModal("success", confirmAction === "ready" ? "You are Ready" : "You are Not Ready", confirmAction === "ready" ? "You have marked yourself ready." : "You are no longer marked ready.");
+        if (confirmAction === "ready") {
+          return openActionModal("success", undefined, "You're ready to go!");
+        }
+        return openActionModal("success", "You are Not Ready", "You are no longer marked ready.");
       }
 
       if (confirmAction === "start") {
@@ -740,208 +728,418 @@ export default function TeamLobbyPage() {
     }
   };
 
+  const readyCount = participantIds.filter((id: string) => !!lobby?.ready?.[id]).length;
+  const inviteCount = Array.isArray(lobby?.invites) ? lobby.invites.length : 0;
+  const readinessPercent = participantsCount > 0 ? Math.round((readyCount / participantsCount) * 100) : 0;
+  const participantProgress = selectedPuzzle && requiredPlayers > 0
+    ? Math.min(100, Math.round((participantsCount / requiredPlayers) * 100))
+    : 0;
+  const currentUserInLobby = !!currentUserId && participantIds.includes(currentUserId);
+  const roleLabel = isLeader ? "Leader" : isAdmin ? "Admin" : "Member";
+
   return (
-    <div className="min-h-screen p-6" style={{ background: "#020202", paddingTop: navHeight ? `${navHeight}px` : undefined }}>
-      <div className="max-w-3xl mx-auto bg-slate-900 border rounded-lg p-6">
-        <h2 className="text-2xl text-white font-bold mb-4">Team Lobby</h2>
+    <div
+      className="min-h-screen relative overflow-hidden"
+      style={{
+        paddingTop: navHeight ? `${navHeight}px` : undefined,
+        background:
+          "radial-gradient(1200px 600px at 10% -10%, rgba(56,189,248,0.14), transparent 60%), radial-gradient(900px 500px at 90% 0%, rgba(20,184,166,0.12), transparent 55%), #020617",
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 opacity-50 [background:linear-gradient(rgba(148,163,184,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.06)_1px,transparent_1px)] [background-size:34px_34px]" />
 
-        <div className="mb-4">
-          <label className="text-sm text-gray-300 block mb-2">Choose Team Puzzle</label>
-          <select
-            value={puzzleId}
-            onChange={(e) => {
-              if (lobby && !isLeader) {
-                openActionModal('error', 'Not Allowed', 'Only the lobby leader can change the team puzzle.');
-                return;
-              }
-              const id = e.target.value;
-              const found = teamPuzzles.find((p) => p.id === id) || null;
-              if (found?.isLocked) {
-                openActionModal('error', 'Locked Puzzle', 'You already failed this escape room. It is locked and cannot be replayed.');
-                return;
-              }
-              setPuzzleId(id);
-              setSelectedPuzzle(found);
-              try {
-                router.replace(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(id)}`);
-              } catch {
-                // ignore
-              }
-            }}
-            disabled={!!lobby && !isLeader}
-            className="w-full px-3 py-2 rounded bg-black text-white border"
-          >
-            <option value="">-- Select a puzzle --</option>
-            {teamPuzzles.map((p) => (
-              <option key={p.id} value={p.id} disabled={!!p.isLocked}>
-                {getPuzzleDisplayTitle(p)} (players: {p.requiredPlayers || 1}){p.isLocked ? ' — LOCKED' : ''}
-              </option>
-            ))}
-          </select>
-          <div className="flex gap-2 mt-3">
-            <button type="button" onClick={handleRefresh} className="px-4 py-2 bg-slate-700 text-white rounded">Refresh</button>
-          </div>
-
-          {selectedPuzzle && (
-            <div className="mt-3 text-sm text-gray-300">
-              Required players: <span className="font-semibold text-white">{requiredPlayers || 1}</span>
+      <div className="relative mx-auto w-full max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+        <section className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">
+                <Sparkles className="h-3.5 w-3.5" />
+                Team Coordination
+              </div>
+              <h1 className="mt-4 text-2xl font-black tracking-tight text-white sm:text-4xl">Team Lobby</h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-300 sm:text-base">
+                Get everyone synced, lock in readiness, and launch with precision.
+              </p>
             </div>
-          )}
 
-          {selectedPuzzle && members.length < requiredPlayers && (
-            <div className="mt-3 p-3 rounded border bg-slate-800 border-slate-700">
-              <div className="text-sm text-amber-200">
-                Your team has <strong className="text-white">{members.length}</strong> member(s), but this puzzle requires <strong className="text-white">{requiredPlayers}</strong> players.
-                <div className="mt-2"><a className="text-sky-400 underline" href={`/teams/${teamId}`}>Manage team members</a></div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400">Role</div>
+                <div className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-100">
+                  {isLeader ? <Crown className="h-4 w-4 text-amber-300" /> : <Shield className="h-4 w-4 text-cyan-300" />}
+                  {roleLabel}
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400">Players</div>
+                <div className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-100">
+                  <Users className="h-4 w-4 text-sky-300" />
+                  {participantsCount}/{requiredPlayers || "-"}
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 col-span-2 sm:col-span-1">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400">Ready</div>
+                <div className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-100">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                  {readyCount}/{participantsCount || 0}
+                </div>
               </div>
             </div>
-          )}
-
-          {isLeader && (
-            <div className="mt-4">
-              <label className="text-sm text-gray-300 block mb-2">Invite members to lobby</label>
-              {hasEnoughPlayers ? (
-                <div className="p-3 rounded bg-slate-800 text-sm text-emerald-300">Required players met — cannot invite more members.</div>
-              ) : (
-                <div className="space-y-2">
-                  {members
-                    .filter((m: any) => m.user?.id && m.user.id !== currentUserId)
-                    .map((m: any) => {
-                      const memberId = m.user.id;
-                      const alreadyParticipant = participantIds.includes(memberId);
-                      const alreadyInvited = (lobby?.invites || []).some((inv: any) => inv.userId === memberId || inv.email === m.user.email);
-                      const inviteLimitReached = selectedPuzzle && (((participantsCount) + (lobby?.invites?.length || 0)) >= requiredPlayers || hasEnoughPlayers);
-                      return (
-                        <div key={memberId} className="flex items-center justify-between p-2 bg-slate-800 rounded">
-                          <div className="text-gray-200">{m.user.name || m.user.email}</div>
-                          <div>
-                            {alreadyParticipant ? (
-                              <span className="text-xs text-gray-400">Participant</span>
-                            ) : alreadyInvited ? (
-                              <span className="text-xs text-gray-400">Invited</span>
-                            ) : (
-                              <button
-                                onClick={async () => {
-                                  if (!selectedPuzzle) return openActionModal('error', 'Missing Puzzle', 'Select a puzzle before inviting');
-                                  if (inviteLimitReached) return openActionModal('error', 'Invite Limit', 'Invite limit reached for selected puzzle.');
-                                  try {
-                                    const res = await fetch('/api/team/lobby', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'invite', teamId, puzzleId, inviteeUserId: memberId }) });
-                                    const j = await res.json().catch(() => ({}));
-                                    if (!res.ok) return openActionModal('error', 'Invite Failed', j?.error || res.statusText);
-                                    await fetchLobby();
-                                    openActionModal('success', 'Invited', `Invitation sent to ${m.user.name || m.user.email}`);
-                                  } catch (err) {
-                                    console.error('Invite failed', err);
-                                    openActionModal('error', 'Invite Failed', 'An unexpected error occurred.');
-                                  }
-                                }}
-                                disabled={!selectedPuzzle || inviteLimitReached}
-                                className="px-3 py-1 rounded bg-indigo-600 text-white disabled:opacity-50 text-xs"
-                              >
-                                Invite
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <h3 className="text-white font-semibold">Participants in lobby: {participantsCount}/{requiredPlayers || '—'}</h3>
-          <div className="mt-2 space-y-2">
-            {participantsCount === 0 && (
-              <div className="text-sm text-gray-400">No participants yet. Click "Create / Join Lobby" to join.</div>
-            )}
-            
-          {(() => {
-            const rawParts = (lobby?.participants || []).map((p: any, index: number) => {
-              if (!p) return null;
-              if (typeof p === 'string') return { userId: p, name: undefined, _index: index };
-              const userId = p.userId || p.id || p.user?.id;
-              const name = p.name || p.userName || p.user?.name || undefined;
-              return { userId, name, _index: index };
-            }).filter(Boolean as any);
-
-            const parts = (() => {
-              const seen = new Set<string>();
-              const deduped: any[] = [];
-              for (const part of rawParts) {
-                const uid = part?.userId;
-                if (uid && !seen.has(uid)) {
-                  seen.add(uid);
-                  deduped.push(part);
-                  continue;
-                }
-                if (!uid) deduped.push(part);
-              }
-              return deduped;
-            })();
-
-            return parts.map((part: any) => {
-              const uid: string | undefined = part.userId;
-              const member = members.find((m: any) => m.user?.id === uid);
-              const label = member ? (member.user.name || member.user.email) : (part.name || uid);
-              return (
-                <div key={uid ? `user:${uid}` : `idx:${part._index}`} className="flex items-center justify-between p-2 bg-slate-800 rounded">
-                  <div className="text-white">{label}</div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-sm">
-                      {uid && lobby?.ready?.[uid] ? (
-                        <span className="text-emerald-400 font-bold">READY!</span>
-                      ) : (
-                        <span className="text-red-500">Not ready</span>
-                      )}
-                    </div>
-                    {isLeader && uid && uid !== currentUserId && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            const res = await fetch('/api/team/lobby', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'kick', teamId, puzzleId, targetUserId: uid }) });
-                            const j = await res.json().catch(() => ({}));
-                            if (!res.ok) return openActionModal('error', 'Remove Failed', j?.error || res.statusText);
-                            await fetchLobby();
-                            openActionModal('info', 'Removed', `${label} was removed from the lobby.`);
-                          } catch (err) {
-                            console.error('Remove participant failed', err);
-                            openActionModal('error', 'Remove Failed', 'An unexpected error occurred.');
-                          }
-                        }}
-                        className="px-2 py-1 rounded bg-red-600 text-white text-xs"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            });
-          })()}
           </div>
 
-          {lobby?.invites && lobby.invites.length > 0 && (
-            <div className="mt-3">
-              <h4 className="text-sm text-gray-300">Invites</h4>
-              <div className="mt-2 space-y-2">
-                {lobby.invites.map((inv: any, idx: number) => {
-                  const inviter = members.find((m: any) => m.user?.id === inv.invitedBy);
-                  const inviterLabel = inviter ? (inviter.user.name || inviter.user.email) : inv.invitedBy;
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-cyan-400/60 hover:bg-slate-800"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+          </div>
+        </section>
 
-                  const invitedMember = inv.userId ? members.find((m: any) => m.user?.id === inv.userId) : null;
-                  const inviteeLabel =
-                    (invitedMember?.user?.name as string | undefined) ||
-                    (inv.displayName as string | undefined) ||
-                    (inv.userId as string | undefined) ||
-                    'Invited player';
+        <div className="mt-6 grid gap-6 lg:grid-cols-12">
+          <section className="lg:col-span-8 rounded-3xl border border-slate-800 bg-slate-950/70 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-bold text-white">Puzzle Setup</h2>
+              <div className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-300">
+                {selectedPuzzle ? "Selected" : "Pending"}
+              </div>
+            </div>
+
+            <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-slate-400">Choose Team Puzzle</label>
+            <select
+              value={puzzleId}
+              onChange={(e) => {
+                if (lobby && !isLeader) {
+                  openActionModal('error', 'Not Allowed', 'Only the lobby leader can change the team puzzle.');
+                  return;
+                }
+                const id = e.target.value;
+                const found = teamPuzzles.find((p) => p.id === id) || null;
+                setPuzzleId(id);
+                setSelectedPuzzle(found);
+                try {
+                  router.replace(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(id)}`);
+                } catch {
+                  // ignore
+                }
+              }}
+              disabled={!!lobby && !isLeader}
+              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
+            >
+              <option value="">-- Select a puzzle --</option>
+              {teamPuzzles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {getPuzzleDisplayTitle(p)} (players: {p.requiredPlayers || 1})
+                </option>
+              ))}
+            </select>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400">Required</div>
+                <div className="mt-1 text-lg font-bold text-slate-100">{requiredPlayers || 1}</div>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400">Participants</div>
+                <div className="mt-1 text-lg font-bold text-slate-100">{participantsCount}</div>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400">Queued Invites</div>
+                <div className="mt-1 text-lg font-bold text-slate-100">{inviteCount}</div>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wider text-slate-400">
+                <span>Player Requirement Progress</span>
+                <span>{participantProgress}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-900">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-teal-400 transition-all"
+                  style={{ width: `${participantProgress}%` }}
+                />
+              </div>
+            </div>
+
+            {selectedPuzzle && members.length < requiredPlayers && (
+              <div className="mt-4 rounded-xl border border-amber-600/40 bg-amber-950/20 p-3 text-sm text-amber-100">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                  <div>
+                    Your team has <strong className="text-white">{members.length}</strong> member(s), but this puzzle requires <strong className="text-white">{requiredPlayers}</strong> players.
+                    <div className="mt-1">
+                      <a className="underline text-amber-200 hover:text-white" href={`/teams/${teamId}`}>Manage team members</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isLeader && (
+              <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/65 p-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">Invitations</h3>
+                <p className="mt-1 text-xs text-slate-400">Invite by email or instantly invite existing team members.</p>
+
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <div className="relative flex-1">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <input
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="teammate@email.com"
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2 pl-9 pr-3 text-sm text-white outline-none transition focus:border-cyan-400"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onInviteClick}
+                    disabled={!inviteEmail.trim() || !puzzleId.trim() || hasEnoughPlayers}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Send className="h-4 w-4" />
+                    Invite Email
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {hasEnoughPlayers ? (
+                    <div className="rounded-lg border border-emerald-600/30 bg-emerald-900/20 px-3 py-2 text-xs font-semibold text-emerald-300">
+                      Required players met - additional invites are blocked.
+                    </div>
+                  ) : (
+                    members
+                      .filter((m: any) => m.user?.id && m.user.id !== currentUserId)
+                      .map((m: any) => {
+                        const memberId = m.user.id;
+                        const alreadyParticipant = participantIds.includes(memberId);
+                        const alreadyInvited = (lobby?.invites || []).some((inv: any) => inv.userId === memberId || inv.email === m.user.email);
+                        const inviteLimitReached = selectedPuzzle && (((participantsCount) + (lobby?.invites?.length || 0)) >= requiredPlayers || hasEnoughPlayers);
+                        return (
+                          <div key={memberId} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">
+                            <div className="text-sm text-slate-200">{m.user.name || m.user.email}</div>
+                            <div>
+                              {alreadyParticipant ? (
+                                <span className="rounded-full bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-400">Participant</span>
+                              ) : alreadyInvited ? (
+                                <span className="rounded-full bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-400">Invited</span>
+                              ) : (
+                                <button
+                                  onClick={async () => {
+                                    if (!selectedPuzzle) return openActionModal('error', 'Missing Puzzle', 'Select a puzzle before inviting');
+                                    if (inviteLimitReached) return openActionModal('error', 'Invite Limit', 'Invite limit reached for selected puzzle.');
+                                    try {
+                                      const res = await fetch('/api/team/lobby', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'invite', teamId, puzzleId, inviteeUserId: memberId }) });
+                                      const j = await res.json().catch(() => ({}));
+                                      if (!res.ok) return openActionModal('error', 'Invite Failed', j?.error || res.statusText);
+                                      await fetchLobby();
+                                      openActionModal('success', 'Invited', `Invitation sent to ${m.user.name || m.user.email}`);
+                                    } catch (err) {
+                                      console.error('Invite failed', err);
+                                      openActionModal('error', 'Invite Failed', 'An unexpected error occurred.');
+                                    }
+                                  }}
+                                  disabled={!selectedPuzzle || inviteLimitReached}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <UserPlus className="h-3.5 w-3.5" />
+                                  Invite
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <aside className="lg:col-span-4 rounded-3xl border border-slate-800 bg-slate-950/70 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-6">
+            <h2 className="text-lg font-bold text-white">Control Panel</h2>
+            <p className="mt-1 text-sm text-slate-400">Run core lobby actions from one place.</p>
+
+            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+              <div className="flex items-center justify-between text-xs uppercase tracking-wider text-slate-400">
+                <span>Readiness</span>
+                <span>{readinessPercent}%</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-950">
+                <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all" style={{ width: `${readinessPercent}%` }} />
+              </div>
+              <div className="mt-2 text-xs text-slate-300">{readyCount}/{participantsCount || 0} participants ready</div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {currentUserInLobby ? (
+                <button
+                  onClick={onToggleReadyClick}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:brightness-110"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {isReady ? 'Set Not Ready' : 'Set Ready'}
+                </button>
+              ) : (
+                <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-400">
+                  Lobby membership is automatic. Use Refresh if your status is out of sync.
+                </div>
+              )}
+
+              {isLeader && (
+                <button
+                  onClick={onStartClick}
+                  disabled={!selectedPuzzle || !hasEnoughPlayers || !allReady}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={
+                    !selectedPuzzle
+                      ? 'Select a puzzle to start'
+                      : !hasEnoughPlayers
+                        ? `Requires at least ${requiredPlayers} player${requiredPlayers !== 1 ? 's' : ''}`
+                        : !allReady
+                          ? 'All participants must be marked ready before starting'
+                          : undefined
+                  }
+                >
+                  <Play className="h-4 w-4" />
+                  Start Puzzle
+                </button>
+              )}
+
+              {isLeader && (
+                <button
+                  onClick={onShutdownClick}
+                  disabled={!puzzleId}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-700/70 bg-red-950/40 px-4 py-2.5 text-sm font-bold text-red-200 transition hover:bg-red-950/60 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Shut down the current lobby"
+                >
+                  <Power className="h-4 w-4" />
+                  Shut Down Lobby
+                </button>
+              )}
+
+              {currentUserInLobby && (
+                <button
+                  onClick={onLeaveClick}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-rose-700/70 bg-rose-950/40 px-4 py-2.5 text-sm font-bold text-rose-200 transition hover:bg-rose-950/60"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Leave Lobby
+                </button>
+              )}
+            </div>
+          </aside>
+
+          <section className="lg:col-span-7 rounded-3xl border border-slate-800 bg-slate-950/70 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-bold text-white">Participants</h2>
+              <div className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-300">
+                {participantsCount}/{requiredPlayers || '-'}
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {participantsCount === 0 && (
+                <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-400">
+                  No participants yet. Select a puzzle and the lobby will auto-sync participants.
+                </div>
+              )}
+
+              {(() => {
+                const rawParts = (lobby?.participants || []).map((p: any, index: number) => {
+                  if (!p) return null;
+                  if (typeof p === 'string') return { userId: p, name: undefined, _index: index };
+                  const userId = p.userId || p.id || p.user?.id;
+                  const name = p.name || p.userName || p.user?.name || undefined;
+                  return { userId, name, _index: index };
+                }).filter(Boolean as any);
+
+                const parts = (() => {
+                  const seen = new Set<string>();
+                  const deduped: any[] = [];
+                  for (const part of rawParts) {
+                    const uid = part?.userId;
+                    if (uid && !seen.has(uid)) {
+                      seen.add(uid);
+                      deduped.push(part);
+                      continue;
+                    }
+                    if (!uid) deduped.push(part);
+                  }
+                  return deduped;
+                })();
+
+                return parts.map((part: any) => {
+                  const uid: string | undefined = part.userId;
+                  const member = members.find((m: any) => m.user?.id === uid);
+                  const label = member ? (member.user.name || member.user.email) : (part.name || uid);
+                  const initial = (label || "?").charAt(0).toUpperCase();
                   return (
-                    <div key={inv.id ?? `${inv.userId ?? inv.email ?? 'inv'}:${idx}`} className="flex items-center justify-between p-2 bg-slate-800 rounded">
-                      <div className="text-gray-200">{inviteeLabel} <span className="text-xs text-gray-400">({inv.status})</span></div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-xs text-gray-400">Invited by: {inviterLabel}</div>
+                    <div key={uid ? `user:${uid}` : `idx:${part._index}`} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2.5">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-cyan-200">
+                          {initial}
+                        </div>
+                        <div className="truncate text-sm font-semibold text-white">{label}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide">
+                          {uid && lobby?.ready?.[uid] ? (
+                            <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300">Ready</span>
+                          ) : (
+                            <span className="rounded-full bg-rose-500/20 px-2 py-1 text-rose-300">Not Ready</span>
+                          )}
+                        </div>
+                        {isLeader && uid && uid !== currentUserId && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch('/api/team/lobby', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'kick', teamId, puzzleId, targetUserId: uid }) });
+                                const j = await res.json().catch(() => ({}));
+                                if (!res.ok) return openActionModal('error', 'Remove Failed', j?.error || res.statusText);
+                                await fetchLobby();
+                                openActionModal('info', 'Removed', `${label} was removed from the lobby.`);
+                              } catch (err) {
+                                console.error('Remove participant failed', err);
+                                openActionModal('error', 'Remove Failed', 'An unexpected error occurred.');
+                              }
+                            }}
+                            className="rounded-md bg-rose-700 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-rose-600"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {lobby?.invites && lobby.invites.length > 0 && (
+              <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300">Pending Invites</h3>
+                <div className="mt-3 space-y-2">
+                  {lobby.invites.map((inv: any, idx: number) => {
+                    const inviter = members.find((m: any) => m.user?.id === inv.invitedBy);
+                    const inviterLabel = inviter ? (inviter.user.name || inviter.user.email) : inv.invitedBy;
+                    const invitedMember = inv.userId ? members.find((m: any) => m.user?.id === inv.userId) : null;
+                    const inviteeLabel =
+                      (invitedMember?.user?.name as string | undefined) ||
+                      (inv.displayName as string | undefined) ||
+                      (inv.userId as string | undefined) ||
+                      'Invited player';
+
+                    return (
+                      <div key={inv.id ?? `${inv.userId ?? inv.email ?? 'inv'}:${idx}`} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/75 px-3 py-2">
+                        <div className="text-sm text-slate-200">
+                          {inviteeLabel}
+                          <span className="ml-1 text-[11px] uppercase tracking-wide text-slate-500">({inv.status})</span>
+                          <div className="text-[11px] text-slate-500">Invited by: {inviterLabel}</div>
+                        </div>
                         {isLeader && (
                           <button
                             onClick={async () => {
@@ -956,104 +1154,109 @@ export default function TeamLobbyPage() {
                                 openActionModal('error', 'Uninvite Failed', 'An unexpected error occurred.');
                               }
                             }}
-                            className="px-2 py-1 rounded bg-red-600 text-white text-xs"
+                            className="rounded-md bg-rose-700 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-rose-600"
                           >
                             Uninvite
                           </button>
                         )}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button onClick={onToggleReadyClick} className="w-full sm:w-auto text-sm px-3 py-2 bg-amber-500 text-black rounded">Ready / Unready</button>
-          {isLeader && (
-            <button
-              onClick={onStartClick}
-              disabled={!selectedPuzzle || !hasEnoughPlayers || !allReady}
-              className="w-full sm:w-auto text-sm px-3 py-2 bg-emerald-600 text-white rounded disabled:opacity-50"
-              title={
-                !selectedPuzzle
-                  ? 'Select a puzzle to start'
-                  : !hasEnoughPlayers
-                    ? `Requires at least ${requiredPlayers} player${requiredPlayers !== 1 ? 's' : ''}`
-                    : !allReady
-                      ? 'All participants must be marked ready before starting'
-                      : undefined
-              }
-            >
-              Start Puzzle
-            </button>
-          )}
-          {isLeader && (
-            <button
-              onClick={onShutdownClick}
-              disabled={!puzzleId}
-              className="w-full sm:w-auto text-sm px-3 py-2 bg-slate-800 border border-red-700 text-red-200 rounded hover:bg-slate-700 disabled:opacity-50"
-              title="Shut down the current lobby"
-            >
-              Shut Down Lobby
-            </button>
-          )}
-          {!!currentUserId && participantIds.includes(currentUserId!) && (
-            <button onClick={onLeaveClick} className="w-full sm:w-auto text-sm px-3 py-2 bg-red-600 text-white rounded">Leave Lobby</button>
-          )}
-        </div>
-
-        <div className="mt-4 bg-slate-900 border rounded-lg p-4 w-[98%] sm:max-w-7xl mx-auto">
-          <h4 className="text-white font-semibold mb-2">Lobby Chat</h4>
-          <div className="max-h-64 overflow-y-auto mb-3 space-y-3" style={{ background: '#050506', padding: '8px', borderRadius: 6 }}>
-            {chatMessages.length === 0 && (
-              <div className="text-sm text-gray-400">No messages yet — say hello!</div>
-            )}
-            {chatMessages.map((m, idx) => {
-              const member = (members || []).find((mm: any) => mm.user?.id && m?.userId && mm.user.id === m.userId);
-              const senderLabel =
-                (m?.user?.name as string | undefined) ||
-                (m?.user?.email as string | undefined) ||
-                (member?.user?.name as string | undefined) ||
-                (member?.user?.email as string | undefined) ||
-                (m?.userId as string | undefined) ||
-                'Unknown';
-
-              const key = m?.id ?? `${m?.userId ?? 'u'}:${m?.createdAt ?? idx}:${idx}`;
-              return (
-              <div key={key} className="flex flex-col sm:flex-row items-start justify-between bg-slate-800 rounded w-full px-1 py-1">
-                <div className="flex-1 min-w-0 px-3">
-                  <div className="text-base text-gray-200"><strong className="text-white">{senderLabel}</strong> <span className="text-xs text-gray-400">{new Date(m.createdAt).toLocaleTimeString()}</span></div>
-                  <div className="text-base text-gray-300 break-words mt-1">{m.content}</div>
+                    );
+                  })}
                 </div>
-                {isAdmin && (
-                  <div className="mt-2 sm:mt-0 sm:ml-3">
-                    <button onClick={async () => { if (confirm('Delete this message?')) await deleteChatMessage(m.id); }} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Delete</button>
-                  </div>
-                )}
               </div>
-              );
-            })}
-          </div>
+            )}
+          </section>
 
-          <div className="flex items-center justify-center">
-            <div className="flex w-full max-w-5xl gap-2 mx-auto justify-center items-center px-2">
-              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type a message..." className="flex-1 min-w-0 px-3 py-2 rounded bg-black text-white border" />
-              <button onClick={() => postChatMessage(chatInput)} className="px-4 py-2 bg-sky-600 text-white rounded">Send</button>
+          <section className="lg:col-span-5 rounded-3xl border border-slate-800 bg-slate-950/70 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+                <MessageSquareText className="h-5 w-5 text-cyan-300" />
+                Lobby Chat
+              </h2>
+              <div className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-300">
+                {chatMessages.length} message{chatMessages.length === 1 ? '' : 's'}
+              </div>
             </div>
-          </div>
+
+            <div className="mt-4 max-h-[360px] space-y-2 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/85 p-2.5">
+              {chatMessages.length === 0 && (
+                <div className="rounded-lg border border-dashed border-slate-700 px-3 py-4 text-center text-sm text-slate-400">
+                  No messages yet. Break the silence.
+                </div>
+              )}
+
+              {chatMessages.map((m, idx) => {
+                const member = (members || []).find((mm: any) => mm.user?.id && m?.userId && mm.user.id === m.userId);
+                const senderLabel =
+                  (m?.user?.name as string | undefined) ||
+                  (m?.user?.email as string | undefined) ||
+                  (member?.user?.name as string | undefined) ||
+                  (member?.user?.email as string | undefined) ||
+                  (m?.userId as string | undefined) ||
+                  'Unknown';
+                const key = m?.id ?? `${m?.userId ?? 'u'}:${m?.createdAt ?? idx}:${idx}`;
+                const initial = senderLabel.charAt(0).toUpperCase();
+
+                return (
+                  <div key={key} className="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/80 px-2.5 py-2">
+                    <div className="flex min-w-0 flex-1 gap-2">
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-800 text-[11px] font-bold text-cyan-200">
+                        {initial}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-xs text-slate-300">
+                          <span className="font-semibold text-white">{senderLabel}</span>
+                          <span className="ml-2 text-slate-500">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                        </div>
+                        <div className="mt-0.5 break-words text-sm text-slate-200">{m.content}</div>
+                      </div>
+                    </div>
+
+                    {isAdmin && (
+                      <button
+                        onClick={async () => { if (confirm('Delete this message?')) await deleteChatMessage(m.id); }}
+                        className="rounded-md border border-rose-700/70 bg-rose-950/40 px-2 py-1 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-950/60"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400"
+              />
+              <button
+                onClick={() => postChatMessage(chatInput)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-cyan-500"
+              >
+                <Send className="h-4 w-4" />
+                Send
+              </button>
+            </div>
+          </section>
         </div>
       </div>
 
       <ConfirmModal
         isOpen={confirmOpen}
+        theme="teamLobby"
+        confirmTone={
+          confirmAction === 'destroy' || confirmAction === 'leave'
+            ? 'danger'
+            : confirmAction === 'start'
+              ? 'success'
+              : 'brand'
+        }
         title={
           confirmAction === 'start'
             ? 'Start Puzzle'
-            : confirmAction === 'create'
-            ? 'Create Lobby'
             : confirmAction === 'destroy'
             ? 'Shut Down Lobby'
             : confirmAction === 'ready'
@@ -1069,8 +1272,6 @@ export default function TeamLobbyPage() {
         message={
           confirmAction === 'start'
             ? `Start the puzzle now? This will open the puzzle for the team if start conditions are met.`
-            : confirmAction === 'create'
-            ? `Create or join the lobby for '${getPuzzleDisplayTitle(selectedPuzzle) || puzzleId}'?`
             : confirmAction === 'destroy'
             ? `Shut down this lobby and send everyone back to the dashboard?`
             : confirmAction === 'ready'
@@ -1093,6 +1294,7 @@ export default function TeamLobbyPage() {
       <ActionModal
         isOpen={actionModalOpen}
         variant={actionModalVariant}
+        theme="teamLobby"
         title={actionModalTitle}
         message={actionModalMessage}
         onClose={() => {

@@ -70,7 +70,8 @@ export async function requireEscapeRoomTeamContext(
 ): Promise<EscapeRoomTeamContext | NextResponse> {
   const requireStarted = options?.requireStarted ?? true;
   const requireNotFinished = options?.requireNotFinished ?? true;
-  const allowUserFailed = options?.allowUserFailed ?? false;
+  // Replay is allowed after failure by default.
+  const allowUserFailed = options?.allowUserFailed ?? true;
   if (request.method !== "GET" && request.method !== "HEAD") {
     const sameOriginError = validateSameOrigin(request);
     if (sameOriginError) return sameOriginError;

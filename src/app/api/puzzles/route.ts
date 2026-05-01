@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
       skip,
     });
 
-    // Escape-room lockout state (per-user): failed escape rooms are no longer accessible.
+    // Escape-room per-user failure history (for UI metadata).
     let escapeRoomFailedByPuzzleId = new Map<string, { failed: boolean; reason: string | null }>();
     try {
       const escapeRoomEntries = puzzles

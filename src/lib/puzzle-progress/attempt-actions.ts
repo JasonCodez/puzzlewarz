@@ -60,6 +60,8 @@ export async function handleAttemptSuccess(
   durationSeconds: number | undefined,
   userId: string,
 ): Promise<NextResponse | null> {
+  const alreadySolved = !!progress.solved;
+
   // Enforce Sudoku time limit server-side
   if (puzzleRecord.puzzleType === "sudoku") {
     const now = new Date();
@@ -136,7 +138,7 @@ export async function handleAttemptSuccess(
       lastAttemptAt: new Date(),
       averageTimePerAttempt: newAvgTime,
       solved: true,
-      solvedAt: new Date(),
+      ...(alreadySolved ? {} : { solvedAt: new Date() }),
     },
   });
 
@@ -153,20 +155,22 @@ export async function handleAttemptSuccess(
     });
   }
 
-  // Check Triple-or-Nothing token (3× rewards on first attempt)
-  let tripleActive = false;
-  try {
-    const tripleUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { tripleOrNothingActive: true },
-    });
-    tripleActive = !!(tripleUser?.tripleOrNothingActive && progress.attempts === 0);
-    if (tripleActive) {
-      await prisma.user.update({ where: { id: userId }, data: { tripleOrNothingActive: false } });
-    }
-  } catch { /* non-critical */ }
+  if (!alreadySolved) {
+    // Check Triple-or-Nothing token (3× rewards on first attempt)
+    let tripleActive = false;
+    try {
+      const tripleUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { tripleOrNothingActive: true },
+      });
+      tripleActive = !!(tripleUser?.tripleOrNothingActive && progress.attempts === 0);
+      if (tripleActive) {
+        await prisma.user.update({ where: { id: userId }, data: { tripleOrNothingActive: false } });
+      }
+    } catch { /* non-critical */ }
 
-  await awardSolveRewards(userId, progress.id, puzzleRecord, tripleActive);
+    await awardSolveRewards(userId, progress.id, puzzleRecord, tripleActive);
+  }
 
   return null;
 }
