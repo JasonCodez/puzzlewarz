@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { getParasiteCodeData, sanitizeParasiteForClient, calcRank } from '@/lib/parasiteCode';
+import { getParasiteCodeData, sanitizeParasiteForClient, calcRank, createFallbackParasiteCodeCase } from '@/lib/parasiteCode';
+import { MAX_PUZZLE_ATTEMPTS } from '@/lib/puzzleConstants';
+import { getPuzzleAccessState } from '@/lib/puzzle-state/getPuzzleAccessState';
 
 export async function GET(
   _req: NextRequest,
@@ -35,12 +37,10 @@ export async function GET(
       return NextResponse.json({ error: 'Not a Parasite Code puzzle' }, { status: 400 });
     }
 
-    const caseData = getParasiteCodeData(puzzle.data);
-    if (!caseData) {
-      return NextResponse.json(
-        { error: 'Parasite Code case is not configured — add a parasiteCode JSON block in the admin puzzle editor.' },
-        { status: 500 }
-      );
+    const parsedCaseData = getParasiteCodeData(puzzle.data);
+    const caseData = parsedCaseData ?? createFallbackParasiteCodeCase(puzzle.title);
+    if (!parsedCaseData) {
+      console.warn(`[parasite/state] Missing parasite data for puzzle ${puzzleId}; using fallback case.`);
     }
 
     // Check whether this player has already submitted a correct quarantine
@@ -67,6 +67,7 @@ export async function GET(
     }
 
     const clientData = sanitizeParasiteForClient(caseData);
+    const accessState = await getPuzzleAccessState(user.id, puzzleId);
 
     return NextResponse.json({
       puzzleId,
@@ -78,6 +79,10 @@ export async function GET(
       lastFeedback,
       activationCondition: solvedSubmission ? caseData.activationCondition : null,
       retentionUnlock: solvedSubmission ? (caseData.retentionUnlock ?? null) : null,
+      attemptsUsed: accessState.attemptsUsed,
+      attemptsRemaining: accessState.attemptsRemaining,
+      maxAttempts: MAX_PUZZLE_ATTEMPTS,
+      locked: accessState.isAttemptLocked,
     });
   } catch (e) {
     console.error('[parasite/state] Failed:', e);

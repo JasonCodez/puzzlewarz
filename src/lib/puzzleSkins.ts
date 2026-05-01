@@ -8,6 +8,7 @@ export type SkinKey =
   | "neon"     | "skin_neon"
   | "lava"     | "skin_lava"
   | "galaxy"   | "skin_galaxy"
+  | "christmas"| "skin_christmas"
   | "ice"      | "skin_ice";
 
 export interface PuzzleSkinTokens {
@@ -17,6 +18,8 @@ export interface PuzzleSkinTokens {
   boardBorder: string;
   boardShadow: string;
   boardRadius: string;
+  // Background readability layer applied above animated canvases
+  backdropScrim: string;
   // Tile / cell
   tileBg: string;
   tileBorder: string;
@@ -42,6 +45,7 @@ const DEFAULT: PuzzleSkinTokens = {
   boardBorder: "rgba(56,145,166,0.3)",
   boardShadow: "none",
   boardRadius: "1rem",
+  backdropScrim: "linear-gradient(180deg, rgba(1,2,6,0.24), rgba(1,2,6,0.28))",
   tileBg: "rgba(56,145,166,0.12)",
   tileBorder: "rgba(56,145,166,0.35)",
   tileText: "#ffffff",
@@ -63,6 +67,7 @@ const RETRO: PuzzleSkinTokens = {
   boardBorder: "#B43CFF",
   boardShadow: "0 0 0 3px #B43CFF, 0 0 30px rgba(180,60,255,0.55), 0 0 70px rgba(180,60,255,0.18), inset 0 0 20px rgba(180,60,255,0.05)",
   boardRadius: "0",
+  backdropScrim: "linear-gradient(180deg, rgba(8,0,24,0.24), rgba(8,0,24,0.28))",
   tileBg: "#120030",
   tileBorder: "#B43CFF",
   tileText: "#00FF88",
@@ -84,6 +89,7 @@ const MINIMAL: PuzzleSkinTokens = {
   boardBorder: "rgba(255,255,255,0.1)",
   boardShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 24px rgba(0,0,0,0.6)",
   boardRadius: "0.5rem",
+  backdropScrim: "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.18))",
   tileBg: "rgba(255,255,255,0.035)",
   tileBorder: "rgba(255,255,255,0.1)",
   tileText: "#f0f0f0",
@@ -105,6 +111,7 @@ const NEON: PuzzleSkinTokens = {
   boardBorder: "#00FFE5",
   boardShadow: "0 0 0 2px #00FFE5, 0 0 25px rgba(0,255,229,0.65), 0 0 70px rgba(0,255,229,0.2), inset 0 0 25px rgba(0,255,229,0.05)",
   boardRadius: "0.25rem",
+  backdropScrim: "linear-gradient(180deg, rgba(0,4,12,0.22), rgba(0,4,12,0.28))",
   tileBg: "rgba(0,255,229,0.04)",
   tileBorder: "rgba(0,255,229,0.55)",
   tileText: "#00FFE5",
@@ -126,6 +133,7 @@ const LAVA: PuzzleSkinTokens = {
   boardBorder: "#FF5500",
   boardShadow: "0 0 0 2px #FF5500, 0 0 25px rgba(255,85,0,0.5), 0 0 65px rgba(255,40,0,0.18), inset 0 0 30px rgba(255,20,0,0.07)",
   boardRadius: "0.375rem",
+  backdropScrim: "linear-gradient(180deg, rgba(10,2,0,0.24), rgba(10,2,0,0.3))",
   tileBg: "rgba(255,85,0,0.07)",
   tileBorder: "rgba(255,85,0,0.5)",
   tileText: "#FF9030",
@@ -147,6 +155,7 @@ const GALAXY: PuzzleSkinTokens = {
   boardBorder: "#8B5CF6",
   boardShadow: "0 0 0 2px #8B5CF6, 0 0 25px rgba(139,92,246,0.55), 0 0 65px rgba(200,0,255,0.18), inset 0 0 25px rgba(139,92,246,0.06)",
   boardRadius: "1rem",
+  backdropScrim: "linear-gradient(180deg, rgba(4,2,18,0.22), rgba(4,2,18,0.28))",
   tileBg: "rgba(139,92,246,0.09)",
   tileBorder: "rgba(139,92,246,0.5)",
   tileText: "#D8B4FE",
@@ -162,12 +171,13 @@ const GALAXY: PuzzleSkinTokens = {
   labelColor: "#9B6DFF",
 };
 
-// ── ICE: Crystal frost ─────────────────────────────────────────────────────
-const ICE: PuzzleSkinTokens = {
+// ── CHRISTMAS (legacy: ICE): Crystal frost + winter ambiance ──────────────
+const CHRISTMAS: PuzzleSkinTokens = {
   boardBg: "#000d1f",
   boardBorder: "#67E8F9",
   boardShadow: "0 0 0 2px #67E8F9, 0 0 22px rgba(103,232,249,0.45), 0 0 55px rgba(103,232,249,0.12), inset 0 0 22px rgba(103,232,249,0.05)",
   boardRadius: "1.25rem",
+  backdropScrim: "linear-gradient(180deg, rgba(0,10,22,0.18), rgba(0,10,22,0.24))",
   tileBg: "rgba(103,232,249,0.05)",
   tileBorder: "rgba(103,232,249,0.38)",
   tileText: "#E0F9FF",
@@ -190,7 +200,8 @@ export const SKIN_TOKENS: Record<SkinKey, PuzzleSkinTokens> = {
   neon:         NEON,    skin_neon:    NEON,
   lava:         LAVA,    skin_lava:    LAVA,
   galaxy:       GALAXY,  skin_galaxy:  GALAXY,
-  ice:          ICE,     skin_ice:     ICE,
+  christmas:    CHRISTMAS, skin_christmas: CHRISTMAS,
+  ice:          CHRISTMAS, skin_ice:       CHRISTMAS,
 };
 
 export function getSkinTokens(key: string | undefined | null): PuzzleSkinTokens {

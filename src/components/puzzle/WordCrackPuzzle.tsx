@@ -227,7 +227,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   const revealStepMs = prefersReducedMotion ? 120 : isCompactMobile ? 220 : 350;
   const revealBaseMs = prefersReducedMotion ? 120 : 400;
   const keyboardKeyHeight = isCompactMobile ? 42 : 44;
-  const showAnimatedBackdrops = !(prefersReducedMotion || isCompactMobile);
+  // Keep theme backgrounds visible on mobile; only disable motion when the user requests reduced motion.
+  const showAnimatedBackdrops = !prefersReducedMotion;
   const onSolvedFired = useRef(false);
   const isLongWord = wordLength >= 7;
   const tileGapPx = isCompactMobile
@@ -254,6 +255,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     skin_lava:  "rgba(40,8,2,0.85)",
     galaxy:     "rgba(10,6,28,0.88)",
     skin_galaxy:"rgba(10,6,28,0.88)",
+    christmas:  "rgba(6,16,32,0.85)",
+    skin_christmas:"rgba(6,16,32,0.85)",
     ice:        "rgba(6,16,32,0.85)",
     skin_ice:   "rgba(6,16,32,0.85)",
     minimal:    "rgba(255,255,255,0.09)",
@@ -653,9 +656,19 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         {/* Animated skin backgrounds */}
         {showAnimatedBackdrops && (skin._key === "lava" || skin._key === "skin_lava") && <LavaBackground />}
         {showAnimatedBackdrops && (skin._key === "galaxy" || skin._key === "skin_galaxy") && <GalaxyBackground />}
-        {showAnimatedBackdrops && (skin._key === "ice" || skin._key === "skin_ice") && <IceBackground />}
+        {showAnimatedBackdrops && (skin._key === "ice" || skin._key === "skin_ice" || skin._key === "christmas" || skin._key === "skin_christmas") && <IceBackground />}
         {showAnimatedBackdrops && (skin._key === "neon" || skin._key === "skin_neon") && <NeonBackground />}
         {showAnimatedBackdrops && (skin._key === "retro" || skin._key === "skin_retro") && <RetroBackground />}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            background: skin.backdropScrim,
+            zIndex: 0,
+          }}
+        />
 
       <div
         className="flex flex-col items-center gap-4 select-none pb-6"
@@ -685,6 +698,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                 skin_lava:   "linear-gradient(135deg, #FF5500, #FFAA00, #FF3000)",
                 galaxy:      "linear-gradient(135deg, #8B5CF6, #E0BAFF, #C026D3)",
                 skin_galaxy: "linear-gradient(135deg, #8B5CF6, #E0BAFF, #C026D3)",
+                christmas:   "linear-gradient(135deg, #67E8F9, #FFFFFF, #38BDF8)",
+                skin_christmas:"linear-gradient(135deg, #67E8F9, #FFFFFF, #38BDF8)",
                 ice:         "linear-gradient(135deg, #67E8F9, #FFFFFF, #38BDF8)",
                 skin_ice:    "linear-gradient(135deg, #67E8F9, #FFFFFF, #38BDF8)",
                 default:     "linear-gradient(135deg, #818cf8, #c084fc, #f472b6)",
@@ -698,6 +713,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                 skin_lava:   "drop-shadow(0 0 14px rgba(255,85,0,0.75))",
                 galaxy:      "drop-shadow(0 0 14px rgba(139,92,246,0.7))",
                 skin_galaxy: "drop-shadow(0 0 14px rgba(139,92,246,0.7))",
+                christmas:   "drop-shadow(0 0 14px rgba(103,232,249,0.65))",
+                skin_christmas:"drop-shadow(0 0 14px rgba(103,232,249,0.65))",
                 ice:         "drop-shadow(0 0 14px rgba(103,232,249,0.65))",
                 skin_ice:    "drop-shadow(0 0 14px rgba(103,232,249,0.65))",
                 default:     "drop-shadow(0 0 12px rgba(129,140,248,0.5))",
@@ -1154,7 +1171,9 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             radial-gradient(ellipse at 30% 80%, rgba(139,92,246,0.12) 0%, transparent 50%),
             radial-gradient(ellipse at 70% 20%, rgba(200,0,255,0.08) 0%, transparent 50%);
         }
-        /* Ice: crystal shimmer + frost gradient */
+        /* Christmas/Ice: crystal shimmer + frost gradient */
+        .wc-board[data-skin="christmas"],
+        .wc-board[data-skin="skin_christmas"],
         .wc-board[data-skin="ice"],
         .wc-board[data-skin="skin_ice"] {
           animation: wc-ice-glow 3.5s ease-in-out infinite;
@@ -1163,6 +1182,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           0%, 100% { box-shadow: 0 0 0 2px #67E8F9, 0 0 22px rgba(103,232,249,0.45), 0 0 55px rgba(103,232,249,0.12), inset 0 0 22px rgba(103,232,249,0.05); }
           50%      { box-shadow: 0 0 0 2px #7EEDFF, 0 0 35px rgba(103,232,249,0.65), 0 0 75px rgba(103,232,249,0.2), inset 0 0 30px rgba(103,232,249,0.1); }
         }
+        .wc-board[data-skin="christmas"] .wc-skin-overlay,
+        .wc-board[data-skin="skin_christmas"] .wc-skin-overlay,
         .wc-board[data-skin="ice"] .wc-skin-overlay,
         .wc-board[data-skin="skin_ice"] .wc-skin-overlay {
           background:

@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         activeTheme: true,
         activeFrame: true,
         activeSkin: true,
+        activeCompletionAnimation: true,
         activeFlair: true,
         activeNameColor: true,
         activeTitle: true,
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
       rank: userRank > 0 ? userRank : null,
       xpProgress,
       xpToNextLevel,
+      activeCompletionAnimation: user.activeCompletionAnimation ?? "default",
     });
   } catch (error) {
     console.error("Profile GET error:", error instanceof Error ? error.message : String(error), error);

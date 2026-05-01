@@ -146,6 +146,22 @@ function getItemAccent(item: StoreItem): string | null {
   return meta?.primaryColor ?? meta?.color ?? null;
 }
 
+function normalizeSkinValue(value: string | null | undefined): string {
+  if (!value) return "";
+  return value === "ice" || value === "skin_ice" ? "christmas" : value;
+}
+
+function getStoreItemDisplayName(item: StoreItem): string {
+  if (item.subcategory !== "skin") return item.name;
+  const meta = item.metadata as { value?: string } | null;
+  const skinValue = normalizeSkinValue(meta?.value ?? "");
+  if (skinValue === "christmas" || skinValue === "skin_christmas") {
+    if (/ice/i.test(item.name)) return item.name.replace(/ice/gi, "Christmas");
+    if (!/christmas/i.test(item.name)) return "Christmas Skin";
+  }
+  return item.name;
+}
+
 function CosmeticPreview({ item }: { item: StoreItem }) {
   const meta = item.metadata as Record<string, string> | null;
   const sub = item.subcategory;
@@ -213,9 +229,12 @@ function CosmeticPreview({ item }: { item: StoreItem }) {
       neon:    { bg: "#010012",  border: "#00FFE5", cell: "#00FFE5",  cellGlow: "rgba(0,255,229,0.8)",  alt: "rgba(0,255,229,0.06)", label: "#00FFE5", accent: "rgba(255,0,204,0.7)", shadow: "0 0 0 2px #00FFE5, 0 0 18px rgba(0,255,229,0.55)" },
       lava:    { bg: "#060100",  border: "#FF5500", cell: "#FF5500",  cellGlow: "rgba(255,85,0,0.75)",  alt: "rgba(255,85,0,0.07)",  label: "#FF9030", accent: "rgba(255,160,0,0.65)", shadow: "0 0 0 2px #FF5500, 0 0 18px rgba(255,85,0,0.5)" },
       galaxy:  { bg: "#04001a",  border: "#8B5CF6", cell: "#8B5CF6",  cellGlow: "rgba(139,92,246,0.75)", alt: "rgba(139,92,246,0.08)", label: "#D8B4FE", accent: "rgba(200,0,255,0.6)", shadow: "0 0 0 2px #8B5CF6, 0 0 18px rgba(139,92,246,0.55)" },
+      christmas: { bg: "#000d1f",  border: "#67E8F9", cell: "#67E8F9",  cellGlow: "rgba(103,232,249,0.7)", alt: "rgba(103,232,249,0.06)", label: "#E0F9FF", accent: "rgba(103,232,249,0.5)", shadow: "0 0 0 2px #67E8F9, 0 0 18px rgba(103,232,249,0.45)" },
+      skin_christmas: { bg: "#000d1f",  border: "#67E8F9", cell: "#67E8F9",  cellGlow: "rgba(103,232,249,0.7)", alt: "rgba(103,232,249,0.06)", label: "#E0F9FF", accent: "rgba(103,232,249,0.5)", shadow: "0 0 0 2px #67E8F9, 0 0 18px rgba(103,232,249,0.45)" },
       ice:     { bg: "#000d1f",  border: "#67E8F9", cell: "#67E8F9",  cellGlow: "rgba(103,232,249,0.7)", alt: "rgba(103,232,249,0.06)", label: "#E0F9FF", accent: "rgba(103,232,249,0.5)", shadow: "0 0 0 2px #67E8F9, 0 0 18px rgba(103,232,249,0.45)" },
     };
-    const sd = skinDefs[meta?.value ?? ""] ?? skinDefs.minimal;
+    const normalizedSkinValue = normalizeSkinValue(meta?.value ?? "");
+    const sd = skinDefs[normalizedSkinValue] ?? skinDefs.minimal;
     const tiles = [1,0,1,0,1,1,0,1,0,1,1,0,1,0,0,1];
     return (
       <div className="h-16 flex items-center justify-center mb-3 rounded-xl overflow-hidden relative"
@@ -230,8 +249,8 @@ function CosmeticPreview({ item }: { item: StoreItem }) {
               }} />
           ))}
         </div>
-        <div className="absolute bottom-1.5 right-2.5 text-xs font-bold tracking-wider" style={{ color: sd.label, fontFamily: meta?.value === "retro" || meta?.value === "neon" ? "'Courier New', monospace" : "inherit" }}>
-          {(meta?.value ?? "").toUpperCase()}
+        <div className="absolute bottom-1.5 right-2.5 text-xs font-bold tracking-wider" style={{ color: sd.label, fontFamily: normalizedSkinValue === "retro" || normalizedSkinValue === "neon" ? "'Courier New', monospace" : "inherit" }}>
+          {normalizedSkinValue.replace(/^skin_/, "").toUpperCase()}
         </div>
       </div>
     );
@@ -421,40 +440,88 @@ function FramePreviewContent({ frameKey }: { frameKey: string }) {
 
 function SkinPreviewContent({ skinKey }: { skinKey: string }) {
   const s = getSkinTokens(skinKey);
-  const resolvedKey = skinKey.replace(/^skin_/, "");
-  const hasAnimatedBg = ["lava", "galaxy", "ice", "neon", "retro"].includes(resolvedKey);
-  // 5×5 grid for a more realistic puzzle board feel
-  const letters = [
-    "P","U","Z","Z","L",
-    "W","A","R","Z","E",
-    "Q","I","X","M","B",
-    "E","S","T","N","O",
-    "G","R","I","D","S",
+  const resolvedKeyRaw = skinKey.replace(/^skin_/, "");
+  const resolvedKey = resolvedKeyRaw === "ice" ? "christmas" : resolvedKeyRaw;
+  const hasAnimatedBg = ["lava", "galaxy", "christmas", "ice", "neon", "retro"].includes(resolvedKey);
+  const grid = [
+    ["P", "U", "Z", "Z", "L"],
+    ["W", "A", "R", "Z", "E"],
+    ["Q", "I", "X", "M", "B"],
+    ["E", "S", "T", "N", "O"],
+    ["G", "R", "I", "D", "S"],
   ];
-  const highlighted = [0,1,2,3,4]; // "PUZZL" row
-  const activeCell = 7; // "R"
+
+  const words = ["PUZZLE", "GRID", "WARS", "CODE"]; 
+  const foundWords = new Set(["PUZZLE", "GRID"]);
+  const wordColors = [
+    { bg: "rgba(34,197,94,0.28)", border: "#22c55e", text: "#4ade80" },
+    { bg: "rgba(59,130,246,0.28)", border: "#3b82f6", text: "#60a5fa" },
+    { bg: "rgba(234,179,8,0.28)", border: "#eab308", text: "#facc15" },
+    { bg: "rgba(239,68,68,0.28)", border: "#ef4444", text: "#f87171" },
+  ];
+
+  const foundCellMap = new Map<string, number>();
+  // PUZZLE path (row 0 col 0-4, then row 1 col 4)
+  [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [1, 4]].forEach(([r, c]) => {
+    foundCellMap.set(`${r},${c}`, 0);
+  });
+  // GRID path (row 4 col 0-3)
+  [[4, 0], [4, 1], [4, 2], [4, 3]].forEach(([r, c]) => {
+    foundCellMap.set(`${r},${c}`, 1);
+  });
+
+  const activeCell = "1,2";
+
   return (
     <div className="w-full">
-      {/* Outer wrapper — this is where the animated background lives (like the real puzzle page) */}
-      <div className="relative rounded-2xl overflow-hidden" style={{ borderRadius: "1rem" }}>
-        {/* Animated canvas background — full bleed behind everything */}
+      <div
+        className="relative rounded-2xl overflow-hidden"
+        data-skin={s._key ?? "default"}
+        style={{
+          borderRadius: "1rem",
+          width: "100%",
+          maxWidth: "100%",
+        }}
+      >
         {hasAnimatedBg && (
           <div className="absolute inset-0 z-0">
             {resolvedKey === "lava" && <LavaBackground />}
             {resolvedKey === "galaxy" && <GalaxyBackground />}
-            {resolvedKey === "ice" && <IceBackground />}
+            {(resolvedKey === "christmas" || resolvedKey === "ice") && <IceBackground />}
             {resolvedKey === "neon" && <NeonBackground />}
             {resolvedKey === "retro" && <RetroBackground />}
           </div>
         )}
-        {/* Non-animated skins still show the page background */}
-        {!hasAnimatedBg && (
-          <div className="absolute inset-0 z-0" style={{ backgroundColor: "#0a0c10" }} />
-        )}
 
-        {/* Content on top of canvas — mimics the real puzzle page layout */}
-        <div className="relative z-10 flex flex-col items-center py-6 px-4 gap-3">
-          {/* Title */}
+        {!hasAnimatedBg && (
+          <div
+            className="absolute inset-0 z-0"
+            style={{
+              background: `linear-gradient(180deg, ${s.boardBg}, rgba(10,12,16,0.95))`,
+            }}
+          />
+        )}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            background: s.backdropScrim,
+            zIndex: 0,
+          }}
+        />
+
+        <div
+          className="relative z-10 flex flex-col items-center gap-4 pb-4 pt-4 px-3"
+          style={{
+            overflowX: "hidden",
+            fontFamily:
+              s.tileFontFamily !== "inherit"
+                ? s.tileFontFamily
+                : "'Clear Sans', 'Helvetica Neue', Arial, sans-serif",
+          }}
+        >
           <h3
             className="text-lg font-black tracking-[0.2em] text-center"
             style={{
@@ -468,50 +535,133 @@ function SkinPreviewContent({ skinKey }: { skinKey: string }) {
           >
             WORD SEARCH
           </h3>
-          <p className="text-xs font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8)" }}>
-            Attempts left: <span className="font-semibold">3</span>
+
+          <p
+            className="text-xs font-medium"
+            style={{
+              color: "#e2e8f0",
+              textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)",
+            }}
+          >
+            2 / 4 words found
           </p>
 
-          {/* Puzzle board — opaque card sitting ON TOP of the animation */}
-          <div className="w-full border-4 p-3" style={{
-            background: s.boardBg,
-            borderColor: s.boardBorder,
-            boxShadow: s.boardShadow !== "none" ? s.boardShadow : undefined,
-            borderRadius: s.boardRadius,
-          }}>
-            {/* Board header inside the card */}
-            <div className="flex items-center justify-between mb-2.5">
-              <p className="text-xs font-bold" style={{ color: s.labelColor }}>Find the words</p>
-              <p className="text-xs font-semibold" style={{ color: s.accentCorrect }}>1/3 found</p>
+          <div className="flex flex-col sm:flex-row gap-3 items-start w-full">
+            <div
+              className="mx-auto sm:mx-0"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 3,
+                background: "rgba(0,0,0,0.55)",
+                backdropFilter: "blur(6px)",
+                WebkitBackdropFilter: "blur(6px)",
+                borderRadius: "0.75rem",
+                padding: "10px",
+                width: "fit-content",
+                maxWidth: "100%",
+              }}
+            >
+              {grid.map((row, ri) => (
+                <div key={ri} style={{ display: "flex", gap: 3 }}>
+                  {row.map((letter, ci) => {
+                    const key = `${ri},${ci}`;
+                    const colorIdx = foundCellMap.get(key);
+                    const isFound = colorIdx !== undefined;
+                    const color = isFound ? wordColors[colorIdx] : null;
+                    const isActive = key === activeCell;
+
+                    return (
+                      <div
+                        key={key}
+                        className="flex items-center justify-center font-black rounded"
+                        style={{
+                          width: "clamp(1.4rem, 6vw, 1.8rem)",
+                          height: "clamp(1.4rem, 6vw, 1.8rem)",
+                          fontSize: "clamp(0.62rem, 2.8vw, 0.86rem)",
+                          background: isActive
+                            ? s.accentActive
+                            : isFound
+                            ? color!.bg
+                            : s.tileBg,
+                          border: isActive
+                            ? `2px solid ${s.boardBorder}`
+                            : isFound
+                            ? `2px solid ${color!.border}`
+                            : `2px solid ${s.tileBorder}`,
+                          color: isActive
+                            ? "#ffffff"
+                            : isFound
+                            ? color!.text
+                            : s.tileText,
+                          boxShadow: isFound ? `0 0 6px ${color!.border}40` : "none",
+                          userSelect: "none",
+                          WebkitUserSelect: "none",
+                        }}
+                      >
+                        {letter}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
-            {/* Grid */}
-            <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-              {letters.map((letter, i) => {
-                const isHighlighted = highlighted.includes(i);
-                const isActive = i === activeCell;
-                return (
-                  <div key={i} className="aspect-square flex items-center justify-center text-sm font-bold"
-                    style={{
-                      backgroundColor: isHighlighted ? s.accentCorrect : isActive ? s.accentActive : s.tileBg,
-                      border: `1.5px solid ${isHighlighted ? s.accentCorrect : isActive ? s.accentActive : s.tileBorder}`,
-                      color: s.tileText,
-                      fontFamily: s.tileFontFamily,
-                      borderRadius: "0.25rem",
-                      boxShadow: isHighlighted ? `0 0 8px ${s.accentCorrect}` : isActive ? `0 0 8px ${s.accentActive}` : "none",
-                    }}>
-                    {letter}
-                  </div>
-                );
-              })}
-            </div>
-            {/* Input area mock */}
-            <div className="mt-2.5 flex gap-2">
-              <div className="flex-1 rounded-lg px-3 py-1.5 text-xs" style={{ backgroundColor: s.inputBg, border: `1px solid ${s.inputBorder}`, color: s.inputText }}>
-                Type answer...
+
+            <div className="w-full sm:w-auto flex-1 flex flex-col gap-1.5 sm:gap-2">
+              <p
+                className="text-[11px] sm:text-xs font-semibold tracking-[0.12em]"
+                style={{
+                  color: "#cbd5e1",
+                  textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)",
+                }}
+              >
+                FIND THESE WORDS
+              </p>
+
+              <div className="w-full flex flex-wrap sm:flex-col gap-1.5 sm:gap-2">
+                {words.map((word, wi) => {
+                  const found = foundWords.has(word);
+                  const color = found ? wordColors[wi % wordColors.length] : null;
+
+                  return (
+                    <div
+                      key={word}
+                      className="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md sm:rounded-lg text-[11px] sm:text-sm font-semibold leading-tight"
+                      style={{
+                        background: found ? color!.bg : s.tileBg,
+                        border: `1px solid ${found ? color!.border : "rgba(148,163,184,0.4)"}`,
+                        color: found ? color!.text : "#cbd5e1",
+                        textDecoration: found ? "line-through" : "none",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {word}
+                    </div>
+                  );
+                })}
               </div>
-              <div className="rounded-lg px-3 py-1.5 text-xs font-bold" style={{ background: s.btnBg, color: s.btnText }}>
-                Submit
-              </div>
+
+              <button
+                className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={{
+                  background: "rgba(56,145,166,0.15)",
+                  border: "1px solid rgba(56,145,166,0.4)",
+                  color: "#3891A6",
+                }}
+              >
+                💡 Hint (3)
+              </button>
+
+              <button
+                className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={{
+                  background: "rgba(253,231,76,0.08)",
+                  border: "1px solid rgba(253,231,76,0.3)",
+                  color: "#FDE74C",
+                }}
+              >
+                ? How to play
+              </button>
             </div>
           </div>
         </div>
@@ -568,21 +718,22 @@ function CosmeticPreviewModal({ item, onClose }: { item: StoreItem; onClose: () 
   const sub = item.subcategory;
   const value = meta?.value ?? "";
   const isSkin = sub === "skin";
+  const displayName = getStoreItemDisplayName(item);
 
   let title = "Live Preview";
   let content: React.ReactNode = null;
 
   if (sub === "theme" || sub === "team_theme") {
-    title = `${item.name}`;
+    title = displayName;
     content = <ThemePreviewContent themeKey={value || "default"} />;
   } else if (sub === "frame") {
-    title = item.name;
+    title = displayName;
     content = <FramePreviewContent frameKey={value || "gold"} />;
   } else if (sub === "skin") {
-    title = item.name;
+    title = displayName;
     content = <SkinPreviewContent skinKey={value || "default"} />;
   } else if (sub === "name_color") {
-    title = item.name;
+    title = displayName;
     content = <NameColorPreviewContent value={value} />;
   }
 
@@ -602,7 +753,7 @@ function CosmeticPreviewModal({ item, onClose }: { item: StoreItem; onClose: () 
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 10 }}
         transition={{ type: "spring", stiffness: 340, damping: 26 }}
-        className={`rounded-2xl p-6 w-full max-h-[85vh] overflow-y-auto relative ${isSkin ? "max-w-lg" : "max-w-md"}`}
+        className={`rounded-2xl p-6 w-full max-h-[85vh] overflow-y-auto relative ${isSkin ? "max-w-xl" : "max-w-md"}`}
         style={{ backgroundColor: "rgba(15,18,25,0.98)", border: "1px solid rgba(255,255,255,0.12)" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -740,7 +891,7 @@ function StorePageInner() {
         showToast(data.error ?? "Purchase failed", "error");
         return;
       }
-      showToast(`${item.iconEmoji} ${item.name} purchased!`);
+      showToast(`${item.iconEmoji} ${getStoreItemDisplayName(item)} purchased!`);
       fetchStore();
     } finally {
       setPurchasing(null);
@@ -761,7 +912,7 @@ function StorePageInner() {
         showToast(data.error ?? "Failed to equip", "error");
         return;
       }
-      showToast(unequip ? "Unequipped" : `${item.iconEmoji} ${item.name} equipped!`);
+      showToast(unequip ? "Unequipped" : `${item.iconEmoji} ${getStoreItemDisplayName(item)} equipped!`);
       fetchStore();
     } finally {
       setEquipping(null);
@@ -1114,7 +1265,7 @@ function StorePageInner() {
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">{item.iconEmoji}</span>
                       <div>
-                        <p className="font-bold text-white text-sm leading-tight">{item.name}</p>
+                        <p className="font-bold text-white text-sm leading-tight">{getStoreItemDisplayName(item)}</p>
                         <p className="text-xs mt-0.5" style={{ color: "#6b7280" }}>
                           {SUBCATEGORY_LABELS[item.subcategory] ?? item.subcategory}
                           {item.isConsumable && " · Consumable"}

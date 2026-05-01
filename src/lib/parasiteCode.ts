@@ -98,28 +98,87 @@ export type ParasiteCodeClientCase = {
   testInputs: TestInput[];
 };
 
+const FALLBACK_PARASITE_CODE_CASE: ParasiteCodeCase = {
+  caseTitle: 'Parasite Code Incident',
+  programName: 'payroll_v4.prg',
+  contextNarrative:
+    'Accounts Payable flagged an anomaly last quarter: a $12,000 overpayment that the payroll system claimed never happened. The program has been running unchanged for three years. Last week the same amount disappeared again. Find the malicious lines and quarantine them.',
+  strainFamily: 'output-manipulator',
+  activationCondition: 'Triggers when DEPT equals "EXEC" and BASE_PAY exceeds 10000',
+  parasiteLineIds: ['L09', 'L10', 'L11'],
+  program: [
+    { id: 'L01', lineNumber: 1, opcode: 'LOAD', operands: ['R0', 'DEPT'], comment: 'load department code' },
+    { id: 'L02', lineNumber: 2, opcode: 'LOAD', operands: ['R1', 'BASE_PAY'], comment: 'load base salary' },
+    { id: 'L03', lineNumber: 3, opcode: 'LOAD', operands: ['R2', 'BONUS_PCT'], comment: 'bonus percentage' },
+    { id: 'L04', lineNumber: 4, opcode: 'MUL', operands: ['R3', 'R1', 'R2'], comment: 'R3 = bonus amount' },
+    { id: 'L05', lineNumber: 5, opcode: 'ADD', operands: ['R4', 'R1', 'R3'], comment: 'R4 = total pay' },
+    { id: 'L06', lineNumber: 6, opcode: 'SET', operands: ['R5', 'EXEC'], comment: '' },
+    { id: 'L07', lineNumber: 7, opcode: 'CMP', operands: ['R0', 'R5'], comment: 'compare dept to EXEC' },
+    { id: 'L08', lineNumber: 8, opcode: 'IF', operands: ['FLAG', '!=', '1'], comment: 'skip if not EXEC dept' },
+    { id: 'L09', lineNumber: 9, opcode: 'SET', operands: ['R6', '12000'], comment: '', isParasite: true },
+    { id: 'L10', lineNumber: 10, opcode: 'ADD', operands: ['R4', 'R4', 'R6'], comment: '', isParasite: true },
+    { id: 'L11', lineNumber: 11, opcode: 'OUT', operands: ['R6'], comment: '', isParasite: true },
+    { id: 'L12', lineNumber: 12, opcode: 'OUT', operands: ['R4'], comment: 'output final pay' },
+    { id: 'L13', lineNumber: 13, opcode: 'HALT', operands: [], comment: '' },
+  ],
+  testInputs: [
+    {
+      id: 'T1',
+      label: 'Standard employee - Dept: SALES, Pay: $4,200',
+      values: { DEPT: 'SALES', BASE_PAY: 4200, BONUS_PCT: 0.05 },
+      expectedOutput: '$4,410',
+      activatesParasite: false,
+    },
+    {
+      id: 'T2',
+      label: 'Executive - Dept: EXEC, Pay: $14,500',
+      values: { DEPT: 'EXEC', BASE_PAY: 14500, BONUS_PCT: 0.1 },
+      expectedOutput: '$15,950',
+      activatesParasite: true,
+    },
+  ],
+  retentionUnlock:
+    'INTERNAL AUDIT - CASE #PR-0044\n\nThe overflow was traced to a contractor who had read access to the payroll service repository. The $12,000 figure was routed to an external account registered under a shell entity.\n\nContracting relationship terminated. Matter referred to financial crimes unit.',
+};
+
+export function createFallbackParasiteCodeCase(caseTitle?: string): ParasiteCodeCase {
+  const fallback = JSON.parse(JSON.stringify(FALLBACK_PARASITE_CODE_CASE)) as ParasiteCodeCase;
+  if (typeof caseTitle === 'string' && caseTitle.trim()) {
+    fallback.caseTitle = caseTitle.trim();
+  }
+  return fallback;
+}
+
+function isValidParasiteCaseShape(c: Record<string, unknown>): boolean {
+  return (
+    typeof c.caseTitle === 'string' &&
+    typeof c.programName === 'string' &&
+    typeof c.contextNarrative === 'string' &&
+    typeof c.strainFamily === 'string' &&
+    typeof c.activationCondition === 'string' &&
+    Array.isArray(c.program) &&
+    Array.isArray(c.parasiteLineIds) &&
+    Array.isArray(c.testInputs)
+  );
+}
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 export function getParasiteCodeData(puzzleData: unknown): ParasiteCodeCase | null {
   if (!puzzleData || typeof puzzleData !== 'object') return null;
   const d = puzzleData as Record<string, unknown>;
-  if (!d.parasiteCode || typeof d.parasiteCode !== 'object') return null;
-  const c = d.parasiteCode as Record<string, unknown>;
 
-  if (
-    typeof c.caseTitle !== 'string' ||
-    typeof c.programName !== 'string' ||
-    typeof c.contextNarrative !== 'string' ||
-    typeof c.strainFamily !== 'string' ||
-    typeof c.activationCondition !== 'string' ||
-    !Array.isArray(c.program) ||
-    !Array.isArray(c.parasiteLineIds) ||
-    !Array.isArray(c.testInputs)
-  ) {
-    return null;
+  // Supports both the canonical shape { parasiteCode: {...} } and a direct case object.
+  const nested = d.parasiteCode;
+  if (nested && typeof nested === 'object' && isValidParasiteCaseShape(nested as Record<string, unknown>)) {
+    return nested as ParasiteCodeCase;
   }
 
-  return c as unknown as ParasiteCodeCase;
+  if (isValidParasiteCaseShape(d)) {
+    return d as unknown as ParasiteCodeCase;
+  }
+
+  return null;
 }
 
 // ── Sanitizer ─────────────────────────────────────────────────────────────────

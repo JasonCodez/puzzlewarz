@@ -91,9 +91,19 @@ export default function AnagramBlitz({
     >
       {(skin._key === "lava" || skin._key === "skin_lava") && <LavaBackground />}
       {(skin._key === "galaxy" || skin._key === "skin_galaxy") && <GalaxyBackground />}
-      {(skin._key === "ice" || skin._key === "skin_ice") && <IceBackground />}
+      {(skin._key === "ice" || skin._key === "skin_ice" || skin._key === "christmas" || skin._key === "skin_christmas") && <IceBackground />}
       {(skin._key === "neon" || skin._key === "skin_neon") && <NeonBackground />}
       {(skin._key === "retro" || skin._key === "skin_retro") && <RetroBackground />}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background: skin.backdropScrim,
+          zIndex: 0,
+        }}
+      />
       <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
     </div>
   );

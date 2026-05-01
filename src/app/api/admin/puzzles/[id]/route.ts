@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getGridlockFileData } from "@/lib/gridlockFile";
+import { getParasiteCodeData } from "@/lib/parasiteCode";
 import { getVaultPuzzleData } from "@/lib/vault";
 
 const toPositiveInt = (...values: unknown[]): number | undefined => {
@@ -130,6 +131,16 @@ export async function PUT(
     }
   }
 
+  if (puzzleType === 'parasite_code') {
+    const parsed = getParasiteCodeData(puzzleData);
+    if (!parsed) {
+      return NextResponse.json(
+        { error: 'Parasite Code puzzles require puzzleData.parasiteCode with case metadata, program, parasiteLineIds, and testInputs' },
+        { status: 400 }
+      );
+    }
+  }
+
   const vaultData = puzzleType === 'vault' ? getVaultPuzzleData(puzzleData) : null;
   if (puzzleType === 'vault' && !vaultData) {
     return NextResponse.json(
@@ -167,7 +178,7 @@ export async function PUT(
     if (!isSpecialType) {
       puzzleUpdateData.riddleAnswer = correctAnswer;
     }
-    if (["escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file", "debrief"].includes(puzzleType) && puzzleData != null) {
+    if (["escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file", "debrief", "parasite_code"].includes(puzzleType) && puzzleData != null) {
       puzzleUpdateData.data = puzzleData;
     }
     if (puzzleType === 'vault' && vaultData) {

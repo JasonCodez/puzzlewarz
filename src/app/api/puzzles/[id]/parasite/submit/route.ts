@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { getParasiteCodeData, validateQuarantine, calcRank } from '@/lib/parasiteCode';
+import { getParasiteCodeData, validateQuarantine, calcRank, createFallbackParasiteCodeCase } from '@/lib/parasiteCode';
 import { recordFailedAttempt, MAX_PUZZLE_ATTEMPTS } from '@/lib/attemptLimit';
 import { getPuzzleAccessState } from '@/lib/puzzle-state/getPuzzleAccessState';
 
@@ -39,14 +39,20 @@ export async function POST(
     const accessState = await getPuzzleAccessState(user.id, puzzleId);
     if (accessState.isAttemptLocked) {
       return NextResponse.json(
-        { error: 'No attempts remaining', locked: true, attemptsUsed: accessState.attemptsUsed, maxAttempts: MAX_PUZZLE_ATTEMPTS },
+        {
+          error: 'No attempts remaining',
+          locked: true,
+          attemptsUsed: accessState.attemptsUsed,
+          attemptsRemaining: accessState.attemptsRemaining,
+          maxAttempts: MAX_PUZZLE_ATTEMPTS,
+        },
         { status: 403 }
       );
     }
 
     const puzzle = await prisma.puzzle.findUnique({
       where: { id: puzzleId },
-      select: { id: true, puzzleType: true, data: true, xpReward: true },
+      select: { id: true, title: true, puzzleType: true, data: true, xpReward: true },
     });
     if (!puzzle) {
       return NextResponse.json({ error: 'Puzzle not found' }, { status: 404 });
@@ -55,9 +61,10 @@ export async function POST(
       return NextResponse.json({ error: 'Not a Parasite Code puzzle' }, { status: 400 });
     }
 
-    const caseData = getParasiteCodeData(puzzle.data);
-    if (!caseData) {
-      return NextResponse.json({ error: 'Parasite Code case is not configured' }, { status: 500 });
+    const parsedCaseData = getParasiteCodeData(puzzle.data);
+    const caseData = parsedCaseData ?? createFallbackParasiteCodeCase(puzzle.title);
+    if (!parsedCaseData) {
+      console.warn(`[parasite/submit] Missing parasite data for puzzle ${puzzleId}; using fallback case.`);
     }
 
     const body = await req.json();
@@ -125,6 +132,10 @@ export async function POST(
         rank,
         activationCondition: caseData.activationCondition,
         retentionUnlock: caseData.retentionUnlock ?? null,
+        attemptsUsed: accessState.attemptsUsed,
+        attemptsRemaining: accessState.attemptsRemaining,
+        maxAttempts: MAX_PUZZLE_ATTEMPTS,
+        locked: false,
       });
     } else {
       await prisma.$transaction(async (tx) => {
@@ -155,6 +166,10 @@ export async function POST(
         });
       });
 
+      const attemptsUsed = await recordFailedAttempt(user.id, puzzleId);
+      const attemptsRemaining = Math.max(0, MAX_PUZZLE_ATTEMPTS - attemptsUsed);
+      const locked = attemptsRemaining === 0;
+
       return NextResponse.json({
         correct: false,
         feedback: result.feedback,
@@ -162,9 +177,10 @@ export async function POST(
         totalParasiteCount: result.totalParasiteCount,
         submissionCount,
         rank,
-        attemptsUsed: await recordFailedAttempt(user.id, puzzleId),
-        attemptsRemaining: Math.max(0, MAX_PUZZLE_ATTEMPTS - (accessState.attemptsUsed + 1)),
-        locked: (accessState.attemptsUsed + 1) >= MAX_PUZZLE_ATTEMPTS,
+        attemptsUsed,
+        attemptsRemaining,
+        maxAttempts: MAX_PUZZLE_ATTEMPTS,
+        locked,
       });
     }
   } catch (e) {

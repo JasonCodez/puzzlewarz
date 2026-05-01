@@ -302,12 +302,16 @@ export default function PuzzleDetailPage() {
   };
   const [jigsawControls, setJigsawControls] = useState<JigsawControlsApi | null>(null);
   const [activeSkin, setActiveSkin] = useState<string>("default");
+  const [activeCompletionAnimation, setActiveCompletionAnimation] = useState<string>("default");
 
-  // Fetch active skin once on mount
+  // Fetch equipped cosmetics once on mount
   useEffect(() => {
     fetch("/api/user/profile", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d?.activeSkin) setActiveSkin(d.activeSkin); })
+      .then((d) => {
+        if (d?.activeSkin) setActiveSkin(d.activeSkin);
+        if (d?.activeCompletionAnimation) setActiveCompletionAnimation(d.activeCompletionAnimation);
+      })
       .catch(() => {});
   }, []);
 
@@ -1589,6 +1593,7 @@ export default function PuzzleDetailPage() {
                 oldProgress={xpModalData.oldProgress}
                 newProgress={xpModalData.newProgress}
                 levelReward={xpModalData.levelReward}
+                completionAnimation={activeCompletionAnimation}
                 onDismiss={() => {
                   setShowXpModal(false);
                   if (comparisonStats) {

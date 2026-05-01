@@ -969,7 +969,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
   return (
     <div style={{ backgroundColor: '#020202' }} className="min-h-screen">
       {/* Header */}
-      <div className="hero-bg pt-24 pb-8 md:pb-16 px-4" style={{ backgroundImage: 'linear-gradient(160deg, rgba(56,145,166,0.12) 0%, rgba(2,2,2,0) 60%, rgba(253,231,76,0.04) 100%)' }}>
+      <div className="pt-24 pb-8 md:pb-16 px-4">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-3xl md:text-5xl font-bold text-white mb-4">Puzzles</h1>
           <p style={{ color: '#DDDBF1' }}>Tackle challenges at your own pace. Win points solo or team up for collaborative solving</p>

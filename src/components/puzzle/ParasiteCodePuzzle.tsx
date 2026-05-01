@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type {
   ParasiteCodeClientCase,
@@ -26,6 +26,10 @@ interface ServerState {
   lastFeedback: QuarantineFeedback | null;
   activationCondition: string | null;
   retentionUnlock: string | null;
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  maxAttempts: number;
+  locked: boolean;
 }
 
 // ── Submit result shape ───────────────────────────────────────────────────────
@@ -38,6 +42,10 @@ interface SubmitResult {
   rank: Rank;
   activationCondition?: string;
   retentionUnlock?: string | null;
+  attemptsUsed?: number;
+  attemptsRemaining?: number;
+  maxAttempts?: number;
+  locked?: boolean;
 }
 
 // ── Opcode colour map ─────────────────────────────────────────────────────────
@@ -69,6 +77,253 @@ const FEEDBACK_COLOR: Record<QuarantineFeedback, string> = {
   'under-flagged': '#FFD580',
   'off':           '#FF6060',
 };
+
+type RuntimeValue = string | number;
+
+interface InputDiagnostics {
+  executedLineIds: string[];
+  visitedLineIds: string[];
+  outputValues: RuntimeValue[];
+  observedOutput: string;
+  matchedExpected: boolean;
+  registerSnapshot: Array<[string, RuntimeValue]>;
+  runtimeError: string | null;
+  reachedStepLimit: boolean;
+}
+
+interface TraceComparisonSummary {
+  sharedPrefixCount: number;
+  firstActiveOnlyLine: string | null;
+  firstBaselineOnlyLine: string | null;
+  uniqueActiveCount: number;
+  uniqueBaselineCount: number;
+}
+
+function parseNumericValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/[$,%\s,]/g, '');
+  if (!cleaned || cleaned === '-' || cleaned === '.' || cleaned === '-.') return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeText(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function compareObservedToExpected(
+  outputValues: RuntimeValue[],
+  observedOutput: string,
+  expectedOutput: string,
+): boolean {
+  const expected = expectedOutput.trim();
+  if (!expected) return outputValues.length === 0;
+
+  if (outputValues.length === 1) {
+    const observedSingle = parseNumericValue(outputValues[0]);
+    const expectedSingle = parseNumericValue(expected);
+    if (observedSingle !== null && expectedSingle !== null) {
+      return Math.abs(observedSingle - expectedSingle) < 0.0001;
+    }
+  }
+
+  const observedNumeric = parseNumericValue(observedOutput);
+  const expectedNumeric = parseNumericValue(expected);
+  if (observedNumeric !== null && expectedNumeric !== null) {
+    return Math.abs(observedNumeric - expectedNumeric) < 0.0001;
+  }
+
+  return normalizeText(observedOutput) === normalizeText(expected);
+}
+
+function simulateProgramExecution(
+  program: ParasiteCodeClientCase['program'],
+  inputValues: Record<string, string | number>,
+  expectedOutput: string,
+): InputDiagnostics {
+  const registers: Record<string, RuntimeValue> = {};
+  const labels = new Map<string, number>();
+
+  program.forEach((line, idx) => {
+    labels.set(line.id, idx);
+    const firstOperand = line.operands[0];
+    if (firstOperand && /^[A-Z_][A-Z0-9_]*:$/.test(firstOperand)) {
+      labels.set(firstOperand.slice(0, -1), idx);
+    }
+  });
+
+  const executedLineIds: string[] = [];
+  const outputValues: RuntimeValue[] = [];
+  const callStack: number[] = [];
+
+  const toNumeric = (value: RuntimeValue): number => {
+    const n = parseNumericValue(value);
+    return n ?? 0;
+  };
+
+  const resolveToken = (token: string | undefined): RuntimeValue => {
+    if (!token) return 0;
+    if (Object.prototype.hasOwnProperty.call(registers, token)) return registers[token];
+    if (Object.prototype.hasOwnProperty.call(inputValues, token)) return inputValues[token];
+    const n = parseNumericValue(token);
+    if (n !== null && /^-?\d+(\.\d+)?$/.test(token.trim())) return n;
+    return token;
+  };
+
+  const evaluateComparison = (left: RuntimeValue, op: string, right: RuntimeValue): boolean => {
+    const leftNum = parseNumericValue(left);
+    const rightNum = parseNumericValue(right);
+    const numeric = leftNum !== null && rightNum !== null;
+
+    switch (op) {
+      case '=':
+      case '==':
+        return numeric ? leftNum === rightNum : String(left) === String(right);
+      case '!=':
+      case '<>':
+        return numeric ? leftNum !== rightNum : String(left) !== String(right);
+      case '>':
+        return numeric ? leftNum > rightNum : String(left) > String(right);
+      case '>=':
+        return numeric ? leftNum >= rightNum : String(left) >= String(right);
+      case '<':
+        return numeric ? leftNum < rightNum : String(left) < String(right);
+      case '<=':
+        return numeric ? leftNum <= rightNum : String(left) <= String(right);
+      default:
+        return numeric ? leftNum === rightNum : String(left) === String(right);
+    }
+  };
+
+  let pc = 0;
+  let steps = 0;
+  const maxSteps = Math.max(40, program.length * 20);
+  let runtimeError: string | null = null;
+
+  while (pc >= 0 && pc < program.length && steps < maxSteps) {
+    const line = program[pc];
+    executedLineIds.push(line.id);
+    steps += 1;
+
+    const [a, b, c] = line.operands;
+
+    switch (line.opcode) {
+      case 'LOAD': {
+        if (a) registers[a] = typeof b === 'string' && b in inputValues ? inputValues[b] : 0;
+        pc += 1;
+        break;
+      }
+      case 'SET': {
+        if (a) registers[a] = resolveToken(b);
+        pc += 1;
+        break;
+      }
+      case 'ADD': {
+        if (a) registers[a] = toNumeric(resolveToken(b)) + toNumeric(resolveToken(c));
+        pc += 1;
+        break;
+      }
+      case 'SUB': {
+        if (a) registers[a] = toNumeric(resolveToken(b)) - toNumeric(resolveToken(c));
+        pc += 1;
+        break;
+      }
+      case 'MUL': {
+        if (a) registers[a] = toNumeric(resolveToken(b)) * toNumeric(resolveToken(c));
+        pc += 1;
+        break;
+      }
+      case 'CMP': {
+        const left = resolveToken(a);
+        const right = resolveToken(b);
+        registers.FLAG = evaluateComparison(left, '==', right) ? 1 : 0;
+        pc += 1;
+        break;
+      }
+      case 'IF': {
+        const left = resolveToken(a);
+        const op = b ?? '==';
+        const right = resolveToken(c);
+        const condition = evaluateComparison(left, op, right);
+        // IF condition is false => skip next line.
+        pc += condition ? 1 : 2;
+        break;
+      }
+      case 'GOTO': {
+        const target = (a ?? '').replace(/:$/, '');
+        const targetPc = labels.get(target);
+        if (typeof targetPc !== 'number') {
+          runtimeError = `Unknown jump target: ${target || '(empty)'}`;
+          pc = program.length;
+        } else {
+          pc = targetPc;
+        }
+        break;
+      }
+      case 'CALL': {
+        const target = (a ?? '').replace(/:$/, '');
+        const targetPc = labels.get(target);
+        if (typeof targetPc !== 'number') {
+          runtimeError = `Unknown subroutine target: ${target || '(empty)'}`;
+          pc = program.length;
+        } else {
+          callStack.push(pc + 1);
+          pc = targetPc;
+        }
+        break;
+      }
+      case 'RET': {
+        if (callStack.length === 0) {
+          pc = program.length;
+        } else {
+          const returnPc = callStack.pop();
+          pc = typeof returnPc === 'number' ? returnPc : program.length;
+        }
+        break;
+      }
+      case 'OUT': {
+        outputValues.push(resolveToken(a));
+        pc += 1;
+        break;
+      }
+      case 'HALT': {
+        pc = program.length;
+        break;
+      }
+      default: {
+        pc += 1;
+      }
+    }
+  }
+
+  const reachedStepLimit = steps >= maxSteps;
+  if (reachedStepLimit && !runtimeError) {
+    runtimeError = 'Execution reached the safety step limit (possible loop).';
+  }
+
+  const observedOutput = outputValues.length > 0
+    ? outputValues.map(v => String(v)).join(', ')
+    : 'No output emitted';
+
+  const matchedExpected = compareObservedToExpected(outputValues, observedOutput, expectedOutput);
+  const visitedLineIds = [...new Set(executedLineIds)];
+  const registerSnapshot = Object.entries(registers)
+    .filter(([k]) => /^R\d+$/i.test(k) || k === 'FLAG')
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(0, 10);
+
+  return {
+    executedLineIds,
+    visitedLineIds,
+    outputValues,
+    observedOutput,
+    matchedExpected,
+    registerSnapshot,
+    runtimeError,
+    reachedStepLimit,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
@@ -194,12 +449,14 @@ function ProgramLineRow({
   line,
   flagged,
   tracing,
+  visited,
   solved,
   onClick,
 }: {
   line: ParasiteCodeClientCase['program'][number];
   flagged: boolean;
   tracing: boolean;
+  visited: boolean;
   solved: boolean;
   onClick: () => void;
 }) {
@@ -214,11 +471,15 @@ function ProgramLineRow({
           ? 'rgba(255, 96, 96, 0.15)'
           : tracing
           ? 'rgba(125, 249, 170, 0.08)'
+          : visited
+          ? 'rgba(96, 255, 240, 0.06)'
           : 'transparent',
         borderLeft: flagged
           ? '2px solid #FF6060'
           : tracing
           ? '2px solid #7DF9AA'
+          : visited
+          ? '2px solid rgba(96,255,240,0.45)'
           : '2px solid transparent',
         cursor: solved ? 'default' : 'pointer',
       }}
@@ -251,6 +512,11 @@ function ProgramLineRow({
       {flagged && (
         <span className="text-xs font-mono shrink-0 pt-0.5" style={{ color: '#FF6060' }}>
           [QUARANTINE]
+        </span>
+      )}
+      {!flagged && visited && (
+        <span className="text-xs font-mono shrink-0 pt-0.5" style={{ color: '#60FFF0' }}>
+          [VISITED]
         </span>
       )}
     </motion.div>
@@ -298,10 +564,12 @@ function OpcodeGuide() {
 function TestInputPanel({
   inputs,
   activeId,
+  diagnostics,
   onActivate,
 }: {
   inputs: ParasiteCodeClientCase['testInputs'];
   activeId: string | null;
+  diagnostics: InputDiagnostics | null;
   onActivate: (id: string) => void;
 }) {
   return (
@@ -309,6 +577,13 @@ function TestInputPanel({
       <div className="text-xs font-mono text-gray-500 tracking-widest uppercase">TEST INPUTS</div>
       {inputs.map(inp => {
         const active = inp.id === activeId;
+        const diagnosticsForInput = active ? diagnostics : null;
+        const tracePreview = diagnosticsForInput
+          ? diagnosticsForInput.visitedLineIds.slice(0, 14)
+          : [];
+        const hasTraceOverflow = diagnosticsForInput
+          ? diagnosticsForInput.visitedLineIds.length > tracePreview.length
+          : false;
         return (
           <div
             key={inp.id}
@@ -339,6 +614,41 @@ function TestInputPanel({
                   <span className="text-gray-500">Expected output:</span>
                   <span className="text-yellow-300">{inp.expectedOutput}</span>
                 </div>
+                {diagnosticsForInput && (
+                  <>
+                    <div className="flex gap-2 text-xs font-mono mt-1">
+                      <span className="text-gray-500">Observed output:</span>
+                      <span style={{ color: diagnosticsForInput.matchedExpected ? '#7DF9AA' : '#FFB86B' }}>
+                        {diagnosticsForInput.observedOutput}
+                      </span>
+                    </div>
+                    <div
+                      className="text-xs font-mono"
+                      style={{ color: diagnosticsForInput.matchedExpected ? '#7DF9AA' : '#FFD580' }}
+                    >
+                      {diagnosticsForInput.matchedExpected
+                        ? '✓ Observed output matches expected baseline'
+                        : '⚠ Observed output diverges from expected baseline'}
+                    </div>
+                    <div className="text-xs font-mono text-cyan-300 break-words">
+                      Trace: {tracePreview.join(' → ')}
+                      {hasTraceOverflow ? ` → … (+${diagnosticsForInput.visitedLineIds.length - tracePreview.length} more)` : ''}
+                    </div>
+                    {diagnosticsForInput.registerSnapshot.length > 0 && (
+                      <div className="text-xs font-mono text-gray-400 break-words">
+                        Registers: {diagnosticsForInput.registerSnapshot.map(([k, v]) => `${k}=${String(v)}`).join(' · ')}
+                      </div>
+                    )}
+                    {diagnosticsForInput.runtimeError && (
+                      <div className="text-xs font-mono text-red-300">
+                        Runtime warning: {diagnosticsForInput.runtimeError}
+                      </div>
+                    )}
+                    <div className="text-[11px] font-mono text-gray-500">
+                      Analyst cue: compare this trace against a different input to find where control flow diverges.
+                    </div>
+                  </>
+                )}
                 {inp.activatesParasite && (
                   <div className="text-xs font-mono text-red-400">
                     ⚠ This input activates an anomalous execution path
@@ -353,30 +663,190 @@ function TestInputPanel({
   );
 }
 
+// ── Investigation guide panel ───────────────────────────────────────────────
+function InvestigationGuidePanel({
+  activeInputLabel,
+  activeInputAnomalous,
+  diagnostics,
+  baselineLabel,
+  traceComparison,
+  flaggedCount,
+  flaggedVisitedCount,
+  flaggedUnvisitedCount,
+  attemptsRemaining,
+  maxAttempts,
+  locked,
+}: {
+  activeInputLabel: string | null;
+  activeInputAnomalous: boolean | null;
+  diagnostics: InputDiagnostics | null;
+  baselineLabel: string | null;
+  traceComparison: TraceComparisonSummary | null;
+  flaggedCount: number;
+  flaggedVisitedCount: number;
+  flaggedUnvisitedCount: number;
+  attemptsRemaining: number;
+  maxAttempts: number;
+  locked: boolean;
+}) {
+  const hasRunInput = Boolean(activeInputLabel && diagnostics);
+  const hasAnyFlagged = flaggedCount > 0;
+
+  return (
+    <div className="border border-cyan-500/20 rounded-lg p-3 bg-cyan-900/10 space-y-2">
+      <div className="text-xs font-mono tracking-widest uppercase text-cyan-300/80">
+        INVESTIGATION FLOW
+      </div>
+
+      {!hasRunInput ? (
+        <div className="text-xs font-mono text-gray-300 leading-relaxed">
+          Step 1: Run a control input first, then an anomalous input. Use their traces to locate branch points before flagging lines.
+        </div>
+      ) : (
+        <div className="text-xs font-mono text-gray-300 leading-relaxed space-y-1">
+          <div>
+            Active input: <span style={{ color: '#60FFF0' }}>{activeInputLabel}</span>
+            {' '}
+            <span style={{ color: activeInputAnomalous ? '#FF8A8A' : '#7DF9AA' }}>
+              ({activeInputAnomalous ? 'anomalous path' : 'control path'})
+            </span>
+          </div>
+          <div>
+            Lines visited in this run: <span className="text-cyan-300">{diagnostics?.visitedLineIds.length ?? 0}</span>
+          </div>
+        </div>
+      )}
+
+      {traceComparison && baselineLabel && (
+        <div className="border border-gray-700/60 rounded p-2 bg-black/25 text-[11px] font-mono text-gray-300 leading-relaxed space-y-1">
+          <div>
+            Shared prefix with baseline <span style={{ color: '#7DF9AA' }}>{baselineLabel}</span>:
+            {' '}
+            {traceComparison.sharedPrefixCount} step{traceComparison.sharedPrefixCount === 1 ? '' : 's'}.
+          </div>
+          <div>
+            First divergence:
+            {' '}
+            baseline {traceComparison.firstBaselineOnlyLine ?? 'END'}
+            {' vs '}
+            current {traceComparison.firstActiveOnlyLine ?? 'END'}.
+          </div>
+          <div>
+            Current path touched {traceComparison.uniqueActiveCount} line
+            {traceComparison.uniqueActiveCount === 1 ? '' : 's'} not seen in baseline.
+          </div>
+        </div>
+      )}
+
+      <div className="text-[11px] font-mono text-gray-400 leading-relaxed space-y-1">
+        {!hasAnyFlagged && (
+          <div>
+            Step 2: Quarantine the smallest suspicious cluster first, not the whole branch.
+          </div>
+        )}
+        {hasAnyFlagged && (
+          <>
+            <div>
+              Current quarantine set: {flaggedCount} line{flaggedCount === 1 ? '' : 's'}.
+            </div>
+            {flaggedUnvisitedCount > 0 ? (
+              <div className="text-yellow-300">
+                {flaggedUnvisitedCount} flagged line{flaggedUnvisitedCount === 1 ? '' : 's'} were not visited in this run. Re-check with another input.
+              </div>
+            ) : (
+              <div>
+                {flaggedVisitedCount} flagged line{flaggedVisitedCount === 1 ? '' : 's'} are present on the active trace.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div
+        className="text-[11px] font-mono"
+        style={{ color: locked || attemptsRemaining <= 1 ? '#FF8A8A' : '#9ca3af' }}
+      >
+        {locked
+          ? 'Case locked: no retries remain.'
+          : attemptsRemaining <= 1
+          ? `Final retry warning: ${attemptsRemaining}/${maxAttempts} remaining.`
+          : `Retries remaining: ${attemptsRemaining}/${maxAttempts}.`}
+      </div>
+    </div>
+  );
+}
+
 // ── Quarantine panel ──────────────────────────────────────────────────────────
 function QuarantinePanel({
   flaggedIds,
   onRemove,
+  onClearAll,
   onSubmit,
   submitting,
   submitResult,
+  submitError,
   submissionCount,
+  attemptsUsed,
+  attemptsRemaining,
+  maxAttempts,
+  locked,
   solved,
 }: {
   flaggedIds: Set<string>;
   onRemove: (id: string) => void;
+  onClearAll: () => void;
   onSubmit: () => void;
   submitting: boolean;
   submitResult: SubmitResult | null;
+  submitError: string | null;
   submissionCount: number;
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  maxAttempts: number;
+  locked: boolean;
   solved: boolean;
 }) {
   const ids = [...flaggedIds];
   const lastFeedback = submitResult && !submitResult.correct ? submitResult.feedback : null;
+  const safeMaxAttempts = Math.max(1, maxAttempts);
+  const usedAttemptPct = Math.min(100, Math.round((attemptsUsed / safeMaxAttempts) * 100));
 
   return (
     <div className="space-y-3">
-      <div className="text-xs font-mono text-gray-500 tracking-widest uppercase">QUARANTINE WORKSPACE</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-mono text-gray-500 tracking-widest uppercase">QUARANTINE WORKSPACE</div>
+        {!solved && ids.length > 0 && (
+          <button
+            onClick={onClearAll}
+            className="text-[11px] font-mono text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {!solved && (
+        <div className="border border-gray-800 rounded p-3 bg-black/40 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-gray-400">Retry budget</span>
+            <span style={{ color: locked ? '#FF6060' : '#FFD580' }}>
+              {attemptsRemaining}/{maxAttempts} left
+            </span>
+          </div>
+          <div className="h-1.5 rounded bg-gray-800 overflow-hidden">
+            <div
+              className="h-full transition-all"
+              style={{
+                width: `${usedAttemptPct}%`,
+                background: locked ? '#FF6060' : '#FFD580',
+              }}
+            />
+          </div>
+          <div className="text-[11px] font-mono text-gray-500">
+            Incorrect submissions used: {attemptsUsed}/{maxAttempts}
+          </div>
+        </div>
+      )}
 
       {ids.length === 0 ? (
         <div className="border border-dashed border-gray-700 rounded p-4 text-center text-xs font-mono text-gray-600">
@@ -416,6 +886,27 @@ function QuarantinePanel({
         </motion.div>
       )}
 
+      {submitError && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="border rounded p-3 text-xs font-mono"
+          style={{
+            borderColor: 'rgba(255,96,96,0.35)',
+            background: 'rgba(255,96,96,0.08)',
+            color: '#FF9C9C',
+          }}
+        >
+          {submitError}
+        </motion.div>
+      )}
+
+      {locked && !solved && (
+        <div className="border border-red-500/30 rounded p-3 bg-red-900/10 text-xs font-mono text-red-300">
+          Case locked. You have no retries remaining for this puzzle.
+        </div>
+      )}
+
       {/* Attempt counter */}
       {submissionCount > 0 && !solved && (
         <div className="text-xs font-mono text-gray-500">
@@ -426,7 +917,7 @@ function QuarantinePanel({
       {!solved && (
         <button
           onClick={onSubmit}
-          disabled={submitting || ids.length === 0}
+          disabled={submitting || ids.length === 0 || locked || attemptsRemaining <= 0}
           className="w-full py-2.5 rounded font-mono font-bold text-sm uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
             background: ids.length === 0 ? 'transparent' : 'rgba(255,96,96,0.15)',
@@ -434,7 +925,11 @@ function QuarantinePanel({
             color: '#FF6060',
           }}
         >
-          {submitting ? '▶ SUBMITTING…' : `▶ SUBMIT QUARANTINE (${ids.length} line${ids.length !== 1 ? 's' : ''})`}
+          {locked || attemptsRemaining <= 0
+            ? '▶ CASE LOCKED'
+            : submitting
+            ? '▶ SUBMITTING…'
+            : `▶ SUBMIT QUARANTINE (${ids.length} line${ids.length !== 1 ? 's' : ''})`}
         </button>
       )}
     </div>
@@ -533,15 +1028,18 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // UI state
   const [phase, setPhase] = useState<'briefing' | 'analysis' | 'solved'>('briefing');
   const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
   const [tracingLine, setTracingLine] = useState<string | null>(null);
   const [activeInput, setActiveInput] = useState<string | null>(null);
+  const [activeDiagnostics, setActiveDiagnostics] = useState<InputDiagnostics | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const tracerTimeoutRef = useRef<number | null>(null);
 
   // ── Load state ──────────────────────────────────────────────────────────────
   const loadState = useCallback(async () => {
@@ -550,6 +1048,7 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
       if (!res.ok) throw new Error('Failed to load');
       const data: ServerState = await res.json();
       setServerState(data);
+      setSubmitError(data.locked && !data.solved ? 'No attempts remaining. This case is locked for your account.' : null);
       if (data.solved) {
         setPhase('solved');
       }
@@ -586,29 +1085,163 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
     });
   }, []);
 
-  // ── Tracer ─────────────────────────────────────────────────────────────────
+  const stopTraceAnimation = useCallback(() => {
+    if (tracerTimeoutRef.current !== null) {
+      window.clearTimeout(tracerTimeoutRef.current);
+      tracerTimeoutRef.current = null;
+    }
+    setTracingLine(null);
+  }, []);
+
+  // ── Tracer + runtime diagnostics ───────────────────────────────────────────
   const handleActivateInput = useCallback((inputId: string) => {
-    setActiveInput(prev => (prev === inputId ? null : inputId));
-    if (!serverState?.puzzle?.program?.length) return;
-    // Animate the tracer cursor stepping through lines
-    const lines = serverState.puzzle.program;
+    if (activeInput === inputId) {
+      setActiveInput(null);
+      setActiveDiagnostics(null);
+      stopTraceAnimation();
+      return;
+    }
+
+    setActiveInput(inputId);
+
+    const puzzle = serverState?.puzzle;
+    if (!puzzle?.program?.length) {
+      setActiveDiagnostics(null);
+      stopTraceAnimation();
+      return;
+    }
+
+    const selectedInput = puzzle.testInputs.find(inp => inp.id === inputId);
+    if (!selectedInput) {
+      setActiveDiagnostics(null);
+      stopTraceAnimation();
+      return;
+    }
+
+    const diagnostics = simulateProgramExecution(
+      puzzle.program,
+      selectedInput.values,
+      selectedInput.expectedOutput,
+    );
+    setActiveDiagnostics(diagnostics);
+
+    stopTraceAnimation();
+    if (diagnostics.executedLineIds.length === 0) return;
+
     let i = 0;
+    const trace = diagnostics.executedLineIds;
     const step = () => {
-      if (i >= lines.length) {
+      if (i >= trace.length) {
         setTracingLine(null);
+        tracerTimeoutRef.current = null;
         return;
       }
-      setTracingLine(lines[i].id);
-      i++;
-      setTimeout(step, 120);
+      setTracingLine(trace[i]);
+      i += 1;
+      tracerTimeoutRef.current = window.setTimeout(step, 130);
     };
-    setTracingLine(null);
-    setTimeout(step, 200);
-  }, [serverState?.puzzle?.program]);
+    tracerTimeoutRef.current = window.setTimeout(step, 180);
+  }, [activeInput, serverState?.puzzle, stopTraceAnimation]);
+
+  useEffect(() => {
+    return () => {
+      if (tracerTimeoutRef.current !== null) {
+        window.clearTimeout(tracerTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const visitedLineIds = useMemo(
+    () => new Set(activeDiagnostics?.visitedLineIds ?? []),
+    [activeDiagnostics],
+  );
+
+  const puzzleData = serverState?.puzzle ?? null;
+
+  const activeInputConfig = useMemo(() => {
+    if (!puzzleData?.testInputs?.length || !activeInput) return null;
+    return puzzleData.testInputs.find(inp => inp.id === activeInput) ?? null;
+  }, [activeInput, puzzleData]);
+
+  const baselineInputConfig = useMemo(() => {
+    if (!puzzleData?.testInputs?.length) return null;
+    return puzzleData.testInputs.find(inp => !inp.activatesParasite) ?? puzzleData.testInputs[0] ?? null;
+  }, [puzzleData]);
+
+  const baselineDiagnostics = useMemo(() => {
+    if (!puzzleData || !baselineInputConfig) return null;
+    return simulateProgramExecution(
+      puzzleData.program,
+      baselineInputConfig.values,
+      baselineInputConfig.expectedOutput,
+    );
+  }, [baselineInputConfig, puzzleData]);
+
+  const traceComparison = useMemo<TraceComparisonSummary | null>(() => {
+    if (!activeDiagnostics || !baselineDiagnostics || !activeInputConfig?.activatesParasite) {
+      return null;
+    }
+
+    const activeTrace = activeDiagnostics.executedLineIds;
+    const baselineTrace = baselineDiagnostics.executedLineIds;
+    let sharedPrefixCount = 0;
+
+    while (
+      sharedPrefixCount < activeTrace.length &&
+      sharedPrefixCount < baselineTrace.length &&
+      activeTrace[sharedPrefixCount] === baselineTrace[sharedPrefixCount]
+    ) {
+      sharedPrefixCount += 1;
+    }
+
+    const activeVisited = new Set(activeDiagnostics.visitedLineIds);
+    const baselineVisited = new Set(baselineDiagnostics.visitedLineIds);
+    let uniqueActiveCount = 0;
+    let uniqueBaselineCount = 0;
+
+    activeVisited.forEach(id => {
+      if (!baselineVisited.has(id)) uniqueActiveCount += 1;
+    });
+    baselineVisited.forEach(id => {
+      if (!activeVisited.has(id)) uniqueBaselineCount += 1;
+    });
+
+    return {
+      sharedPrefixCount,
+      firstActiveOnlyLine: activeTrace[sharedPrefixCount] ?? null,
+      firstBaselineOnlyLine: baselineTrace[sharedPrefixCount] ?? null,
+      uniqueActiveCount,
+      uniqueBaselineCount,
+    };
+  }, [activeDiagnostics, activeInputConfig, baselineDiagnostics]);
+
+  const flaggedTraceStats = useMemo(() => {
+    let flaggedVisitedCount = 0;
+    let flaggedUnvisitedCount = 0;
+
+    flaggedIds.forEach(id => {
+      if (visitedLineIds.has(id)) {
+        flaggedVisitedCount += 1;
+      } else {
+        flaggedUnvisitedCount += 1;
+      }
+    });
+
+    return {
+      flaggedVisitedCount,
+      flaggedUnvisitedCount,
+    };
+  }, [flaggedIds, visitedLineIds]);
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     if (submitting || flaggedIds.size === 0) return;
+    if (serverState?.locked || (serverState?.attemptsRemaining ?? 1) <= 0) {
+      setSubmitError('No attempts remaining. This case is locked for your account.');
+      return;
+    }
+
+    setSubmitError(null);
     setSubmitting(true);
     try {
       const res = await fetch(`/api/puzzles/${puzzleId}/parasite/submit`, {
@@ -616,7 +1249,22 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quarantinedIds: [...flaggedIds] }),
       });
-      const data: SubmitResult = await res.json();
+      const payload = await res.json().catch(() => ({} as Record<string, unknown>));
+
+      if (!res.ok) {
+        const message = typeof payload.error === 'string' ? payload.error : 'Submission failed. Please try again.';
+        setSubmitError(message);
+        setServerState(prev => prev ? {
+          ...prev,
+          attemptsUsed: typeof payload.attemptsUsed === 'number' ? payload.attemptsUsed : prev.attemptsUsed,
+          attemptsRemaining: typeof payload.attemptsRemaining === 'number' ? payload.attemptsRemaining : prev.attemptsRemaining,
+          maxAttempts: typeof payload.maxAttempts === 'number' ? payload.maxAttempts : prev.maxAttempts,
+          locked: typeof payload.locked === 'boolean' ? payload.locked : prev.locked,
+        } : prev);
+        return;
+      }
+
+      const data = payload as SubmitResult;
       setSubmitResult(data);
       setServerState(prev => prev ? {
         ...prev,
@@ -625,17 +1273,27 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
         solved: data.correct,
         activationCondition: data.activationCondition ?? prev.activationCondition,
         retentionUnlock: data.retentionUnlock ?? prev.retentionUnlock,
+        attemptsUsed: typeof data.attemptsUsed === 'number' ? data.attemptsUsed : prev.attemptsUsed,
+        attemptsRemaining: typeof data.attemptsRemaining === 'number' ? data.attemptsRemaining : prev.attemptsRemaining,
+        maxAttempts: typeof data.maxAttempts === 'number' ? data.maxAttempts : prev.maxAttempts,
+        locked: typeof data.locked === 'boolean' ? data.locked : prev.locked,
       } : prev);
+
+      if (!data.correct && data.locked) {
+        setSubmitError('No attempts remaining. This case is locked for your account.');
+      }
+
       if (data.correct) {
         setPhase('solved');
         onSolved();
       }
     } catch (e) {
       console.error('[submit]', e);
+      setSubmitError('Submission failed. Check your connection and try again.');
     } finally {
       setSubmitting(false);
     }
-  }, [flaggedIds, puzzleId, submitting, onSolved]);
+  }, [flaggedIds, puzzleId, submitting, onSolved, serverState]);
 
   // ── Render states ───────────────────────────────────────────────────────────
   if (loading) {
@@ -696,9 +1354,21 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
             <RankBadge rank={serverState.rank} />
           )}
           <span className="text-xs text-gray-500">
-            Attempts: {serverState.submissionCount}
+            Attempts logged: {serverState.submissionCount}
+          </span>
+          <span
+            className="text-xs"
+            style={{ color: serverState.locked || serverState.attemptsRemaining <= 0 ? '#FF6060' : '#9ca3af' }}
+          >
+            Retries left: {serverState.attemptsRemaining}/{serverState.maxAttempts}
           </span>
           <button onClick={() => setShowHelp(true)} className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-80" style={{ background: "rgba(253,231,76,0.08)", border: "1px solid rgba(253,231,76,0.3)", color: "#FDE74C" }}>? How to play</button>
+        </div>
+      </div>
+
+      <div className="border border-gray-800 rounded-lg px-4 py-2 bg-black/35">
+        <div className="text-[11px] font-mono text-gray-400 leading-relaxed">
+          Workflow: choose a test input, inspect output + trace, compare against a control run, then quarantine only the lines that consistently explain the anomalous path.
         </div>
       </div>
 
@@ -729,6 +1399,7 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
                 line={line}
                 flagged={flaggedIds.has(line.id)}
                 tracing={tracingLine === line.id}
+                visited={visitedLineIds.has(line.id)}
                 solved={serverState.solved}
                 onClick={() => toggleFlag(line.id)}
               />
@@ -751,10 +1422,25 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
 
         {/* RIGHT — sidebar */}
         <div className="space-y-5">
+          <InvestigationGuidePanel
+            activeInputLabel={activeInputConfig?.label ?? null}
+            activeInputAnomalous={activeInputConfig?.activatesParasite ?? null}
+            diagnostics={activeDiagnostics}
+            baselineLabel={baselineInputConfig?.label ?? null}
+            traceComparison={traceComparison}
+            flaggedCount={flaggedIds.size}
+            flaggedVisitedCount={flaggedTraceStats.flaggedVisitedCount}
+            flaggedUnvisitedCount={flaggedTraceStats.flaggedUnvisitedCount}
+            attemptsRemaining={serverState.attemptsRemaining}
+            maxAttempts={serverState.maxAttempts}
+            locked={serverState.locked}
+          />
+
           {/* Test inputs */}
           <TestInputPanel
             inputs={puzzle.testInputs}
             activeId={activeInput}
+            diagnostics={activeDiagnostics}
             onActivate={handleActivateInput}
           />
 
@@ -762,10 +1448,16 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
           <QuarantinePanel
             flaggedIds={flaggedIds}
             onRemove={id => setFlaggedIds(prev => { const n = new Set(prev); n.delete(id); return n; })}
+            onClearAll={() => setFlaggedIds(new Set())}
             onSubmit={handleSubmit}
             submitting={submitting}
             submitResult={submitResult}
+            submitError={submitError}
             submissionCount={serverState.submissionCount}
+            attemptsUsed={serverState.attemptsUsed}
+            attemptsRemaining={serverState.attemptsRemaining}
+            maxAttempts={serverState.maxAttempts}
+            locked={serverState.locked}
             solved={serverState.solved}
           />
         </div>

@@ -38,6 +38,22 @@ type DrawerItem = {
   metadata: Record<string, unknown> | null; owned: number; isExclusive?: boolean;
 };
 
+function normalizeSkinValue(value: string | null | undefined): string {
+  if (!value) return '';
+  return value === 'ice' || value === 'skin_ice' ? 'christmas' : value;
+}
+
+function getDrawerItemDisplayName(item: DrawerItem): string {
+  if (item.subcategory !== 'skin') return item.name;
+  const meta = item.metadata as { value?: string } | null;
+  const skinValue = normalizeSkinValue(meta?.value ?? '');
+  if (skinValue === 'christmas' || skinValue === 'skin_christmas') {
+    if (/ice/i.test(item.name)) return item.name.replace(/ice/gi, 'Christmas');
+    if (!/christmas/i.test(item.name)) return 'Christmas Skin';
+  }
+  return item.name;
+}
+
 function DrawerItemPreview({ item }: { item: DrawerItem }) {
   const meta = item.metadata as Record<string, string> | null;
   const sub = item.subcategory;
@@ -108,9 +124,12 @@ function DrawerItemPreview({ item }: { item: DrawerItem }) {
       neon:    { bg: '#010012', border: '#00FFE5', cell: '#00FFE5',  cellGlow: 'rgba(0,255,229,0.8)', alt: 'rgba(0,255,229,0.06)', label: '#00FFE5', shadow: '0 0 0 2px #00FFE5, 0 0 12px rgba(0,255,229,0.55)' },
       lava:    { bg: '#060100', border: '#FF5500', cell: '#FF5500',  cellGlow: 'rgba(255,85,0,0.75)', alt: 'rgba(255,85,0,0.07)', label: '#FF9030', shadow: '0 0 0 2px #FF5500, 0 0 12px rgba(255,85,0,0.5)' },
       galaxy:  { bg: '#04001a', border: '#8B5CF6', cell: '#8B5CF6',  cellGlow: 'rgba(139,92,246,0.75)', alt: 'rgba(139,92,246,0.08)', label: '#D8B4FE', shadow: '0 0 0 2px #8B5CF6, 0 0 12px rgba(139,92,246,0.55)' },
+      christmas: { bg: '#000d1f', border: '#67E8F9', cell: '#67E8F9',  cellGlow: 'rgba(103,232,249,0.7)', alt: 'rgba(103,232,249,0.06)', label: '#E0F9FF', shadow: '0 0 0 2px #67E8F9, 0 0 12px rgba(103,232,249,0.45)' },
+      skin_christmas: { bg: '#000d1f', border: '#67E8F9', cell: '#67E8F9',  cellGlow: 'rgba(103,232,249,0.7)', alt: 'rgba(103,232,249,0.06)', label: '#E0F9FF', shadow: '0 0 0 2px #67E8F9, 0 0 12px rgba(103,232,249,0.45)' },
       ice:     { bg: '#000d1f', border: '#67E8F9', cell: '#67E8F9',  cellGlow: 'rgba(103,232,249,0.7)', alt: 'rgba(103,232,249,0.06)', label: '#E0F9FF', shadow: '0 0 0 2px #67E8F9, 0 0 12px rgba(103,232,249,0.45)' },
     };
-    const sd = skinDefs[meta?.value ?? ''] ?? skinDefs.minimal;
+    const normalizedSkinValue = normalizeSkinValue(meta?.value ?? '');
+    const sd = skinDefs[normalizedSkinValue] ?? skinDefs.minimal;
     return (
       <div className="h-10 flex items-center justify-between px-3 mb-3 rounded-lg relative overflow-hidden"
         style={{ backgroundColor: sd.bg, border: `1px solid ${sd.border}55`, boxShadow: sd.shadow }}>
@@ -120,8 +139,8 @@ function DrawerItemPreview({ item }: { item: DrawerItem }) {
               style={{ backgroundColor: f ? sd.cell : sd.alt, border: `1px solid ${sd.border}44`, boxShadow: f ? `0 0 4px ${sd.cellGlow}` : 'none' }} />
           ))}
         </div>
-        <span className="text-xs font-bold tracking-widest" style={{ color: sd.label, fontFamily: meta?.value === 'retro' || meta?.value === 'neon' ? "'Courier New', monospace" : 'inherit' }}>
-          {(meta?.value ?? '').toUpperCase()}
+        <span className="text-xs font-bold tracking-widest" style={{ color: sd.label, fontFamily: normalizedSkinValue === 'retro' || normalizedSkinValue === 'neon' ? "'Courier New', monospace" : 'inherit' }}>
+          {normalizedSkinValue.replace(/^skin_/, '').toUpperCase()}
         </span>
       </div>
     );
@@ -829,7 +848,7 @@ export default function ProfilePage() {
                     <DrawerItemPreview item={item} />
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{item.name}</p>
+                        <p className="text-sm font-semibold text-white truncate">{getDrawerItemDisplayName(item)}</p>
                         {equipped && <p className="text-xs font-bold" style={{ color: t.primary }}>● Equipped</p>}
                       </div>
                       <button

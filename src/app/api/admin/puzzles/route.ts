@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { notifyPuzzleRelease } from "@/lib/notification-service";
 import { getDetectiveCaseData } from "@/lib/detectiveCase";
 import { getGridlockFileData } from "@/lib/gridlockFile";
+import { getParasiteCodeData } from "@/lib/parasiteCode";
 import { getVaultPuzzleData } from "@/lib/vault";
 
 type MultiPartInput = {
@@ -192,6 +193,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (puzzleType === 'parasite_code') {
+      const parsed = getParasiteCodeData(puzzleData);
+      if (!parsed) {
+        return NextResponse.json(
+          { error: 'Parasite Code puzzles require puzzleData.parasiteCode with case metadata, program, parasiteLineIds, and testInputs' },
+          { status: 400 }
+        );
+      }
+    }
+
     const vaultData = puzzleType === 'vault' ? getVaultPuzzleData(puzzleData) : null;
     if (puzzleType === 'vault' && !vaultData) {
       return NextResponse.json(
@@ -327,7 +338,7 @@ export async function POST(request: NextRequest) {
         : undefined,
     };
 
-    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search' || puzzleType === 'anagram_blitz' || puzzleType === 'arg' || puzzleType === 'blackout' || puzzleType === 'gridlock_file' || puzzleType === 'debrief' || puzzleType === 'crossword' || puzzleType === 'vault') && typeof puzzleData !== 'undefined') {
+    if ((puzzleType === 'escape_room' || puzzleType === 'code_master' || puzzleType === 'detective_case' || puzzleType === 'crime_rpg' || puzzleType === 'crack_safe' || puzzleType === 'word_crack' || puzzleType === 'word_search' || puzzleType === 'anagram_blitz' || puzzleType === 'arg' || puzzleType === 'blackout' || puzzleType === 'gridlock_file' || puzzleType === 'debrief' || puzzleType === 'crossword' || puzzleType === 'vault' || puzzleType === 'parasite_code') && typeof puzzleData !== 'undefined') {
       createData.data = puzzleData;
     }
     // Persist jigsaw shape params (piece designer) into puzzle.data JSON
