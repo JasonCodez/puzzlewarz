@@ -78,6 +78,25 @@ function cellsInLine(from: CellCoord, to: CellCoord): CellCoord[] {
   }));
 }
 
+function snapDirection(dr: number, dc: number): { dr: number; dc: number } | null {
+  if (dr === 0 && dc === 0) return null;
+  const octant = Math.round(Math.atan2(dr, dc) / (Math.PI / 4));
+  switch (octant) {
+    case 0: return { dr: 0, dc: 1 };
+    case 1: return { dr: 1, dc: 1 };
+    case 2: return { dr: 1, dc: 0 };
+    case 3: return { dr: 1, dc: -1 };
+    case 4:
+    case -4:
+      return { dr: 0, dc: -1 };
+    case -3: return { dr: -1, dc: -1 };
+    case -2: return { dr: -1, dc: 0 };
+    case -1: return { dr: -1, dc: 1 };
+    default:
+      return null;
+  }
+}
+
 function HowToPlayModal({ onClose }: { onClose: () => void }) {
   return (
     <div
@@ -147,8 +166,6 @@ export default function WordSearchPuzzle({
   });
 
   const [selectedCells, setSelectedCells] = useState<CellCoord[]>([]);
-  const [dragStart, setDragStart] = useState<CellCoord | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [flashWord, setFlashWord] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [gameStatus, setGameStatus] = useState<"playing" | "won">(() =>
@@ -157,8 +174,23 @@ export default function WordSearchPuzzle({
   const [wsHintCount, setWsHintCount] = useState(0);
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef<CellCoord | null>(null);
+  const isDraggingRef = useRef(false);
+  const selectedCellsRef = useRef<CellCoord[]>([]);
+  const directionLockRef = useRef<{ dr: number; dc: number } | null>(null);
+  const pointerIdRef = useRef<number | null>(null);
+  const queuedPointRef = useRef<{ x: number; y: number } | null>(null);
+  const moveRafRef = useRef<number | null>(null);
   const skin = usePuzzleSkin();
   const [showHelp, setShowHelp] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (moveRafRef.current !== null) {
+        cancelAnimationFrame(moveRafRef.current);
+      }
+    };
+  }, []);
 
   // Persist found words across page reloads
   useEffect(() => {
@@ -178,6 +210,17 @@ export default function WordSearchPuzzle({
 
   const selectedSet = new Set(selectedCells.map(serializeCoord));
 
+  function setSelection(cells: CellCoord[]) {
+    selectedCellsRef.current = cells;
+    setSelectedCells(cells);
+  }
+
+  function triggerHaptic(pattern: number | number[]) {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(pattern);
+    }
+  }
+
   // Hint: reveal a random unfound word (costs 1 hint token)
   const useWordSearchHint = async () => {
     if (gameStatus !== "playing") return;
@@ -195,6 +238,7 @@ export default function WordSearchPuzzle({
       foundWords: [...prev.foundWords, word],
       foundWordCells: new Map(prev.foundWordCells).set(word, cells),
     }));
+    triggerHaptic(12);
     setFlashWord(word);
     setTimeout(() => setFlashWord(null), 1200);
     setWsHintCount((c) => c + 1);
@@ -204,22 +248,59 @@ export default function WordSearchPuzzle({
 
   function startDrag(row: number, col: number) {
     if (gameStatus !== "playing" || submitting) return;
-    setDragStart({ row, col });
-    setSelectedCells([{ row, col }]);
-    setIsDragging(true);
+    dragStartRef.current = { row, col };
+    isDraggingRef.current = true;
+    directionLockRef.current = null;
+    setSelection([{ row, col }]);
   }
 
   function extendDrag(row: number, col: number) {
-    if (!isDragging || !dragStart) return;
-    setSelectedCells(cellsInLine(dragStart, { row, col }));
+    const dragStart = dragStartRef.current;
+    if (!isDraggingRef.current || !dragStart) return;
+
+    const rawDr = row - dragStart.row;
+    const rawDc = col - dragStart.col;
+    const lockThresholdReached = Math.max(Math.abs(rawDr), Math.abs(rawDc)) >= 2;
+    if (!directionLockRef.current && lockThresholdReached) {
+      directionLockRef.current = snapDirection(rawDr, rawDc);
+    }
+
+    const dir = directionLockRef.current;
+    if (!dir) {
+      setSelection(cellsInLine(dragStart, { row, col }));
+      return;
+    }
+
+    const maxRowSteps =
+      dir.dr > 0
+        ? gridSize - 1 - dragStart.row
+        : dir.dr < 0
+        ? dragStart.row
+        : Number.POSITIVE_INFINITY;
+    const maxColSteps =
+      dir.dc > 0
+        ? gridSize - 1 - dragStart.col
+        : dir.dc < 0
+        ? dragStart.col
+        : Number.POSITIVE_INFINITY;
+    const maxSteps = Math.min(maxRowSteps, maxColSteps);
+    const rawSteps = dir.dr !== 0 ? Math.round(rawDr / dir.dr) : Math.round(rawDc / dir.dc);
+    const clampedSteps = Math.max(0, Math.min(maxSteps, rawSteps));
+    const lockedTo = {
+      row: dragStart.row + dir.dr * clampedSteps,
+      col: dragStart.col + dir.dc * clampedSteps,
+    };
+
+    setSelection(cellsInLine(dragStart, lockedTo));
   }
 
   async function endDrag() {
-    if (!isDragging) return;
-    setIsDragging(false);
-    const cells = selectedCells;
-    setSelectedCells([]);
-    setDragStart(null);
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    const cells = selectedCellsRef.current;
+    setSelection([]);
+    dragStartRef.current = null;
+    directionLockRef.current = null;
 
     if (cells.length < 2) return;
 
@@ -252,10 +333,12 @@ export default function WordSearchPuzzle({
           foundWords: newFoundWords,
           foundWordCells: new Map(prev.foundWordCells).set(matched, canonicalCells),
         }));
+        triggerHaptic([12, 30, 12]);
         setFlashWord(matched);
         setTimeout(() => setFlashWord(null), 1200);
         if (data.allFound) {
           setGameStatus("won");
+          triggerHaptic([20, 40, 20]);
           onSolved?.();
         }
       }
@@ -263,32 +346,112 @@ export default function WordSearchPuzzle({
     setSubmitting(false);
   }
 
-  // ── Touch helpers ───────────────────────────────────────────────────────────
+  // ── Pointer helpers ─────────────────────────────────────────────────────────
 
-  function cellFromPoint(x: number, y: number): CellCoord | null {
+  function cellFromPoint(x: number, y: number, allowNearest = false): CellCoord | null {
     const el = document.elementFromPoint(x, y) as HTMLElement | null;
-    if (!el) return null;
-    const r = Number(el.dataset.wsRow);
-    const c = Number(el.dataset.wsCol);
-    return !isNaN(r) && !isNaN(c) ? { row: r, col: c } : null;
+    if (el) {
+      const r = Number(el.dataset.wsRow);
+      const c = Number(el.dataset.wsCol);
+      if (!isNaN(r) && !isNaN(c)) {
+        return { row: r, col: c };
+      }
+    }
+
+    const gridEl = gridRef.current;
+    if (!gridEl || grid.length === 0) return null;
+
+    const gridRect = gridEl.getBoundingClientRect();
+    const hitSlop = 18;
+    if (
+      x < gridRect.left - hitSlop ||
+      x > gridRect.right + hitSlop ||
+      y < gridRect.top - hitSlop ||
+      y > gridRect.bottom + hitSlop
+    ) {
+      return null;
+    }
+
+    const firstCell = gridEl.querySelector('[data-ws-row="0"][data-ws-col="0"]') as HTMLElement | null;
+    if (!firstCell) return null;
+
+    const firstRect = firstCell.getBoundingClientRect();
+    const stepX = firstRect.width + 3;
+    const stepY = firstRect.height + 3;
+    const rawRow = Math.round((y - firstRect.top) / stepY);
+    const rawCol = Math.round((x - firstRect.left) / stepX);
+
+    if (!allowNearest) {
+      if (rawRow < 0 || rawRow >= grid.length) return null;
+      const rowLen = grid[rawRow]?.length ?? 0;
+      if (rawCol < 0 || rawCol >= rowLen) return null;
+    }
+
+    const clampedRow = Math.max(0, Math.min(grid.length - 1, rawRow));
+    const rowLen = grid[clampedRow]?.length ?? gridSize;
+    const clampedCol = Math.max(0, Math.min(Math.max(0, rowLen - 1), rawCol));
+    return { row: clampedRow, col: clampedCol };
   }
 
-  function handleTouchStart(e: React.TouchEvent) {
-    const touch = e.touches[0];
-    const cell = cellFromPoint(touch.clientX, touch.clientY);
-    if (cell) startDrag(cell.row, cell.col);
+  function queuePointerMove(x: number, y: number) {
+    queuedPointRef.current = { x, y };
+    if (moveRafRef.current !== null) return;
+    moveRafRef.current = requestAnimationFrame(() => {
+      moveRafRef.current = null;
+      const point = queuedPointRef.current;
+      queuedPointRef.current = null;
+      if (!point) return;
+      const cell = cellFromPoint(point.x, point.y, true);
+      if (cell) extendDrag(cell.row, cell.col);
+    });
   }
 
-  function handleTouchMove(e: React.TouchEvent) {
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const cell = cellFromPoint(e.clientX, e.clientY);
+    if (!cell) return;
+    startDrag(cell.row, cell.col);
+    pointerIdRef.current = e.pointerId;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
     e.preventDefault();
-    const touch = e.touches[0];
-    const cell = cellFromPoint(touch.clientX, touch.clientY);
-    if (cell) extendDrag(cell.row, cell.col);
   }
 
-  // Responsive cell size: fills available width but caps at 38px.
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) return;
+    if (!isDraggingRef.current) return;
+    e.preventDefault();
+    queuePointerMove(e.clientX, e.clientY);
+  }
+
+  async function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) return;
+    if (moveRafRef.current !== null) {
+      cancelAnimationFrame(moveRafRef.current);
+      moveRafRef.current = null;
+    }
+    const cell = cellFromPoint(e.clientX, e.clientY, true);
+    if (cell) extendDrag(cell.row, cell.col);
+    pointerIdRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+    await endDrag();
+  }
+
+  function handlePointerCancel(e: React.PointerEvent<HTMLDivElement>) {
+    if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) return;
+    pointerIdRef.current = null;
+    isDraggingRef.current = false;
+    dragStartRef.current = null;
+    directionLockRef.current = null;
+    setSelection([]);
+  }
+
+  // Responsive cell size: fills available width but caps at 40px.
   // Subtracts: grid inner padding (10px*2=20px) + outer px-2 (8px*2=16px) + cell gaps.
-  const cellSz = `clamp(14px, calc((min(94vw, 480px) - 36px - ${(gridSize - 1) * 3}px) / ${gridSize}), 38px)`;
+  const cellSz = `clamp(16px, calc((min(94vw, 480px) - 36px - ${(gridSize - 1) * 3}px) / ${gridSize}), 40px)`;
 
   return (
     <>
@@ -364,11 +527,10 @@ export default function WordSearchPuzzle({
               borderRadius: "0.75rem",
               padding: "10px",
             }}
-            onMouseLeave={endDrag}
-            onMouseUp={endDrag}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={endDrag}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
           >
             {grid.map((row, ri) => (
               <div key={ri} style={{ display: "flex", gap: 3 }}>
@@ -409,8 +571,6 @@ export default function WordSearchPuzzle({
                         userSelect: "none",
                         WebkitUserSelect: "none",
                       }}
-                      onMouseDown={() => startDrag(ri, ci)}
-                      onMouseEnter={() => extendDrag(ri, ci)}
                     >
                       {letter}
                     </div>

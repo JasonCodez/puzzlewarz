@@ -63,9 +63,9 @@ const KEY_COLORS: Record<LetterStatus | "unused", string> = {
 
 interface Particle { id: number; x: number; color: string; delay: number; duration: number; size: number; }
 
-function makeConfetti(): Particle[] {
+function makeConfetti(count = 60): Particle[] {
   const palette = ["#38D399","#FDE74C","#3891A6","#f472b6","#818cf8","#fb923c"];
-  return Array.from({ length: 60 }, (_, i) => ({
+  return Array.from({ length: count }, (_, i) => ({
     id: i,
     x: Math.random() * 100,
     color: palette[i % palette.length],
@@ -73,6 +73,17 @@ function makeConfetti(): Particle[] {
     duration: 0.8 + Math.random() * 0.8,
     size: 6 + Math.random() * 8,
   }));
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    target.isContentEditable ||
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT"
+  );
 }
 
 // â”€â”€â”€ Instructions Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -193,6 +204,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   // Responsive tile sizing — measured from the actual board container
   const boardRef = useRef<HTMLDivElement>(null);
   const [tileSize, setTileSize] = useState(44);
+  const [isCompactMobile, setIsCompactMobile] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   /** Reset game state for a fresh attempt (same word, new board). */
   const resetForNewAttempt = () => {
@@ -210,6 +223,10 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   };
 
   const isPlaying = gameStatus === "playing" && !showInstructions;
+  const revealStepMs = prefersReducedMotion ? 120 : isCompactMobile ? 220 : 350;
+  const revealBaseMs = prefersReducedMotion ? 120 : 400;
+  const keyboardKeyHeight = isCompactMobile ? 42 : 44;
+  const showAnimatedBackdrops = !(prefersReducedMotion || isCompactMobile);
   const onSolvedFired = useRef(false);
 
   // skin-derived colour overrides
@@ -259,6 +276,42 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     }
   }
 
+  const triggerHaptic = useCallback((pattern: number | number[]) => {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(pattern);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const compactQuery = window.matchMedia("(max-width: 640px)");
+    const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncCompact = () => setIsCompactMobile(compactQuery.matches);
+    const syncReducedMotion = () => setPrefersReducedMotion(reducedMotionQuery.matches);
+
+    syncCompact();
+    syncReducedMotion();
+
+    if (typeof compactQuery.addEventListener === "function") {
+      compactQuery.addEventListener("change", syncCompact);
+      reducedMotionQuery.addEventListener("change", syncReducedMotion);
+    } else {
+      compactQuery.addListener(syncCompact);
+      reducedMotionQuery.addListener(syncReducedMotion);
+    }
+
+    return () => {
+      if (typeof compactQuery.removeEventListener === "function") {
+        compactQuery.removeEventListener("change", syncCompact);
+        reducedMotionQuery.removeEventListener("change", syncReducedMotion);
+      } else {
+        compactQuery.removeListener(syncCompact);
+        reducedMotionQuery.removeListener(syncReducedMotion);
+      }
+    };
+  }, []);
+
   // â”€â”€ Pop animation when typing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const triggerPop = useCallback((col: number) => {
     const row = guesses.length;
@@ -274,6 +327,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     if (word.length !== wordLength) {
       setError(`Need ${wordLength} letters!`);
       setShakingRow(true);
+      triggerHaptic([12, 30, 12]);
       setTimeout(() => { setShakingRow(false); setError(""); }, 700);
       return;
     }
@@ -294,6 +348,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
       if (!resp.ok) {
         setError(data.error ?? "Something went wrong");
         setShakingRow(true);
+        triggerHaptic([12, 30, 12]);
         setTimeout(() => { setShakingRow(false); setError(""); }, 700);
         setSubmitting(false);
         return;
@@ -307,7 +362,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
 
       // Stagger-reveal tiles
       setRevealingRow(rowIndex);
-      const revealTotal = wordLength * 350 + 400;
+      const revealTotal = wordLength * revealStepMs + revealBaseMs;
       setTimeout(() => {
         setRevealingRow(null);
         setRevealDone(prev => [...prev, rowIndex]);
@@ -316,7 +371,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
       if (data.solved) {
         setTimeout(() => {
           setGameStatus("won");
-          setConfetti(makeConfetti());
+          setConfetti(makeConfetti(prefersReducedMotion ? 0 : isCompactMobile ? 28 : 60));
+          triggerHaptic([15, 45, 15]);
           setBounceWin(true);
           if (!onSolvedFired.current) {
             onSolvedFired.current = true;
@@ -326,6 +382,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
       } else if (newGuesses.length >= maxGuesses) {
         setTimeout(() => {
           setGameStatus("lost");
+          triggerHaptic(25);
           if (warzMode) {
             onFailed?.();
           } else if (!gameLossRecorded.current) {
@@ -346,10 +403,27 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
       }
     } catch {
       setError("Network error — please try again");
+      triggerHaptic(20);
     } finally {
       setSubmitting(false);
     }
-  }, [isPlaying, submitting, currentInput, wordLength, puzzleId, guesses, maxGuesses, onSolved]);
+  }, [
+    currentInput,
+    guesses,
+    isCompactMobile,
+    isPlaying,
+    maxGuesses,
+    onFailed,
+    onSolved,
+    prefersReducedMotion,
+    puzzleId,
+    revealBaseMs,
+    revealStepMs,
+    submitting,
+    triggerHaptic,
+    warzMode,
+    wordLength,
+  ]);
 
   // -- Board resize observer ----------------------------------------
   useEffect(() => {
@@ -372,6 +446,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     const onKey = (e: KeyboardEvent) => {
       if (!isPlaying || submitting) return;
       if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (isEditableTarget(e.target)) return;
       const key = e.key.toUpperCase();
       if (key === "ENTER") {
         submitGuess();
@@ -392,16 +467,19 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   const handleKey = useCallback((key: string) => {
     if (!isPlaying || submitting) return;
     if (key === "ENTER") {
+      triggerHaptic(14);
       submitGuess();
     } else if (key === "⌫") {
+      triggerHaptic(8);
       setCurrentInput(prev => prev.slice(0, -1));
       setError("");
     } else if (/^[A-Z]$/.test(key) && currentInput.length < wordLength) {
+      triggerHaptic(8);
       triggerPop(currentInput.length);
       setCurrentInput(prev => prev + key);
       setError("");
     }
-  }, [isPlaying, submitting, currentInput, wordLength, submitGuess, triggerPop]);
+  }, [isPlaying, submitting, currentInput, wordLength, submitGuess, triggerPop, triggerHaptic]);
 
   // Derived: positions already guessed correctly
   const revealedPositions = Array.from(
@@ -532,11 +610,11 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         }}
       >
         {/* Animated skin backgrounds */}
-        {(skin._key === "lava" || skin._key === "skin_lava") && <LavaBackground />}
-        {(skin._key === "galaxy" || skin._key === "skin_galaxy") && <GalaxyBackground />}
-        {(skin._key === "ice" || skin._key === "skin_ice") && <IceBackground />}
-        {(skin._key === "neon" || skin._key === "skin_neon") && <NeonBackground />}
-        {(skin._key === "retro" || skin._key === "skin_retro") && <RetroBackground />}
+        {showAnimatedBackdrops && (skin._key === "lava" || skin._key === "skin_lava") && <LavaBackground />}
+        {showAnimatedBackdrops && (skin._key === "galaxy" || skin._key === "skin_galaxy") && <GalaxyBackground />}
+        {showAnimatedBackdrops && (skin._key === "ice" || skin._key === "skin_ice") && <IceBackground />}
+        {showAnimatedBackdrops && (skin._key === "neon" || skin._key === "skin_neon") && <NeonBackground />}
+        {showAnimatedBackdrops && (skin._key === "retro" || skin._key === "skin_retro") && <RetroBackground />}
 
       <div
         className="flex flex-col items-center gap-4 select-none pb-6"
@@ -806,6 +884,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             position: "relative",
             overflow: "hidden",
             width: "fit-content",
+            animation: showAnimatedBackdrops ? undefined : "none",
           }}
         >
           <div className="wc-skin-overlay" />
@@ -824,7 +903,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                 {letters.map(({ char, kind }, colIndex) => {
                   const c = tileColors[kind];
                   const isPopping = popCol?.row === rowIndex && popCol?.col === colIndex;
-                  const revealDelay = isRevealing ? colIndex * 350 : 0;
+                  const revealDelay = isRevealing ? colIndex * revealStepMs : 0;
                   const shouldFlip = isRevealing || isDone;
 
                   return (
@@ -856,7 +935,10 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         </div>
 
         {gameStatus === "playing" && (
-          <div className="flex flex-col gap-1 sm:gap-1.5 mt-2 w-full px-1 max-w-sm mx-auto">
+          <div
+            className="flex flex-col gap-1 sm:gap-1.5 mt-2 w-full px-1 max-w-sm mx-auto"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.25rem)" }}
+          >
             {KEYBOARD_ROWS.map((row, ri) => (
               <div key={ri} className="flex gap-[3px] sm:gap-1 w-full">
                 {row.map((key) => {
@@ -872,7 +954,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                       className="rounded-lg font-bold text-white transition-all duration-150 active:scale-90 min-w-0"
                       style={{
                         flex: isWide ? "1.5 1 0" : "1 1 0",
-                        height: 44,
+                        height: keyboardKeyHeight,
                         background: bg,
                         boxShadow: glow,
                         fontSize: isWide ? 11 : 13,
@@ -1095,6 +1177,18 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         @keyframes wc-fall {
           0%   { transform: translateY(0) rotate(0deg);   opacity: 1; }
           100% { transform: translateY(100vh) rotate(540deg); opacity: 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .wc-board[data-skin] {
+            animation: none !important;
+          }
+          .wc-flipped,
+          .wc-pop,
+          .wc-shake,
+          .wc-win-bounce {
+            animation: none !important;
+          }
         }
       `}</style>
     </>

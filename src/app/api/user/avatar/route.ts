@@ -7,6 +7,36 @@ import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { resolveUploadsPath } from "@/lib/uploadStorage";
 import { validateSameOrigin } from "@/lib/requestSecurity";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+function getR2Client(): S3Client | null {
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!accountId || !accessKeyId || !secretAccessKey) return null;
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+}
+
+async function uploadToR2(buffer: ArrayBuffer, key: string, mimeType: string): Promise<string> {
+  const client = getR2Client();
+  const bucket = process.env.R2_BUCKET_NAME;
+  const publicUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, "");
+  if (!client || !bucket || !publicUrl) throw new Error("R2 not configured");
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: Buffer.from(buffer),
+      ContentType: mimeType,
+      CacheControl: "public, max-age=31536000, immutable",
+    })
+  );
+  return `${publicUrl}/${key}`;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,21 +80,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = resolveUploadsPath('avatars');
-    await mkdir(uploadsDir, { recursive: true });
-
     // Generate unique filename
     const ext = path.extname(file.name);
     const filename = `${uuidv4()}${ext}`;
-    const filepath = path.join(uploadsDir, filename);
 
-    // Save file
     const bytes = await file.arrayBuffer();
-    await writeFile(filepath, Buffer.from(bytes));
+    let imageUrl: string;
 
-    // Update user in database
-    const imageUrl = `/uploads/avatars/${filename}`;
+    const hasR2 = !!(getR2Client() && process.env.R2_BUCKET_NAME && process.env.R2_PUBLIC_URL);
+    const hasPersistentUploadsDir = !!process.env.UPLOADS_DIR?.trim();
+
+    if (process.env.NODE_ENV === "production" && !hasR2 && !hasPersistentUploadsDir) {
+      return NextResponse.json(
+        { error: "Avatar storage is not configured for production" },
+        { status: 500 }
+      );
+    }
+
+    if (hasR2) {
+      const r2Key = `avatars/${filename}`;
+      imageUrl = await uploadToR2(bytes, r2Key, file.type || "application/octet-stream");
+    } else {
+      const uploadsDir = resolveUploadsPath("avatars");
+      await mkdir(uploadsDir, { recursive: true });
+      const filepath = path.join(uploadsDir, filename);
+      await writeFile(filepath, Buffer.from(bytes));
+      imageUrl = `/uploads/avatars/${filename}`;
+    }
+
     const user = await prisma.user.update({
       where: { email: session.user.email },
       data: { image: imageUrl },

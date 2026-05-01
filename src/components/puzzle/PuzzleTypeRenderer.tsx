@@ -9,7 +9,6 @@ import GridlockFilePuzzle from "@/components/puzzle/GridlockFilePuzzle";
 import CrackTheSafePuzzle from "@/components/puzzle/CrackTheSafePuzzle";
 import WordCrackPuzzle from "@/components/puzzle/WordCrackPuzzle";
 import WordSearchPuzzle from "@/components/puzzle/WordSearchPuzzle";
-import CrosswordPuzzle from "@/components/puzzle/CrosswordPuzzle";
 import AnagramBlitz from "@/components/puzzle/AnagramBlitz";
 import ArgPuzzle from "@/components/puzzle/ArgPuzzle";
 import BlackoutPuzzle from "@/components/puzzle/BlackoutPuzzle";
@@ -257,20 +256,28 @@ export function PuzzleTypeRenderer({
   if (puzzle.puzzleType === 'crossword') {
     return (
       <div className="mb-8">
-        {progress?.solved && (
-          <div className="mb-6 p-4 rounded-lg border text-white"
-               style={{ backgroundColor: "rgba(56, 211, 153, 0.1)", borderColor: "#38D399" }}>
-            ✏️ You already solved this crossword!
+        <div
+          className="p-4 rounded-lg border"
+          style={{
+            backgroundColor: "rgba(253, 231, 76, 0.1)",
+            borderColor: "rgba(253, 231, 76, 0.45)",
+            color: "#FDE74C",
+          }}
+        >
+          <p className="font-semibold mb-2">Crossword is temporarily disabled.</p>
+          <p className="text-sm" style={{ color: "#E5E7EB" }}>
+            We are reworking crossword logic and layout for a better experience.
+            Please continue with other puzzles for now.
+          </p>
+          <div className="mt-3">
+            <Link
+              href="/puzzles"
+              className="inline-block px-3 py-2 rounded bg-yellow-400 text-black border border-yellow-500 hover:opacity-90 text-sm font-medium"
+            >
+              Back to puzzle list
+            </Link>
           </div>
-        )}
-        <CrosswordPuzzle
-          puzzleId={puzzleId}
-          crosswordData={(puzzle.data ?? {}) as Record<string, unknown>}
-          alreadySolved={progress?.solved ?? false}
-          hintTokens={effectiveHintTokens}
-          onHintUsed={onHintUsed}
-          onSolved={() => onSolved()}
-        />
+        </div>
       </div>
     );
   }
