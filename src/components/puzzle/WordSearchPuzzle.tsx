@@ -172,6 +172,7 @@ export default function WordSearchPuzzle({
     alreadySolved || foundWords.length === words.length ? "won" : "playing"
   );
   const [wsHintCount, setWsHintCount] = useState(0);
+  const [isUltraNarrow, setIsUltraNarrow] = useState(false);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<CellCoord | null>(null);
@@ -190,6 +191,15 @@ export default function WordSearchPuzzle({
         cancelAnimationFrame(moveRafRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 360px)");
+    const apply = () => setIsUltraNarrow(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
   }, []);
 
   // Persist found words across page reloads
@@ -449,9 +459,13 @@ export default function WordSearchPuzzle({
     setSelection([]);
   }
 
-  // Responsive cell size: fills available width but caps at 40px.
-  // Subtracts: grid inner padding (10px*2=20px) + outer px-2 (8px*2=16px) + cell gaps.
-  const cellSz = `clamp(16px, calc((min(94vw, 480px) - 36px - ${(gridSize - 1) * 3}px) / ${gridSize}), 40px)`;
+  // Responsive cell size: allow tighter cells for larger grids on small screens.
+  // Subtracts: grid inner padding (10px*2=20px) + outer container padding (~16px) + cell gaps.
+  const minCellPx = gridSize >= 18 ? 10 : gridSize >= 15 ? 12 : 14;
+  const viewportCap = gridSize >= 18 ? "98vw" : "96vw";
+  const cellSz = `clamp(${minCellPx}px, calc((min(${viewportCap}, 480px) - 36px - ${(gridSize - 1) * 3}px) / ${gridSize}), 40px)`;
+  const longestWordLen = words.reduce((max, w) => Math.max(max, w.length), 0);
+  const compactWordGrid = isUltraNarrow && words.length >= 10 && longestWordLen <= 14;
 
   return (
     <>
@@ -511,11 +525,11 @@ export default function WordSearchPuzzle({
         )}
 
         {/* Grid + word list */}
-        <div className="flex flex-col sm:flex-row gap-5 items-start w-full max-w-2xl px-2">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 items-start w-full max-w-2xl px-1 sm:px-2">
           {/* Letter grid */}
           <div
             ref={gridRef}
-            className="flex-shrink-0"
+            className="flex-shrink-0 mx-auto sm:mx-0"
             style={{
               display: "flex",
               flexDirection: "column",
@@ -526,6 +540,8 @@ export default function WordSearchPuzzle({
               WebkitBackdropFilter: "blur(6px)",
               borderRadius: "0.75rem",
               padding: "10px",
+              width: "fit-content",
+              maxWidth: "100%",
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -581,36 +597,43 @@ export default function WordSearchPuzzle({
           </div>
 
           {/* Word list */}
-          <div className="flex-1 flex flex-wrap sm:flex-col gap-2 sm:min-w-[110px]">
+          <div className="w-full sm:w-auto flex-1 flex flex-col gap-1.5 sm:gap-2 sm:min-w-[100px]">
             <p
-              className="w-full text-xs font-semibold tracking-wider mb-1 hidden sm:block"
+              className="w-full text-[11px] sm:text-xs font-semibold tracking-[0.12em] mb-1"
               style={{ color: "#cbd5e1", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}
             >
               FIND THESE WORDS
             </p>
-            {words.map((word, wi) => {
-              const found = foundWords.includes(word);
-              const colorIdx = wi % WORD_COLORS.length;
-              const color = found ? WORD_COLORS[colorIdx] : null;
-              const isFlashing = flashWord === word;
+            <div
+              className={compactWordGrid ? "w-full grid grid-cols-2 gap-1.5 sm:grid-cols-1 sm:gap-2" : "w-full flex flex-wrap sm:flex-col gap-1.5 sm:gap-2"}
+            >
+              {words.map((word, wi) => {
+                const found = foundWords.includes(word);
+                const colorIdx = wi % WORD_COLORS.length;
+                const color = found ? WORD_COLORS[colorIdx] : null;
+                const isFlashing = flashWord === word;
 
-              return (
-                <div
-                  key={word}
-                  className="px-3 py-1.5 rounded-lg text-sm font-bold transition-all duration-200"
-                  style={{
-                    background: found ? color!.bg : skin.tileBg,
-                    border: `1px solid ${found ? color!.border : skin.tileBorder}`,
-                    color: found ? color!.text : "#cbd5e1",
-                    textDecoration: found ? "line-through" : "none",
-                    transform: isFlashing ? "scale(1.1)" : "scale(1)",
-                    boxShadow: isFlashing ? `0 0 14px ${color!.border}` : "none",
-                  }}
-                >
-                  {word}
-                </div>
-              );
-            })}
+                return (
+                  <div
+                    key={word}
+                    className="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md sm:rounded-lg text-[11px] sm:text-sm font-semibold leading-tight transition-all duration-200"
+                    style={{
+                      width: compactWordGrid ? "100%" : undefined,
+                      textAlign: compactWordGrid ? "center" : "left",
+                      background: found ? color!.bg : skin.tileBg,
+                      border: `1px solid ${found ? color!.border : "rgba(148,163,184,0.4)"}`,
+                      color: found ? color!.text : "#cbd5e1",
+                      textDecoration: found ? "line-through" : "none",
+                      transform: isFlashing ? "scale(1.1)" : "scale(1)",
+                      boxShadow: isFlashing ? `0 0 14px ${color!.border}` : "none",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {word}
+                  </div>
+                );
+              })}
+            </div>
             {gameStatus === "playing" && (
               <>
                 <button

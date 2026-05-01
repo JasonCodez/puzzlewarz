@@ -45,11 +45,11 @@ const KEYBOARD_ROWS = [
 
 // CRACKED = right letter, right spot  |  CLOSE = in word, wrong spot  |  COLD = not in word
 const COLORS = {
-  correct: { bg: "#38D399", border: "#10b981", glow: "rgba(56,211,153,0.65)" },
-  present: { bg: "#FDE74C", border: "#d97706", glow: "rgba(253,231,76,0.65)" },
-  absent:  { bg: "rgba(56,145,166,0.22)", border: "rgba(56,145,166,0.5)", glow: "none" },
-  empty:   { bg: "transparent", border: "#374151", glow: "none" },
-  active:  { bg: "rgba(253,231,76,0.08)", border: "#FDE74C", glow: "rgba(253,231,76,0.3)" },
+  correct: { bg: "#38D399", border: "#10b981", glow: "rgba(56,211,153,0.65)", text: "#04190f" },
+  present: { bg: "#FDE74C", border: "#d97706", glow: "rgba(253,231,76,0.65)", text: "#3b2b00" },
+  absent:  { bg: "rgba(56,145,166,0.22)", border: "rgba(56,145,166,0.5)", glow: "none", text: "#E2E8F0" },
+  empty:   { bg: "transparent", border: "#374151", glow: "none", text: "#ffffff" },
+  active:  { bg: "rgba(253,231,76,0.08)", border: "#FDE74C", glow: "rgba(253,231,76,0.3)", text: "#ffffff" },
 };
 
 const KEY_COLORS: Record<LetterStatus | "unused", string> = {
@@ -205,6 +205,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   const boardRef = useRef<HTMLDivElement>(null);
   const [tileSize, setTileSize] = useState(44);
   const [isCompactMobile, setIsCompactMobile] = useState(false);
+  const [isVerySmallMobile, setIsVerySmallMobile] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   /** Reset game state for a fresh attempt (same word, new board). */
@@ -228,12 +229,19 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   const keyboardKeyHeight = isCompactMobile ? 42 : 44;
   const showAnimatedBackdrops = !(prefersReducedMotion || isCompactMobile);
   const onSolvedFired = useRef(false);
+  const isLongWord = wordLength >= 7;
+  const tileGapPx = isCompactMobile
+    ? (isVerySmallMobile ? (wordLength >= 8 ? 1 : 2) : (wordLength >= 8 ? 2 : 3))
+    : 6;
+  const boardPaddingPx = isCompactMobile
+    ? (isVerySmallMobile ? (wordLength >= 8 ? 6 : 8) : (wordLength >= 8 ? 8 : 10))
+    : 20;
 
   // skin-derived colour overrides
   const tileColors = {
     ...COLORS,
-    empty: { bg: "transparent", border: skin.tileBorder, glow: "none" },
-    active: { bg: skin.accentActive, border: skin.boardBorder, glow: "none" },
+    empty: { bg: "transparent", border: skin.tileBorder, glow: "none", text: skin.tileText },
+    active: { bg: skin.accentActive, border: skin.boardBorder, glow: "none", text: skin.tileText },
   };
 
   // Per-skin keyboard key background — opaque so keys are readable over canvas backgrounds
@@ -258,6 +266,13 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     ...KEY_COLORS,
     unused: keySurface,
     absent: skin.tileBg,
+  };
+
+  const keyTextByState: Record<LetterStatus | "unused", string> = {
+    correct: COLORS.correct.text,
+    present: COLORS.present.text,
+    absent: "#E2E8F0",
+    unused: skin.tileText,
   };
 
   // â”€â”€ Derived: keyboard letter states â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -286,27 +301,34 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     if (typeof window === "undefined") return;
 
     const compactQuery = window.matchMedia("(max-width: 640px)");
+    const verySmallQuery = window.matchMedia("(max-width: 320px)");
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const syncCompact = () => setIsCompactMobile(compactQuery.matches);
+    const syncVerySmall = () => setIsVerySmallMobile(verySmallQuery.matches);
     const syncReducedMotion = () => setPrefersReducedMotion(reducedMotionQuery.matches);
 
     syncCompact();
+    syncVerySmall();
     syncReducedMotion();
 
     if (typeof compactQuery.addEventListener === "function") {
       compactQuery.addEventListener("change", syncCompact);
+      verySmallQuery.addEventListener("change", syncVerySmall);
       reducedMotionQuery.addEventListener("change", syncReducedMotion);
     } else {
       compactQuery.addListener(syncCompact);
+      verySmallQuery.addListener(syncVerySmall);
       reducedMotionQuery.addListener(syncReducedMotion);
     }
 
     return () => {
       if (typeof compactQuery.removeEventListener === "function") {
         compactQuery.removeEventListener("change", syncCompact);
+        verySmallQuery.removeEventListener("change", syncVerySmall);
         reducedMotionQuery.removeEventListener("change", syncReducedMotion);
       } else {
         compactQuery.removeListener(syncCompact);
+        verySmallQuery.removeListener(syncVerySmall);
         reducedMotionQuery.removeListener(syncReducedMotion);
       }
     };
@@ -429,17 +451,36 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   useEffect(() => {
     const el = boardRef.current;
     if (!el) return;
+
     const update = () => {
-      const inner = el.clientWidth - 40;
-      const gaps = (wordLength - 1) * 3;
-      const size = Math.max(26, Math.min(56, Math.floor((inner - gaps) / wordLength)));
+      const parentWidth = el.parentElement?.clientWidth ?? (typeof window !== "undefined" ? window.innerWidth : 360);
+      const viewportWidth = typeof window !== "undefined" ? window.innerWidth : parentWidth;
+      const isVerySmallViewport = isVerySmallMobile || parentWidth <= 320 || viewportWidth <= 320;
+      const safeSideGutter = isCompactMobile ? (isVerySmallViewport ? 8 : 14) : 28;
+      const usableBoardWidth = Math.max(180, parentWidth - safeSideGutter);
+      const gaps = (wordLength - 1) * tileGapPx;
+      const tileSpace = usableBoardWidth - boardPaddingPx * 2 - gaps;
+      const rawSize = Math.floor(tileSpace / wordLength);
+      const minTile = isCompactMobile
+        ? (isVerySmallViewport ? (wordLength >= 8 ? 14 : 16) : (wordLength >= 8 ? 16 : 18))
+        : 24;
+      const size = Math.max(minTile, Math.min(56, rawSize));
       setTileSize(size);
     };
+
     update();
     const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [wordLength]);
+    ro.observe(el.parentElement ?? el);
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", update, { passive: true });
+    }
+    return () => {
+      ro.disconnect();
+      if (typeof window !== "undefined") {
+        window.removeEventListener("resize", update);
+      }
+    };
+  }, [boardPaddingPx, isCompactMobile, isVerySmallMobile, tileGapPx, wordLength]);
 
   // â”€â”€ Physical keyboard handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
@@ -880,15 +921,16 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             border: `2px solid ${skin.boardBorder}`,
             boxShadow: skin.boardShadow !== "none" ? skin.boardShadow : undefined,
             borderRadius: skin.boardRadius,
-            padding: "1.25rem",
+            padding: `${boardPaddingPx}px`,
             position: "relative",
             overflow: "hidden",
             width: "fit-content",
+            maxWidth: "100%",
             animation: showAnimatedBackdrops ? undefined : "none",
           }}
         >
           <div className="wc-skin-overlay" />
-          <div className="flex flex-col items-center gap-[3px] sm:gap-1.5" style={{ position: "relative", zIndex: 1 }}>
+          <div className="flex flex-col items-center" style={{ position: "relative", zIndex: 1, gap: `${tileGapPx}px` }}>
           {rows.map(({ letters, rowIndex }) => {
             const isCurrentRow = rowIndex === guesses.length && gameStatus === "playing";
             const isRevealing = revealingRow === rowIndex;
@@ -898,7 +940,8 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             return (
               <div
                 key={rowIndex}
-                className={`flex gap-[3px] sm:gap-1.5 ${isShaking ? "wc-shake" : ""}`}
+                className={`flex ${isShaking ? "wc-shake" : ""}`}
+                style={{ gap: `${tileGapPx}px` }}
               >
                 {letters.map(({ char, kind }, colIndex) => {
                   const c = tileColors[kind];
@@ -914,9 +957,14 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                         "--tile-bg": c.bg,
                         "--tile-border": c.border,
                         "--tile-glow": c.glow,
+                        "--tile-text": c.text,
                         "--flip-delay": `${revealDelay}ms`,
                         width: tileSize,
                         height: tileSize,
+                        fontSize:
+                          isLongWord && isCompactMobile
+                            ? (isVerySmallMobile ? "clamp(0.62rem, 3.3vw, 0.9rem)" : "clamp(0.7rem, 3.6vw, 1rem)")
+                            : undefined,
                       } as React.CSSProperties}
                     >
                       <div className="wc-tile-front" style={{ borderColor: tileColors[kind === "empty" || kind === "active" ? kind : "empty"].border }}>
@@ -959,7 +1007,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                         boxShadow: glow,
                         fontSize: isWide ? 11 : 13,
                         border: `1px solid ${skin.boardBorder}`,
-                        color: skin.tileText,
+                        color: keyTextByState[state],
                       }}
                       aria-label={key}
                     >
@@ -1048,7 +1096,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           border-color: var(--tile-border);
           box-shadow: 0 0 16px var(--tile-glow);
           transform: rotateX(180deg);
-          color: var(--skin-tile-text, white);
+          color: var(--tile-text, var(--skin-tile-text, white));
         }
         /* Board skin overlay */
         .wc-skin-overlay {

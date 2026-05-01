@@ -8,7 +8,6 @@ import { Rarity, rarityColors } from '@/lib/rarity';
 import { THEME_CONFIGS, FRAME_CONFIGS, type ThemeConfig } from '@/lib/profileThemes';
 import AvatarFrame from '@/components/AvatarFrame';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import './profile-actions.css';
 
 interface UserProfile {
   name: string | null;

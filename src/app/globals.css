@@ -328,3 +328,27 @@ body {
   transform: translateY(-3px);
   border-color: rgba(253,231,76,0.55) !important;
 }
+
+/* Profile action button layout shared by profile pages */
+.profile-action-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+@media (min-width: 640px) and (max-width: 800px) {
+  .profile-action-buttons {
+    flex-direction: column;
+    align-items: flex-end;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .profile-action-buttons button {
+    width: 100%;
+    min-width: 0 !important;
+    justify-content: flex-end;
+  }
+}

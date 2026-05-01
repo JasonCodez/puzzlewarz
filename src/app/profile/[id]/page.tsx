@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import "./profile-actions.css";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { PuzzleSkinContext } from "@/contexts/PuzzleSkinContext";
