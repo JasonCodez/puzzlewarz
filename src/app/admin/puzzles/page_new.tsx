@@ -8,6 +8,7 @@ import PuzzleTypeFields from "@/components/admin/PuzzleTypeFields";
 import JigsawPuzzle from "@/components/puzzle/JigsawPuzzle";
 import SudokuGenerator from "@/components/puzzle/SudokuGenerator";
 import { createDefaultGridlockFileData, getGridlockFileData } from "@/lib/gridlockFile";
+import { validateCrosswordPuzzleData } from "@/lib/crosswordCore";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 interface HintEntry {
@@ -737,6 +738,16 @@ export default function AdminPuzzlesPage() {
       }
       if (formData.puzzleType === 'crossword') {
         delete submitBody.correctAnswer;
+
+        const crosswordValidation = validateCrosswordPuzzleData(submitBody.puzzleData, {
+          requireAnswers: true,
+          enforceStyle: false,
+        });
+        if (!crosswordValidation.valid) {
+          setFormError(crosswordValidation.error || 'Crossword layout is invalid. Ensure every white cell is fully crossed.');
+          setSubmitting(false);
+          return;
+        }
       }
 
       // ── EDIT mode: PUT to existing puzzle ─────────────────────────────

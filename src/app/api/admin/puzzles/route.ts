@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     if (puzzleType === 'crossword') {
       const cw = validateCrosswordPuzzleData(puzzleData, {
         requireAnswers: true,
-        enforceStyle: true,
+        enforceStyle: false,
       });
 
       if (!cw.valid || !cw.normalized) {

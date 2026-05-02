@@ -119,12 +119,40 @@ export default function TeamLobbyInviteModalProvider() {
     if (!parsed) return dismissCurrent();
     setBusy("join");
     try {
-      // Accept by joining; server-side join will also clear the pending invite + notification.
-      await fetch("/api/team/lobby", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", teamId: parsed.teamId, puzzleId: parsed.puzzleId }),
-      });
+      const postLobbyAction = async (action: "join" | "create") => {
+        const res = await fetch("/api/team/lobby", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, teamId: parsed.teamId, puzzleId: parsed.puzzleId }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        return { res, payload };
+      };
+
+      let { res, payload } = await postLobbyAction("join");
+
+      if (!res.ok && payload?.activePuzzleId && typeof payload.activePuzzleId === "string") {
+        const notice = encodeURIComponent(payload?.error || "A different team puzzle is currently active.");
+        dismissCurrent();
+        router.push(`/teams/${parsed.teamId}/lobby?puzzleId=${encodeURIComponent(payload.activePuzzleId)}&notice=${notice}`);
+        return;
+      }
+
+      const joinError = String(payload?.error || "");
+      const shouldCreate = !res.ok && res.status === 409 && /lobby not found/i.test(joinError);
+      if (shouldCreate) {
+        const createResult = await postLobbyAction("create");
+        res = createResult.res;
+        payload = createResult.payload;
+      }
+
+      if (!res.ok) {
+        const notice = encodeURIComponent(payload?.error || "Unable to join this lobby right now.");
+        const destinationPuzzleId = typeof payload?.activePuzzleId === "string" ? payload.activePuzzleId : parsed.puzzleId;
+        dismissCurrent();
+        router.push(`/teams/${parsed.teamId}/lobby?puzzleId=${encodeURIComponent(destinationPuzzleId)}&notice=${notice}`);
+        return;
+      }
 
       // Ask bell to refresh unread count (best effort).
       try {

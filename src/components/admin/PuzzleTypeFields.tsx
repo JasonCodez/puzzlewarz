@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 import { createDefaultGridlockFileData, getGridlockFileData } from '@/lib/gridlockFile';
 import { createDefaultVaultData, getVaultDerivedLetters, getVaultPuzzleData } from '@/lib/vault';
 import { generateWordSearchGrid, normalizeWordList, type WordSearchGenerationDifficulty } from '@/lib/wordSearchCore';
+import { validateCrosswordPuzzleData } from '@/lib/crosswordCore';
+import { generateCrossword } from 'crossword-generator';
 // Dynamically import the advanced Escape Room Designer (client-side only)
 const EscapeRoomDesigner = dynamic(() => import("@/app/escape-rooms/Designer"), { ssr: false });
 
@@ -3988,6 +3990,11 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
       text: string;
     }
 
+    interface SeedEntry {
+      answer: string;
+      text: string;
+    }
+
     const fieldCls = 'w-full px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-white placeholder-gray-500 text-sm';
     const labelCls = 'block text-xs font-semibold text-gray-400 mb-1';
     const MIN_GRID = 3;
@@ -4214,6 +4221,33 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
       return blackCount / total;
     };
 
+    const parseSeedEntries = (raw: string): SeedEntry[] => {
+      if (!raw.trim()) return [];
+
+      const byAnswer = new Map<string, string>();
+      const lines = raw
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith('//'));
+
+      for (const line of lines) {
+        const parts = line.split('|');
+        const answerRaw = parts[0] ?? '';
+        const clueRaw = parts.slice(1).join('|');
+        const answer = normalizeAnswer(answerRaw);
+        const text = asString(clueRaw, '').trim();
+        if (answer.length < 3 || !text) continue;
+        if (!byAnswer.has(answer)) {
+          byAnswer.set(answer, text);
+        }
+      }
+
+      return Array.from(byAnswer.entries()).map(([answer, text]) => ({
+        answer,
+        text,
+      }));
+    };
+
     const cluesRoot = (puzzleData.clues && typeof puzzleData.clues === 'object')
       ? (puzzleData.clues as Record<string, unknown>)
       : {};
@@ -4251,6 +4285,9 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
     const layout = normalizeLayout(baseLayout, rows, cols);
     const gridRows = layout.length;
     const gridCols = layout[0]?.length ?? 0;
+  const seedRaw = asString(puzzleData._crosswordSeedRaw, '');
+  const generationMessage = asString(puzzleData._crosswordGenerationMessage, '');
+  const generationError = asString(puzzleData._crosswordGenerationError, '');
 
     const extracted = extractSlots(layout);
     const acrossEntries = mergeSlotsWithExisting(extracted.across, 'across', rawAcross);
@@ -4359,6 +4396,758 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
       persistClues(nextAcross, nextDown, layout);
     };
 
+    const autoGenerateFromSeedEntries = () => {
+      const seedEntries = parseSeedEntries(seedRaw);
+      if (seedEntries.length < 4) {
+        onDataChange('_crosswordGenerationError', 'Enter at least 4 unique ANSWER | clue lines (answers must be 3+ letters).');
+        onDataChange('_crosswordGenerationMessage', '');
+        return;
+      }
+
+      type Direction = 'across' | 'down';
+      type Candidate = {
+        row: number;
+        col: number;
+        direction: Direction;
+        overlaps: number;
+        score: number;
+      };
+
+      type AttemptResult = {
+        generatedLayout: string[];
+        generatedRows: number;
+        generatedCols: number;
+        whiteCellCount: number;
+        generatedAcross: EditorClue[];
+        generatedDown: EditorClue[];
+        usedSeedCount: number;
+        autoClueCount: number;
+        unplacedSeedAnswers: string[];
+        strategy: string;
+      };
+
+      const clueByAnswer = new Map(seedEntries.map((entry) => [entry.answer, entry.text]));
+      const seedAnswersByLength = new Map<number, string[]>();
+      for (const entry of seedEntries) {
+        const bucket = seedAnswersByLength.get(entry.answer.length) ?? [];
+        bucket.push(entry.answer);
+        seedAnswersByLength.set(entry.answer.length, bucket);
+      }
+
+      const attemptScore = (attempt: AttemptResult): number => {
+        const entriesCount = attempt.generatedAcross.length + attempt.generatedDown.length;
+        const squarenessPenalty = Math.abs(attempt.generatedRows - attempt.generatedCols) * 1.5;
+        return (
+          entriesCount +
+          attempt.usedSeedCount * 20 -
+          attempt.unplacedSeedAnswers.length * 4 +
+          attempt.whiteCellCount * 0.2 -
+          squarenessPenalty
+        );
+      };
+
+      const shuffled = <T,>(items: T[]): T[] => {
+        const out = [...items];
+        for (let i = out.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const temp = out[i];
+          out[i] = out[j];
+          out[j] = temp;
+        }
+        return out;
+      };
+
+      const buildAttemptFromLetterGrid = (
+        letterGrid: Array<Array<string | null>>,
+        strategy: string
+      ): AttemptResult | null => {
+        let whiteCells = 0;
+        let minFilledRow = gridRows;
+        let maxFilledRow = -1;
+        let minFilledCol = gridCols;
+        let maxFilledCol = -1;
+        for (let row = 0; row < gridRows; row += 1) {
+          for (let col = 0; col < gridCols; col += 1) {
+            if (letterGrid[row][col] !== null) {
+              whiteCells += 1;
+              if (row < minFilledRow) minFilledRow = row;
+              if (row > maxFilledRow) maxFilledRow = row;
+              if (col < minFilledCol) minFilledCol = col;
+              if (col > maxFilledCol) maxFilledCol = col;
+            }
+          }
+        }
+
+        if (whiteCells === 0 || maxFilledRow < minFilledRow || maxFilledCol < minFilledCol) {
+          return null;
+        }
+
+        const filledHeight = maxFilledRow - minFilledRow + 1;
+        const filledWidth = maxFilledCol - minFilledCol + 1;
+        const trimmedGrid: Array<Array<string | null>> = Array.from(
+          { length: filledHeight },
+          (_, rowOffset) => Array.from(
+            { length: filledWidth },
+            (_, colOffset) => letterGrid[minFilledRow + rowOffset][minFilledCol + colOffset]
+          )
+        );
+
+        const totalCells = filledHeight * filledWidth;
+        const longerSide = Math.max(filledHeight, filledWidth);
+        const shorterSide = Math.max(1, Math.min(filledHeight, filledWidth));
+        const aspectRatio = longerSide / shorterSide;
+
+        // Reject extremely elongated layouts (e.g. 15x6) that look like strips instead of crosswords.
+        if (longerSide >= 10 && aspectRatio > 1.55) {
+          return null;
+        }
+
+        // For medium+ boards, avoid all-white layouts and preserve black-cell structure.
+        if (whiteCells === totalCells && totalCells >= 36) {
+          return null;
+        }
+
+        const generatedLayout = trimmedGrid.map((row) => row.map((cell) => (cell === null ? '#' : '.')).join(''));
+        const generatedSlots = extractSlots(generatedLayout);
+        const generatedAnswerSet = new Set<string>();
+        let autoClueCount = 0;
+
+        const buildEntries = (slots: Slot[], direction: Direction): EditorClue[] | null => {
+          const entries: EditorClue[] = [];
+
+          for (const slot of slots) {
+            const letters: string[] = [];
+            for (let i = 0; i < slot.length; i += 1) {
+              const row = direction === 'down' ? slot.row + i : slot.row;
+              const col = direction === 'across' ? slot.col + i : slot.col;
+              const letter = trimmedGrid[row]?.[col] ?? null;
+              if (!letter) return null;
+              letters.push(letter);
+            }
+
+            const answer = letters.join('');
+            if (generatedAnswerSet.has(answer)) {
+              return null;
+            }
+            generatedAnswerSet.add(answer);
+
+            const clue = clueByAnswer.get(answer);
+            if (!clue) autoClueCount += 1;
+
+            entries.push({
+              number: slot.number,
+              row: slot.row,
+              col: slot.col,
+              length: slot.length,
+              direction,
+              answer,
+              text: clue ?? `Auto-generated clue for ${answer}`,
+            });
+          }
+
+          return entries;
+        };
+
+        const generatedAcross = buildEntries(generatedSlots.across, 'across');
+        const generatedDown = buildEntries(generatedSlots.down, 'down');
+
+        if (!generatedAcross || !generatedDown || generatedAcross.length === 0 || generatedDown.length === 0) {
+          return null;
+        }
+
+        const validation = validateCrosswordPuzzleData(
+          {
+            clues: {
+              across: generatedAcross,
+              down: generatedDown,
+            },
+          },
+          {
+            requireAnswers: true,
+            enforceStyle: false,
+          }
+        );
+        if (!validation.valid) {
+          return null;
+        }
+
+        const usedFromSeed = new Set<string>();
+        for (const entry of [...generatedAcross, ...generatedDown]) {
+          if (clueByAnswer.has(entry.answer)) {
+            usedFromSeed.add(entry.answer);
+          }
+        }
+
+        const unplacedSeedAnswers = seedEntries
+          .map((entry) => entry.answer)
+          .filter((answer) => !usedFromSeed.has(answer));
+
+        return {
+          generatedLayout,
+          generatedRows: filledHeight,
+          generatedCols: filledWidth,
+          whiteCellCount: whiteCells,
+          generatedAcross,
+          generatedDown,
+          usedSeedCount: usedFromSeed.size,
+          autoClueCount,
+          unplacedSeedAnswers,
+          strategy,
+        };
+      };
+
+      const runPackageGeneratorAttempt = (): AttemptResult | null => {
+        const maxGridSize = Math.min(gridRows, gridCols);
+        if (maxGridSize < 3) {
+          return null;
+        }
+
+        const words = seedEntries.map((entry) => entry.answer);
+        let best: AttemptResult | null = null;
+
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          try {
+            const generated = generateCrossword(words, {
+              wordCount: words.length,
+              maxGridSize,
+              maxAttempts: 2500,
+              validationLevel: 'normal',
+              minWordLength: 3,
+              maxWordLength: maxGridSize,
+            });
+
+            const sourceRows = generated.grid.length;
+            const sourceCols = generated.grid[0]?.length ?? 0;
+            if (sourceRows < 3 || sourceCols < 3) continue;
+            if (sourceRows > gridRows || sourceCols > gridCols) continue;
+
+            const letterGrid: Array<Array<string | null>> = Array.from(
+              { length: gridRows },
+              () => Array.from({ length: gridCols }, () => null)
+            );
+
+            const startRow = Math.floor((gridRows - sourceRows) / 2);
+            const startCol = Math.floor((gridCols - sourceCols) / 2);
+
+            for (let row = 0; row < sourceRows; row += 1) {
+              const sourceRow = generated.grid[row] ?? [];
+              for (let col = 0; col < sourceCols; col += 1) {
+                const rawCell = sourceRow[col];
+                if (typeof rawCell !== 'string' || rawCell.length === 0) continue;
+                const normalized = normalizeAnswer(rawCell).charAt(0);
+                if (!normalized) continue;
+                letterGrid[startRow + row][startCol + col] = normalized;
+              }
+            }
+
+            const built = buildAttemptFromLetterGrid(
+              letterGrid,
+              `npm-crossword-generator-${sourceRows}x${sourceCols}`
+            );
+            if (!built) continue;
+
+            if (!best || attemptScore(built) > attemptScore(best)) {
+              best = built;
+            }
+
+            if (built.usedSeedCount === seedEntries.length && built.unplacedSeedAnswers.length === 0) {
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+
+        return best;
+      };
+
+      const runAttempt = (): AttemptResult | null => {
+        const letterGrid: Array<Array<string | null>> = Array.from(
+          { length: gridRows },
+          () => Array.from({ length: gridCols }, () => null)
+        );
+
+        const isFilled = (row: number, col: number): boolean => {
+          return row >= 0 && row < gridRows && col >= 0 && col < gridCols && letterGrid[row][col] !== null;
+        };
+
+        const countRun = (row: number, col: number, dr: number, dc: number): number => {
+          let r = row + dr;
+          let c = col + dc;
+          let n = 0;
+          while (r >= 0 && r < gridRows && c >= 0 && c < gridCols && letterGrid[r][c] !== null) {
+            n += 1;
+            r += dr;
+            c += dc;
+          }
+          return n;
+        };
+
+        const canPlace = (word: string, row: number, col: number, direction: Direction): Candidate | null => {
+          const dr = direction === 'down' ? 1 : 0;
+          const dc = direction === 'across' ? 1 : 0;
+          const endRow = row + dr * (word.length - 1);
+          const endCol = col + dc * (word.length - 1);
+          if (endRow < 0 || endRow >= gridRows || endCol < 0 || endCol >= gridCols) return null;
+
+          const beforeRow = row - dr;
+          const beforeCol = col - dc;
+          const afterRow = endRow + dr;
+          const afterCol = endCol + dc;
+          if (beforeRow >= 0 && beforeRow < gridRows && beforeCol >= 0 && beforeCol < gridCols && isFilled(beforeRow, beforeCol)) {
+            return null;
+          }
+          if (afterRow >= 0 && afterRow < gridRows && afterCol >= 0 && afterCol < gridCols && isFilled(afterRow, afterCol)) {
+            return null;
+          }
+
+          let overlaps = 0;
+
+          for (let i = 0; i < word.length; i += 1) {
+            const r = row + dr * i;
+            const c = col + dc * i;
+            const existing = letterGrid[r][c];
+
+            if (existing !== null && existing !== word[i]) return null;
+
+            if (existing === null) {
+              if (direction === 'across') {
+                if (isFilled(r - 1, c) || isFilled(r + 1, c)) return null;
+              } else {
+                if (isFilled(r, c - 1) || isFilled(r, c + 1)) return null;
+              }
+            } else {
+              overlaps += 1;
+              if (direction === 'across') {
+                if (!isFilled(r - 1, c) && !isFilled(r + 1, c)) return null;
+              } else {
+                if (!isFilled(r, c - 1) && !isFilled(r, c + 1)) return null;
+              }
+            }
+          }
+
+          if (overlaps === word.length) return null;
+
+          const centerR = (gridRows - 1) / 2;
+          const centerC = (gridCols - 1) / 2;
+          const midR = (row + endRow) / 2;
+          const midC = (col + endCol) / 2;
+          const centerPenalty = Math.abs(centerR - midR) + Math.abs(centerC - midC);
+          const score = overlaps * 100 - centerPenalty;
+
+          return { row, col, direction, overlaps, score };
+        };
+
+        const placeWord = (word: string, candidate: Candidate) => {
+          const dr = candidate.direction === 'down' ? 1 : 0;
+          const dc = candidate.direction === 'across' ? 1 : 0;
+          for (let i = 0; i < word.length; i += 1) {
+            const r = candidate.row + dr * i;
+            const c = candidate.col + dc * i;
+            letterGrid[r][c] = word[i];
+          }
+        };
+
+        const sortedSeeds = [...seedEntries].sort((a, b) => {
+          const lenDiff = b.answer.length - a.answer.length;
+          return lenDiff !== 0 ? lenDiff : Math.random() - 0.5;
+        });
+
+        let placedCount = 0;
+
+        for (const seed of sortedSeeds) {
+          const overlapCandidates: Candidate[] = [];
+          const fallbackCandidates: Candidate[] = [];
+
+          for (const direction of ['across', 'down'] as const) {
+            for (let row = 0; row < gridRows; row += 1) {
+              for (let col = 0; col < gridCols; col += 1) {
+                const candidate = canPlace(seed.answer, row, col, direction);
+                if (!candidate) continue;
+                if (candidate.overlaps > 0) overlapCandidates.push(candidate);
+                else fallbackCandidates.push(candidate);
+              }
+            }
+          }
+
+          const pickedPool = overlapCandidates.length > 0
+            ? overlapCandidates
+            : placedCount === 0
+              ? fallbackCandidates
+              : [];
+
+          if (pickedPool.length === 0) {
+            continue;
+          }
+
+          pickedPool.sort((a, b) => b.score - a.score);
+          const topTier = pickedPool.slice(0, Math.min(8, pickedPool.length));
+          const chosen = topTier[Math.floor(Math.random() * topTier.length)];
+          placeWord(seed.answer, chosen);
+          placedCount += 1;
+        }
+
+        if (placedCount === 0) {
+          return null;
+        }
+
+        const pruneUncheckedCells = () => {
+          let changed = true;
+          while (changed) {
+            changed = false;
+            const keep = letterGrid.map((row) => row.map(() => false));
+
+            for (let row = 0; row < gridRows; row += 1) {
+              for (let col = 0; col < gridCols; col += 1) {
+                if (letterGrid[row][col] === null) continue;
+                const horizontalLength = 1 + countRun(row, col, 0, -1) + countRun(row, col, 0, 1);
+                const verticalLength = 1 + countRun(row, col, -1, 0) + countRun(row, col, 1, 0);
+                if (horizontalLength >= 3 && verticalLength >= 3) {
+                  keep[row][col] = true;
+                }
+              }
+            }
+
+            for (let row = 0; row < gridRows; row += 1) {
+              for (let col = 0; col < gridCols; col += 1) {
+                if (letterGrid[row][col] !== null && !keep[row][col]) {
+                  letterGrid[row][col] = null;
+                  changed = true;
+                }
+              }
+            }
+          }
+        };
+
+        const keepLargestConnectedComponent = () => {
+          const seen = new Set<string>();
+          let largest: string[] = [];
+
+          for (let row = 0; row < gridRows; row += 1) {
+            for (let col = 0; col < gridCols; col += 1) {
+              if (letterGrid[row][col] === null) continue;
+              const key = `${row},${col}`;
+              if (seen.has(key)) continue;
+
+              const queue: Array<[number, number]> = [[row, col]];
+              const component: string[] = [];
+              seen.add(key);
+
+              while (queue.length > 0) {
+                const [r, c] = queue.shift() as [number, number];
+                component.push(`${r},${c}`);
+                const neighbors: Array<[number, number]> = [
+                  [r - 1, c],
+                  [r + 1, c],
+                  [r, c - 1],
+                  [r, c + 1],
+                ];
+
+                for (const [nr, nc] of neighbors) {
+                  if (nr < 0 || nr >= gridRows || nc < 0 || nc >= gridCols) continue;
+                  if (letterGrid[nr][nc] === null) continue;
+                  const nKey = `${nr},${nc}`;
+                  if (seen.has(nKey)) continue;
+                  seen.add(nKey);
+                  queue.push([nr, nc]);
+                }
+              }
+
+              if (component.length > largest.length) {
+                largest = component;
+              }
+            }
+          }
+
+          const keepSet = new Set(largest);
+          for (let row = 0; row < gridRows; row += 1) {
+            for (let col = 0; col < gridCols; col += 1) {
+              if (letterGrid[row][col] === null) continue;
+              if (!keepSet.has(`${row},${col}`)) {
+                letterGrid[row][col] = null;
+              }
+            }
+          }
+        };
+
+        pruneUncheckedCells();
+        keepLargestConnectedComponent();
+        pruneUncheckedCells();
+
+        return buildAttemptFromLetterGrid(letterGrid, 'seed-overlap');
+      };
+
+      const runSeedRectangleFallbackAttempt = (): AttemptResult | null => {
+        type RectCandidate = {
+          rows: number;
+          cols: number;
+          rowPool: string[];
+          potential: number;
+        };
+
+        const candidates: RectCandidate[] = [];
+        const minRectangleArea = Math.ceil(gridRows * gridCols * 0.42);
+        for (const [cols, rowPoolRaw] of seedAnswersByLength.entries()) {
+          if (cols < 3 || cols > gridCols) continue;
+
+          const rowPool = [...rowPoolRaw];
+          const maxRows = Math.min(gridRows, rowPool.length);
+          for (let rows = 3; rows <= maxRows; rows += 1) {
+            const longerSide = Math.max(rows, cols);
+            const shorterSide = Math.min(rows, cols);
+            if (shorterSide < 4) continue;
+            if (longerSide / shorterSide > 1.45) continue;
+            if (rows * cols < minRectangleArea) continue;
+
+            const colPoolCount = (seedAnswersByLength.get(rows) ?? []).length;
+            const potential = rows + Math.min(cols, colPoolCount);
+            candidates.push({ rows, cols, rowPool, potential });
+          }
+        }
+
+        if (candidates.length === 0) {
+          return null;
+        }
+
+        candidates.sort((a, b) => {
+          if (b.potential !== a.potential) return b.potential - a.potential;
+          const areaDiff = b.rows * b.cols - a.rows * a.cols;
+          if (areaDiff !== 0) return areaDiff;
+          return b.rows - a.rows;
+        });
+
+        let best: AttemptResult | null = null;
+
+        for (const candidate of candidates.slice(0, 12)) {
+          const seenRows = new Set<string>();
+          const tries = Math.min(900, 180 + candidate.rowPool.length * 120);
+
+          for (let attempt = 0; attempt < tries; attempt += 1) {
+            const rowWords = shuffled(candidate.rowPool).slice(0, candidate.rows);
+            if (rowWords.length !== candidate.rows) continue;
+
+            const rowKey = rowWords.join('|');
+            if (seenRows.has(rowKey)) continue;
+            seenRows.add(rowKey);
+
+            const colWords: string[] = [];
+            for (let col = 0; col < candidate.cols; col += 1) {
+              let word = '';
+              for (let row = 0; row < candidate.rows; row += 1) {
+                word += rowWords[row][col];
+              }
+              colWords.push(word);
+            }
+
+            const allWords = [...rowWords, ...colWords];
+            if (new Set(allWords).size !== allWords.length) {
+              continue;
+            }
+
+            const letterGrid: Array<Array<string | null>> = Array.from(
+              { length: gridRows },
+              () => Array.from({ length: gridCols }, () => null)
+            );
+
+            const startRow = Math.floor((gridRows - candidate.rows) / 2);
+            const startCol = Math.floor((gridCols - candidate.cols) / 2);
+
+            for (let row = 0; row < candidate.rows; row += 1) {
+              for (let col = 0; col < candidate.cols; col += 1) {
+                letterGrid[startRow + row][startCol + col] = rowWords[row][col];
+              }
+            }
+
+            const built = buildAttemptFromLetterGrid(
+              letterGrid,
+              `seed-rectangle-${candidate.rows}x${candidate.cols}`
+            );
+            if (!built) continue;
+
+            if (!best || attemptScore(built) > attemptScore(best)) {
+              best = built;
+            }
+
+            const theoreticalMax = Math.min(seedEntries.length, candidate.potential);
+            if (built.usedSeedCount >= theoreticalMax) {
+              break;
+            }
+          }
+        }
+
+        return best;
+      };
+
+      const runDenseFallbackAttempt = (): AttemptResult | null => {
+        const maxSquare = Math.min(gridRows, gridCols);
+        const byLength = new Map<number, SeedEntry[]>();
+
+        for (const entry of seedEntries) {
+          const length = entry.answer.length;
+          if (length < 3 || length > maxSquare) continue;
+          const bucket = byLength.get(length) ?? [];
+          bucket.push(entry);
+          byLength.set(length, bucket);
+        }
+
+        const candidateSizesRaw = Array.from(byLength.entries())
+          .map(([size, entries]) => ({ size, entries }))
+          .sort((a, b) => {
+            const scoreA = Math.min(a.size, a.entries.length) * 100 + a.size;
+            const scoreB = Math.min(b.size, b.entries.length) * 100 + b.size;
+            return scoreB - scoreA;
+          });
+
+        const preferredMaxCore = maxSquare >= 6 ? maxSquare - 1 : maxSquare;
+        const preferredSizes = candidateSizesRaw.filter((candidate) => candidate.size <= preferredMaxCore);
+        const candidateSizes = preferredSizes.length > 0 ? preferredSizes : candidateSizesRaw;
+
+        if (candidateSizes.length === 0) {
+          return null;
+        }
+
+        const randomLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const randomWord = (length: number): string => {
+          let out = '';
+          for (let i = 0; i < length; i += 1) {
+            out += randomLetters[Math.floor(Math.random() * randomLetters.length)];
+          }
+          return out;
+        };
+
+        let bestFallback: AttemptResult | null = null;
+
+        for (const candidate of candidateSizes.slice(0, 5)) {
+          const size = candidate.size;
+          const availableSeedAnswers = candidate.entries.map((entry) => entry.answer);
+
+          for (let attempt = 0; attempt < 90; attempt += 1) {
+            const rowWords = Array.from({ length: size }, () => '');
+            const seededRowCount = Math.min(size, availableSeedAnswers.length);
+            const seededRows = shuffled(Array.from({ length: size }, (_, i) => i)).slice(0, seededRowCount);
+            const selectedSeedWords = shuffled(availableSeedAnswers).slice(0, seededRowCount);
+            const usedAcrossWords = new Set<string>();
+
+            for (let i = 0; i < seededRowCount; i += 1) {
+              rowWords[seededRows[i]] = selectedSeedWords[i];
+              usedAcrossWords.add(selectedSeedWords[i]);
+            }
+
+            let failed = false;
+            for (let row = 0; row < size; row += 1) {
+              if (rowWords[row]) continue;
+
+              let filled = false;
+              for (let tries = 0; tries < 240; tries += 1) {
+                const candidateWord = randomWord(size);
+                if (usedAcrossWords.has(candidateWord)) continue;
+                rowWords[row] = candidateWord;
+                usedAcrossWords.add(candidateWord);
+                filled = true;
+                break;
+              }
+
+              if (!filled) {
+                failed = true;
+                break;
+              }
+            }
+
+            if (failed) continue;
+
+            const colWords: string[] = [];
+            for (let col = 0; col < size; col += 1) {
+              let word = '';
+              for (let row = 0; row < size; row += 1) {
+                word += rowWords[row][col];
+              }
+              colWords.push(word);
+            }
+
+            const allWords = [...rowWords, ...colWords];
+            const uniqueWords = new Set(allWords);
+            if (uniqueWords.size !== allWords.length) {
+              continue;
+            }
+
+            const letterGrid: Array<Array<string | null>> = Array.from(
+              { length: gridRows },
+              () => Array.from({ length: gridCols }, () => null)
+            );
+
+            const startRow = Math.floor((gridRows - size) / 2);
+            const startCol = Math.floor((gridCols - size) / 2);
+
+            for (let row = 0; row < size; row += 1) {
+              for (let col = 0; col < size; col += 1) {
+                letterGrid[startRow + row][startCol + col] = rowWords[row][col];
+              }
+            }
+
+            const built = buildAttemptFromLetterGrid(letterGrid, `dense-${size}x${size}`);
+            if (!built) continue;
+
+            if (!bestFallback || attemptScore(built) > attemptScore(bestFallback)) {
+              bestFallback = built;
+            }
+
+            const optimalSeedUse = Math.min(size, availableSeedAnswers.length);
+            if (built.usedSeedCount >= optimalSeedUse) {
+              break;
+            }
+          }
+        }
+
+        return bestFallback;
+      };
+
+      let bestAttempt: AttemptResult | null = runPackageGeneratorAttempt();
+
+      // User preference: use npm package output whenever it succeeds.
+      // Custom strategies are fallback-only if package generation fails.
+      if (!bestAttempt) {
+        for (let i = 0; i < 24; i += 1) {
+          const attempt = runAttempt();
+          if (!attempt) continue;
+          if (!bestAttempt || attemptScore(attempt) > attemptScore(bestAttempt)) {
+            bestAttempt = attempt;
+          }
+          if (attempt.usedSeedCount === seedEntries.length && attempt.unplacedSeedAnswers.length === 0) {
+            break;
+          }
+        }
+
+        const rectangleFallbackAttempt = runSeedRectangleFallbackAttempt();
+        if (rectangleFallbackAttempt && (!bestAttempt || attemptScore(rectangleFallbackAttempt) > attemptScore(bestAttempt))) {
+          bestAttempt = rectangleFallbackAttempt;
+        }
+
+        const denseFallbackAttempt = runDenseFallbackAttempt();
+        if (denseFallbackAttempt && (!bestAttempt || attemptScore(denseFallbackAttempt) > attemptScore(bestAttempt))) {
+          bestAttempt = denseFallbackAttempt;
+        }
+      }
+
+      if (!bestAttempt) {
+        onDataChange('_crosswordGenerationError', 'Generation could not produce a valid fully-crossed grid from this seed list. Add more words or increase grid size.');
+        onDataChange('_crosswordGenerationMessage', '');
+        onDataChange('_crosswordUnplacedWords', seedEntries.map((entry) => entry.answer));
+        return;
+      }
+
+      onDataChange('_crosswordLayout', bestAttempt.generatedLayout);
+      onDataChange('_crosswordRows', bestAttempt.generatedRows);
+      onDataChange('_crosswordCols', bestAttempt.generatedCols);
+      onDataChange('_crosswordGenerationError', '');
+      onDataChange(
+        '_crosswordGenerationMessage',
+        `Generated ${bestAttempt.generatedAcross.length + bestAttempt.generatedDown.length} entries on ${bestAttempt.generatedRows}x${bestAttempt.generatedCols}. Seed words used: ${bestAttempt.usedSeedCount}/${seedEntries.length}. Auto clues: ${bestAttempt.autoClueCount}. Unplaced seeds: ${bestAttempt.unplacedSeedAnswers.length}. Strategy: ${bestAttempt.strategy}.`
+      );
+      onDataChange('_crosswordUnplacedWords', bestAttempt.unplacedSeedAnswers);
+
+      persistClues(bestAttempt.generatedAcross, bestAttempt.generatedDown, bestAttempt.generatedLayout);
+    };
+
     const clueNumberByCell = new Map<string, number>();
     for (const slot of [...extracted.across, ...extracted.down]) {
       const key = `${slot.row},${slot.col}`;
@@ -4374,6 +5163,11 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
       return sum + row.split('').filter((cell) => cell === '#').length;
     }, 0);
     const whiteCells = gridRows * gridCols - blackCells;
+    const unplacedWords = Array.isArray(puzzleData._crosswordUnplacedWords)
+      ? (puzzleData._crosswordUnplacedWords as unknown[])
+          .map((word) => normalizeAnswer(word))
+          .filter((word) => word.length > 0)
+      : [];
 
     const cellSize = gridCols >= 20 ? 20 : gridCols >= 15 ? 24 : 28;
 
@@ -4383,6 +5177,50 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
           <p className="font-bold mb-1">🧩 Grid-first crossword editor</p>
           <p>1) Design the black-square layout by clicking cells. 2) Enter answers and clues for each auto-numbered slot. 3) Save.</p>
           <p className="mt-1">All numbering and slot lengths are derived from the grid, so this scales to large boards like 20×20.</p>
+        </div>
+
+        <div className="rounded-lg p-4 space-y-3" style={{ background: 'rgba(56,145,166,0.08)', border: '1px solid rgba(56,145,166,0.3)' }}>
+          <label className={labelCls}>
+            Seed Words + Clues <span className="font-normal text-gray-500">(one per line: ANSWER | clue)</span>
+          </label>
+          <textarea
+            rows={6}
+            value={seedRaw}
+            onChange={(e) => onDataChange('_crosswordSeedRaw', e.target.value)}
+            placeholder={'DREAM | Sequence of images during sleep\nINTRO | Opening section\nNITRO | High-performance fuel additive'}
+            className={`${fieldCls} resize-y font-mono`}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={autoGenerateFromSeedEntries}
+              className="px-3 py-2 rounded-lg text-xs font-bold text-white"
+              style={{ background: 'rgba(56,145,166,0.35)', border: '1px solid rgba(56,145,166,0.5)' }}
+            >
+              Generate Grid From Seed List
+            </button>
+            <span className="text-xs text-gray-400">
+              Generator places words, blacks unused cells, and auto-numbers clues.
+            </span>
+          </div>
+
+          {generationError && (
+            <div className="rounded-md px-3 py-2 text-xs" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#fecaca' }}>
+              {generationError}
+            </div>
+          )}
+
+          {generationMessage && (
+            <div className="rounded-md px-3 py-2 text-xs" style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.35)', color: '#bbf7d0' }}>
+              {generationMessage}
+            </div>
+          )}
+
+          {unplacedWords.length > 0 && (
+            <div className="rounded-md px-3 py-2 text-xs" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)', color: '#fde68a' }}>
+              Unplaced seed words: {unplacedWords.join(', ')}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">

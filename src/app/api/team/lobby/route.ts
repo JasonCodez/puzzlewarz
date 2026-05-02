@@ -280,6 +280,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, left: true, existed: false });
       }
 
+      const active = findActiveLobbyForTeam(teamId);
+      if (active && active.puzzleId !== puzzleId) {
+        return NextResponse.json(
+          {
+            error: 'A different team puzzle lobby is currently active.',
+            activePuzzleId: active.puzzleId,
+          },
+          { status: 409 }
+        );
+      }
+
       return NextResponse.json(
         { error: 'Lobby not found. Return to the lobby page to create/join it first.' },
         { status: 409 }

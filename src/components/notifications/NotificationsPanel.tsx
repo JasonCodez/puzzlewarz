@@ -125,13 +125,32 @@ export default function NotificationsPanel({
 
     setInviteBusy((prev) => ({ ...prev, [notification.id]: "join" }));
     try {
-      const res = await fetch("/api/team/lobby", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", teamId: parsed.teamId, puzzleId: parsed.puzzleId }),
-      });
+      const postLobbyAction = async (action: "join" | "create") => {
+        const res = await fetch("/api/team/lobby", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, teamId: parsed.teamId, puzzleId: parsed.puzzleId }),
+        });
 
-      const payload = await res.json().catch(() => ({} as any));
+        const payload = await res.json().catch(() => ({} as any));
+        return { res, payload };
+      };
+
+      let { res, payload } = await postLobbyAction("join");
+      if (!res.ok && payload?.activePuzzleId) {
+        onClose();
+        router.push(`/teams/${parsed.teamId}/lobby?puzzleId=${encodeURIComponent(payload.activePuzzleId)}&notice=${encodeURIComponent(payload?.error || 'Only the lobby leader can change the team puzzle.')}`);
+        return;
+      }
+
+      const joinError = String(payload?.error || "");
+      const shouldCreate = !res.ok && res.status === 409 && /lobby not found/i.test(joinError);
+      if (shouldCreate) {
+        const createResult = await postLobbyAction("create");
+        res = createResult.res;
+        payload = createResult.payload;
+      }
+
       if (!res.ok && payload?.activePuzzleId) {
         onClose();
         router.push(`/teams/${parsed.teamId}/lobby?puzzleId=${encodeURIComponent(payload.activePuzzleId)}&notice=${encodeURIComponent(payload?.error || 'Only the lobby leader can change the team puzzle.')}`);

@@ -73,7 +73,7 @@ export default function TeamLobbyPage() {
           await fetch("/api/team/lobby", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "create", teamId, puzzleId }),
+            body: JSON.stringify({ action: "join", teamId, puzzleId }),
           });
         } catch {
           // ignore
@@ -294,27 +294,54 @@ export default function TeamLobbyPage() {
       if (autoJoinAttemptRef.current === joinKey) return;
       autoJoinAttemptRef.current = joinKey;
       try {
-        // Always attempt to join via server session; the server will no-op if already joined.
-        const joinRes = await fetch("/api/team/lobby", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "create", teamId, puzzleId }),
-        });
+        const postLobbyAction = async (action: "join" | "create") => {
+          const res = await fetch("/api/team/lobby", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, teamId, puzzleId }),
+          });
+          const payload = await res.json().catch(() => ({}));
+          return { res, payload };
+        };
+
+        // Prefer joining an existing lobby first.
+        let { res: joinRes, payload: joinPayload } = await postLobbyAction("join");
+
+        if (!joinRes.ok && joinPayload?.activePuzzleId && typeof joinPayload.activePuzzleId === 'string') {
+          try {
+            const notice = encodeURIComponent(joinPayload?.error || 'A different team puzzle is currently active.');
+            router.push(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(joinPayload.activePuzzleId)}&notice=${notice}`);
+            return;
+          } catch {
+            // ignore
+          }
+        }
+
+        const joinError = String(joinPayload?.error || '');
+        const shouldCreate = !joinRes.ok && joinRes.status === 409 && /lobby not found/i.test(joinError);
+
+        if (shouldCreate) {
+          // If no lobby exists yet for this puzzle, create/join it.
+          const createResult = await postLobbyAction("create");
+          joinRes = createResult.res;
+          joinPayload = createResult.payload;
+        }
+
         if (!joinRes.ok) {
-          const j = await joinRes.json().catch(() => ({}));
-          if (j?.activePuzzleId && typeof j.activePuzzleId === 'string') {
+          if (joinPayload?.activePuzzleId && typeof joinPayload.activePuzzleId === 'string') {
             try {
-              const notice = encodeURIComponent(j?.error || 'Only the lobby leader can change the team puzzle.');
-              router.push(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(j.activePuzzleId)}&notice=${notice}`);
+              const notice = encodeURIComponent(joinPayload?.error || 'Only the lobby leader can change the team puzzle.');
+              router.push(`/teams/${teamId}/lobby?puzzleId=${encodeURIComponent(joinPayload.activePuzzleId)}&notice=${notice}`);
               return;
             } catch {
               // ignore
             }
           }
-          // If unauthorized, show a clearer message rather than silently staying at 0/4.
-          openActionModal('error', 'Unable to Join Lobby', j?.error || joinRes.statusText);
+
+          openActionModal('error', 'Unable to Join Lobby', joinPayload?.error || joinRes.statusText);
           return;
         }
+
         // refresh lobby and seed prevParticipants to avoid false "removed" modal during immediate join
         const newLobby = await fetchLobby();
         try { prevParticipantsRef.current = (newLobby?.participants || []).slice(); } catch (e) {}

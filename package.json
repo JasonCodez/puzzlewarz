@@ -33,6 +33,7 @@
     "axios": "^1.13.3",
     "bcryptjs": "^3.0.3",
     "canvas-confetti": "^1.9.4",
+    "crossword-generator": "^1.0.1",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.24.10",
