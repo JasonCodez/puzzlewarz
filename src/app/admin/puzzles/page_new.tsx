@@ -735,6 +735,9 @@ export default function AdminPuzzlesPage() {
       if (formData.puzzleType === 'parasite_code') {
         delete submitBody.correctAnswer;
       }
+      if (formData.puzzleType === 'crossword') {
+        delete submitBody.correctAnswer;
+      }
 
       // ── EDIT mode: PUT to existing puzzle ─────────────────────────────
       if (editingId) {
@@ -1497,8 +1500,8 @@ export default function AdminPuzzlesPage() {
                     )
                   )}
 
-                  {/* Correct Answer (not required for Sudoku; answers entered on the board) */}
-                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && formData.puzzleType !== 'debrief' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && formData.puzzleType !== 'anagram_blitz' && formData.puzzleType !== 'blackout' && formData.puzzleType !== 'vault' && (
+                  {/* Correct Answer is hidden for puzzle types that store/validate answers elsewhere. */}
+                  {formData.puzzleType !== 'jigsaw' && formData.puzzleType !== 'sudoku' && formData.puzzleType !== 'escape_room' && formData.puzzleType !== 'code_master' && formData.puzzleType !== 'detective_case' && formData.puzzleType !== 'crime_rpg' && formData.puzzleType !== 'parasite_code' && formData.puzzleType !== 'gridlock_file' && formData.puzzleType !== 'debrief' && formData.puzzleType !== 'crack_safe' && formData.puzzleType !== 'word_crack' && formData.puzzleType !== 'word_search' && formData.puzzleType !== 'anagram_blitz' && formData.puzzleType !== 'blackout' && formData.puzzleType !== 'vault' && formData.puzzleType !== 'crossword' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-300 mb-2">
                         Correct Answer *
