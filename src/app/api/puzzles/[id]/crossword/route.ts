@@ -5,20 +5,10 @@ import { validateSameOrigin } from "@/lib/requestSecurity";
 import { calcLevel } from "@/lib/levels";
 import { awardSeasonXp } from "@/lib/seasonXp";
 import { getXpMultiplier } from "@/lib/getXpMultiplier";
-
-interface CrosswordClue {
-  number: number;
-  answer: string;
-  row: number;
-  col: number;
-}
-
-interface CrosswordData {
-  clues: {
-    across: CrosswordClue[];
-    down: CrosswordClue[];
-  };
-}
+import {
+  normalizeCrosswordAnswer,
+  validateCrosswordPuzzleData,
+} from "@/lib/crosswordCore";
 
 export async function POST(
   request: NextRequest,
@@ -55,64 +45,122 @@ export async function POST(
       return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
     }
 
-    const data = (puzzle.data ?? {}) as unknown as CrosswordData;
-    const clues: CrosswordClue[] =
-      direction === "across" ? (data.clues?.across ?? []) : (data.clues?.down ?? []);
+    const crossword = validateCrosswordPuzzleData(puzzle.data, {
+      requireAnswers: true,
+      enforceStyle: false,
+    });
+
+    if (!crossword.valid || !crossword.normalized) {
+      return NextResponse.json(
+        { error: crossword.error ?? "Crossword puzzle data is invalid." },
+        { status: 400 }
+      );
+    }
+
+    const clues =
+      direction === "across"
+        ? crossword.normalized.clues.across
+        : crossword.normalized.clues.down;
 
     const clue = clues.find((c) => c.number === number);
     if (!clue) {
       return NextResponse.json({ correct: false, error: "Unknown clue" });
     }
 
-    const correct = answer.toUpperCase().trim() === String(clue.answer).toUpperCase().trim();
+    const submittedAnswer = normalizeCrosswordAnswer(answer);
+    const expectedAnswer = clue.answer ?? "";
+    const correct = submittedAnswer === expectedAnswer;
     if (!correct) {
       return NextResponse.json({ correct: false });
     }
 
-    // Check whether all clues are now solved by looking at current progress + this new one
     const progress = await prisma.userPuzzleProgress.findUnique({
       where: { userId_puzzleId: { userId: currentUser.id, puzzleId } },
       select: { solved: true, completionPercentage: true, id: true },
     });
 
-    const totalClues =
-      (data.clues?.across?.length ?? 0) + (data.clues?.down?.length ?? 0);
+    const allClueKeys = [
+      ...crossword.normalized.clues.across.map((c) => `across:${c.number}`),
+      ...crossword.normalized.clues.down.map((c) => `down:${c.number}`),
+    ];
+    const clueKey = `${direction}:${number}`;
+    const submissionFeedback = "crossword_clue_correct";
 
-    // We track solved clue count via completionPercentage as a fraction of total
-    const prevSolvedCount = progress
-      ? Math.round(((progress.completionPercentage ?? 0) / 100) * totalClues)
-      : 0;
-    const newSolvedCount = prevSolvedCount + 1;
-    const allSolved = newSolvedCount >= totalClues;
-    const completionPct = totalClues > 0 ? (newSolvedCount / totalClues) * 100 : 0;
+    const existingCorrectSubmission = await prisma.puzzleSubmission.findFirst({
+      where: {
+        puzzleId,
+        userId: currentUser.id,
+        isCorrect: true,
+        feedback: submissionFeedback,
+        answer: clueKey,
+      },
+      select: { id: true },
+    });
+
+    if (!existingCorrectSubmission) {
+      await prisma.puzzleSubmission.create({
+        data: {
+          puzzleId,
+          userId: currentUser.id,
+          answer: clueKey,
+          isCorrect: true,
+          feedback: submissionFeedback,
+        },
+      });
+    }
+
+    const solvedSubmissions = await prisma.puzzleSubmission.findMany({
+      where: {
+        puzzleId,
+        userId: currentUser.id,
+        isCorrect: true,
+        feedback: submissionFeedback,
+        answer: { in: allClueKeys },
+      },
+      select: { answer: true },
+      distinct: ["answer"],
+    });
+
+    const solvedCount = solvedSubmissions.length;
+    const totalClues = allClueKeys.length;
+    const allSolved = totalClues > 0 && solvedCount >= totalClues;
+    const completionPct = totalClues > 0 ? (solvedCount / totalClues) * 100 : 0;
 
     const now = new Date();
 
     try {
       if (!progress) {
+        const firstCorrectForClue = !existingCorrectSubmission;
         await prisma.userPuzzleProgress.create({
           data: {
             userId: currentUser.id,
             puzzleId,
-            attempts: 1,
+            attempts: firstCorrectForClue ? 1 : 0,
             lastAttemptAt: now,
             completionPercentage: completionPct,
             ...(allSolved && { solved: true, solvedAt: now, successfulAttempts: 1 }),
           },
         });
       } else if (!progress.solved) {
+        const firstCorrectForClue = !existingCorrectSubmission;
+        const progressUpdate: Record<string, unknown> = {
+          lastAttemptAt: now,
+          completionPercentage: completionPct,
+        };
+
+        if (firstCorrectForClue) {
+          progressUpdate.attempts = { increment: 1 };
+        }
+
+        if (allSolved) {
+          progressUpdate.solved = true;
+          progressUpdate.solvedAt = now;
+          progressUpdate.successfulAttempts = { increment: 1 };
+        }
+
         await prisma.userPuzzleProgress.update({
           where: { id: progress.id },
-          data: {
-            lastAttemptAt: now,
-            completionPercentage: completionPct,
-            ...(allSolved && {
-              solved: true,
-              solvedAt: now,
-              successfulAttempts: { increment: 1 },
-              attempts: { increment: 1 },
-            }),
-          },
+          data: progressUpdate,
         });
       }
 
@@ -157,7 +205,7 @@ export async function POST(
       console.error("[crossword] Failed to persist progress:", persistErr);
     }
 
-    return NextResponse.json({ correct: true, allSolved });
+    return NextResponse.json({ correct: true, allSolved, solvedCount, totalClues });
   } catch (err) {
     console.error("[crossword] Error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

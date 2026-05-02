@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { getGridlockFileData } from "@/lib/gridlockFile";
 import { getParasiteCodeData } from "@/lib/parasiteCode";
 import { getVaultPuzzleData } from "@/lib/vault";
+import { validateWordSearchPuzzleData } from "@/lib/wordSearchCore";
+import { validateCrosswordPuzzleData } from "@/lib/crosswordCore";
 
 const toPositiveInt = (...values: unknown[]): number | undefined => {
   for (const raw of values) {
@@ -66,7 +68,7 @@ export async function PUT(
   if (!existing) return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
 
   const body = await req.json();
-  const {
+  let {
     title,
     description,
     content,
@@ -141,6 +143,62 @@ export async function PUT(
     }
   }
 
+  if (puzzleType === 'word_search') {
+    const ws = validateWordSearchPuzzleData(puzzleData);
+    if (!ws.valid || !ws.normalized) {
+      return NextResponse.json(
+        { error: ws.error ?? 'Word Search puzzleData is invalid.' },
+        { status: 400 }
+      );
+    }
+
+    puzzleData = {
+      ...(puzzleData as Record<string, unknown>),
+      grid: ws.normalized.grid,
+      words: ws.normalized.words,
+      unplacedWords: [],
+    };
+  }
+
+  if (puzzleType === 'crossword') {
+    const cw = validateCrosswordPuzzleData(puzzleData, {
+      requireAnswers: true,
+      enforceStyle: true,
+    });
+
+    if (!cw.valid || !cw.normalized) {
+      return NextResponse.json(
+        { error: cw.error ?? 'Crossword puzzleData is invalid.' },
+        { status: 400 }
+      );
+    }
+
+    puzzleData = {
+      ...(puzzleData as Record<string, unknown>),
+      clues: {
+        across: cw.normalized.clues.across.map((clue) => ({
+          number: clue.number,
+          text: clue.text,
+          answer: clue.answer ?? '',
+          length: clue.length,
+          row: clue.row,
+          col: clue.col,
+        })),
+        down: cw.normalized.clues.down.map((clue) => ({
+          number: clue.number,
+          text: clue.text,
+          answer: clue.answer ?? '',
+          length: clue.length,
+          row: clue.row,
+          col: clue.col,
+        })),
+      },
+      rows: cw.normalized.rows,
+      cols: cw.normalized.cols,
+      blackSquareRatio: Number(cw.normalized.blackSquareRatio.toFixed(4)),
+    };
+  }
+
   const vaultData = puzzleType === 'vault' ? getVaultPuzzleData(puzzleData) : null;
   if (puzzleType === 'vault' && !vaultData) {
     return NextResponse.json(
@@ -178,7 +236,7 @@ export async function PUT(
     if (!isSpecialType) {
       puzzleUpdateData.riddleAnswer = correctAnswer;
     }
-    if (["escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file", "debrief", "parasite_code"].includes(puzzleType) && puzzleData != null) {
+    if (["escape_room", "code_master", "detective_case", "crack_safe", "word_crack", "word_search", "anagram_blitz", "arg", "blackout", "crime_rpg", "gridlock_file", "debrief", "parasite_code", "crossword"].includes(puzzleType) && puzzleData != null) {
       puzzleUpdateData.data = puzzleData;
     }
     if (puzzleType === 'vault' && vaultData) {

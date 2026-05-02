@@ -15,7 +15,8 @@ const RetroBackground = dynamic(() => import("@/components/RetroBackground"), { 
 export interface CrosswordClue {
   number: number;
   text: string;
-  answer: string; // uppercase, letters only — must not be sent to client
+  answer: string; // uppercase letters only; may be empty in public payloads
+  length: number;
   row: number;    // 0-based top-left start
   col: number;
 }
@@ -62,12 +63,12 @@ function buildGrid(data: CrosswordData): { grid: CellState[][]; rows: number; co
   let maxCol = 0;
 
   for (const clue of data.clues.across) {
-    const endCol = clue.col + clue.answer.length - 1;
+    const endCol = clue.col + clue.length - 1;
     maxRow = Math.max(maxRow, clue.row);
     maxCol = Math.max(maxCol, endCol);
   }
   for (const clue of data.clues.down) {
-    const endRow = clue.row + clue.answer.length - 1;
+    const endRow = clue.row + clue.length - 1;
     maxRow = Math.max(maxRow, endRow);
     maxCol = Math.max(maxCol, clue.col);
   }
@@ -86,14 +87,14 @@ function buildGrid(data: CrosswordData): { grid: CellState[][]; rows: number; co
 
   // Fill white cells from clues
   for (const clue of data.clues.across) {
-    for (let i = 0; i < clue.answer.length; i++) {
+    for (let i = 0; i < clue.length; i++) {
       const cell = grid[clue.row][clue.col + i];
       cell.isBlack = false;
       cell.acrossNumber = clue.number;
     }
   }
   for (const clue of data.clues.down) {
-    for (let i = 0; i < clue.answer.length; i++) {
+    for (let i = 0; i < clue.length; i++) {
       const cell = grid[clue.row + i][clue.col];
       cell.isBlack = false;
       cell.downNumber = clue.number;
@@ -215,12 +216,60 @@ export default function CrosswordPuzzle({
   // Parse + validate incoming data
   const data = useMemo<CrosswordData | null>(() => {
     try {
-      const raw = crosswordData as { clues?: { across?: CrosswordClue[]; down?: CrosswordClue[] } };
-      if (!raw.clues?.across || !raw.clues?.down) return null;
+      const raw = crosswordData as {
+        clues?: {
+          across?: Array<Partial<CrosswordClue>>;
+          down?: Array<Partial<CrosswordClue>>;
+        };
+      };
+
+      if (!Array.isArray(raw.clues?.across) || !Array.isArray(raw.clues?.down)) return null;
+
+      const normalizeClue = (clue: Partial<CrosswordClue>): CrosswordClue | null => {
+        const number = Number(clue.number);
+        const row = Number(clue.row);
+        const col = Number(clue.col);
+        const text = String(clue.text ?? "").trim();
+        const answer = String(clue.answer ?? "")
+          .toUpperCase()
+          .replace(/[^A-Z]/g, "");
+
+        const rawLength = Number(clue.length);
+        const length =
+          Number.isInteger(rawLength) && rawLength > 0
+            ? rawLength
+            : answer.length;
+
+        if (!Number.isInteger(number) || number <= 0) return null;
+        if (!Number.isInteger(row) || row < 0) return null;
+        if (!Number.isInteger(col) || col < 0) return null;
+        if (!text) return null;
+        if (!Number.isInteger(length) || length < 3) return null;
+
+        return {
+          number,
+          text,
+          answer,
+          length,
+          row,
+          col,
+        };
+      };
+
+      const across = raw.clues.across
+        .map(normalizeClue)
+        .filter((c): c is CrosswordClue => c != null);
+      const down = raw.clues.down
+        .map(normalizeClue)
+        .filter((c): c is CrosswordClue => c != null);
+
+      if (across.length !== raw.clues.across.length) return null;
+      if (down.length !== raw.clues.down.length) return null;
+
       return {
         clues: {
-          across: raw.clues.across.map((c) => ({ ...c, answer: String(c.answer).toUpperCase() })),
-          down: raw.clues.down.map((c) => ({ ...c, answer: String(c.answer).toUpperCase() })),
+          across,
+          down,
         },
       };
     } catch {
@@ -280,6 +329,18 @@ export default function CrosswordPuzzle({
       setLetters(filled);
     }
   }, [alreadySolved, data, rows, cols]);
+
+  useEffect(() => {
+    if (!data || !alreadySolved) return;
+
+    const all = new Set<string>();
+    data.clues.across.forEach((c) => all.add(`across-${c.number}`));
+    data.clues.down.forEach((c) => all.add(`down-${c.number}`));
+
+    setSolvedClues(all);
+    setGameStatus("won");
+    setShowInstructions(false);
+  }, [alreadySolved, data]);
 
   // ── Compute active word cells ──────────────────────────────────────────────
   const activeWordCells = useMemo<Set<string>>(() => {
@@ -492,7 +553,8 @@ export default function CrosswordPuzzle({
             const updatedLetters = letters.map((r) => [...r]);
             updatedLetters[row][col] = key;
             const word = cells.map((c) => updatedLetters[c.row][c.col]).join("");
-            if (word.length === clue.answer.length && !word.includes("")) {
+            const fullyFilled = cells.every((c) => !!updatedLetters[c.row][c.col]);
+            if (fullyFilled && word.length === clue.length) {
               checkWord(activeClue.direction, activeClue.number, word);
             }
           }

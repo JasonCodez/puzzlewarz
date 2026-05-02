@@ -51,6 +51,9 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
   const [newComment, setNewComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [deletingPost, setDeletingPost] = useState(false);
   const [userVotes, setUserVotes] = useState<{ [key: string]: "up" | "down" | null }>({});
 
   useEffect(() => {
@@ -63,6 +66,36 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
       fetchPost();
     }
   }, [status, router, session, id]);
+
+  useEffect(() => {
+    if (!session) {
+      setIsAdmin(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkAdmin = async () => {
+      try {
+        const response = await fetch("/api/admin/check", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!cancelled) {
+          setIsAdmin(Boolean(data?.isAdmin));
+        }
+      } catch {
+        if (!cancelled) {
+          setIsAdmin(false);
+        }
+      }
+    };
+
+    checkAdmin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   const fetchPost = async () => {
     try {
@@ -147,6 +180,37 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
     }
   };
 
+  const handleDeletePost = async () => {
+    if (!post || !isAdmin || deletingPost) return;
+
+    const confirmed = window.confirm(
+      "Delete this forum post? This will permanently remove the post and all comments."
+    );
+
+    if (!confirmed) return;
+
+    setDeletingPost(true);
+    setDeleteError("");
+
+    try {
+      const response = await fetch(`/api/forum/posts/${post.id}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to delete post");
+      }
+
+      router.push("/forum");
+      router.refresh();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete post");
+    } finally {
+      setDeletingPost(false);
+    }
+  };
+
   if (loading) {
     return <LoadingSpinner size={180} />;
   }
@@ -208,6 +272,35 @@ export default function ForumPostPage({ params }: { params: Promise<{ id: string
                 </p>
               </div>
             </div>
+
+            {isAdmin && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                <button
+                  type="button"
+                  onClick={handleDeletePost}
+                  disabled={deletingPost}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: 7,
+                    background: deletingPost ? 'rgba(248,113,113,0.08)' : 'rgba(248,113,113,0.14)',
+                    border: '1px solid rgba(248,113,113,0.4)',
+                    color: deletingPost ? '#fca5a5' : '#f87171',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: deletingPost ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {deletingPost ? 'Deleting…' : 'Delete Post'}
+                </button>
+              </div>
+            )}
+
+            {deleteError && (
+              <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#fca5a5', fontSize: 13, marginBottom: 12 }}>
+                {deleteError}
+              </div>
+            )}
 
             {/* Content */}
             <div style={{ color: '#d1d5db', fontSize: 15, lineHeight: 1.75, whiteSpace: 'pre-wrap', marginBottom: 28 }}>

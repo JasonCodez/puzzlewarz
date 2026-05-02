@@ -192,3 +192,50 @@ export async function POST(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const sameOriginError = validateSameOrigin(request);
+    if (sameOriginError) {
+      return sameOriginError;
+    }
+
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, role: true },
+    });
+
+    if (!user || user.role.toLowerCase() !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { id: postId } = await params;
+
+    const existingPost = await prisma.forumPost.findUnique({
+      where: { id: postId },
+      select: { id: true },
+    });
+
+    if (!existingPost) {
+      return NextResponse.json({ error: "Post not found" }, { status: 404 });
+    }
+
+    await prisma.forumPost.delete({ where: { id: postId } });
+
+    return NextResponse.json({ success: true, deletedPostId: postId });
+  } catch (error) {
+    console.error("Error deleting forum post:", error);
+    return NextResponse.json(
+      { error: "Failed to delete post" },
+      { status: 500 }
+    );
+  }
+}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
+import { findWordInGrid, normalizeWordList } from "@/lib/wordSearchCore";
 
 const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
 const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), { ssr: false });
@@ -35,32 +36,6 @@ const WORD_COLORS = [
 
 function serializeCoord(c: CellCoord) {
   return `${c.row},${c.col}`;
-}
-
-function findWordInGrid(word: string, grid: string[][]): CellCoord[] | null {
-  const dirs = [
-    [0, 1], [1, 0], [0, -1], [-1, 0],
-    [1, 1], [1, -1], [-1, 1], [-1, -1],
-  ] as const;
-  const size = grid.length;
-  for (let r = 0; r < size; r++) {
-    for (let c = 0; c < size; c++) {
-      for (const [dr, dc] of dirs) {
-        const cells: CellCoord[] = [];
-        let ok = true;
-        for (let i = 0; i < word.length; i++) {
-          const nr = r + dr * i, nc = c + dc * i;
-          if (nr < 0 || nr >= size || nc < 0 || nc >= size || grid[nr]?.[nc] !== word[i]) {
-            ok = false;
-            break;
-          }
-          cells.push({ row: nr, col: nc });
-        }
-        if (ok) return cells;
-      }
-    }
-  }
-  return null;
 }
 
 function cellsInLine(from: CellCoord, to: CellCoord): CellCoord[] {
@@ -135,10 +110,8 @@ export default function WordSearchPuzzle({
   hintTokens = 0,
   onHintUsed,
 }: Props) {
-  const grid = (wordSearchData.grid ?? []) as string[][];
-  const words = ((wordSearchData.words ?? []) as string[]).map((w) =>
-    String(w).toUpperCase().trim()
-  );
+  const grid = useMemo(() => (wordSearchData.grid ?? []) as string[][], [wordSearchData.grid]);
+  const words = useMemo(() => normalizeWordList(wordSearchData.words ?? []), [wordSearchData.words]);
   const gridSize = grid.length || 12;
   const storageKey = `ws-found-${puzzleId}`;
 
@@ -147,7 +120,7 @@ export default function WordSearchPuzzle({
     foundWords: string[];
     foundWordCells: Map<string, CellCoord[]>;
   }>(() => {
-    const initial: string[] = alreadySolved
+    const initialInput: string[] = alreadySolved
       ? [...words]
       : (() => {
           if (typeof window === "undefined") return [];
@@ -157,6 +130,9 @@ export default function WordSearchPuzzle({
             return [];
           }
         })();
+
+    const initial = normalizeWordList(initialInput).filter((w) => words.includes(w));
+
     const map = new Map<string, CellCoord[]>();
     for (const w of initial) {
       const cells = findWordInGrid(w, grid);
@@ -173,6 +149,7 @@ export default function WordSearchPuzzle({
   );
   const [wsHintCount, setWsHintCount] = useState(0);
   const [isUltraNarrow, setIsUltraNarrow] = useState(false);
+  const [showRestoreNotice, setShowRestoreNotice] = useState(false);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<CellCoord | null>(null);
@@ -182,16 +159,36 @@ export default function WordSearchPuzzle({
   const pointerIdRef = useRef<number | null>(null);
   const queuedPointRef = useRef<{ x: number; y: number } | null>(null);
   const moveRafRef = useRef<number | null>(null);
+  const restoreNoticeTimeoutRef = useRef<number | null>(null);
+  const foundWordsRef = useRef<string[]>(foundWords);
   const skin = usePuzzleSkin();
   const [showHelp, setShowHelp] = useState(false);
+
+  const showRestoredProgressBanner = () => {
+    if (restoreNoticeTimeoutRef.current !== null) {
+      window.clearTimeout(restoreNoticeTimeoutRef.current);
+    }
+    setShowRestoreNotice(true);
+    restoreNoticeTimeoutRef.current = window.setTimeout(() => {
+      setShowRestoreNotice(false);
+      restoreNoticeTimeoutRef.current = null;
+    }, 2600);
+  };
 
   useEffect(() => {
     return () => {
       if (moveRafRef.current !== null) {
         cancelAnimationFrame(moveRafRef.current);
       }
+      if (restoreNoticeTimeoutRef.current !== null) {
+        window.clearTimeout(restoreNoticeTimeoutRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    foundWordsRef.current = foundWords;
+  }, [foundWords]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -201,6 +198,63 @@ export default function WordSearchPuzzle({
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
   }, []);
+
+  // Hydrate progress from server so leaving/reloading resumes correctly even without localStorage.
+  useEffect(() => {
+    if (alreadySolved) return;
+    if (!puzzleId) return;
+
+    let cancelled = false;
+
+    const hydrateFromServer = async () => {
+      try {
+        const resp = await fetch(`/api/puzzles/${puzzleId}/word_search`, { cache: "no-store" });
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        const serverFound = normalizeWordList(data?.foundWords ?? []).filter((w) => words.includes(w));
+        if (serverFound.length === 0) return;
+
+        if (cancelled) return;
+
+        const hasNewServerProgress = serverFound.some((w) => !foundWordsRef.current.includes(w));
+        if (!hasNewServerProgress) return;
+
+        setFoundState((prev) => {
+          const mergedWords = Array.from(new Set([...prev.foundWords, ...serverFound]));
+          if (mergedWords.length === prev.foundWords.length) {
+            return prev;
+          }
+
+          const mergedCells = new Map(prev.foundWordCells);
+
+          for (const word of mergedWords) {
+            if (mergedCells.has(word)) continue;
+            const cells = findWordInGrid(word, grid);
+            if (cells) mergedCells.set(word, cells);
+          }
+
+          return {
+            foundWords: mergedWords,
+            foundWordCells: mergedCells,
+          };
+        });
+        showRestoredProgressBanner();
+
+        if (data?.allFound) {
+          setGameStatus("won");
+        }
+      } catch {
+        // Non-fatal: localStorage still provides client-side resume fallback.
+      }
+    };
+
+    hydrateFromServer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [alreadySolved, puzzleId, words, grid]);
 
   // Persist found words across page reloads
   useEffect(() => {
@@ -519,6 +573,19 @@ export default function WordSearchPuzzle({
           <p className="text-xs font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)" }}>
             {foundWords.length} / {words.length} words found
           </p>
+          {showRestoreNotice && (
+            <div
+              className="mt-2 inline-flex items-center rounded-md px-3 py-1 text-[11px] font-semibold"
+              style={{
+                background: "rgba(34,197,94,0.14)",
+                border: "1px solid rgba(34,197,94,0.45)",
+                color: "#86efac",
+                textShadow: "none",
+              }}
+            >
+              Progress restored from your last session
+            </div>
+          )}
         </div>
 
         {gameStatus === "won" && (

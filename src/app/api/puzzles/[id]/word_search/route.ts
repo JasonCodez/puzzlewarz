@@ -5,6 +5,70 @@ import { validateSameOrigin } from "@/lib/requestSecurity";
 import { calcLevel } from "@/lib/levels";
 import { awardSeasonXp } from "@/lib/seasonXp";
 import { getXpMultiplier } from "@/lib/getXpMultiplier";
+import {
+  findWordInGrid,
+  normalizeWord,
+  normalizeWordList,
+  normalizeWordSearchGrid,
+  validateWordSelection,
+} from "@/lib/wordSearchCore";
+
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const currentUser = await requireAuthenticatedUser();
+    if (currentUser instanceof NextResponse) return currentUser;
+
+    const { id: puzzleId } = await context.params;
+
+    const puzzle = await prisma.puzzle.findUnique({
+      where: { id: puzzleId },
+      select: {
+        data: true,
+        puzzleType: true,
+      },
+    });
+
+    if (!puzzle || puzzle.puzzleType !== "word_search") {
+      return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
+    }
+
+    const wsData = (puzzle.data ?? {}) as Record<string, unknown>;
+    const grid = normalizeWordSearchGrid(wsData.grid);
+    const puzzleWords = normalizeWordList(wsData.words);
+    const placeableWords = puzzleWords.filter((w) => !!findWordInGrid(w, grid));
+
+    if (grid.length === 0 || placeableWords.length === 0) {
+      return NextResponse.json({ error: "Puzzle data is invalid" }, { status: 400 });
+    }
+
+    const foundSubmissions = await prisma.puzzleSubmission.findMany({
+      where: {
+        puzzleId,
+        userId: currentUser.id,
+        isCorrect: true,
+        answer: { in: placeableWords },
+      },
+      select: { answer: true },
+      distinct: ["answer"],
+    });
+
+    const foundWords = normalizeWordList(foundSubmissions.map((s) => s.answer));
+    const foundCount = foundWords.length;
+
+    return NextResponse.json({
+      foundWords,
+      foundCount,
+      total: placeableWords.length,
+      allFound: foundCount >= placeableWords.length,
+    });
+  } catch (err) {
+    console.error("[word_search][GET] Error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -45,37 +109,33 @@ export async function POST(
     }
 
     const wsData = (puzzle.data ?? {}) as Record<string, unknown>;
-    const grid = (wsData.grid ?? []) as string[][];
-    const puzzleWords = ((wsData.words ?? []) as string[]).map((w) =>
-      String(w).toUpperCase().trim()
-    );
+    const grid = normalizeWordSearchGrid(wsData.grid);
+    const puzzleWords = normalizeWordList(wsData.words);
+    const placeableWords = puzzleWords.filter((w) => !!findWordInGrid(w, grid));
 
-    const cleanWord = word.toUpperCase().trim();
+    if (grid.length === 0 || placeableWords.length === 0) {
+      return NextResponse.json({ error: "Puzzle data is invalid" }, { status: 400 });
+    }
+
+    const cleanWord = normalizeWord(word);
 
     // Validate the word is in the puzzle's word list
-    if (!puzzleWords.includes(cleanWord)) {
+    if (!placeableWords.includes(cleanWord)) {
       return NextResponse.json({ valid: false, error: "Word not in puzzle" });
     }
 
-    // Validate cells: they must spell the word (or its reverse) on the actual grid
-    if (Array.isArray(cells) && cells.length === cleanWord.length) {
-      const spelled = cells
-        .map((c) => grid[c.row]?.[c.col] ?? "")
-        .join("");
-      const spelledReverse = spelled.split("").reverse().join("");
-      if (spelled !== cleanWord && spelledReverse !== cleanWord) {
-        return NextResponse.json({ valid: false, error: "Invalid selection" });
-      }
+    const selection = validateWordSelection(cleanWord, grid, cells);
+    if (!selection.valid) {
+      return NextResponse.json({ valid: false, error: selection.error ?? "Invalid selection" });
     }
 
-    // Validate allFoundWords — all entries must be genuine puzzle words to prevent stuffing
-    const validFoundWords = Array.isArray(allFoundWords)
-      ? allFoundWords.filter((w) =>
-          puzzleWords.includes(String(w).toUpperCase().trim())
-        )
-      : [cleanWord];
+    const clientFoundSet = new Set(
+      normalizeWordList(allFoundWords).filter((w) => placeableWords.includes(w))
+    );
+    clientFoundSet.add(cleanWord);
 
-    const allFound = validFoundWords.length >= puzzleWords.length;
+    let foundCount = clientFoundSet.size;
+    let allFound = foundCount >= placeableWords.length;
 
     // Persist progress
     if (!warzMode) try {
@@ -91,21 +151,62 @@ export async function POST(
         });
       }
 
+      const alreadyFound = await prisma.puzzleSubmission.findFirst({
+        where: {
+          puzzleId,
+          userId: currentUser.id,
+          isCorrect: true,
+          answer: cleanWord,
+        },
+        select: { id: true },
+      });
+
+      if (!alreadyFound) {
+        await prisma.puzzleSubmission.create({
+          data: {
+            puzzleId,
+            userId: currentUser.id,
+            answer: cleanWord,
+            isCorrect: true,
+            feedback: "word_search_found",
+          },
+        });
+      }
+
+      const foundSubmissions = await prisma.puzzleSubmission.findMany({
+        where: {
+          puzzleId,
+          userId: currentUser.id,
+          isCorrect: true,
+          answer: { in: placeableWords },
+        },
+        select: { answer: true },
+        distinct: ["answer"],
+      });
+
+      foundCount = foundSubmissions.length;
+      allFound = foundCount >= placeableWords.length;
+
       if (!progress.solved) {
-        const completionPct = (validFoundWords.length / puzzleWords.length) * 100;
+        const completionPct = (foundCount / placeableWords.length) * 100;
+        const progressUpdate: Record<string, unknown> = {
+          lastAttemptAt: now,
+          completionPercentage: completionPct,
+        };
+
+        if (!alreadyFound) {
+          progressUpdate.attempts = { increment: 1 };
+        }
+
+        if (allFound) {
+          progressUpdate.solved = true;
+          progressUpdate.solvedAt = now;
+          progressUpdate.successfulAttempts = { increment: 1 };
+        }
 
         await prisma.userPuzzleProgress.update({
           where: { id: progress.id },
-          data: {
-            attempts: { increment: 1 },
-            lastAttemptAt: now,
-            completionPercentage: completionPct,
-            ...(allFound && {
-              solved: true,
-              solvedAt: now,
-              successfulAttempts: { increment: 1 },
-            }),
-          },
+          data: progressUpdate,
         });
 
         if (allFound) {
@@ -160,8 +261,8 @@ export async function POST(
     return NextResponse.json({
       valid: true,
       allFound,
-      foundCount: validFoundWords.length,
-      total: puzzleWords.length,
+      foundCount,
+      total: placeableWords.length,
     });
   } catch (err) {
     console.error("[word_search] Error:", err);

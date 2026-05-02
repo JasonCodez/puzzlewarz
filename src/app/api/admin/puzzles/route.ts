@@ -8,6 +8,8 @@ import { getDetectiveCaseData } from "@/lib/detectiveCase";
 import { getGridlockFileData } from "@/lib/gridlockFile";
 import { getParasiteCodeData } from "@/lib/parasiteCode";
 import { getVaultPuzzleData } from "@/lib/vault";
+import { validateWordSearchPuzzleData } from "@/lib/wordSearchCore";
+import { validateCrosswordPuzzleData } from "@/lib/crosswordCore";
 
 type MultiPartInput = {
   title?: string;
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const {
+    let {
       title,
       description,
       content,
@@ -153,6 +155,62 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+    }
+
+    if (puzzleType === 'word_search') {
+      const ws = validateWordSearchPuzzleData(puzzleData);
+      if (!ws.valid || !ws.normalized) {
+        return NextResponse.json(
+          { error: ws.error ?? 'Word Search puzzleData is invalid.' },
+          { status: 400 }
+        );
+      }
+
+      puzzleData = {
+        ...(puzzleData as Record<string, unknown>),
+        grid: ws.normalized.grid,
+        words: ws.normalized.words,
+        unplacedWords: [],
+      };
+    }
+
+    if (puzzleType === 'crossword') {
+      const cw = validateCrosswordPuzzleData(puzzleData, {
+        requireAnswers: true,
+        enforceStyle: true,
+      });
+
+      if (!cw.valid || !cw.normalized) {
+        return NextResponse.json(
+          { error: cw.error ?? 'Crossword puzzleData is invalid.' },
+          { status: 400 }
+        );
+      }
+
+      puzzleData = {
+        ...(puzzleData as Record<string, unknown>),
+        clues: {
+          across: cw.normalized.clues.across.map((clue) => ({
+            number: clue.number,
+            text: clue.text,
+            answer: clue.answer ?? '',
+            length: clue.length,
+            row: clue.row,
+            col: clue.col,
+          })),
+          down: cw.normalized.clues.down.map((clue) => ({
+            number: clue.number,
+            text: clue.text,
+            answer: clue.answer ?? '',
+            length: clue.length,
+            row: clue.row,
+            col: clue.col,
+          })),
+        },
+        rows: cw.normalized.rows,
+        cols: cw.normalized.cols,
+        blackSquareRatio: Number(cw.normalized.blackSquareRatio.toFixed(4)),
+      };
     }
 
     // Validate jigsaw puzzle

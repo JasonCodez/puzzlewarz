@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
+import { sanitizePublicPuzzleData } from "@/lib/publicPuzzleData";
+import { Prisma } from "@prisma/client";
 
 // GET /api/warz/[id] — single challenge details
 export async function GET(
@@ -34,6 +36,16 @@ export async function GET(
       ...challenge,
       challengerTime: isCompleted ? challenge.challengerTime : null,
     };
+
+    if (safeChallenge.puzzle?.data) {
+      safeChallenge.puzzle = {
+        ...safeChallenge.puzzle,
+        data: sanitizePublicPuzzleData(
+          safeChallenge.puzzle.puzzleType,
+          safeChallenge.puzzle.data
+        ) as Prisma.JsonValue,
+      };
+    }
 
     return NextResponse.json({ challenge: safeChallenge });
   } catch (err) {

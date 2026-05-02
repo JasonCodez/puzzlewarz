@@ -150,8 +150,6 @@ function GridPuzzleCard({ puzzle, totalUsers, onDescriptionExpand, onCardClick }
     ? "solved"
     : (puzzle as any).failed
     ? "failed"
-    : (progress && (progress.attempts || 0) >= 5)
-    ? "failed"
     : progress?.attempts
     ? "in-progress"
     : "unsolved";

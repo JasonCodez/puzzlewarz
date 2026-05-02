@@ -2,19 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
-
-interface CrosswordClue {
-  answer: string;
-  row: number;
-  col: number;
-}
-
-interface CrosswordData {
-  clues: {
-    across: CrosswordClue[];
-    down: CrosswordClue[];
-  };
-}
+import { validateCrosswordPuzzleData } from "@/lib/crosswordCore";
 
 export async function POST(
   request: NextRequest,
@@ -67,15 +55,26 @@ export async function POST(
       return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
     }
 
-    const data = (puzzle.data ?? {}) as unknown as CrosswordData;
+    const crossword = validateCrosswordPuzzleData(puzzle.data, {
+      requireAnswers: true,
+      enforceStyle: false,
+    });
+
+    if (!crossword.valid || !crossword.normalized) {
+      return NextResponse.json(
+        { error: crossword.error ?? "Crossword puzzle data is invalid." },
+        { status: 400 }
+      );
+    }
 
     // Find the letter at (row, col) from any clue that covers that cell
     let letter: string | null = null;
 
-    for (const clue of data.clues?.across ?? []) {
-      for (let i = 0; i < clue.answer.length; i++) {
+    for (const clue of crossword.normalized.clues.across) {
+      const answer = clue.answer ?? "";
+      for (let i = 0; i < answer.length; i++) {
         if (clue.row === row && clue.col + i === col) {
-          letter = clue.answer[i].toUpperCase();
+          letter = answer[i].toUpperCase();
           break;
         }
       }
@@ -83,10 +82,11 @@ export async function POST(
     }
 
     if (!letter) {
-      for (const clue of data.clues?.down ?? []) {
-        for (let i = 0; i < clue.answer.length; i++) {
+      for (const clue of crossword.normalized.clues.down) {
+        const answer = clue.answer ?? "";
+        for (let i = 0; i < answer.length; i++) {
           if (clue.row + i === row && clue.col === col) {
-            letter = clue.answer[i].toUpperCase();
+            letter = answer[i].toUpperCase();
             break;
           }
         }

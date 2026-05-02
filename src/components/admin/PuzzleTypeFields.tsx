@@ -4,6 +4,7 @@ import React, { JSX, useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { createDefaultGridlockFileData, getGridlockFileData } from '@/lib/gridlockFile';
 import { createDefaultVaultData, getVaultDerivedLetters, getVaultPuzzleData } from '@/lib/vault';
+import { generateWordSearchGrid, normalizeWordList, type WordSearchGenerationDifficulty } from '@/lib/wordSearchCore';
 // Dynamically import the advanced Escape Room Designer (client-side only)
 const EscapeRoomDesigner = dynamic(() => import("@/app/escape-rooms/Designer"), { ssr: false });
 
@@ -2999,93 +3000,60 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
 
   const renderWordSearchFields = () => {
     const gridSize = Number(puzzleData.gridSize ?? 12);
+    const generationDifficulty = (asString(puzzleData.generationDifficulty, 'medium') || 'medium') as WordSearchGenerationDifficulty;
     const rawWords = asString(puzzleData.wordsRaw, '');
     const currentGrid = (puzzleData.grid ?? []) as string[][];
+    const unplacedWords = Array.isArray(puzzleData.unplacedWords)
+      ? (puzzleData.unplacedWords as string[])
+      : [];
+    const generationStats = (puzzleData.generationStats ?? null) as
+      | { averageSharedPerPlacedWord?: number; decoysPlaced?: number; difficulty?: string }
+      | null;
+
+    const parsedWords = normalizeWordList(rawWords.split(/[\n,]+/));
 
     function generateGrid() {
-      const cleaned = rawWords
-        .split(/[\n,]+/)
-        .map((w: string) => w.trim().toUpperCase().replace(/[^A-Z]/g, ''))
-        .filter((w: string) => w.length >= 2);
-      if (cleaned.length === 0) return;
+      const { grid, placedWords, unplacedWords: failed, stats } = generateWordSearchGrid(parsedWords, gridSize, {
+        difficulty: generationDifficulty,
+        themedDecoys: true,
+      });
 
-      const DIRS = [[0,1],[1,0],[0,-1],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]] as const;
-      const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      const g: string[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(''));
-
-      // Score a candidate placement: higher = more shared letters (encourages intersections)
-      function countShared(word: string, sr: number, sc: number, dr: number, dc: number): number {
-        let shared = 0;
-        for (let i = 0; i < word.length; i++) {
-          if (g[sr + dr * i]?.[sc + dc * i] === word[i]) shared++;
-        }
-        return shared;
-      }
-
-      // Sort longest words first so they're easier to place and create more crossing opportunities
-      const sorted = [...cleaned].sort((a, b) => b.length - a.length);
-
-      for (const word of sorted) {
-        // Collect all valid placements, then pick the one with the most shared letters
-        type Placement = { sr: number; sc: number; dr: number; dc: number; shared: number };
-        const valid: Placement[] = [];
-
-        for (const [dr, dc] of DIRS) {
-          for (let sr = 0; sr < gridSize; sr++) {
-            for (let sc = 0; sc < gridSize; sc++) {
-              const er = sr + dr * (word.length - 1);
-              const ec = sc + dc * (word.length - 1);
-              if (er < 0 || er >= gridSize || ec < 0 || ec >= gridSize) continue;
-              let ok = true;
-              for (let i = 0; i < word.length; i++) {
-                const cell = g[sr + dr * i][sc + dc * i];
-                if (cell !== '' && cell !== word[i]) { ok = false; break; }
-              }
-              if (ok) valid.push({ sr, sc, dr, dc, shared: countShared(word, sr, sc, dr, dc) });
-            }
-          }
-        }
-
-        if (valid.length === 0) continue;
-
-        // Sort by shared descending, then pick randomly among the top tier
-        valid.sort((a, b) => b.shared - a.shared);
-        const topShared = valid[0].shared;
-        const topTier = valid.filter(p => p.shared === topShared);
-        const { sr, sc, dr, dc } = topTier[Math.floor(Math.random() * topTier.length)];
-
-        for (let i = 0; i < word.length; i++) g[sr + dr * i][sc + dc * i] = word[i];
-      }
-
-      for (let r = 0; r < gridSize; r++) {
-        for (let c = 0; c < gridSize; c++) {
-          if (!g[r][c]) g[r][c] = ALPHA[Math.floor(Math.random() * ALPHA.length)];
-        }
-      }
-
-      onDataChange('grid', g);
-      onDataChange('words', cleaned);
+      onDataChange('grid', grid);
+      onDataChange('words', placedWords);
+      onDataChange('unplacedWords', failed);
+      onDataChange('generationStats', {
+        difficulty: stats.difficulty,
+        averageSharedPerPlacedWord: Number(stats.averageSharedPerPlacedWord.toFixed(2)),
+        decoysPlaced: stats.decoysPlaced,
+      });
       onDataChange('gridSize', gridSize);
     }
 
-    const parsedWords = rawWords
-      .split(/[\n,]+/)
-      .map((w: string) => w.trim().toUpperCase().replace(/[^A-Z]/g, ''))
-      .filter((w: string) => w.length >= 2);
-
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="block text-sm font-semibold text-gray-300 mb-1">Grid Size</label>
             <select
               value={gridSize}
-              onChange={(e) => { onDataChange('gridSize', Number(e.target.value)); onDataChange('grid', []); }}
+              onChange={(e) => { onDataChange('gridSize', Number(e.target.value)); onDataChange('grid', []); onDataChange('unplacedWords', []); onDataChange('generationStats', null); }}
               className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
             >
               <option value={10}>10 × 10</option>
               <option value={12}>12 × 12</option>
               <option value={15}>15 × 15</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-1">Generation Difficulty</label>
+            <select
+              value={generationDifficulty}
+              onChange={(e) => { onDataChange('generationDifficulty', e.target.value); onDataChange('grid', []); onDataChange('generationStats', null); }}
+              className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
+            >
+              <option value="easy">Easy (forward-heavy, fewer decoys)</option>
+              <option value="medium">Medium (balanced overlap + decoys)</option>
+              <option value="hard">Hard (all directions, higher overlap, denser decoys)</option>
             </select>
           </div>
           <div className="flex items-end">
@@ -3109,7 +3077,7 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
           <textarea
             rows={5}
             value={rawWords}
-            onChange={(e) => { onDataChange('wordsRaw', e.target.value); onDataChange('grid', []); }}
+            onChange={(e) => { onDataChange('wordsRaw', e.target.value); onDataChange('grid', []); onDataChange('unplacedWords', []); onDataChange('generationStats', null); }}
             placeholder={"PUZZLE\nHIDDEN\nSEARCH\nWORD"}
             className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-gray-500 font-mono uppercase resize-none"
           />
@@ -3119,6 +3087,21 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
             </p>
           )}
         </div>
+
+        {generationStats && (
+          <div className="p-3 rounded-lg text-xs" style={{ background: 'rgba(56,145,166,0.1)', border: '1px solid rgba(56,145,166,0.3)', color: '#bae6fd' }}>
+            Style: {generationStats.difficulty ?? generationDifficulty} | Avg overlap/word: {generationStats.averageSharedPerPlacedWord ?? 0} | Decoys seeded: {generationStats.decoysPlaced ?? 0}
+          </div>
+        )}
+
+        {unplacedWords.length > 0 && (
+          <div className="p-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5' }}>
+            <strong>Unplaced words:</strong> {unplacedWords.join(', ')}
+            <div className="text-xs mt-1 text-rose-200">
+              Increase grid size or shorten these words, then regenerate.
+            </div>
+          </div>
+        )}
 
         {currentGrid.length > 0 && (
           <div>
@@ -3983,298 +3966,612 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
   // ── Crossword ─────────────────────────────────────────────────────────────
 
   const renderCrosswordFields = () => {
-    // Stored shape: { clues: { across: CrosswordClue[], down: CrosswordClue[] } }
-    // Internally we keep two editable text blobs and parse on every change.
+    interface RawClue {
+      number: number;
+      row: number;
+      col: number;
+      length: number;
+      answer: string;
+      text: string;
+    }
 
-    const fieldCls = 'w-full px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-white placeholder-gray-500 text-sm font-mono';
+    interface Slot {
+      number: number;
+      row: number;
+      col: number;
+      length: number;
+    }
+
+    interface EditorClue extends Slot {
+      direction: 'across' | 'down';
+      answer: string;
+      text: string;
+    }
+
+    const fieldCls = 'w-full px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-white placeholder-gray-500 text-sm';
     const labelCls = 'block text-xs font-semibold text-gray-400 mb-1';
+    const MIN_GRID = 3;
+    const MAX_GRID = 30;
 
-    // ------------------------------------------------------------------
-    // Helper — read the current across / down arrays from puzzleData
-    // ------------------------------------------------------------------
-    interface RawClue { number: number; text: string; answer: string; row: number; col: number }
-    const cluesObj = (puzzleData.clues ?? {}) as { across?: RawClue[]; down?: RawClue[] };
-    const acrossArr: RawClue[] = Array.isArray(cluesObj.across) ? cluesObj.across : [];
-    const downArr:   RawClue[] = Array.isArray(cluesObj.down)   ? cluesObj.down   : [];
+    const clampInt = (value: number, min: number, max: number): number => {
+      return Math.max(min, Math.min(max, value));
+    };
 
-    // ------------------------------------------------------------------
-    // Serialise clue arrays to the textarea format:
-    //   <number>. <ROW>,<COL> | <ANSWER> | <clue text>
-    // ------------------------------------------------------------------
-    function serialise(clues: RawClue[]): string {
-      return clues
-        .sort((a, b) => a.number - b.number)
-        .map((c) => `${c.number}. ${c.row},${c.col} | ${c.answer.toUpperCase()} | ${c.text}`)
-        .join('\n');
-    }
+    const normalizeAnswer = (value: unknown): string => {
+      return String(value ?? '').toUpperCase().replace(/[^A-Z]/g, '');
+    };
 
-    // ------------------------------------------------------------------
-    // Parse the textarea back into RawClue[]
-    // Returns null for lines that don't match the format.
-    // ------------------------------------------------------------------
-    function parse(raw: string): { clues: RawClue[]; errors: string[] } {
-      const errors: string[] = [];
-      const clues: RawClue[] = [];
-      raw.split('\n').forEach((line, li) => {
-        const trimmed = line.trim();
-        if (!trimmed) return;
-        // Format: "1. 0,3 | ANSWER | Clue text"
-        const m = trimmed.match(/^(\d+)\.\s+(\d+),(\d+)\s*\|\s*([A-Za-z]+)\s*\|\s*(.+)$/);
-        if (!m) {
-          errors.push(`Line ${li + 1}: unrecognised format — "${trimmed}"`);
-          return;
-        }
-        clues.push({
-          number: Number(m[1]),
-          row: Number(m[2]),
-          col: Number(m[3]),
-          answer: m[4].toUpperCase(),
-          text: m[5].trim(),
+    const createBlankLayout = (rows: number, cols: number): string[] => {
+      return Array.from({ length: rows }, () => '.'.repeat(cols));
+    };
+
+    const normalizeLayout = (rowsInput: string[], rows: number, cols: number): string[] => {
+      const safeRows = clampInt(rows, MIN_GRID, MAX_GRID);
+      const safeCols = clampInt(cols, MIN_GRID, MAX_GRID);
+
+      return Array.from({ length: safeRows }, (_, rowIndex) => {
+        const sourceRow = rowsInput[rowIndex] ?? '';
+        const cells = Array.from({ length: safeCols }, (_, colIndex) => {
+          return sourceRow[colIndex] === '#' ? '#' : '.';
         });
+        return cells.join('');
       });
-      return { clues, errors };
-    }
-
-    // Local textarea values — keep them as strings in puzzleData so edits survive re-renders
-    const acrossRaw = typeof puzzleData._acrossRaw === 'string' ? puzzleData._acrossRaw : serialise(acrossArr);
-    const downRaw   = typeof puzzleData._downRaw   === 'string' ? puzzleData._downRaw   : serialise(downArr);
-
-    const acrossParsed = parse(acrossRaw);
-    const downParsed   = parse(downRaw);
-
-    const commitClues = (newAcross: string, newDown: string) => {
-      const a = parse(newAcross);
-      const d = parse(newDown);
-      onDataChange('clues', { across: a.clues, down: d.clues });
     };
 
-    const handleAcrossChange = (val: string) => {
-      onDataChange('_acrossRaw', val);
-      commitClues(val, downRaw);
-    };
+    const parseLegacyGridText = (raw: string): string[] => {
+      if (!raw.trim()) return [];
 
-    const handleDownChange = (val: string) => {
-      onDataChange('_downRaw', val);
-      commitClues(acrossRaw, val);
-    };
-
-    // ------------------------------------------------------------------
-    // Auto-number: take a simpler input (no numbers / positions) and
-    // attempt to auto-assign positions based on a user-supplied grid
-    // ------------------------------------------------------------------
-    const autoGridRaw = typeof puzzleData._autoGrid === 'string' ? puzzleData._autoGrid : '';
-
-    function runAutoNumber() {
-      if (!autoGridRaw.trim()) return;
-      // Parse grid: space-separated letters per row, '#' for black cells
-      const gridLines = autoGridRaw
+      const lines = raw
         .trim()
         .split('\n')
-        .map((l) => l.trim().toUpperCase().split(/\s+/));
-      if (gridLines.length === 0) return;
-      const rows = gridLines.length;
-      const cols = gridLines[0].length;
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) =>
+          line
+            .split(/\s+/)
+            .map((cell) => (cell === '#' ? '#' : '.'))
+            .join('')
+        );
 
-      // Ensure rectangular
-      for (const row of gridLines) {
-        if (row.length !== cols) return;
+      const width = lines[0]?.length ?? 0;
+      if (width === 0 || lines.some((line) => line.length !== width)) {
+        return [];
       }
 
-      const isBlack = (r: number, c: number) => gridLines[r]?.[c] === '#';
+      return lines;
+    };
 
-      const acrossClues: RawClue[] = [];
-      const downClues: RawClue[]   = [];
-      let num = 1;
+    const toClueList = (raw: unknown): RawClue[] => {
+      if (!Array.isArray(raw)) return [];
 
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          if (isBlack(r, c)) continue;
-          const startsAcross = (c === 0 || isBlack(r, c - 1)) && !isBlack(r, c + 1);
-          const startsDown   = (r === 0 || isBlack(r - 1, c)) && !isBlack(r + 1, c);
+      return raw
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const rec = item as Record<string, unknown>;
+
+          const number = Math.trunc(asNumber(rec.number, -1));
+          const row = Math.trunc(asNumber(rec.row, -1));
+          const col = Math.trunc(asNumber(rec.col, -1));
+          const answer = normalizeAnswer(rec.answer);
+          const rawLength = Math.trunc(asNumber(rec.length, answer.length));
+          const length = rawLength > 0 ? rawLength : answer.length;
+          const text = asString(rec.text, '');
+
+          if (number <= 0 || row < 0 || col < 0 || length <= 0) return null;
+
+          return {
+            number,
+            row,
+            col,
+            length,
+            answer: answer.slice(0, length),
+            text,
+          };
+        })
+        .filter((clue): clue is RawClue => clue != null);
+    };
+
+    const buildLayoutFromClues = (
+      across: RawClue[],
+      down: RawClue[],
+      fallbackRows: number,
+      fallbackCols: number
+    ): string[] => {
+      let rows = fallbackRows;
+      let cols = fallbackCols;
+
+      for (const clue of across) {
+        rows = Math.max(rows, clue.row + 1);
+        cols = Math.max(cols, clue.col + clue.length);
+      }
+
+      for (const clue of down) {
+        rows = Math.max(rows, clue.row + clue.length);
+        cols = Math.max(cols, clue.col + 1);
+      }
+
+      rows = clampInt(rows || 15, MIN_GRID, MAX_GRID);
+      cols = clampInt(cols || rows, MIN_GRID, MAX_GRID);
+
+      const grid = Array.from({ length: rows }, () => Array.from({ length: cols }, () => '#'));
+
+      for (const clue of across) {
+        for (let i = 0; i < clue.length; i += 1) {
+          if (clue.row < rows && clue.col + i < cols) {
+            grid[clue.row][clue.col + i] = '.';
+          }
+        }
+      }
+
+      for (const clue of down) {
+        for (let i = 0; i < clue.length; i += 1) {
+          if (clue.row + i < rows && clue.col < cols) {
+            grid[clue.row + i][clue.col] = '.';
+          }
+        }
+      }
+
+      return grid.map((row) => row.join(''));
+    };
+
+    const extractSlots = (layoutRows: string[]): { across: Slot[]; down: Slot[] } => {
+      const rows = layoutRows.length;
+      const cols = layoutRows[0]?.length ?? 0;
+
+      const isWhite = (row: number, col: number): boolean => {
+        return row >= 0 && row < rows && col >= 0 && col < cols && layoutRows[row][col] !== '#';
+      };
+
+      const runLength = (row: number, col: number, direction: 'across' | 'down'): number => {
+        let r = row;
+        let c = col;
+        let length = 0;
+
+        while (isWhite(r, c)) {
+          length += 1;
+          if (direction === 'across') c += 1;
+          else r += 1;
+        }
+
+        return length;
+      };
+
+      const across: Slot[] = [];
+      const down: Slot[] = [];
+      let nextNumber = 1;
+
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          if (!isWhite(row, col)) continue;
+
+          const leftBlack = col === 0 || !isWhite(row, col - 1);
+          const upBlack = row === 0 || !isWhite(row - 1, col);
+
+          const acrossLength = leftBlack ? runLength(row, col, 'across') : 0;
+          const downLength = upBlack ? runLength(row, col, 'down') : 0;
+
+          const startsAcross = leftBlack && acrossLength >= 3;
+          const startsDown = upBlack && downLength >= 3;
+
           if (!startsAcross && !startsDown) continue;
 
           if (startsAcross) {
-            let answer = '';
-            let cc = c;
-            while (cc < cols && !isBlack(r, cc)) answer += gridLines[r][cc++];
-            acrossClues.push({ number: num, row: r, col: c, answer, text: `${num} Across clue` });
+            across.push({ number: nextNumber, row, col, length: acrossLength });
           }
           if (startsDown) {
-            let answer = '';
-            let rr = r;
-            while (rr < rows && !isBlack(rr, c)) answer += gridLines[rr++][c];
-            downClues.push({ number: num, row: r, col: c, answer, text: `${num} Down clue` });
+            down.push({ number: nextNumber, row, col, length: downLength });
           }
-          num++;
+
+          nextNumber += 1;
         }
       }
 
-      const newAcrossRaw = serialise(acrossClues);
-      const newDownRaw   = serialise(downClues);
-      onDataChange('_acrossRaw', newAcrossRaw);
-      onDataChange('_downRaw',   newDownRaw);
-      onDataChange('clues', { across: acrossClues, down: downClues });
+      return { across, down };
+    };
+
+    const mergeSlotsWithExisting = (
+      slots: Slot[],
+      direction: 'across' | 'down',
+      existingClues: Array<RawClue | EditorClue>
+    ): EditorClue[] => {
+      const byPosition = new Map<string, RawClue | EditorClue>();
+      const byNumber = new Map<number, RawClue | EditorClue>();
+
+      for (const clue of existingClues) {
+        byPosition.set(`${clue.row}:${clue.col}`, clue);
+        if (!byNumber.has(clue.number)) {
+          byNumber.set(clue.number, clue);
+        }
+      }
+
+      return slots.map((slot) => {
+        const source =
+          byPosition.get(`${slot.row}:${slot.col}`) ?? byNumber.get(slot.number);
+        const answer = normalizeAnswer(source?.answer).slice(0, slot.length);
+
+        return {
+          ...slot,
+          direction,
+          answer,
+          text: asString(source?.text, ''),
+        };
+      });
+    };
+
+    const computeBlackSquareRatio = (layoutRows: string[]): number => {
+      const rows = layoutRows.length;
+      const cols = layoutRows[0]?.length ?? 0;
+      const total = rows * cols;
+      if (total === 0) return 0;
+
+      let blackCount = 0;
+      for (const row of layoutRows) {
+        for (const cell of row) {
+          if (cell === '#') blackCount += 1;
+        }
+      }
+
+      return blackCount / total;
+    };
+
+    const cluesRoot = (puzzleData.clues && typeof puzzleData.clues === 'object')
+      ? (puzzleData.clues as Record<string, unknown>)
+      : {};
+    const rawAcross = toClueList(cluesRoot.across);
+    const rawDown = toClueList(cluesRoot.down);
+
+    const storedLayout = Array.isArray(puzzleData._crosswordLayout)
+      ? (puzzleData._crosswordLayout as unknown[])
+          .map((row) => asString(row, ''))
+          .filter((row) => row.length > 0)
+      : [];
+
+    const legacyLayout = parseLegacyGridText(asString(puzzleData._autoGrid, ''));
+    const baseLayout =
+      storedLayout.length > 0
+        ? storedLayout
+        : legacyLayout.length > 0
+          ? legacyLayout
+          : buildLayoutFromClues(rawAcross, rawDown, asNumber(puzzleData.rows, 15), asNumber(puzzleData.cols, 15));
+
+    const inferredRows = baseLayout.length > 0 ? baseLayout.length : 15;
+    const inferredCols = baseLayout[0]?.length ?? inferredRows;
+
+    const rows = clampInt(
+      Math.trunc(asNumber(puzzleData._crosswordRows, asNumber(puzzleData.rows, inferredRows))),
+      MIN_GRID,
+      MAX_GRID
+    );
+    const cols = clampInt(
+      Math.trunc(asNumber(puzzleData._crosswordCols, asNumber(puzzleData.cols, inferredCols))),
+      MIN_GRID,
+      MAX_GRID
+    );
+
+    const layout = normalizeLayout(baseLayout, rows, cols);
+    const gridRows = layout.length;
+    const gridCols = layout[0]?.length ?? 0;
+
+    const extracted = extractSlots(layout);
+    const acrossEntries = mergeSlotsWithExisting(extracted.across, 'across', rawAcross);
+    const downEntries = mergeSlotsWithExisting(extracted.down, 'down', rawDown);
+
+    const persistClues = (
+      nextAcross: EditorClue[],
+      nextDown: EditorClue[],
+      nextLayout: string[]
+    ) => {
+      onDataChange('clues', {
+        across: nextAcross.map((entry) => ({
+          number: entry.number,
+          row: entry.row,
+          col: entry.col,
+          length: entry.length,
+          answer: normalizeAnswer(entry.answer).slice(0, entry.length),
+          text: entry.text,
+        })),
+        down: nextDown.map((entry) => ({
+          number: entry.number,
+          row: entry.row,
+          col: entry.col,
+          length: entry.length,
+          answer: normalizeAnswer(entry.answer).slice(0, entry.length),
+          text: entry.text,
+        })),
+      });
+
+      const nextRows = nextLayout.length;
+      const nextCols = nextLayout[0]?.length ?? 0;
+      const ratio = computeBlackSquareRatio(nextLayout);
+
+      onDataChange('rows', nextRows);
+      onDataChange('cols', nextCols);
+      onDataChange('blackSquareRatio', Number(ratio.toFixed(4)));
+    };
+
+    const applyLayout = (nextLayoutRaw: string[]) => {
+      const nextRows = clampInt(nextLayoutRaw.length || gridRows, MIN_GRID, MAX_GRID);
+      const nextCols = clampInt(nextLayoutRaw[0]?.length || gridCols, MIN_GRID, MAX_GRID);
+      const nextLayout = normalizeLayout(nextLayoutRaw, nextRows, nextCols);
+
+      const nextSlots = extractSlots(nextLayout);
+      const nextAcross = mergeSlotsWithExisting(nextSlots.across, 'across', acrossEntries);
+      const nextDown = mergeSlotsWithExisting(nextSlots.down, 'down', downEntries);
+
+      onDataChange('_crosswordLayout', nextLayout);
+      onDataChange('_crosswordRows', nextRows);
+      onDataChange('_crosswordCols', nextCols);
+
+      persistClues(nextAcross, nextDown, nextLayout);
+    };
+
+    const resizeGrid = (nextRowsInput: number, nextColsInput: number) => {
+      const nextRows = clampInt(nextRowsInput, MIN_GRID, MAX_GRID);
+      const nextCols = clampInt(nextColsInput, MIN_GRID, MAX_GRID);
+      const resized = normalizeLayout(layout, nextRows, nextCols);
+      applyLayout(resized);
+    };
+
+    const toggleCell = (row: number, col: number) => {
+      const nextLayout = layout.map((line, rowIndex) => {
+        if (rowIndex !== row) return line;
+        const chars = line.split('');
+        chars[col] = chars[col] === '#' ? '.' : '#';
+        return chars.join('');
+      });
+      applyLayout(nextLayout);
+    };
+
+    const entryKey = (entry: EditorClue): string => {
+      return `${entry.direction}:${entry.number}:${entry.row}:${entry.col}`;
+    };
+
+    const updateEntry = (
+      direction: 'across' | 'down',
+      target: EditorClue,
+      field: 'answer' | 'text',
+      value: string
+    ) => {
+      const targetKey = entryKey(target);
+
+      const nextAcross = acrossEntries.map((entry) => {
+        if (direction !== 'across' || entryKey(entry) !== targetKey) return entry;
+        if (field === 'answer') {
+          return {
+            ...entry,
+            answer: normalizeAnswer(value).slice(0, entry.length),
+          };
+        }
+        return { ...entry, text: value };
+      });
+
+      const nextDown = downEntries.map((entry) => {
+        if (direction !== 'down' || entryKey(entry) !== targetKey) return entry;
+        if (field === 'answer') {
+          return {
+            ...entry,
+            answer: normalizeAnswer(value).slice(0, entry.length),
+          };
+        }
+        return { ...entry, text: value };
+      });
+
+      persistClues(nextAcross, nextDown, layout);
+    };
+
+    const clueNumberByCell = new Map<string, number>();
+    for (const slot of [...extracted.across, ...extracted.down]) {
+      const key = `${slot.row},${slot.col}`;
+      if (!clueNumberByCell.has(key)) {
+        clueNumberByCell.set(key, slot.number);
+      }
     }
 
-    // ------------------------------------------------------------------
-    // Grid preview
-    // ------------------------------------------------------------------
-    const allClues: RawClue[] = [...acrossParsed.clues, ...downParsed.clues];
-    let previewGrid: string[][] = [];
-    let previewRows = 0, previewCols = 0;
-    if (allClues.length > 0) {
-      for (const c of acrossParsed.clues) {
-        previewRows = Math.max(previewRows, c.row + 1);
-        previewCols = Math.max(previewCols, c.col + c.answer.length);
-      }
-      for (const c of downParsed.clues) {
-        previewRows = Math.max(previewRows, c.row + c.answer.length);
-        previewCols = Math.max(previewCols, c.col + 1);
-      }
-      previewGrid = Array.from({ length: previewRows }, () => Array(previewCols).fill('#'));
-      for (const c of acrossParsed.clues) {
-        for (let i = 0; i < c.answer.length; i++) previewGrid[c.row][c.col + i] = c.answer[i];
-      }
-      for (const c of downParsed.clues) {
-        for (let i = 0; i < c.answer.length; i++) previewGrid[c.row + i][c.col] = previewGrid[c.row + i][c.col] === '#' ? c.answer[i] : previewGrid[c.row + i][c.col];
-      }
-    }
+    const allEntries = [...acrossEntries, ...downEntries];
+    const missingAnswerCount = allEntries.filter((entry) => entry.answer.length !== entry.length).length;
+    const missingClueCount = allEntries.filter((entry) => !entry.text.trim()).length;
+    const blackCells = layout.reduce((sum, row) => {
+      return sum + row.split('').filter((cell) => cell === '#').length;
+    }, 0);
+    const whiteCells = gridRows * gridCols - blackCells;
 
-    const allErrors = [...acrossParsed.errors, ...downParsed.errors];
+    const cellSize = gridCols >= 20 ? 20 : gridCols >= 15 ? 24 : 28;
 
     return (
       <div className="space-y-6">
-
-        {/* How-to */}
         <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)', color: '#c7d2fe' }}>
-          <p className="font-bold mb-1">✏️ How to author a crossword</p>
-          <p>Each clue line follows the format:</p>
-          <code className="block mt-1 mb-1 px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,0,0,0.4)' }}>
-            {'<number>. <row>,<col> | <ANSWER> | Clue text'}
-          </code>
-          <p>Row and col are <strong>0-based</strong> — the top-left cell is <code>0,0</code>. Example:</p>
-          <code className="block mt-1 px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,0,0,0.4)' }}>
-            {'1. 0,0 | BOAT | Something that floats'}
-          </code>
-          <p className="mt-1">Or use the <strong>Auto-number from grid</strong> tool below to generate positions automatically.</p>
+          <p className="font-bold mb-1">🧩 Grid-first crossword editor</p>
+          <p>1) Design the black-square layout by clicking cells. 2) Enter answers and clues for each auto-numbered slot. 3) Save.</p>
+          <p className="mt-1">All numbering and slot lengths are derived from the grid, so this scales to large boards like 20×20.</p>
         </div>
 
-        {/* Auto-number tool */}
-        <details className="rounded-lg overflow-hidden" style={{ border: '1px solid rgba(99,102,241,0.3)' }}>
-          <summary className="px-4 py-2 text-sm font-bold cursor-pointer text-indigo-300" style={{ background: 'rgba(99,102,241,0.1)' }}>
-            🔢 Auto-number from grid layout (optional)
-          </summary>
-          <div className="p-4 space-y-3">
-            <p className="text-xs text-gray-400">
-              Type each row on its own line. Use letters for white cells, <code>#</code> for black cells. Separate each cell with a space.
-            </p>
-            <textarea
-              rows={8}
-              value={autoGridRaw}
-              onChange={(e) => onDataChange('_autoGrid', e.target.value)}
-              placeholder={'B O A T #\n# A # E #\n# T # A #\n# # # L #'}
-              className={`${fieldCls} resize-y`}
-              spellCheck={false}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div>
+            <label className={labelCls}>Rows</label>
+            <input
+              type="number"
+              min={MIN_GRID}
+              max={MAX_GRID}
+              value={gridRows}
+              onChange={(e) => resizeGrid(Number(e.target.value || gridRows), gridCols)}
+              className={fieldCls}
             />
+          </div>
+          <div>
+            <label className={labelCls}>Columns</label>
+            <input
+              type="number"
+              min={MIN_GRID}
+              max={MAX_GRID}
+              value={gridCols}
+              onChange={(e) => resizeGrid(gridRows, Number(e.target.value || gridCols))}
+              className={fieldCls}
+            />
+          </div>
+          <div className="lg:col-span-2 flex flex-wrap items-end gap-2">
             <button
               type="button"
-              onClick={runAutoNumber}
-              disabled={!autoGridRaw.trim()}
-              className="px-4 py-2 rounded-lg font-bold text-sm text-white transition-all disabled:opacity-40"
-              style={{ background: 'rgba(99,102,241,0.3)', border: '1px solid rgba(99,102,241,0.5)' }}
+              onClick={() => resizeGrid(13, 13)}
+              className="px-3 py-2 rounded-lg text-xs font-bold text-white"
+              style={{ background: 'rgba(99,102,241,0.25)', border: '1px solid rgba(99,102,241,0.4)' }}
             >
-              🔢 Generate clue list from grid
+              13×13
             </button>
-            <p className="text-xs text-gray-500">
-              This fills in the Across and Down sections below. You still need to replace the placeholder clue texts with real clues.
-            </p>
-          </div>
-        </details>
-
-        {/* Across / Down textareas */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div>
-            <label className={labelCls}>
-              ACROSS clues <span className="text-red-400">*</span>
-              <span className="font-normal text-gray-500 ml-1">({acrossParsed.clues.length} parsed)</span>
-            </label>
-            <textarea
-              rows={10}
-              value={acrossRaw}
-              onChange={(e) => handleAcrossChange(e.target.value)}
-              placeholder={'1. 0,0 | ACROSS | Goes from left to right\n3. 2,1 | WORD | Another across clue'}
-              className={`${fieldCls} resize-y`}
-              spellCheck={false}
-            />
-          </div>
-          <div>
-            <label className={labelCls}>
-              DOWN clues <span className="text-red-400">*</span>
-              <span className="font-normal text-gray-500 ml-1">({downParsed.clues.length} parsed)</span>
-            </label>
-            <textarea
-              rows={10}
-              value={downRaw}
-              onChange={(e) => handleDownChange(e.target.value)}
-              placeholder={'1. 0,0 | DOWN | Goes from top to bottom\n2. 0,2 | CLUE | Another down clue'}
-              className={`${fieldCls} resize-y`}
-              spellCheck={false}
-            />
+            <button
+              type="button"
+              onClick={() => resizeGrid(15, 15)}
+              className="px-3 py-2 rounded-lg text-xs font-bold text-white"
+              style={{ background: 'rgba(99,102,241,0.25)', border: '1px solid rgba(99,102,241,0.4)' }}
+            >
+              15×15
+            </button>
+            <button
+              type="button"
+              onClick={() => resizeGrid(20, 20)}
+              className="px-3 py-2 rounded-lg text-xs font-bold text-white"
+              style={{ background: 'rgba(99,102,241,0.25)', border: '1px solid rgba(99,102,241,0.4)' }}
+            >
+              20×20
+            </button>
+            <button
+              type="button"
+              onClick={() => applyLayout(createBlankLayout(gridRows, gridCols))}
+              className="px-3 py-2 rounded-lg text-xs font-bold"
+              style={{ background: 'rgba(148,163,184,0.2)', border: '1px solid rgba(148,163,184,0.35)', color: '#e2e8f0' }}
+            >
+              Clear blacks
+            </button>
           </div>
         </div>
 
-        {/* Validation errors */}
-        {allErrors.length > 0 && (
-          <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#fca5a5' }}>
-            <p className="font-bold">Parse errors:</p>
-            {allErrors.map((e, i) => <p key={i}>{e}</p>)}
-          </div>
-        )}
-
-        {/* Grid preview */}
-        {previewGrid.length > 0 && (
-          <div>
-            <label className={labelCls}>Grid preview</label>
-            <div className="overflow-x-auto">
-              <table className="border-collapse text-xs font-mono" style={{ borderSpacing: 0 }}>
-                <tbody>
-                  {previewGrid.map((row, r) => (
-                    <tr key={r}>
-                      {row.map((cell, c) => {
-                        const isBlack = cell === '#';
-                        const clueNum = allClues.find((cl) => cl.row === r && cl.col === c)?.number;
-                        return (
-                          <td
-                            key={c}
-                            style={{
-                              width: 28, height: 28, padding: 0, textAlign: 'center', verticalAlign: 'middle',
-                              background: isBlack ? '#111' : 'rgba(99,102,241,0.12)',
-                              border: isBlack ? '1px solid #222' : '1px solid rgba(99,102,241,0.4)',
-                              position: 'relative',
-                              color: isBlack ? 'transparent' : '#e2e8f0',
-                              fontWeight: 700,
-                              fontSize: 13,
-                            }}
-                          >
-                            {!isBlack && clueNum !== undefined && (
-                              <span style={{ position: 'absolute', top: 1, left: 1, fontSize: 7, lineHeight: 1, color: '#94a3b8', fontWeight: 700 }}>
-                                {clueNum}
-                              </span>
-                            )}
-                            {isBlack ? '' : cell}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <div>
+          <label className={labelCls}>Grid layout (click to toggle black squares)</label>
+          <div className="overflow-x-auto">
+            <div
+              style={{
+                display: 'inline-grid',
+                gridTemplateColumns: `repeat(${gridCols}, ${cellSize}px)`,
+                gap: 1,
+                background: '#111827',
+                padding: 2,
+                borderRadius: 8,
+                border: '1px solid rgba(99,102,241,0.35)',
+              }}
+            >
+              {layout.map((line, row) =>
+                line.split('').map((cell, col) => {
+                  const isBlack = cell === '#';
+                  const clueNum = clueNumberByCell.get(`${row},${col}`);
+                  return (
+                    <button
+                      type="button"
+                      key={`${row}-${col}`}
+                      onClick={() => toggleCell(row, col)}
+                      title={`Row ${row + 1}, Col ${col + 1} — ${isBlack ? 'black' : 'white'}`}
+                      style={{
+                        width: cellSize,
+                        height: cellSize,
+                        borderRadius: 3,
+                        border: isBlack ? '1px solid #1f2937' : '1px solid rgba(99,102,241,0.45)',
+                        background: isBlack ? '#020617' : 'rgba(99,102,241,0.12)',
+                        position: 'relative',
+                      }}
+                    >
+                      {!isBlack && clueNum !== undefined && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: 1,
+                            left: 2,
+                            fontSize: Math.max(7, cellSize * 0.26),
+                            lineHeight: 1,
+                            color: '#94a3b8',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {clueNum}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {previewRows}×{previewCols} grid · {acrossParsed.clues.length} across · {downParsed.clues.length} down
-            </p>
           </div>
-        )}
+          <p className="text-xs text-gray-500 mt-2">
+            {gridRows}×{gridCols} · {whiteCells} white · {blackCells} black · black ratio {computeBlackSquareRatio(layout).toFixed(3)}
+          </p>
+        </div>
+
+        <div className="rounded-lg p-3 text-xs" style={{ background: missingAnswerCount || missingClueCount ? 'rgba(251,191,36,0.1)' : 'rgba(34,197,94,0.1)', border: missingAnswerCount || missingClueCount ? '1px solid rgba(251,191,36,0.35)' : '1px solid rgba(34,197,94,0.35)', color: missingAnswerCount || missingClueCount ? '#fcd34d' : '#86efac' }}>
+          <p className="font-bold mb-1">Slot summary</p>
+          <p>{acrossEntries.length} across · {downEntries.length} down · {allEntries.length} total clues</p>
+          <p>{missingAnswerCount} answers incomplete · {missingClueCount} clues missing text</p>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="rounded-xl p-4 space-y-3" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(71,85,105,0.55)' }}>
+            <label className={labelCls}>Across entries ({acrossEntries.length})</label>
+            <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+              {acrossEntries.length === 0 && (
+                <p className="text-xs text-gray-500">No across entries yet. Toggle black squares to create slots.</p>
+              )}
+              {acrossEntries.map((entry) => (
+                <div key={entryKey(entry)} className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(30,41,59,0.7)', border: '1px solid rgba(100,116,139,0.45)' }}>
+                  <p className="text-xs text-gray-400 font-semibold">
+                    #{entry.number} · row {entry.row + 1}, col {entry.col + 1} · {entry.length} letters
+                  </p>
+                  <input
+                    type="text"
+                    maxLength={entry.length}
+                    value={entry.answer}
+                    onChange={(e) => updateEntry('across', entry, 'answer', e.target.value)}
+                    placeholder={`${entry.length}-letter answer`}
+                    className={`${fieldCls} font-mono uppercase tracking-wider`}
+                  />
+                  <input
+                    type="text"
+                    value={entry.text}
+                    onChange={(e) => updateEntry('across', entry, 'text', e.target.value)}
+                    placeholder="Across clue text"
+                    className={fieldCls}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl p-4 space-y-3" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(71,85,105,0.55)' }}>
+            <label className={labelCls}>Down entries ({downEntries.length})</label>
+            <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+              {downEntries.length === 0 && (
+                <p className="text-xs text-gray-500">No down entries yet. Toggle black squares to create slots.</p>
+              )}
+              {downEntries.map((entry) => (
+                <div key={entryKey(entry)} className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(30,41,59,0.7)', border: '1px solid rgba(100,116,139,0.45)' }}>
+                  <p className="text-xs text-gray-400 font-semibold">
+                    #{entry.number} · row {entry.row + 1}, col {entry.col + 1} · {entry.length} letters
+                  </p>
+                  <input
+                    type="text"
+                    maxLength={entry.length}
+                    value={entry.answer}
+                    onChange={(e) => updateEntry('down', entry, 'answer', e.target.value)}
+                    placeholder={`${entry.length}-letter answer`}
+                    className={`${fieldCls} font-mono uppercase tracking-wider`}
+                  />
+                  <input
+                    type="text"
+                    value={entry.text}
+                    onChange={(e) => updateEntry('down', entry, 'text', e.target.value)}
+                    placeholder="Down clue text"
+                    className={fieldCls}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
