@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
 
@@ -39,6 +40,9 @@ interface Props {
 }
 
 type Direction = "across" | "down";
+
+const WORD_SOLVED_ANIMATION_MS = 1400;
+const PUZZLE_COMPLETE_ANIMATION_MS = 2600;
 
 interface ActiveClue {
   direction: Direction;
@@ -200,6 +204,42 @@ function InstructionsModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function CrosswordCompletionOverlay() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 flex items-center justify-center px-4"
+      style={{ zIndex: 2147483647, background: "rgba(2,6,23,0.78)", backdropFilter: "blur(6px)" }}
+    >
+      <div style={{ position: "relative", width: "min(560px, 94vw)", minHeight: 220, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="crossword-completion-ring" style={{ position: "absolute", inset: 4, border: "2px solid rgba(74,222,128,0.56)", borderRadius: 16 }} />
+        <div className="crossword-completion-ring" style={{ position: "absolute", inset: 34, border: "1px solid rgba(253,231,76,0.36)", borderRadius: 14, animationDelay: "220ms" }} />
+        <div
+          className="crossword-completion-card"
+          style={{
+            position: "relative",
+            width: "100%",
+            padding: "28px 30px",
+            borderRadius: 14,
+            background: "linear-gradient(135deg, rgba(15,23,42,0.98), rgba(6,78,59,0.94))",
+            border: "2px solid rgba(134,239,172,0.9)",
+            boxShadow: "0 26px 90px rgba(0,0,0,0.65), 0 0 54px rgba(34,197,94,0.42)",
+            textAlign: "center",
+            opacity: 1,
+          }}
+        >
+          <div style={{ color: "#bbf7d0", fontWeight: 900, fontSize: "0.72rem", letterSpacing: "0.22em", textTransform: "uppercase" }}>Puzzle Solved</div>
+          <div style={{ color: "#f8fafc", fontWeight: 900, fontSize: "clamp(1.7rem, 6vw, 3.1rem)", letterSpacing: 0, lineHeight: 1.05, marginTop: 7 }}>Crossword Complete</div>
+          <div style={{ color: "#d1fae5", fontSize: "0.95rem", fontWeight: 800, marginTop: 12, letterSpacing: 0 }}>Preparing your XP and points</div>
+          <div style={{ height: 6, marginTop: 20, borderRadius: 999, background: "rgba(255,255,255,0.16)", overflow: "hidden" }}>
+            <div className="crossword-completion-bar" style={{ height: "100%", width: "100%", borderRadius: 999, background: "linear-gradient(90deg, #38d399, #fde74c)" }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CrosswordPuzzle({
@@ -296,6 +336,7 @@ export default function CrosswordPuzzle({
     }
     return new Set();
   });
+  const solvedCluesRef = useRef<Set<string>>(solvedClues);
   // Hint-revealed cells
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
 
@@ -307,10 +348,29 @@ export default function CrosswordPuzzle({
   const [hintLoading, setHintLoading] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [justSolvedClues, setJustSolvedClues] = useState<Set<string>>(new Set());
+  const [latestSolvedClue, setLatestSolvedClue] = useState<ActiveClue | null>(null);
+  const [completionAnimating, setCompletionAnimating] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cellSize = useCellSize(containerRef, cols);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const checkingCluesRef = useRef<Map<string, string>>(new Map());
+  const checkQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const solvedAnimationTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completionNotifiedRef = useRef(false);
+
+  useEffect(() => {
+    solvedCluesRef.current = solvedClues;
+  }, [solvedClues]);
+
+  useEffect(() => {
+    return () => {
+      solvedAnimationTimersRef.current.forEach((timer) => clearTimeout(timer));
+      if (completionTimerRef.current) clearTimeout(completionTimerRef.current);
+    };
+  }, []);
 
   // Pre-fill correct letters when already solved
   useEffect(() => {
@@ -354,40 +414,125 @@ export default function CrosswordPuzzle({
     return new Set(cells.map((c) => `${c.row},${c.col}`));
   }, [activeClue, initialGrid, data]);
 
+  const triggerSolvedClueAnimation = useCallback((key: string, direction: Direction, number: number) => {
+    setJustSolvedClues((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+    setLatestSolvedClue({ direction, number });
+
+    const timer = setTimeout(() => {
+      setJustSolvedClues((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      setLatestSolvedClue((current) => (
+        current?.direction === direction && current.number === number ? null : current
+      ));
+    }, WORD_SOLVED_ANIMATION_MS);
+    solvedAnimationTimersRef.current.push(timer);
+  }, []);
+
+  const startCompletionAnimation = useCallback(() => {
+    if (completionNotifiedRef.current) return;
+    completionNotifiedRef.current = true;
+    setGameStatus("won");
+    setCompletionAnimating(true);
+
+    if (completionTimerRef.current) clearTimeout(completionTimerRef.current);
+    completionTimerRef.current = setTimeout(() => {
+      setCompletionAnimating(false);
+      onSolved?.();
+    }, PUZZLE_COMPLETE_ANIMATION_MS);
+  }, [onSolved]);
+
   // ── Check a word against the server ───────────────────────────────────────
   const checkWord = useCallback(
     async (direction: Direction, number: number, answer: string) => {
       const key = `${direction}-${number}`;
-      if (solvedClues.has(key)) return;
-      setSubmitting(true);
-      try {
-        const res = await fetch(`/api/puzzles/${puzzleId}/crossword`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ direction, number, answer }),
-        });
-        const json = await res.json();
-        if (json.correct) {
-          setSolvedClues((prev) => {
-            const next = new Set(prev);
-            next.add(key);
-            return next;
+      if (solvedCluesRef.current.has(key)) return;
+      if (checkingCluesRef.current.get(key) === answer) return;
+
+      checkingCluesRef.current.set(key, answer);
+
+      const runCheck = async () => {
+        if (solvedCluesRef.current.has(key)) {
+          if (checkingCluesRef.current.get(key) === answer) {
+            checkingCluesRef.current.delete(key);
+          }
+          return;
+        }
+
+        setSubmitting(true);
+        try {
+          const res = await fetch(`/api/puzzles/${puzzleId}/crossword`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ direction, number, answer }),
           });
-          setError("");
-          if (json.allSolved) {
-            setGameStatus("won");
-            onSolved?.();
+          const json = await res.json();
+          if (json.correct && checkingCluesRef.current.get(key) === answer) {
+            if (!solvedCluesRef.current.has(key)) {
+              const next = new Set(solvedCluesRef.current);
+              next.add(key);
+              solvedCluesRef.current = next;
+              setSolvedClues(next);
+              triggerSolvedClueAnimation(key, direction, number);
+            }
+            setError("");
+            if (json.allSolved) {
+              startCompletionAnimation();
+            }
+          }
+        } catch {
+          // network error — silently ignore
+        } finally {
+          if (checkingCluesRef.current.get(key) === answer) {
+            checkingCluesRef.current.delete(key);
+          }
+          setSubmitting(false);
+        }
+      };
+
+      const queuedCheck = checkQueueRef.current.catch(() => undefined).then(runCheck);
+      checkQueueRef.current = queuedCheck;
+      await queuedCheck;
+    },
+    [puzzleId, startCompletionAnimation, triggerSolvedClueAnimation]
+  );
+
+  const checkFilledClues = useCallback(
+    (currentLetters: string[][]) => {
+      if (!data || !initialGrid.length || gameStatus !== "playing") return;
+
+      const checkClueSet = (direction: Direction, clues: CrosswordClue[]) => {
+        for (const clue of clues) {
+          const key = `${direction}-${clue.number}`;
+          if (solvedCluesRef.current.has(key)) continue;
+
+          const cells = getWordCells(initialGrid, clue.row, clue.col, direction);
+          if (cells.length !== clue.length) continue;
+
+          const word = cells.map((cell) => currentLetters[cell.row]?.[cell.col] ?? "").join("");
+          if (checkingCluesRef.current.get(key) === word) continue;
+          if (word.length === clue.length && cells.every((cell) => !!currentLetters[cell.row]?.[cell.col])) {
+            checkWord(direction, clue.number, word);
           }
         }
-      } catch {
-        // network error — silently ignore
-      } finally {
-        setSubmitting(false);
-      }
+      };
+
+      checkClueSet("across", data.clues.across);
+      checkClueSet("down", data.clues.down);
     },
-    [puzzleId, solvedClues, onSolved]
+    [data, gameStatus, initialGrid, checkWord]
   );
+
+  useEffect(() => {
+    checkFilledClues(letters);
+  }, [letters, checkFilledClues]);
 
   // ── Move cursor to next empty cell in word ─────────────────────────────────
   const [cursorCell, setCursorCell] = useState<{ row: number; col: number } | null>(null);
@@ -541,27 +686,9 @@ export default function CrosswordPuzzle({
           return next;
         });
         advanceCursor(row, col, activeClue.direction);
-
-        // Check if the whole word is now filled in
-        if (data) {
-          const clue =
-            activeClue.direction === "across"
-              ? data.clues.across.find((c) => c.number === activeClue.number)
-              : data.clues.down.find((c) => c.number === activeClue.number);
-          if (clue) {
-            const cells = getWordCells(initialGrid, clue.row, clue.col, activeClue.direction);
-            const updatedLetters = letters.map((r) => [...r]);
-            updatedLetters[row][col] = key;
-            const word = cells.map((c) => updatedLetters[c.row][c.col]).join("");
-            const fullyFilled = cells.every((c) => !!updatedLetters[c.row][c.col]);
-            if (fullyFilled && word.length === clue.length) {
-              checkWord(activeClue.direction, activeClue.number, word);
-            }
-          }
-        }
       }
     },
-    [gameStatus, activeClue, cursorCell, letters, initialGrid, data, goToNextClue, retreatCursor, advanceCursor, checkWord]
+    [gameStatus, activeClue, cursorCell, letters, initialGrid, goToNextClue, retreatCursor, advanceCursor]
   );
 
   // ── Hint: reveal a letter in the current cell ──────────────────────────────
@@ -621,8 +748,28 @@ export default function CrosswordPuzzle({
     [gameStatus, data, initialGrid, letters]
   );
 
+  const getCellStatus = (row: number, col: number): { isSolved: boolean; isJustSolved: boolean } => {
+    const cell = initialGrid[row]?.[col];
+    if (!cell || cell.isBlack) return { isSolved: false, isJustSolved: false };
+
+    const acrossKey = cell.acrossNumber ? `across-${cell.acrossNumber}` : null;
+    const downKey = cell.downNumber ? `down-${cell.downNumber}` : null;
+
+    return {
+      isSolved: !!((acrossKey && solvedClues.has(acrossKey)) || (downKey && solvedClues.has(downKey))),
+      isJustSolved: !!((acrossKey && justSolvedClues.has(acrossKey)) || (downKey && justSolvedClues.has(downKey))),
+    };
+  };
+
+  const cellTextColor = (row: number, col: number): string => {
+    const { isSolved } = getCellStatus(row, col);
+    if (isSolved) return "#4ade80";
+    if (revealed.has(`${row},${col}`)) return "#FDE74C";
+    return "#f8fafc";
+  };
+
   // ── Cell colour ────────────────────────────────────────────────────────────
-  function cellStyle(row: number, col: number): React.CSSProperties {
+  function cellStyle(row: number, col: number, status = getCellStatus(row, col)): React.CSSProperties {
     const cell = initialGrid[row]?.[col];
     if (!cell || cell.isBlack) {
       return { background: skin.tileBg === "transparent" ? "#111" : "#0a0a0f", border: "1px solid #222" };
@@ -632,23 +779,22 @@ export default function CrosswordPuzzle({
     const isInWord = activeWordCells.has(key);
     const isRevealed = revealed.has(key);
 
-    // Determine if the containing across/down word is solved
-    const acrossSolved = cell.acrossNumber ? solvedClues.has(`across-${cell.acrossNumber}`) : false;
-    const downSolved = cell.downNumber ? solvedClues.has(`down-${cell.downNumber}`) : false;
-    const isSolved = acrossSolved || downSolved;
-
     let bg = "rgba(255,255,255,0.06)";
     let borderColor = "rgba(255,255,255,0.15)";
 
-    if (isSolved)     { bg = "rgba(34,197,94,0.22)";     borderColor = "#22c55e"; }
     if (isInWord)     { bg = "rgba(99,140,248,0.25)";    borderColor = "#6366f1"; }
     if (isRevealed)   { bg = "rgba(253,231,76,0.18)";    borderColor = "#FDE74C"; }
-    if (isActive)     { bg = "rgba(99,140,248,0.55)";    borderColor = "#818cf8"; }
+    if (status.isSolved) { bg = "rgba(34,197,94,0.22)";  borderColor = "#22c55e"; }
+    if (isActive)     { borderColor = status.isSolved ? "#86efac" : "#818cf8"; }
 
     return {
       background: bg,
       border: `2px solid ${borderColor}`,
-      boxShadow: isActive ? "0 0 0 2px #818cf840" : undefined,
+      boxShadow: isActive
+        ? status.isSolved
+          ? "0 0 0 2px rgba(134,239,172,0.32)"
+          : "0 0 0 2px #818cf840"
+        : undefined,
       cursor: "pointer",
       position: "relative",
     };
@@ -664,10 +810,99 @@ export default function CrosswordPuzzle({
 
   const acrossClues = [...data.clues.across].sort((a, b) => a.number - b.number);
   const downClues = [...data.clues.down].sort((a, b) => a.number - b.number);
+  const completionOverlay = completionAnimating && typeof document !== "undefined"
+    ? createPortal(<CrosswordCompletionOverlay />, document.body)
+    : null;
 
   return (
     <>
+      <style jsx global>{`
+        @keyframes crossword-cell-success {
+          0% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 0 rgba(74, 222, 128, 0); }
+          18% { transform: scale(1.18); filter: brightness(1.75); box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.35), 0 0 26px rgba(74, 222, 128, 0.95); }
+          42% { transform: scale(1.05); filter: brightness(1.35); box-shadow: 0 0 0 2px rgba(253, 231, 76, 0.26), 0 0 18px rgba(253, 231, 76, 0.42); }
+          100% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 0 rgba(74, 222, 128, 0); }
+        }
+
+        @keyframes crossword-cell-finish {
+          0%, 100% { transform: scale(1); filter: brightness(1); }
+          35% { transform: scale(1.08); filter: brightness(1.65); }
+        }
+
+        @keyframes crossword-clue-success {
+          0% { transform: translateX(0) scale(1); }
+          20% { transform: translateX(6px) scale(1.03); }
+          100% { transform: translateX(0) scale(1); }
+        }
+
+        @keyframes crossword-completion-card {
+          0% { transform: scale(0.9) translateY(18px); }
+          20% { transform: scale(1.05) translateY(0); }
+          100% { transform: scale(1) translateY(0); }
+        }
+
+        @keyframes crossword-completion-ring {
+          0% { opacity: 0; transform: scale(0.58); }
+          20% { opacity: 0.9; }
+          100% { opacity: 0; transform: scale(1.42); }
+        }
+
+        @keyframes crossword-word-toast {
+          0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.94); }
+          18% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.04); }
+          78% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.96); }
+        }
+
+        @keyframes crossword-completion-bar {
+          0% { transform: scaleX(0); }
+          100% { transform: scaleX(1); }
+        }
+
+        .crossword-cell-success {
+          animation: crossword-cell-success ${WORD_SOLVED_ANIMATION_MS}ms ease-out;
+          z-index: 2;
+        }
+
+        .crossword-cell-finish {
+          animation: crossword-cell-finish 900ms ease-in-out 2;
+        }
+
+        .crossword-clue-success {
+          animation: crossword-clue-success ${WORD_SOLVED_ANIMATION_MS}ms ease-out;
+        }
+
+        .crossword-completion-card {
+          animation: crossword-completion-card ${PUZZLE_COMPLETE_ANIMATION_MS}ms ease-in-out both;
+        }
+
+        .crossword-completion-ring {
+          animation: crossword-completion-ring ${PUZZLE_COMPLETE_ANIMATION_MS}ms ease-out both;
+        }
+
+        .crossword-word-toast {
+          animation: crossword-word-toast ${WORD_SOLVED_ANIMATION_MS}ms ease-out both;
+        }
+
+        .crossword-completion-bar {
+          transform-origin: left center;
+          animation: crossword-completion-bar ${PUZZLE_COMPLETE_ANIMATION_MS}ms linear both;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .crossword-cell-success,
+          .crossword-cell-finish,
+          .crossword-clue-success,
+          .crossword-completion-card,
+          .crossword-completion-ring,
+          .crossword-word-toast,
+          .crossword-completion-bar {
+            animation: none !important;
+          }
+        }
+      `}</style>
       {showInstructions && <InstructionsModal onClose={() => setShowInstructions(false)} />}
+      {completionOverlay}
 
       <div
         className="wc-skin-root"
@@ -745,7 +980,34 @@ export default function CrosswordPuzzle({
             {/* Grid */}
             <div className="flex flex-col items-center gap-2">
               {/* Active clue banner */}
-              <div className="w-full max-w-sm min-h-[2.5rem] px-3 py-1.5 rounded-lg text-sm text-center"
+              <div style={{ position: "relative", width: "100%", maxWidth: "24rem" }}>
+              {latestSolvedClue && (
+                <div
+                  className="crossword-word-toast"
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    top: -38,
+                    transform: "translateX(-50%)",
+                    width: "max-content",
+                    maxWidth: "100%",
+                    padding: "6px 12px",
+                    borderRadius: 999,
+                    background: "rgba(20,83,45,0.94)",
+                    border: "1px solid rgba(134,239,172,0.7)",
+                    boxShadow: "0 10px 28px rgba(0,0,0,0.28), 0 0 18px rgba(34,197,94,0.32)",
+                    color: "#bbf7d0",
+                    fontSize: "0.72rem",
+                    fontWeight: 900,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    zIndex: 3,
+                  }}
+                >
+                  Correct: {latestSolvedClue.number} {latestSolvedClue.direction}
+                </div>
+              )}
+              <div className="w-full min-h-[2.5rem] px-3 py-1.5 rounded-lg text-sm text-center"
                 style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.3)", color: "#c7d2fe" }}>
                 {activeClue ? (
                   <>
@@ -757,6 +1019,7 @@ export default function CrosswordPuzzle({
                 ) : (
                   <span style={{ color: "#6b7280" }}>Click a cell to begin</span>
                 )}
+              </div>
               </div>
 
               {/* Grid container */}
@@ -777,49 +1040,65 @@ export default function CrosswordPuzzle({
                 onClick={() => inputRef.current?.focus()}
               >
                 {initialGrid.map((rowArr, r) =>
-                  rowArr.map((cell, c) => (
-                    <div
-                      key={`${r}-${c}`}
-                      style={{
-                        width: cellSize,
-                        height: cellSize,
-                        ...cellStyle(r, c),
-                        borderRadius: "3px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        userSelect: "none",
-                      }}
-                      onClick={() => handleCellClick(r, c)}
-                    >
-                      {!cell.isBlack && (
-                        <>
-                          {cell.clueNumber !== undefined && (
+                  rowArr.map((cell, c) => {
+                    const status = getCellStatus(r, c);
+                    const cellClasses = [
+                      status.isJustSolved ? "crossword-cell-success" : "",
+                      completionAnimating && !cell.isBlack ? "crossword-cell-finish" : "",
+                    ].filter(Boolean).join(" ");
+
+                    return (
+                      <div
+                        key={`${r}-${c}`}
+                        className={cellClasses || undefined}
+                        style={{
+                          width: cellSize,
+                          height: cellSize,
+                          ...cellStyle(r, c, status),
+                          animation: status.isJustSolved
+                            ? `crossword-cell-success ${WORD_SOLVED_ANIMATION_MS}ms ease-out`
+                            : completionAnimating && !cell.isBlack
+                              ? "crossword-cell-finish 900ms ease-in-out 2"
+                              : undefined,
+                          borderRadius: "3px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          userSelect: "none",
+                        }}
+                        onClick={() => handleCellClick(r, c)}
+                      >
+                        {!cell.isBlack && (
+                          <>
+                            {cell.clueNumber !== undefined && (
+                              <span style={{
+                                position: "absolute",
+                                top: 1,
+                                left: 2,
+                                fontSize: Math.max(7, cellSize * 0.22),
+                                lineHeight: 1,
+                                color: status.isSolved ? "#86efac" : "#94a3b8",
+                                fontWeight: 700,
+                                pointerEvents: "none",
+                              }}>
+                                {cell.clueNumber}
+                              </span>
+                            )}
                             <span style={{
-                              position: "absolute",
-                              top: 1,
-                              left: 2,
-                              fontSize: Math.max(7, cellSize * 0.22),
+                              fontSize: Math.max(12, cellSize * 0.5),
+                              fontWeight: 900,
+                              color: cellTextColor(r, c),
                               lineHeight: 1,
-                              color: "#94a3b8",
-                              fontWeight: 700,
-                              pointerEvents: "none",
+                              transition: "color 180ms ease, text-shadow 180ms ease",
+                              textShadow: status.isSolved ? "0 0 10px rgba(74,222,128,0.38)" : "none",
                             }}>
-                              {cell.clueNumber}
+                              {letters[r][c]}
                             </span>
-                          )}
-                          <span style={{
-                            fontSize: Math.max(12, cellSize * 0.5),
-                            fontWeight: 900,
-                            color: revealed.has(`${r},${c}`) ? "#FDE74C" : (skin.tileText ?? "#fff"),
-                            lineHeight: 1,
-                          }}>
-                            {letters[r][c]}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  ))
+                          </>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
 
@@ -857,12 +1136,13 @@ export default function CrosswordPuzzle({
                 <div className="flex flex-col gap-0.5">
                   {acrossClues.map((clue) => {
                     const solved = solvedClues.has(`across-${clue.number}`);
+                    const justSolved = justSolvedClues.has(`across-${clue.number}`);
                     const isActive = activeClue?.direction === "across" && activeClue.number === clue.number;
                     return (
                       <button
                         key={clue.number}
                         onClick={() => handleClueClick("across", clue.number)}
-                        className="text-left px-2 py-1 rounded text-xs transition-all"
+                        className={`text-left px-2 py-1 rounded text-xs transition-all${justSolved ? " crossword-clue-success" : ""}`}
                         style={{
                           background: isActive ? "rgba(99,102,241,0.25)" : solved ? "rgba(34,197,94,0.1)" : "transparent",
                           border: `1px solid ${isActive ? "rgba(99,102,241,0.5)" : solved ? "rgba(34,197,94,0.3)" : "transparent"}`,
@@ -884,12 +1164,13 @@ export default function CrosswordPuzzle({
                 <div className="flex flex-col gap-0.5">
                   {downClues.map((clue) => {
                     const solved = solvedClues.has(`down-${clue.number}`);
+                    const justSolved = justSolvedClues.has(`down-${clue.number}`);
                     const isActive = activeClue?.direction === "down" && activeClue.number === clue.number;
                     return (
                       <button
                         key={clue.number}
                         onClick={() => handleClueClick("down", clue.number)}
-                        className="text-left px-2 py-1 rounded text-xs transition-all"
+                        className={`text-left px-2 py-1 rounded text-xs transition-all${justSolved ? " crossword-clue-success" : ""}`}
                         style={{
                           background: isActive ? "rgba(192,132,252,0.25)" : solved ? "rgba(34,197,94,0.1)" : "transparent",
                           border: `1px solid ${isActive ? "rgba(192,132,252,0.5)" : solved ? "rgba(34,197,94,0.3)" : "transparent"}`,

@@ -125,6 +125,73 @@ describe("crosswordCore", () => {
     expect(result.error).toContain("Duplicate crossword answer");
   });
 
+  test("validateCrosswordPuzzleData rejects unchecked cells", () => {
+    const unchecked = {
+      clues: {
+        across: [
+          { number: 1, row: 0, col: 0, answer: "ABC", text: "Across 1" },
+          { number: 4, row: 1, col: 0, answer: "DEF", text: "Across 4" },
+          { number: 5, row: 2, col: 0, answer: "GHI", text: "Across 5" },
+        ],
+        down: [
+          { number: 1, row: 0, col: 0, answer: "ADG", text: "Down 1" },
+          { number: 2, row: 0, col: 1, answer: "BEH", text: "Down 2" },
+        ],
+      },
+    };
+
+    const result = validateCrosswordPuzzleData(unchecked, { enforceStyle: false });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("unchecked cell");
+  });
+
+  test("validateCrosswordPuzzleData accepts unchecked cells when allowed", () => {
+    const unchecked = {
+      allowUncheckedCells: true,
+      clues: {
+        across: [
+          { number: 1, row: 0, col: 0, answer: "ABC", text: "Across 1" },
+          { number: 4, row: 1, col: 0, answer: "DEF", text: "Across 4" },
+          { number: 5, row: 2, col: 0, answer: "GHI", text: "Across 5" },
+        ],
+        down: [
+          { number: 1, row: 0, col: 0, answer: "ADG", text: "Down 1" },
+          { number: 2, row: 0, col: 1, answer: "BEH", text: "Down 2" },
+        ],
+      },
+    };
+
+    const result = validateCrosswordPuzzleData(unchecked, { enforceStyle: false });
+    expect(result.valid).toBe(true);
+  });
+
+  test("validateCrosswordPuzzleData rejects disconnected white-cell components", () => {
+    const disconnected = {
+      clues: {
+        across: [
+          { number: 1, row: 0, col: 0, answer: "ABC", text: "Across 1" },
+          { number: 4, row: 0, col: 4, answer: "DEF", text: "Across 4" },
+          { number: 7, row: 1, col: 0, answer: "GHI", text: "Across 7" },
+          { number: 8, row: 1, col: 4, answer: "JKL", text: "Across 8" },
+          { number: 9, row: 2, col: 0, answer: "MNO", text: "Across 9" },
+          { number: 10, row: 2, col: 4, answer: "PQR", text: "Across 10" },
+        ],
+        down: [
+          { number: 1, row: 0, col: 0, answer: "AGM", text: "Down 1" },
+          { number: 2, row: 0, col: 1, answer: "BHN", text: "Down 2" },
+          { number: 3, row: 0, col: 2, answer: "CIO", text: "Down 3" },
+          { number: 4, row: 0, col: 4, answer: "DJP", text: "Down 4" },
+          { number: 5, row: 0, col: 5, answer: "EKQ", text: "Down 5" },
+          { number: 6, row: 0, col: 6, answer: "FLR", text: "Down 6" },
+        ],
+      },
+    };
+
+    const result = validateCrosswordPuzzleData(disconnected, { enforceStyle: false });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("single connected");
+  });
+
   test("extractAndNumberEntriesFromGrid emits numbered across/down entries", () => {
     const extracted = extractAndNumberEntriesFromGrid([
       ["A", "B", "C"],

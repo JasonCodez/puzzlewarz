@@ -14,6 +14,7 @@ export interface CrosswordPuzzleDataInput {
     across?: CrosswordClueInput[];
     down?: CrosswordClueInput[];
   };
+  allowUncheckedCells?: boolean;
 }
 
 export interface CrosswordClueNormalized {
@@ -40,6 +41,7 @@ export interface CrosswordNormalizedData {
 export interface CrosswordValidationOptions {
   requireAnswers?: boolean;
   enforceStyle?: boolean;
+  requireCheckedCells?: boolean;
   maxBlackSquareRatio?: number;
 }
 
@@ -529,6 +531,7 @@ export function validateCrosswordPuzzleData(
   }
 
   const payload = data as CrosswordPuzzleDataInput;
+  const requireCheckedCells = options.requireCheckedCells ?? payload.allowUncheckedCells !== true;
   if (!payload.clues || typeof payload.clues !== "object") {
     return { valid: false, error: "Crossword requires puzzleData.clues with across and down arrays." };
   }
@@ -561,8 +564,10 @@ export function validateCrosswordPuzzleData(
   const numberingErr = validateNumberingAndShapes(normalizedClues, mask);
   if (numberingErr) return { valid: false, error: numberingErr };
 
-  const checkedErr = validateCheckedCells(acrossCoverage, downCoverage, mask);
-  if (checkedErr) return { valid: false, error: checkedErr };
+  if (requireCheckedCells) {
+    const checkedErr = validateCheckedCells(acrossCoverage, downCoverage, mask);
+    if (checkedErr) return { valid: false, error: checkedErr };
+  }
 
   const connectivityErr = validateConnectivity(mask);
   if (connectivityErr) return { valid: false, error: connectivityErr };

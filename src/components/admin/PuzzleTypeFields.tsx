@@ -5,8 +5,10 @@ import dynamic from 'next/dynamic';
 import { createDefaultGridlockFileData, getGridlockFileData } from '@/lib/gridlockFile';
 import { createDefaultVaultData, getVaultDerivedLetters, getVaultPuzzleData } from '@/lib/vault';
 import { generateWordSearchGrid, normalizeWordList, type WordSearchGenerationDifficulty } from '@/lib/wordSearchCore';
-import { validateCrosswordPuzzleData } from '@/lib/crosswordCore';
-import { generateCrossword } from 'crossword-generator';
+import {
+  generateCrosswordFromSeedEntries,
+  type CrosswordGeneratorSeedEntry,
+} from '@/lib/crosswordGenerator';
 // Dynamically import the advanced Escape Room Designer (client-side only)
 const EscapeRoomDesigner = dynamic(() => import("@/app/escape-rooms/Designer"), { ssr: false });
 
@@ -3990,9 +3992,10 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
       text: string;
     }
 
-    interface SeedEntry {
-      answer: string;
-      text: string;
+    type SeedEntry = CrosswordGeneratorSeedEntry;
+
+    interface CrosswordGenerationOptions {
+      fillPoolEntries?: SeedEntry[];
     }
 
     const fieldCls = 'w-full px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-600 text-white placeholder-gray-500 text-sm';
@@ -4248,6 +4251,425 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
       }));
     };
 
+    const TOPIC_LABELS: Record<string, string> = {
+      food: 'Food and Cooking',
+      space: 'Space and Astronomy',
+      ocean: 'Ocean and Marine Life',
+      sports: 'Sports and Athletics',
+      technology: 'Technology and Computing',
+      history: 'History and Civilization',
+    };
+
+    const TOPIC_SEED_BANK: Record<string, SeedEntry[]> = {
+      food: [
+        { answer: 'APPLE', text: 'Common red or green fruit.' },
+        { answer: 'ORANGE', text: 'Citrus fruit named after a color.' },
+        { answer: 'BANANA', text: 'Long curved yellow fruit.' },
+        { answer: 'GRAPE', text: 'Small fruit often used in wine.' },
+        { answer: 'PEACH', text: 'Fuzzy stone fruit with sweet flesh.' },
+        { answer: 'PEAR', text: 'Bell-shaped juicy fruit.' },
+        { answer: 'CHERRY', text: 'Small red fruit with a pit.' },
+        { answer: 'LEMON', text: 'Sour yellow citrus fruit.' },
+        { answer: 'LIME', text: 'Small green citrus fruit.' },
+        { answer: 'MANGO', text: 'Tropical fruit with orange flesh.' },
+        { answer: 'PAPAYA', text: 'Tropical fruit with black seeds.' },
+        { answer: 'ALMOND', text: 'Popular nut used in milk alternatives.' },
+        { answer: 'WALNUT', text: 'Wrinkled nut in a hard shell.' },
+        { answer: 'CASHEW', text: 'Curved nut often roasted and salted.' },
+        { answer: 'PEANUT', text: 'Legume commonly found in butter spread.' },
+        { answer: 'OATMEAL', text: 'Warm porridge made from oats.' },
+        { answer: 'CEREAL', text: 'Breakfast food often eaten with milk.' },
+        { answer: 'TOAST', text: 'Bread browned with dry heat.' },
+        { answer: 'BUTTER', text: 'Dairy spread made from churned cream.' },
+        { answer: 'HONEY', text: 'Sweet syrup produced by bees.' },
+        { answer: 'YOGURT', text: 'Cultured dairy product.' },
+        { answer: 'CHEESE', text: 'Aged or fresh product made from milk curds.' },
+        { answer: 'BREAD', text: 'Staple baked food made from flour.' },
+        { answer: 'MUFFIN', text: 'Small single-serving quick bread.' },
+        { answer: 'BAGEL', text: 'Ring-shaped bread with a chewy texture.' },
+        { answer: 'PANCAKE', text: 'Flat cake cooked on a griddle.' },
+        { answer: 'WAFFLE', text: 'Breakfast cake with a grid pattern.' },
+        { answer: 'OMELET', text: 'Folded egg dish with fillings.' },
+        { answer: 'BACON', text: 'Cured pork often served at breakfast.' },
+        { answer: 'SAUSAGE', text: 'Seasoned ground meat in a casing.' },
+        { answer: 'COFFEE', text: 'Caffeinated drink brewed from roasted beans.' },
+        { answer: 'TEA', text: 'Drink made by steeping leaves in hot water.' },
+        { answer: 'JUICE', text: 'Drink extracted from fruits or vegetables.' },
+        { answer: 'SMOOTHIE', text: 'Thick blended drink of fruit or yogurt.' },
+        { answer: 'KETTLE', text: 'Vessel used to boil water.' },
+        { answer: 'SPATULA', text: 'Flat tool used for flipping food.' },
+        { answer: 'SKILLET', text: 'Frying pan with sloped sides.' },
+        { answer: 'SAUCEPAN', text: 'Deep pan used for liquids and sauces.' },
+        { answer: 'RECIPE', text: 'Set of instructions for preparing a dish.' },
+        { answer: 'PANTRY', text: 'Storage space for dry food items.' },
+      ],
+      space: [
+        { answer: 'SUN', text: 'Star at the center of our solar system.' },
+        { answer: 'SKY', text: 'The visible dome above Earth.' },
+        { answer: 'ISS', text: 'Abbreviation for the International Space Station.' },
+        { answer: 'EVA', text: 'Spacewalk performed outside a spacecraft.' },
+        { answer: 'UFO', text: 'Common term for an unidentified flying object.' },
+        { answer: 'ION', text: 'Electrically charged atom or molecule.' },
+        { answer: 'EON', text: 'Immensely long span of time.' },
+        { answer: 'PLANET', text: 'Large celestial body that orbits a star.' },
+        { answer: 'EARTH', text: 'Our home planet in the solar system.' },
+        { answer: 'MOON', text: 'Natural satellite orbiting a planet.' },
+        { answer: 'SATURN', text: 'Planet famous for its rings.' },
+        { answer: 'JUPITER', text: 'Largest planet in the solar system.' },
+        { answer: 'MERCURY', text: 'Smallest planet and closest to the Sun.' },
+        { answer: 'VENUS', text: 'Bright planet often called Earths sister.' },
+        { answer: 'MARS', text: 'Red planet with giant volcanoes.' },
+        { answer: 'NEPTUNE', text: 'Blue ice giant far from the Sun.' },
+        { answer: 'URANUS', text: 'Planet that rotates on its side.' },
+        { answer: 'PLUTO', text: 'Dwarf planet in the outer solar system.' },
+        { answer: 'COMET', text: 'Icy object that forms a glowing tail near the Sun.' },
+        { answer: 'ASTEROID', text: 'Rocky body orbiting mostly between Mars and Jupiter.' },
+        { answer: 'GALAXY', text: 'Vast system of stars, gas, and dark matter.' },
+        { answer: 'NEBULA', text: 'Cloud of gas and dust in space.' },
+        { answer: 'ORBIT', text: 'Path of one body around another.' },
+        { answer: 'NOVA', text: 'Sudden brightening of a star.' },
+        { answer: 'VOID', text: 'Seemingly empty expanse of space.' },
+        { answer: 'AXIS', text: 'Imaginary line about which a body rotates.' },
+        { answer: 'ECLIPSE', text: 'Event when one celestial body blocks another.' },
+        { answer: 'METEOR', text: 'Streak of light from burning space debris.' },
+        { answer: 'METEORITE', text: 'Space rock that reaches the ground.' },
+        { answer: 'TELESCOPE', text: 'Instrument used to observe distant objects.' },
+        { answer: 'COSMOS', text: 'The universe regarded as an ordered system.' },
+        { answer: 'STAR', text: 'Luminous sphere of plasma in space.' },
+        { answer: 'ORION', text: 'Prominent constellation known for its belt.' },
+        { answer: 'VEGA', text: 'Bright star in the constellation Lyra.' },
+        { answer: 'ALTAIR', text: 'Bright star in the constellation Aquila.' },
+        { answer: 'SIRIUS', text: 'Brightest star visible in Earths night sky.' },
+        { answer: 'POLARIS', text: 'North Star used for navigation.' },
+        { answer: 'SUPERNOVA', text: 'Explosive death of a massive star.' },
+        { answer: 'QUASAR', text: 'Extremely bright active galactic nucleus.' },
+        { answer: 'ROCKET', text: 'Vehicle propelled by exhaust thrust.' },
+        { answer: 'SHUTTLE', text: 'Reusable spacecraft used for orbital missions.' },
+        { answer: 'MODULE', text: 'Section of a spacecraft or station.' },
+        { answer: 'ASTRONAUT', text: 'Person trained to travel in space.' },
+        { answer: 'COSMONAUT', text: 'Space traveler trained in a Russian program.' },
+        { answer: 'SPACECRAFT', text: 'Vehicle designed for travel beyond Earth.' },
+        { answer: 'SATELLITE', text: 'Object that orbits a planet or moon.' },
+        { answer: 'LAUNCH', text: 'Initial sending of a rocket into flight.' },
+        { answer: 'PAYLOAD', text: 'Cargo carried by a rocket or spacecraft.' },
+        { answer: 'NOZZLE', text: 'Rocket engine part that accelerates exhaust.' },
+        { answer: 'THRUST', text: 'Forward force produced by rocket engines.' },
+        { answer: 'LUNAR', text: 'Related to the Moon.' },
+        { answer: 'SOLAR', text: 'Related to the Sun.' },
+        { answer: 'COSMIC', text: 'Relating to the universe as a whole.' },
+        { answer: 'STARDUST', text: 'Fine particles originating from stars.' },
+        { answer: 'EXOPLANET', text: 'Planet that orbits a star beyond our Sun.' },
+        { answer: 'REDSHIFT', text: 'Spectral shift indicating objects moving away.' },
+        { answer: 'HORIZON', text: 'Boundary line of observation, as in event horizon.' },
+        { answer: 'PARSEC', text: 'Astronomical unit of distance.' },
+        { answer: 'LIGHTYEAR', text: 'Distance light travels in one year.' },
+        { answer: 'ROVER', text: 'Vehicle used to explore another world surface.' },
+        { answer: 'PROBE', text: 'Uncrewed spacecraft sent to gather data.' },
+        { answer: 'FUSION', text: 'Process powering stars by combining nuclei.' },
+        { answer: 'PLASMA', text: 'Ionized gas common in stars.' },
+        { answer: 'PHOTON', text: 'Particle of light.' },
+        { answer: 'BINARY', text: 'System of two stars orbiting each other.' },
+        { answer: 'ORRERY', text: 'Mechanical model of the solar system.' },
+        { answer: 'ATLAS', text: 'Name used by a long-running rocket family.' },
+        { answer: 'ZENITH', text: 'Point directly overhead in the sky.' },
+        { answer: 'NADIR', text: 'Point directly below an observer.' },
+        { answer: 'APOGEE', text: 'Farthest point from Earth in an orbit.' },
+        { answer: 'PERIGEE', text: 'Nearest point to Earth in an orbit.' },
+        { answer: 'APSIS', text: 'Term for orbital extreme points like apogee.' },
+        { answer: 'ECLIPTIC', text: 'Apparent yearly path of the Sun on the sky.' },
+        { answer: 'SPECTRUM', text: 'Range of electromagnetic wavelengths.' },
+        { answer: 'SUNSPOT', text: 'Cooler, darker patch on the Suns surface.' },
+        { answer: 'TELEMETRY', text: 'Transmission of measurements from distant instruments.' },
+        { answer: 'ASTROLABE', text: 'Historic instrument used to measure celestial positions.' },
+        { answer: 'CERES', text: 'Largest object in the asteroid belt.' },
+        { answer: 'TITAN', text: 'Largest moon of Saturn.' },
+        { answer: 'EUROPA', text: 'Icy moon of Jupiter with a hidden ocean.' },
+        { answer: 'APOLLO', text: 'Program that landed humans on the Moon.' },
+        { answer: 'GEMINI', text: 'NASA program between Mercury and Apollo.' },
+        { answer: 'CRATER', text: 'Bowl-shaped impact feature on a surface.' },
+        { answer: 'GRAVITY', text: 'Force that attracts masses toward each other.' },
+      ],
+      ocean: [
+        { answer: 'OCEAN', text: 'Large body of salt water covering Earth.' },
+        { answer: 'TIDAL', text: 'Related to the rise and fall of sea levels.' },
+        { answer: 'CORAL', text: 'Marine invertebrate that forms reefs.' },
+        { answer: 'REEF', text: 'Ridge of rock or coral near the sea surface.' },
+        { answer: 'KELP', text: 'Large brown seaweed found in cold waters.' },
+        { answer: 'ALGAE', text: 'Simple aquatic photosynthetic organisms.' },
+        { answer: 'PLANKTON', text: 'Tiny drifting organisms in water.' },
+        { answer: 'DOLPHIN', text: 'Intelligent marine mammal known for clicks and whistles.' },
+        { answer: 'WHALE', text: 'Large marine mammal that breathes air.' },
+        { answer: 'SHARK', text: 'Cartilaginous fish with rows of teeth.' },
+        { answer: 'RAY', text: 'Flat-bodied relative of sharks.' },
+        { answer: 'TURTLE', text: 'Reptile with a shell, including sea species.' },
+        { answer: 'SEAHORSE', text: 'Small upright fish with a curled tail.' },
+        { answer: 'OCTOPUS', text: 'Eight-armed cephalopod.' },
+        { answer: 'SQUID', text: 'Fast-swimming cephalopod with tentacles.' },
+        { answer: 'JELLYFISH', text: 'Gelatinous drifting animal with stinging tentacles.' },
+        { answer: 'ANCHOVY', text: 'Small schooling fish used in cooking.' },
+        { answer: 'SALMON', text: 'Fish known for migrating upstream to spawn.' },
+        { answer: 'TUNA', text: 'Fast ocean fish popular in seafood dishes.' },
+        { answer: 'LOBSTER', text: 'Crustacean with large claws.' },
+        { answer: 'CRAB', text: 'Crustacean with a broad shell and pincers.' },
+        { answer: 'SEAL', text: 'Marine mammal that hauls out on shore.' },
+        { answer: 'OTTER', text: 'Aquatic mammal known for tool use.' },
+        { answer: 'CURRENT', text: 'Continuous directional movement of seawater.' },
+        { answer: 'TSUNAMI', text: 'Large ocean wave caused by seismic activity.' },
+        { answer: 'ESTUARY', text: 'Coastal area where river water meets the sea.' },
+        { answer: 'HARBOR', text: 'Sheltered place where boats can anchor.' },
+        { answer: 'BAY', text: 'Body of water partly enclosed by land.' },
+        { answer: 'ISLAND', text: 'Land surrounded by water.' },
+        { answer: 'LAGOON', text: 'Shallow body of water separated from larger water.' },
+      ],
+      sports: [
+        { answer: 'SPORT', text: 'Competitive physical activity with rules.' },
+        { answer: 'SOCCER', text: 'Sport played with a round ball and goals.' },
+        { answer: 'FOOTBALL', text: 'Contact field sport with an oval ball.' },
+        { answer: 'BASEBALL', text: 'Bat-and-ball game with innings.' },
+        { answer: 'SOFTBALL', text: 'Variant of baseball with a larger ball.' },
+        { answer: 'BASKETBALL', text: 'Court sport where teams shoot into a hoop.' },
+        { answer: 'VOLLEYBALL', text: 'Net sport where teams volley a ball over.' },
+        { answer: 'TENNIS', text: 'Racket sport played on a court.' },
+        { answer: 'HOCKEY', text: 'Sport played with sticks and a puck or ball.' },
+        { answer: 'GOLF', text: 'Sport aiming to sink a ball into holes.' },
+        { answer: 'RUGBY', text: 'Team sport with continuous play and tackling.' },
+        { answer: 'CRICKET', text: 'Bat-and-ball game popular in many countries.' },
+        { answer: 'SWIMMING', text: 'Race sport through water using strokes.' },
+        { answer: 'CYCLING', text: 'Sport of riding bicycles competitively.' },
+        { answer: 'RUNNING', text: 'Foot race over a set distance.' },
+        { answer: 'SPRINTER', text: 'Athlete specializing in short-distance speed.' },
+        { answer: 'MARATHON', text: 'Long-distance race of over twenty-six miles.' },
+        { answer: 'TRIATHLON', text: 'Race combining swimming, cycling, and running.' },
+        { answer: 'WRESTLING', text: 'Combat sport of grappling techniques.' },
+        { answer: 'BOXING', text: 'Combat sport fought with gloved punches.' },
+        { answer: 'REFEREE', text: 'Official who enforces rules during play.' },
+        { answer: 'COACH', text: 'Person who trains and guides athletes.' },
+        { answer: 'STADIUM', text: 'Large venue for sports events.' },
+        { answer: 'ARENA', text: 'Enclosed venue for games and matches.' },
+        { answer: 'TOURNAMENT', text: 'Series of contests to determine a winner.' },
+        { answer: 'PLAYOFF', text: 'Postseason elimination stage.' },
+        { answer: 'CHAMPION', text: 'Winner of a competition.' },
+        { answer: 'MEDAL', text: 'Award for sporting achievement.' },
+        { answer: 'TROPHY', text: 'Physical prize for victory.' },
+        { answer: 'SCORE', text: 'Number of points earned in a game.' },
+      ],
+      technology: [
+        { answer: 'COMPUTER', text: 'Electronic machine that processes data.' },
+        { answer: 'LAPTOP', text: 'Portable personal computer.' },
+        { answer: 'DESKTOP', text: 'Stationary personal computer.' },
+        { answer: 'KEYBOARD', text: 'Input device with letter and number keys.' },
+        { answer: 'MONITOR', text: 'Screen used to display computer output.' },
+        { answer: 'MOUSE', text: 'Pointing device for cursor control.' },
+        { answer: 'PRINTER', text: 'Device that produces paper output.' },
+        { answer: 'ROUTER', text: 'Network device that directs traffic.' },
+        { answer: 'SERVER', text: 'Computer that provides services to clients.' },
+        { answer: 'CLIENT', text: 'Device or app requesting network services.' },
+        { answer: 'DATABASE', text: 'Structured collection of stored data.' },
+        { answer: 'BACKEND', text: 'Server-side part of an application.' },
+        { answer: 'FRONTEND', text: 'User-facing part of an application.' },
+        { answer: 'BROWSER', text: 'Application used to access web pages.' },
+        { answer: 'WEBSITE', text: 'Collection of related pages on the web.' },
+        { answer: 'NETWORK', text: 'Connected system of devices.' },
+        { answer: 'WIRELESS', text: 'Communication without physical cables.' },
+        { answer: 'BLUETOOTH', text: 'Short-range wireless communication standard.' },
+        { answer: 'ENCRYPTION', text: 'Process of encoding data for security.' },
+        { answer: 'FIREWALL', text: 'Security system that filters network traffic.' },
+        { answer: 'PASSWORD', text: 'Secret string used for authentication.' },
+        { answer: 'SOFTWARE', text: 'Programs and operating information for a device.' },
+        { answer: 'HARDWARE', text: 'Physical components of a computer system.' },
+        { answer: 'ALGORITHM', text: 'Step-by-step method for solving a problem.' },
+        { answer: 'CODING', text: 'Writing instructions in a programming language.' },
+        { answer: 'DEBUGGING', text: 'Finding and fixing defects in code.' },
+        { answer: 'COMPILER', text: 'Program that translates source code.' },
+        { answer: 'TERMINAL', text: 'Text interface for command execution.' },
+        { answer: 'CLOUD', text: 'Remote computing resources delivered online.' },
+        { answer: 'GITHUB', text: 'Platform for hosting and collaborating on code.' },
+      ],
+      history: [
+        { answer: 'HISTORY', text: 'Study of past events and societies.' },
+        { answer: 'ANCIENT', text: 'Very old, especially from early civilizations.' },
+        { answer: 'MEDIEVAL', text: 'Related to the Middle Ages.' },
+        { answer: 'EMPIRE', text: 'Large political unit with central rule.' },
+        { answer: 'DYNASTY', text: 'Line of hereditary rulers.' },
+        { answer: 'PHARAOH', text: 'Title of an ancient Egyptian ruler.' },
+        { answer: 'PYRAMID', text: 'Monumental structure associated with ancient Egypt.' },
+        { answer: 'ROMAN', text: 'Related to ancient Rome.' },
+        { answer: 'GREEK', text: 'Related to ancient Greece.' },
+        { answer: 'SPARTA', text: 'Ancient Greek city-state known for warriors.' },
+        { answer: 'ATHENS', text: 'Ancient city-state known for philosophy and democracy.' },
+        { answer: 'VIKING', text: 'Seafaring Norse raider and trader.' },
+        { answer: 'CASTLE', text: 'Fortified residence of medieval rulers.' },
+        { answer: 'KNIGHT', text: 'Mounted warrior in medieval Europe.' },
+        { answer: 'MONARCH', text: 'Sole and hereditary head of state.' },
+        { answer: 'REVOLUTION', text: 'Major political or social upheaval.' },
+        { answer: 'TREATY', text: 'Formal agreement between states.' },
+        { answer: 'COLONY', text: 'Territory under control of another country.' },
+        { answer: 'RENAISSANCE', text: 'Period of cultural rebirth in Europe.' },
+        { answer: 'INDUSTRIAL', text: 'Related to machine-driven manufacturing growth.' },
+        { answer: 'ARCHAEOLOGY', text: 'Study of human history through material remains.' },
+        { answer: 'ARTIFACT', text: 'Object made by humans with historical value.' },
+        { answer: 'CHRONICLE', text: 'Historical account arranged by time.' },
+        { answer: 'CIVILIZATION', text: 'Advanced society with organized institutions.' },
+        { answer: 'CONQUEST', text: 'Taking control of territory by force.' },
+        { answer: 'EXPEDITION', text: 'Journey undertaken for discovery or research.' },
+        { answer: 'ARCHIVE', text: 'Collection of historical documents and records.' },
+        { answer: 'SCHOLAR', text: 'Person devoted to study and learning.' },
+        { answer: 'MUSEUM', text: 'Institution preserving and displaying history.' },
+        { answer: 'TIMELINE', text: 'Chronological representation of events.' },
+      ],
+    };
+
+    const TOPIC_ALIASES: Record<string, string> = {
+      food: 'food',
+      cooking: 'food',
+      kitchen: 'food',
+      cuisine: 'food',
+      astronomy: 'space',
+      space: 'space',
+      scifi: 'space',
+      cosmic: 'space',
+      ocean: 'ocean',
+      marine: 'ocean',
+      sea: 'ocean',
+      aquatic: 'ocean',
+      sports: 'sports',
+      athletic: 'sports',
+      athletics: 'sports',
+      technology: 'technology',
+      tech: 'technology',
+      computer: 'technology',
+      coding: 'technology',
+      history: 'history',
+      ancient: 'history',
+      medieval: 'history',
+      civilization: 'history',
+    };
+
+    const normalizeTopicText = (topic: string): string => {
+      return topic
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    const resolveTopicKey = (topic: string): string | null => {
+      const normalized = normalizeTopicText(topic);
+      if (!normalized) return null;
+
+      if (TOPIC_LABELS[normalized]) {
+        return normalized;
+      }
+
+      if (TOPIC_ALIASES[normalized]) {
+        return TOPIC_ALIASES[normalized];
+      }
+
+      for (const [alias, key] of Object.entries(TOPIC_ALIASES)) {
+        if (normalized.includes(alias)) {
+          return key;
+        }
+      }
+
+      return null;
+    };
+
+    const buildTopicSeedEntries = (topic: string, requestedCount: number): {
+      topicKey: string;
+      entries: SeedEntry[];
+    } | null => {
+      const topicKey = resolveTopicKey(topic);
+      if (!topicKey) return null;
+
+      const pool = TOPIC_SEED_BANK[topicKey] ?? [];
+      if (pool.length === 0) return null;
+
+      const uniqueByAnswer = new Map<string, SeedEntry>();
+      for (const entry of pool) {
+        if (!uniqueByAnswer.has(entry.answer)) {
+          uniqueByAnswer.set(entry.answer, entry);
+        }
+      }
+
+      const uniquePool = Array.from(uniqueByAnswer.values());
+      const maxCount = Math.min(80, uniquePool.length);
+      const minCount = Math.min(12, maxCount);
+      const count = clampInt(requestedCount, minCount, maxCount);
+
+      const shuffled = <T,>(items: T[]): T[] => {
+        const out = [...items];
+        for (let i = out.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const temp = out[i];
+          out[i] = out[j];
+          out[j] = temp;
+        }
+        return out;
+      };
+
+      const buckets = new Map<number, SeedEntry[]>();
+      for (const entry of uniquePool) {
+        const bucket = buckets.get(entry.answer.length) ?? [];
+        bucket.push(entry);
+        buckets.set(entry.answer.length, bucket);
+      }
+
+      for (const [length, bucket] of buckets.entries()) {
+        buckets.set(length, shuffled(bucket));
+      }
+
+      const lengths = shuffled(Array.from(buckets.keys()));
+      const entries: SeedEntry[] = [];
+
+      // Ensure broad slot-length coverage first, then favor shorter/mid words.
+      for (const length of lengths) {
+        const next = buckets.get(length)?.pop();
+        if (!next) continue;
+        entries.push(next);
+        if (entries.length >= count) break;
+      }
+
+      const weightedLengths: number[] = [];
+      for (const length of lengths) {
+        const weight = length <= 4 ? 6 : length <= 6 ? 4 : length <= 8 ? 2 : 1;
+        for (let i = 0; i < weight; i += 1) {
+          weightedLengths.push(length);
+        }
+      }
+
+      while (entries.length < count) {
+        const availableWeighted = weightedLengths.filter(
+          (length) => (buckets.get(length)?.length ?? 0) > 0
+        );
+
+        if (availableWeighted.length > 0) {
+          const pickedLength = availableWeighted[Math.floor(Math.random() * availableWeighted.length)];
+          const picked = buckets.get(pickedLength)?.pop();
+          if (picked) {
+            entries.push(picked);
+            continue;
+          }
+        }
+
+        const fallbackLength = lengths.find((length) => (buckets.get(length)?.length ?? 0) > 0);
+        if (fallbackLength == null) {
+          break;
+        }
+
+        const fallback = buckets.get(fallbackLength)?.pop();
+        if (!fallback) {
+          break;
+        }
+
+        entries.push(fallback);
+      }
+
+      return {
+        topicKey,
+        entries,
+      };
+    };
+
     const cluesRoot = (puzzleData.clues && typeof puzzleData.clues === 'object')
       ? (puzzleData.clues as Record<string, unknown>)
       : {};
@@ -4285,9 +4707,17 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
     const layout = normalizeLayout(baseLayout, rows, cols);
     const gridRows = layout.length;
     const gridCols = layout[0]?.length ?? 0;
-  const seedRaw = asString(puzzleData._crosswordSeedRaw, '');
-  const generationMessage = asString(puzzleData._crosswordGenerationMessage, '');
-  const generationError = asString(puzzleData._crosswordGenerationError, '');
+    const seedRaw = asString(puzzleData._crosswordSeedRaw, '');
+    const topicRaw = asString(puzzleData._crosswordTopic, '');
+    const topicSeedCountInput = asNumberOrEmpty(puzzleData._crosswordTopicWordCount);
+    const topicSeedCount = clampInt(
+      Math.trunc(asNumber(puzzleData._crosswordTopicWordCount, 36)),
+      12,
+      80
+    );
+    const generationMessage = asString(puzzleData._crosswordGenerationMessage, '');
+    const generationError = asString(puzzleData._crosswordGenerationError, '');
+    const supportedTopicLabels = Object.values(TOPIC_LABELS).join(', ');
 
     const extracted = extractSlots(layout);
     const acrossEntries = mergeSlotsWithExisting(extracted.across, 'across', rawAcross);
@@ -4321,6 +4751,7 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
       const nextCols = nextLayout[0]?.length ?? 0;
       const ratio = computeBlackSquareRatio(nextLayout);
 
+      onDataChange('allowUncheckedCells', true);
       onDataChange('rows', nextRows);
       onDataChange('cols', nextCols);
       onDataChange('blackSquareRatio', Number(ratio.toFixed(4)));
@@ -4396,756 +4827,226 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
       persistClues(nextAcross, nextDown, layout);
     };
 
-    const autoGenerateFromSeedEntries = () => {
-      const seedEntries = parseSeedEntries(seedRaw);
+    const autoGenerateFromSeedEntries = (
+      providedSeedEntries?: SeedEntry[] | unknown,
+      options?: CrosswordGenerationOptions
+    ): boolean => {
+      const seedEntries = Array.isArray(providedSeedEntries)
+        ? (providedSeedEntries as SeedEntry[])
+        : parseSeedEntries(seedRaw);
       if (seedEntries.length < 4) {
         onDataChange('_crosswordGenerationError', 'Enter at least 4 unique ANSWER | clue lines (answers must be 3+ letters).');
         onDataChange('_crosswordGenerationMessage', '');
-        return;
+        return false;
       }
 
-      type Direction = 'across' | 'down';
-      type Candidate = {
-        row: number;
-        col: number;
-        direction: Direction;
-        overlaps: number;
-        score: number;
-      };
-
-      type AttemptResult = {
-        generatedLayout: string[];
-        generatedRows: number;
-        generatedCols: number;
-        whiteCellCount: number;
-        generatedAcross: EditorClue[];
-        generatedDown: EditorClue[];
-        usedSeedCount: number;
-        autoClueCount: number;
-        unplacedSeedAnswers: string[];
-        strategy: string;
-      };
-
-      const clueByAnswer = new Map(seedEntries.map((entry) => [entry.answer, entry.text]));
-      const seedAnswersByLength = new Map<number, string[]>();
+      const fillPoolByAnswer = new Map<string, SeedEntry>();
       for (const entry of seedEntries) {
-        const bucket = seedAnswersByLength.get(entry.answer.length) ?? [];
-        bucket.push(entry.answer);
-        seedAnswersByLength.set(entry.answer.length, bucket);
-      }
-
-      const attemptScore = (attempt: AttemptResult): number => {
-        const entriesCount = attempt.generatedAcross.length + attempt.generatedDown.length;
-        const squarenessPenalty = Math.abs(attempt.generatedRows - attempt.generatedCols) * 1.5;
-        return (
-          entriesCount +
-          attempt.usedSeedCount * 20 -
-          attempt.unplacedSeedAnswers.length * 4 +
-          attempt.whiteCellCount * 0.2 -
-          squarenessPenalty
-        );
-      };
-
-      const shuffled = <T,>(items: T[]): T[] => {
-        const out = [...items];
-        for (let i = out.length - 1; i > 0; i -= 1) {
-          const j = Math.floor(Math.random() * (i + 1));
-          const temp = out[i];
-          out[i] = out[j];
-          out[j] = temp;
-        }
-        return out;
-      };
-
-      const buildAttemptFromLetterGrid = (
-        letterGrid: Array<Array<string | null>>,
-        strategy: string
-      ): AttemptResult | null => {
-        let whiteCells = 0;
-        let minFilledRow = gridRows;
-        let maxFilledRow = -1;
-        let minFilledCol = gridCols;
-        let maxFilledCol = -1;
-        for (let row = 0; row < gridRows; row += 1) {
-          for (let col = 0; col < gridCols; col += 1) {
-            if (letterGrid[row][col] !== null) {
-              whiteCells += 1;
-              if (row < minFilledRow) minFilledRow = row;
-              if (row > maxFilledRow) maxFilledRow = row;
-              if (col < minFilledCol) minFilledCol = col;
-              if (col > maxFilledCol) maxFilledCol = col;
-            }
-          }
-        }
-
-        if (whiteCells === 0 || maxFilledRow < minFilledRow || maxFilledCol < minFilledCol) {
-          return null;
-        }
-
-        const filledHeight = maxFilledRow - minFilledRow + 1;
-        const filledWidth = maxFilledCol - minFilledCol + 1;
-        const trimmedGrid: Array<Array<string | null>> = Array.from(
-          { length: filledHeight },
-          (_, rowOffset) => Array.from(
-            { length: filledWidth },
-            (_, colOffset) => letterGrid[minFilledRow + rowOffset][minFilledCol + colOffset]
-          )
-        );
-
-        const totalCells = filledHeight * filledWidth;
-        const longerSide = Math.max(filledHeight, filledWidth);
-        const shorterSide = Math.max(1, Math.min(filledHeight, filledWidth));
-        const aspectRatio = longerSide / shorterSide;
-
-        // Reject extremely elongated layouts (e.g. 15x6) that look like strips instead of crosswords.
-        if (longerSide >= 10 && aspectRatio > 1.55) {
-          return null;
-        }
-
-        // For medium+ boards, avoid all-white layouts and preserve black-cell structure.
-        if (whiteCells === totalCells && totalCells >= 36) {
-          return null;
-        }
-
-        const generatedLayout = trimmedGrid.map((row) => row.map((cell) => (cell === null ? '#' : '.')).join(''));
-        const generatedSlots = extractSlots(generatedLayout);
-        const generatedAnswerSet = new Set<string>();
-        let autoClueCount = 0;
-
-        const buildEntries = (slots: Slot[], direction: Direction): EditorClue[] | null => {
-          const entries: EditorClue[] = [];
-
-          for (const slot of slots) {
-            const letters: string[] = [];
-            for (let i = 0; i < slot.length; i += 1) {
-              const row = direction === 'down' ? slot.row + i : slot.row;
-              const col = direction === 'across' ? slot.col + i : slot.col;
-              const letter = trimmedGrid[row]?.[col] ?? null;
-              if (!letter) return null;
-              letters.push(letter);
-            }
-
-            const answer = letters.join('');
-            if (generatedAnswerSet.has(answer)) {
-              return null;
-            }
-            generatedAnswerSet.add(answer);
-
-            const clue = clueByAnswer.get(answer);
-            if (!clue) autoClueCount += 1;
-
-            entries.push({
-              number: slot.number,
-              row: slot.row,
-              col: slot.col,
-              length: slot.length,
-              direction,
-              answer,
-              text: clue ?? `Auto-generated clue for ${answer}`,
-            });
-          }
-
-          return entries;
-        };
-
-        const generatedAcross = buildEntries(generatedSlots.across, 'across');
-        const generatedDown = buildEntries(generatedSlots.down, 'down');
-
-        if (!generatedAcross || !generatedDown || generatedAcross.length === 0 || generatedDown.length === 0) {
-          return null;
-        }
-
-        const validation = validateCrosswordPuzzleData(
-          {
-            clues: {
-              across: generatedAcross,
-              down: generatedDown,
-            },
-          },
-          {
-            requireAnswers: true,
-            enforceStyle: false,
-          }
-        );
-        if (!validation.valid) {
-          return null;
-        }
-
-        const usedFromSeed = new Set<string>();
-        for (const entry of [...generatedAcross, ...generatedDown]) {
-          if (clueByAnswer.has(entry.answer)) {
-            usedFromSeed.add(entry.answer);
-          }
-        }
-
-        const unplacedSeedAnswers = seedEntries
-          .map((entry) => entry.answer)
-          .filter((answer) => !usedFromSeed.has(answer));
-
-        return {
-          generatedLayout,
-          generatedRows: filledHeight,
-          generatedCols: filledWidth,
-          whiteCellCount: whiteCells,
-          generatedAcross,
-          generatedDown,
-          usedSeedCount: usedFromSeed.size,
-          autoClueCount,
-          unplacedSeedAnswers,
-          strategy,
-        };
-      };
-
-      const runPackageGeneratorAttempt = (): AttemptResult | null => {
-        const maxGridSize = Math.min(gridRows, gridCols);
-        if (maxGridSize < 3) {
-          return null;
-        }
-
-        const words = seedEntries.map((entry) => entry.answer);
-        let best: AttemptResult | null = null;
-
-        for (let attempt = 0; attempt < 20; attempt += 1) {
-          try {
-            const generated = generateCrossword(words, {
-              wordCount: words.length,
-              maxGridSize,
-              maxAttempts: 2500,
-              validationLevel: 'normal',
-              minWordLength: 3,
-              maxWordLength: maxGridSize,
-            });
-
-            const sourceRows = generated.grid.length;
-            const sourceCols = generated.grid[0]?.length ?? 0;
-            if (sourceRows < 3 || sourceCols < 3) continue;
-            if (sourceRows > gridRows || sourceCols > gridCols) continue;
-
-            const letterGrid: Array<Array<string | null>> = Array.from(
-              { length: gridRows },
-              () => Array.from({ length: gridCols }, () => null)
-            );
-
-            const startRow = Math.floor((gridRows - sourceRows) / 2);
-            const startCol = Math.floor((gridCols - sourceCols) / 2);
-
-            for (let row = 0; row < sourceRows; row += 1) {
-              const sourceRow = generated.grid[row] ?? [];
-              for (let col = 0; col < sourceCols; col += 1) {
-                const rawCell = sourceRow[col];
-                if (typeof rawCell !== 'string' || rawCell.length === 0) continue;
-                const normalized = normalizeAnswer(rawCell).charAt(0);
-                if (!normalized) continue;
-                letterGrid[startRow + row][startCol + col] = normalized;
-              }
-            }
-
-            const built = buildAttemptFromLetterGrid(
-              letterGrid,
-              `npm-crossword-generator-${sourceRows}x${sourceCols}`
-            );
-            if (!built) continue;
-
-            if (!best || attemptScore(built) > attemptScore(best)) {
-              best = built;
-            }
-
-            if (built.usedSeedCount === seedEntries.length && built.unplacedSeedAnswers.length === 0) {
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
-
-        return best;
-      };
-
-      const runAttempt = (): AttemptResult | null => {
-        const letterGrid: Array<Array<string | null>> = Array.from(
-          { length: gridRows },
-          () => Array.from({ length: gridCols }, () => null)
-        );
-
-        const isFilled = (row: number, col: number): boolean => {
-          return row >= 0 && row < gridRows && col >= 0 && col < gridCols && letterGrid[row][col] !== null;
-        };
-
-        const countRun = (row: number, col: number, dr: number, dc: number): number => {
-          let r = row + dr;
-          let c = col + dc;
-          let n = 0;
-          while (r >= 0 && r < gridRows && c >= 0 && c < gridCols && letterGrid[r][c] !== null) {
-            n += 1;
-            r += dr;
-            c += dc;
-          }
-          return n;
-        };
-
-        const canPlace = (word: string, row: number, col: number, direction: Direction): Candidate | null => {
-          const dr = direction === 'down' ? 1 : 0;
-          const dc = direction === 'across' ? 1 : 0;
-          const endRow = row + dr * (word.length - 1);
-          const endCol = col + dc * (word.length - 1);
-          if (endRow < 0 || endRow >= gridRows || endCol < 0 || endCol >= gridCols) return null;
-
-          const beforeRow = row - dr;
-          const beforeCol = col - dc;
-          const afterRow = endRow + dr;
-          const afterCol = endCol + dc;
-          if (beforeRow >= 0 && beforeRow < gridRows && beforeCol >= 0 && beforeCol < gridCols && isFilled(beforeRow, beforeCol)) {
-            return null;
-          }
-          if (afterRow >= 0 && afterRow < gridRows && afterCol >= 0 && afterCol < gridCols && isFilled(afterRow, afterCol)) {
-            return null;
-          }
-
-          let overlaps = 0;
-
-          for (let i = 0; i < word.length; i += 1) {
-            const r = row + dr * i;
-            const c = col + dc * i;
-            const existing = letterGrid[r][c];
-
-            if (existing !== null && existing !== word[i]) return null;
-
-            if (existing === null) {
-              if (direction === 'across') {
-                if (isFilled(r - 1, c) || isFilled(r + 1, c)) return null;
-              } else {
-                if (isFilled(r, c - 1) || isFilled(r, c + 1)) return null;
-              }
-            } else {
-              overlaps += 1;
-              if (direction === 'across') {
-                if (!isFilled(r - 1, c) && !isFilled(r + 1, c)) return null;
-              } else {
-                if (!isFilled(r, c - 1) && !isFilled(r, c + 1)) return null;
-              }
-            }
-          }
-
-          if (overlaps === word.length) return null;
-
-          const centerR = (gridRows - 1) / 2;
-          const centerC = (gridCols - 1) / 2;
-          const midR = (row + endRow) / 2;
-          const midC = (col + endCol) / 2;
-          const centerPenalty = Math.abs(centerR - midR) + Math.abs(centerC - midC);
-          const score = overlaps * 100 - centerPenalty;
-
-          return { row, col, direction, overlaps, score };
-        };
-
-        const placeWord = (word: string, candidate: Candidate) => {
-          const dr = candidate.direction === 'down' ? 1 : 0;
-          const dc = candidate.direction === 'across' ? 1 : 0;
-          for (let i = 0; i < word.length; i += 1) {
-            const r = candidate.row + dr * i;
-            const c = candidate.col + dc * i;
-            letterGrid[r][c] = word[i];
-          }
-        };
-
-        const sortedSeeds = [...seedEntries].sort((a, b) => {
-          const lenDiff = b.answer.length - a.answer.length;
-          return lenDiff !== 0 ? lenDiff : Math.random() - 0.5;
-        });
-
-        let placedCount = 0;
-
-        for (const seed of sortedSeeds) {
-          const overlapCandidates: Candidate[] = [];
-          const fallbackCandidates: Candidate[] = [];
-
-          for (const direction of ['across', 'down'] as const) {
-            for (let row = 0; row < gridRows; row += 1) {
-              for (let col = 0; col < gridCols; col += 1) {
-                const candidate = canPlace(seed.answer, row, col, direction);
-                if (!candidate) continue;
-                if (candidate.overlaps > 0) overlapCandidates.push(candidate);
-                else fallbackCandidates.push(candidate);
-              }
-            }
-          }
-
-          const pickedPool = overlapCandidates.length > 0
-            ? overlapCandidates
-            : placedCount === 0
-              ? fallbackCandidates
-              : [];
-
-          if (pickedPool.length === 0) {
-            continue;
-          }
-
-          pickedPool.sort((a, b) => b.score - a.score);
-          const topTier = pickedPool.slice(0, Math.min(8, pickedPool.length));
-          const chosen = topTier[Math.floor(Math.random() * topTier.length)];
-          placeWord(seed.answer, chosen);
-          placedCount += 1;
-        }
-
-        if (placedCount === 0) {
-          return null;
-        }
-
-        const pruneUncheckedCells = () => {
-          let changed = true;
-          while (changed) {
-            changed = false;
-            const keep = letterGrid.map((row) => row.map(() => false));
-
-            for (let row = 0; row < gridRows; row += 1) {
-              for (let col = 0; col < gridCols; col += 1) {
-                if (letterGrid[row][col] === null) continue;
-                const horizontalLength = 1 + countRun(row, col, 0, -1) + countRun(row, col, 0, 1);
-                const verticalLength = 1 + countRun(row, col, -1, 0) + countRun(row, col, 1, 0);
-                if (horizontalLength >= 3 && verticalLength >= 3) {
-                  keep[row][col] = true;
-                }
-              }
-            }
-
-            for (let row = 0; row < gridRows; row += 1) {
-              for (let col = 0; col < gridCols; col += 1) {
-                if (letterGrid[row][col] !== null && !keep[row][col]) {
-                  letterGrid[row][col] = null;
-                  changed = true;
-                }
-              }
-            }
-          }
-        };
-
-        const keepLargestConnectedComponent = () => {
-          const seen = new Set<string>();
-          let largest: string[] = [];
-
-          for (let row = 0; row < gridRows; row += 1) {
-            for (let col = 0; col < gridCols; col += 1) {
-              if (letterGrid[row][col] === null) continue;
-              const key = `${row},${col}`;
-              if (seen.has(key)) continue;
-
-              const queue: Array<[number, number]> = [[row, col]];
-              const component: string[] = [];
-              seen.add(key);
-
-              while (queue.length > 0) {
-                const [r, c] = queue.shift() as [number, number];
-                component.push(`${r},${c}`);
-                const neighbors: Array<[number, number]> = [
-                  [r - 1, c],
-                  [r + 1, c],
-                  [r, c - 1],
-                  [r, c + 1],
-                ];
-
-                for (const [nr, nc] of neighbors) {
-                  if (nr < 0 || nr >= gridRows || nc < 0 || nc >= gridCols) continue;
-                  if (letterGrid[nr][nc] === null) continue;
-                  const nKey = `${nr},${nc}`;
-                  if (seen.has(nKey)) continue;
-                  seen.add(nKey);
-                  queue.push([nr, nc]);
-                }
-              }
-
-              if (component.length > largest.length) {
-                largest = component;
-              }
-            }
-          }
-
-          const keepSet = new Set(largest);
-          for (let row = 0; row < gridRows; row += 1) {
-            for (let col = 0; col < gridCols; col += 1) {
-              if (letterGrid[row][col] === null) continue;
-              if (!keepSet.has(`${row},${col}`)) {
-                letterGrid[row][col] = null;
-              }
-            }
-          }
-        };
-
-        pruneUncheckedCells();
-        keepLargestConnectedComponent();
-        pruneUncheckedCells();
-
-        return buildAttemptFromLetterGrid(letterGrid, 'seed-overlap');
-      };
-
-      const runSeedRectangleFallbackAttempt = (): AttemptResult | null => {
-        type RectCandidate = {
-          rows: number;
-          cols: number;
-          rowPool: string[];
-          potential: number;
-        };
-
-        const candidates: RectCandidate[] = [];
-        const minRectangleArea = Math.ceil(gridRows * gridCols * 0.42);
-        for (const [cols, rowPoolRaw] of seedAnswersByLength.entries()) {
-          if (cols < 3 || cols > gridCols) continue;
-
-          const rowPool = [...rowPoolRaw];
-          const maxRows = Math.min(gridRows, rowPool.length);
-          for (let rows = 3; rows <= maxRows; rows += 1) {
-            const longerSide = Math.max(rows, cols);
-            const shorterSide = Math.min(rows, cols);
-            if (shorterSide < 4) continue;
-            if (longerSide / shorterSide > 1.45) continue;
-            if (rows * cols < minRectangleArea) continue;
-
-            const colPoolCount = (seedAnswersByLength.get(rows) ?? []).length;
-            const potential = rows + Math.min(cols, colPoolCount);
-            candidates.push({ rows, cols, rowPool, potential });
-          }
-        }
-
-        if (candidates.length === 0) {
-          return null;
-        }
-
-        candidates.sort((a, b) => {
-          if (b.potential !== a.potential) return b.potential - a.potential;
-          const areaDiff = b.rows * b.cols - a.rows * a.cols;
-          if (areaDiff !== 0) return areaDiff;
-          return b.rows - a.rows;
-        });
-
-        let best: AttemptResult | null = null;
-
-        for (const candidate of candidates.slice(0, 12)) {
-          const seenRows = new Set<string>();
-          const tries = Math.min(900, 180 + candidate.rowPool.length * 120);
-
-          for (let attempt = 0; attempt < tries; attempt += 1) {
-            const rowWords = shuffled(candidate.rowPool).slice(0, candidate.rows);
-            if (rowWords.length !== candidate.rows) continue;
-
-            const rowKey = rowWords.join('|');
-            if (seenRows.has(rowKey)) continue;
-            seenRows.add(rowKey);
-
-            const colWords: string[] = [];
-            for (let col = 0; col < candidate.cols; col += 1) {
-              let word = '';
-              for (let row = 0; row < candidate.rows; row += 1) {
-                word += rowWords[row][col];
-              }
-              colWords.push(word);
-            }
-
-            const allWords = [...rowWords, ...colWords];
-            if (new Set(allWords).size !== allWords.length) {
-              continue;
-            }
-
-            const letterGrid: Array<Array<string | null>> = Array.from(
-              { length: gridRows },
-              () => Array.from({ length: gridCols }, () => null)
-            );
-
-            const startRow = Math.floor((gridRows - candidate.rows) / 2);
-            const startCol = Math.floor((gridCols - candidate.cols) / 2);
-
-            for (let row = 0; row < candidate.rows; row += 1) {
-              for (let col = 0; col < candidate.cols; col += 1) {
-                letterGrid[startRow + row][startCol + col] = rowWords[row][col];
-              }
-            }
-
-            const built = buildAttemptFromLetterGrid(
-              letterGrid,
-              `seed-rectangle-${candidate.rows}x${candidate.cols}`
-            );
-            if (!built) continue;
-
-            if (!best || attemptScore(built) > attemptScore(best)) {
-              best = built;
-            }
-
-            const theoreticalMax = Math.min(seedEntries.length, candidate.potential);
-            if (built.usedSeedCount >= theoreticalMax) {
-              break;
-            }
-          }
-        }
-
-        return best;
-      };
-
-      const runDenseFallbackAttempt = (): AttemptResult | null => {
-        const maxSquare = Math.min(gridRows, gridCols);
-        const byLength = new Map<number, SeedEntry[]>();
-
-        for (const entry of seedEntries) {
-          const length = entry.answer.length;
-          if (length < 3 || length > maxSquare) continue;
-          const bucket = byLength.get(length) ?? [];
-          bucket.push(entry);
-          byLength.set(length, bucket);
-        }
-
-        const candidateSizesRaw = Array.from(byLength.entries())
-          .map(([size, entries]) => ({ size, entries }))
-          .sort((a, b) => {
-            const scoreA = Math.min(a.size, a.entries.length) * 100 + a.size;
-            const scoreB = Math.min(b.size, b.entries.length) * 100 + b.size;
-            return scoreB - scoreA;
-          });
-
-        const preferredMaxCore = maxSquare >= 6 ? maxSquare - 1 : maxSquare;
-        const preferredSizes = candidateSizesRaw.filter((candidate) => candidate.size <= preferredMaxCore);
-        const candidateSizes = preferredSizes.length > 0 ? preferredSizes : candidateSizesRaw;
-
-        if (candidateSizes.length === 0) {
-          return null;
-        }
-
-        const randomLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        const randomWord = (length: number): string => {
-          let out = '';
-          for (let i = 0; i < length; i += 1) {
-            out += randomLetters[Math.floor(Math.random() * randomLetters.length)];
-          }
-          return out;
-        };
-
-        let bestFallback: AttemptResult | null = null;
-
-        for (const candidate of candidateSizes.slice(0, 5)) {
-          const size = candidate.size;
-          const availableSeedAnswers = candidate.entries.map((entry) => entry.answer);
-
-          for (let attempt = 0; attempt < 90; attempt += 1) {
-            const rowWords = Array.from({ length: size }, () => '');
-            const seededRowCount = Math.min(size, availableSeedAnswers.length);
-            const seededRows = shuffled(Array.from({ length: size }, (_, i) => i)).slice(0, seededRowCount);
-            const selectedSeedWords = shuffled(availableSeedAnswers).slice(0, seededRowCount);
-            const usedAcrossWords = new Set<string>();
-
-            for (let i = 0; i < seededRowCount; i += 1) {
-              rowWords[seededRows[i]] = selectedSeedWords[i];
-              usedAcrossWords.add(selectedSeedWords[i]);
-            }
-
-            let failed = false;
-            for (let row = 0; row < size; row += 1) {
-              if (rowWords[row]) continue;
-
-              let filled = false;
-              for (let tries = 0; tries < 240; tries += 1) {
-                const candidateWord = randomWord(size);
-                if (usedAcrossWords.has(candidateWord)) continue;
-                rowWords[row] = candidateWord;
-                usedAcrossWords.add(candidateWord);
-                filled = true;
-                break;
-              }
-
-              if (!filled) {
-                failed = true;
-                break;
-              }
-            }
-
-            if (failed) continue;
-
-            const colWords: string[] = [];
-            for (let col = 0; col < size; col += 1) {
-              let word = '';
-              for (let row = 0; row < size; row += 1) {
-                word += rowWords[row][col];
-              }
-              colWords.push(word);
-            }
-
-            const allWords = [...rowWords, ...colWords];
-            const uniqueWords = new Set(allWords);
-            if (uniqueWords.size !== allWords.length) {
-              continue;
-            }
-
-            const letterGrid: Array<Array<string | null>> = Array.from(
-              { length: gridRows },
-              () => Array.from({ length: gridCols }, () => null)
-            );
-
-            const startRow = Math.floor((gridRows - size) / 2);
-            const startCol = Math.floor((gridCols - size) / 2);
-
-            for (let row = 0; row < size; row += 1) {
-              for (let col = 0; col < size; col += 1) {
-                letterGrid[startRow + row][startCol + col] = rowWords[row][col];
-              }
-            }
-
-            const built = buildAttemptFromLetterGrid(letterGrid, `dense-${size}x${size}`);
-            if (!built) continue;
-
-            if (!bestFallback || attemptScore(built) > attemptScore(bestFallback)) {
-              bestFallback = built;
-            }
-
-            const optimalSeedUse = Math.min(size, availableSeedAnswers.length);
-            if (built.usedSeedCount >= optimalSeedUse) {
-              break;
-            }
-          }
-        }
-
-        return bestFallback;
-      };
-
-      let bestAttempt: AttemptResult | null = runPackageGeneratorAttempt();
-
-      // User preference: use npm package output whenever it succeeds.
-      // Custom strategies are fallback-only if package generation fails.
-      if (!bestAttempt) {
-        for (let i = 0; i < 24; i += 1) {
-          const attempt = runAttempt();
-          if (!attempt) continue;
-          if (!bestAttempt || attemptScore(attempt) > attemptScore(bestAttempt)) {
-            bestAttempt = attempt;
-          }
-          if (attempt.usedSeedCount === seedEntries.length && attempt.unplacedSeedAnswers.length === 0) {
-            break;
-          }
-        }
-
-        const rectangleFallbackAttempt = runSeedRectangleFallbackAttempt();
-        if (rectangleFallbackAttempt && (!bestAttempt || attemptScore(rectangleFallbackAttempt) > attemptScore(bestAttempt))) {
-          bestAttempt = rectangleFallbackAttempt;
-        }
-
-        const denseFallbackAttempt = runDenseFallbackAttempt();
-        if (denseFallbackAttempt && (!bestAttempt || attemptScore(denseFallbackAttempt) > attemptScore(bestAttempt))) {
-          bestAttempt = denseFallbackAttempt;
+        if (entry.answer.length < 3 || !entry.text.trim()) continue;
+        if (!fillPoolByAnswer.has(entry.answer)) {
+          fillPoolByAnswer.set(entry.answer, entry);
         }
       }
 
-      if (!bestAttempt) {
-        onDataChange('_crosswordGenerationError', 'Generation could not produce a valid fully-crossed grid from this seed list. Add more words or increase grid size.');
+      const additionalPoolEntries = Array.isArray(options?.fillPoolEntries)
+        ? options.fillPoolEntries
+        : [];
+
+      for (const entry of additionalPoolEntries) {
+        if (entry.answer.length < 3 || !entry.text.trim()) continue;
+        if (!fillPoolByAnswer.has(entry.answer)) {
+          fillPoolByAnswer.set(entry.answer, entry);
+        }
+      }
+
+      const fillPoolEntries = Array.from(fillPoolByAnswer.values());
+      const longestAnswer = fillPoolEntries.reduce((max, entry) => Math.max(max, entry.answer.length), 3);
+      const requestedRows = clampInt(gridRows, MIN_GRID, MAX_GRID);
+      const requestedCols = clampInt(gridCols, MIN_GRID, MAX_GRID);
+      const preferredSide = clampInt(
+        Math.max(requestedRows, requestedCols, longestAnswer),
+        MIN_GRID,
+        MAX_GRID
+      );
+
+      const generation = generateCrosswordFromSeedEntries({
+        seedEntries,
+        fillPoolEntries,
+        gridRows: requestedRows,
+        gridCols: requestedCols,
+        minGrid: Math.min(requestedRows, requestedCols),
+        maxGrid: Math.max(requestedRows, requestedCols),
+        preferredSide,
+        maxLayoutAttemptsPerSide: seedEntries.length >= 30 ? 180 : 120,
+        maxDurationMs: preferredSide >= 18 ? 7000 : 5000,
+      });
+
+      if (!generation) {
+        onDataChange('_crosswordGenerationError', 'Generation could not produce a proper connected crossword. Add more short and mid-length intersectable words, or try another topic.');
         onDataChange('_crosswordGenerationMessage', '');
         onDataChange('_crosswordUnplacedWords', seedEntries.map((entry) => entry.answer));
-        return;
+        return false;
       }
 
-      onDataChange('_crosswordLayout', bestAttempt.generatedLayout);
-      onDataChange('_crosswordRows', bestAttempt.generatedRows);
-      onDataChange('_crosswordCols', bestAttempt.generatedCols);
+      const totalGeneratedEntries = generation.generatedAcross.length + generation.generatedDown.length;
+      const totalCells = generation.generatedRows * generation.generatedCols;
+      const blackRatio = totalCells > 0
+        ? (totalCells - generation.whiteCellCount) / totalCells
+        : 0;
+
+      onDataChange('_crosswordLayout', generation.generatedLayout);
+      onDataChange('_crosswordRows', generation.generatedRows);
+      onDataChange('_crosswordCols', generation.generatedCols);
       onDataChange('_crosswordGenerationError', '');
       onDataChange(
         '_crosswordGenerationMessage',
-        `Generated ${bestAttempt.generatedAcross.length + bestAttempt.generatedDown.length} entries on ${bestAttempt.generatedRows}x${bestAttempt.generatedCols}. Seed words used: ${bestAttempt.usedSeedCount}/${seedEntries.length}. Auto clues: ${bestAttempt.autoClueCount}. Unplaced seeds: ${bestAttempt.unplacedSeedAnswers.length}. Strategy: ${bestAttempt.strategy}.`
+        `Generated ${totalGeneratedEntries} entries on ${generation.generatedRows}x${generation.generatedCols}. Black ratio: ${blackRatio.toFixed(3)}. Seed words used: ${generation.usedSeedCount}/${seedEntries.length}. Unplaced seeds: ${generation.unplacedSeedAnswers.length}. Strategy: ${generation.strategy}.`
       );
-      onDataChange('_crosswordUnplacedWords', bestAttempt.unplacedSeedAnswers);
+      onDataChange('_crosswordUnplacedWords', generation.unplacedSeedAnswers);
 
-      persistClues(bestAttempt.generatedAcross, bestAttempt.generatedDown, bestAttempt.generatedLayout);
+      persistClues(generation.generatedAcross, generation.generatedDown, generation.generatedLayout);
+      return true;
+    };
+
+    const setTopicSeedRaw = (entries: SeedEntry[]) => {
+      const nextSeedRaw = entries
+        .map((entry) => `${entry.answer} | ${entry.text}`)
+        .join('\n');
+      onDataChange('_crosswordSeedRaw', nextSeedRaw);
+    };
+
+    const fetchRemoteTopicEntries = async (topic: string, requestedCount: number): Promise<{
+      entries: SeedEntry[];
+      sources: string[];
+    }> => {
+      const response = await fetch('/api/admin/crossword-topic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, count: requestedCount }),
+      });
+
+      const payload = await response.json().catch(() => ({})) as {
+        error?: unknown;
+        entries?: unknown;
+        sources?: unknown;
+      };
+
+      if (!response.ok) {
+        throw new Error(typeof payload.error === 'string' ? payload.error : 'Topic lookup failed.');
+      }
+
+      const entries = Array.isArray(payload.entries)
+        ? payload.entries
+            .map((entry) => {
+              const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {};
+              return {
+                answer: normalizeAnswer(record.answer),
+                text: asString(record.text, '').trim(),
+              };
+            })
+            .filter((entry) => entry.answer.length >= 3 && entry.text.length > 0)
+        : [];
+
+      const sources = Array.isArray(payload.sources)
+        ? payload.sources.map((source) => String(source ?? '').trim()).filter(Boolean)
+        : [];
+
+      return { entries, sources };
+    };
+
+    const generateFromRemoteTopic = async (): Promise<boolean> => {
+      const topic = topicRaw.trim();
+      const normalizedTopic = normalizeTopicText(topic);
+      const isRandomRequest = topic.length === 0 || ['any', 'anything', 'general', 'mixed', 'random', 'surprise'].includes(normalizedTopic);
+      const lookupLabel = isRandomRequest ? 'a random set' : `"${topic}"`;
+
+      onDataChange('_crosswordGenerationError', '');
+      onDataChange(
+        '_crosswordGenerationMessage',
+        isRandomRequest
+          ? 'Searching public word and clue sources for a random set...'
+          : `Searching public word and knowledge sources for "${topic}"...`
+      );
+
+      try {
+        const requestedCount = clampInt(topicSeedCount, 12, 80);
+        const remote = await fetchRemoteTopicEntries(topic, requestedCount);
+        if (remote.entries.length < 4) {
+          onDataChange('_crosswordGenerationError', `Could not find enough crossword-friendly words for ${lookupLabel}.`);
+          onDataChange('_crosswordGenerationMessage', '');
+          return false;
+        }
+
+        const sourceLabel = remote.sources.length > 0
+          ? remote.sources.join(' + ')
+          : 'public sources';
+
+        setTopicSeedRaw(remote.entries);
+        onDataChange('_crosswordGenerationError', '');
+        onDataChange(
+          '_crosswordGenerationMessage',
+          `Pulled ${remote.entries.length} words and clues for ${lookupLabel} from ${sourceLabel}. Generating crossword...`
+        );
+
+        const success = autoGenerateFromSeedEntries(remote.entries, {
+          fillPoolEntries: remote.entries,
+        });
+        if (success) {
+          return true;
+        }
+
+        onDataChange(
+          '_crosswordGenerationError',
+          `Pulled words for ${lookupLabel}, but they could not fit into the current grid. Try a larger grid or a higher word count.`
+        );
+        return false;
+      } catch (error) {
+        onDataChange(
+          '_crosswordGenerationError',
+          error instanceof Error ? error.message : 'Topic lookup failed.'
+        );
+        onDataChange('_crosswordGenerationMessage', '');
+        return false;
+      }
+    };
+
+    const autoGenerateFromTopic = async () => {
+      const topicKey = resolveTopicKey(topicRaw);
+      if (!topicKey) {
+        await generateFromRemoteTopic();
+        return;
+      }
+
+      const poolSize = TOPIC_SEED_BANK[topicKey]?.length ?? 0;
+      const countsToTry = Array.from(
+        new Set([
+          clampInt(topicSeedCount, 12, Math.max(12, poolSize)),
+          clampInt(topicSeedCount + 8, 12, Math.max(12, poolSize)),
+          clampInt(topicSeedCount + 16, 12, Math.max(12, poolSize)),
+          Math.max(12, poolSize),
+        ])
+      ).sort((a, b) => a - b);
+
+      for (const count of countsToTry) {
+        const generated = buildTopicSeedEntries(topicRaw, count);
+        if (!generated) continue;
+
+        setTopicSeedRaw(generated.entries);
+        onDataChange('_crosswordGenerationError', '');
+        onDataChange(
+          '_crosswordGenerationMessage',
+          `Built ${generated.entries.length} topic seeds for ${TOPIC_LABELS[generated.topicKey]}. Generating crossword...`
+        );
+
+        const success = autoGenerateFromSeedEntries(generated.entries, {
+          fillPoolEntries: TOPIC_SEED_BANK[generated.topicKey] ?? generated.entries,
+        });
+        if (success) {
+          return;
+        }
+      }
+
+      await generateFromRemoteTopic();
     };
 
     const clueNumberByCell = new Map<string, number>();
@@ -5183,6 +5084,43 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
           <label className={labelCls}>
             Seed Words + Clues <span className="font-normal text-gray-500">(one per line: ANSWER | clue)</span>
           </label>
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+            <div className="lg:col-span-2">
+              <label className={labelCls}>Topic or Random</label>
+              <input
+                type="text"
+                value={topicRaw}
+                onChange={(e) => onDataChange('_crosswordTopic', e.target.value)}
+                placeholder="e.g. animals, mythology, space; blank for random"
+                className={fieldCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Topic Word Count</label>
+              <input
+                type="number"
+                min={12}
+                max={80}
+                value={topicSeedCountInput}
+                onChange={(e) => onDataChange('_crosswordTopicWordCount', e.target.value)}
+                onBlur={() => onDataChange('_crosswordTopicWordCount', topicSeedCount)}
+                className={fieldCls}
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={autoGenerateFromTopic}
+                className="w-full px-3 py-2 rounded-lg text-xs font-bold text-white"
+                style={{ background: 'rgba(99,102,241,0.35)', border: '1px solid rgba(99,102,241,0.5)' }}
+              >
+                Generate From Topic
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400">
+            Preset shortcuts: {supportedTopicLabels}. Leave blank or type random for mixed clues; other topics use public word and knowledge sources.
+          </p>
           <textarea
             rows={6}
             value={seedRaw}
@@ -5200,7 +5138,7 @@ At [[23:30]], security found the room vacant. The window was unlatched. A single
               Generate Grid From Seed List
             </button>
             <span className="text-xs text-gray-400">
-              Generator places words, blacks unused cells, and auto-numbers clues.
+              Use any topic, leave it blank for random words+clues, or paste your own seed list.
             </span>
           </div>
 
