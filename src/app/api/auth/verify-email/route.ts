@@ -109,13 +109,18 @@ export async function POST(request: NextRequest) {
           const newXp = (freshUser.xp ?? 0) + xpToAdd;
           const { level, title } = calcLevel(newXp);
 
-          // Count the guest solves to show accurate "N puzzles solved" in the modal
-          const solveCount = await prisma.gridlockSolve.count({
-            where: { anonId, userId: null },
-          });
+          const [gridlockSolveCount, guestDailyWordSolves] = await Promise.all([
+            prisma.gridlockSolve.count({
+              where: { anonId, userId: null },
+            }),
+            prisma.guestDailyWordSolve.findMany({
+              where: { anonId, userId: null },
+              select: { dayNumber: true, guesses: true },
+            }),
+          ]);
 
-          await prisma.$transaction([
-            prisma.user.update({
+          await prisma.$transaction(async (tx) => {
+            await tx.user.update({
               where: { id: user.id },
               data: {
                 xp: newXp,
@@ -126,14 +131,38 @@ export async function POST(request: NextRequest) {
                 prelaunchRewardXp: 0,
                 prelaunchRewardPoints: 0,
               },
-            }),
-            prisma.gridlockSolve.updateMany({
+            });
+
+            await tx.gridlockSolve.updateMany({
               where: { anonId, userId: null },
               data: { userId: user.id },
-            }),
-          ]);
+            });
 
-          prelaunchRewards = { xp: xpToAdd, points: pointsToAdd, solves: solveCount };
+            await tx.guestDailyWordSolve.updateMany({
+              where: { anonId, userId: null },
+              data: { userId: user.id },
+            });
+
+            if (guestDailyWordSolves.length > 0) {
+              await tx.dailyWordRecord.createMany({
+                data: guestDailyWordSolves.map((solve) => ({
+                  userId: user.id,
+                  dayNumber: solve.dayNumber,
+                  won: true,
+                  guesses: solve.guesses,
+                  skipped: false,
+                  shieldUsed: false,
+                })),
+                skipDuplicates: true,
+              });
+            }
+          });
+
+          prelaunchRewards = {
+            xp: xpToAdd,
+            points: pointsToAdd,
+            solves: gridlockSolveCount + guestDailyWordSolves.length,
+          };
         }
       } catch (err) {
         console.error("[verify-email] Failed to credit pre-launch rewards:", err);

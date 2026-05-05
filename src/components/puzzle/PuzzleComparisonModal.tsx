@@ -110,7 +110,7 @@ export default function PuzzleComparisonModal({ puzzleId, stats, onDismiss }: Pr
           </p>
         </div>
 
-        {/* Word Crack — guess comparison */}
+        {/* WordScry — guess comparison */}
         {hasGuessData && (
           <div
             className="rounded-xl p-4"
@@ -153,7 +153,7 @@ export default function PuzzleComparisonModal({ puzzleId, stats, onDismiss }: Pr
           </div>
         )}
 
-        {/* Percentile ranking bar (word crack only) */}
+        {/* Percentile ranking bar (WordScry only) */}
         {hasPercentile && (
           <div>
             <div className="flex justify-between text-xs mb-2" style={{ color: "#9ca3af" }}>

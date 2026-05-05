@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       debriefReleaseAt,
     } = body;
 
-    // Validate input - title is required for most puzzle types but optional for Sudoku, Escape Room, and Word Crack
+    // Validate input - title is required for most puzzle types but optional for Sudoku, Escape Room, and WordScry
     if (!title && puzzleType !== 'sudoku' && puzzleType !== 'escape_room' && puzzleType !== 'word_crack' && puzzleType !== 'word_search' && puzzleType !== 'anagram_blitz' && puzzleType !== 'arg' && puzzleType !== 'vault') {
       return NextResponse.json(
         { error: "Missing required field: title" },
@@ -282,7 +282,7 @@ export async function POST(request: NextRequest) {
 
     // Normalise snake_case category values coming from the admin dropdown to display names
     const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
-      word_crack:    'Word Crack',
+      word_crack:    'Hidden Word',
       word_search:   'Word Search',
       anagram_blitz: 'Anagram Blitz',
       crack_safe:    'Crack Safe',
@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
     // Provide a fallback title when none is supplied
     const finalTitle = title ||
       (puzzleType === 'sudoku' ? `Sudoku (${(sudokuDifficulty || 'medium').toString().toUpperCase()})` :
-      puzzleType === 'word_crack' ? 'Word Crack' :
+      puzzleType === 'word_crack' ? 'Hidden Word' :
       puzzleType === 'word_search' ? 'Word Search' :
       puzzleType === 'anagram_blitz' ? 'Anagram Blitz' :
       puzzleType === 'arg' ? 'ARG' :
@@ -645,14 +645,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send puzzle release notification if active
-    // Upsert PuzzleSchedule.releaseAt for gridlock_file puzzles
-    if (puzzle.puzzleType === 'gridlock_file') {
-      const releaseAt = gridlockReleaseAt ? new Date(gridlockReleaseAt) : new Date();
+    // Gridlock files only join the daily rotation when explicitly scheduled.
+    if (puzzle.puzzleType === 'gridlock_file' && gridlockReleaseAt) {
+      const releaseAt = new Date(gridlockReleaseAt);
       await prisma.puzzleSchedule.upsert({
         where: { puzzleId: puzzle.id },
         create: { puzzleId: puzzle.id, releaseAt, schedulingType: 'scheduled' },
-        update: { releaseAt },
+        update: { releaseAt, schedulingType: 'scheduled' },
       });
     }
     // Upsert PuzzleSchedule.releaseAt for debrief puzzles

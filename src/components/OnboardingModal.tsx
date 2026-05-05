@@ -110,7 +110,7 @@ function LeaderboardVisual() {
 function PuzzlesVisual() {
   const types = [
     { icon: "📡", label: "Frequency",  sub: "Daily · Streak" },
-    { icon: "🔤", label: "Word Crack", sub: "Speed · Letters" },
+    { icon: "🔤", label: "Hidden Word", sub: "Speed · Letters" },
     { icon: "🔢", label: "Sudoku",     sub: "Logic · Grid" },
   ];
   return (

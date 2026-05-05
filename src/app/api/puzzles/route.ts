@@ -20,7 +20,18 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "500");
     const skip = parseInt(searchParams.get("skip") || "0");
 
-    const where: any = { isActive: true, isWarzExclusive: false, NOT: { puzzleType: "gridlock_file" } };
+    const catalogVisibility = {
+      OR: [
+        { puzzleType: { not: "gridlock_file" } },
+        { puzzleType: "gridlock_file", schedule: null },
+      ],
+    };
+
+    const where: any = {
+      isActive: true,
+      isWarzExclusive: false,
+      AND: [catalogVisibility],
+    };
     // Optional filter for team puzzles
     const isTeam = searchParams.get("isTeam");
     if (isTeam === "true") where.isTeamPuzzle = true;
@@ -30,10 +41,12 @@ export async function GET(request: NextRequest) {
     
     // Search by title or description
     if (search && search.trim()) {
-      where.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
-      ];
+      where.AND.push({
+        OR: [
+          { title: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
+        ],
+      });
     }
 
     // Get user's email for progress filtering

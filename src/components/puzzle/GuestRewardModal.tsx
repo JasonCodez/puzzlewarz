@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import Link from 'next/link';
@@ -12,6 +12,9 @@ export interface GuestRewardModalProps {
   onDismiss: () => void;
   /** When true, replaces sign-up CTAs with a "launching soon" message */
   prelaunch?: boolean;
+  title?: string;
+  message?: ReactNode;
+  signupLabel?: string;
 }
 
 const COUNTER_DURATION = 1200; // ms
@@ -36,7 +39,16 @@ function useCountUp(target: number) {
   return display;
 }
 
-export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, onDismiss, prelaunch = false }: GuestRewardModalProps) {
+export default function GuestRewardModal({
+  xpEarned,
+  pointsEarned,
+  puzzleTitle,
+  onDismiss,
+  prelaunch = false,
+  title,
+  message,
+  signupLabel,
+}: GuestRewardModalProps) {
   const displayXp = useCountUp(xpEarned);
   const displayPoints = useCountUp(pointsEarned);
 
@@ -88,7 +100,7 @@ export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, 
             </div>
 
             {/* Headline */}
-            <h2 className="text-2xl font-extrabold text-white mb-1">File Solved!</h2>
+            <h2 className="text-2xl font-extrabold text-white mb-1">{title ?? 'File Solved!'}</h2>
             {puzzleTitle && (
               <p className="text-sm mb-5" style={{ color: '#9CA3AF' }}>"{puzzleTitle}"</p>
             )}
@@ -123,10 +135,10 @@ export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, 
 
             {/* Locked message */}
             <p className="text-sm mb-6 leading-relaxed" style={{ color: '#9CA3AF' }}>
-              {prelaunch
+              {message ?? (prelaunch
                 ? <>Your rewards are banked. When we launch on <span style={{ color: '#FFD700', fontWeight: 700 }}>May 1st</span>, sign up and confirm your email — they'll be deposited straight into your account.</>
-                : <>Your rewards are saved. Create a free account to{' '}<span style={{ color: '#FFD700', fontWeight: 700 }}>unlock them permanently</span>{' '}and track your progress.</>
-              }
+                : <>Your rewards are saved. Create a free account to{' '}<span style={{ color: '#FFD700', fontWeight: 700 }}>unlock them permanently</span>{' '}and keep your streak and progress.</>
+              )}
             </p>
 
             {/* CTA buttons */}
@@ -155,7 +167,7 @@ export default function GuestRewardModal({ xpEarned, pointsEarned, puzzleTitle, 
                     style={{ background: 'linear-gradient(90deg, #FDE74C, #FFB86B)', color: '#020202' }}
                     onClick={onDismiss}
                   >
-                    🎉 Create Free Account
+                    {signupLabel ?? '🎉 Create Free Account'}
                   </Link>
                   <button
                     onClick={onDismiss}

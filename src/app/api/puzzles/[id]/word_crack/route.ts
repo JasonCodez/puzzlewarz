@@ -5,7 +5,8 @@ import { validateSameOrigin } from "@/lib/requestSecurity";
 import { calcLevel } from "@/lib/levels";
 import { awardSeasonXp } from "@/lib/seasonXp";
 import { getXpMultiplier } from "@/lib/getXpMultiplier";
-// Word Crack uses a stricter 2-game limit independent of the global MAX_PUZZLE_ATTEMPTS.
+import { isSolvedWordScryResult, scoreWordScryGuess } from "@/lib/wordScry";
+// WordScry uses a stricter 2-game limit independent of the global MAX_PUZZLE_ATTEMPTS.
 // First failure: can retry with halved XP/points. Second failure: permanently locked.
 const WORD_CRACK_MAX_ATTEMPTS = 2;
 
@@ -40,7 +41,7 @@ export async function POST(
     const wordleData = (puzzle.data ?? {}) as Record<string, unknown>;
     const word = String(wordleData.word ?? "").toUpperCase().trim();
 
-    // Check 2-attempt limit for Word Crack (each full failed game = 1 attempt)
+    // Check 2-attempt limit for WordScry (each full failed game = 1 attempt)
     if (!warzMode) {
       const progress = await prisma.userPuzzleProgress.findUnique({
         where: { userId_puzzleId: { userId: currentUser.id, puzzleId } },
@@ -84,41 +85,8 @@ export async function POST(
       );
     }
 
-    // ── Wordle scoring ──────────────────────────────────────────────────────
-    const wordArr = word.split("");
-    const guessArr = cleanGuess.split("");
-
-    type LetterStatus = "correct" | "present" | "absent";
-    const result: { letter: string; status: LetterStatus }[] = guessArr.map(
-      (letter) => ({ letter, status: "absent" as LetterStatus })
-    );
-
-    const usedWord: boolean[] = Array(word.length).fill(false);
-    const usedGuess: boolean[] = Array(word.length).fill(false);
-
-    // Pass 1 – exact position matches (green)
-    for (let i = 0; i < word.length; i++) {
-      if (guessArr[i] === wordArr[i]) {
-        result[i].status = "correct";
-        usedWord[i] = true;
-        usedGuess[i] = true;
-      }
-    }
-
-    // Pass 2 – present but wrong position (yellow)
-    for (let i = 0; i < word.length; i++) {
-      if (usedGuess[i]) continue;
-      for (let j = 0; j < word.length; j++) {
-        if (usedWord[j]) continue;
-        if (guessArr[i] === wordArr[j]) {
-          result[i].status = "present";
-          usedWord[j] = true;
-          break;
-        }
-      }
-    }
-
-    const solved = result.every((r) => r.status === "correct");
+    const result = scoreWordScryGuess(cleanGuess, word);
+    const solved = isSolvedWordScryResult(result);
 
     // ── Persist progress ─────────────────────────────────────────────────
     if (!warzMode) try {

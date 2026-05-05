@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
+import {
+  isSolvedWordScryResult,
+  type WordScryGameStatus,
+  type WordScryGuessResult,
+} from "@/lib/wordScry";
 
 const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
 const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), { ssr: false });
@@ -13,10 +18,18 @@ const RetroBackground = dynamic(() => import("@/components/RetroBackground"), { 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type LetterStatus = "correct" | "present" | "absent";
+type GuessResult = WordScryGuessResult;
 
-interface GuessResult {
-  letter: string;
-  status: LetterStatus;
+interface SubmitGuessResponse {
+  result?: GuessResult[];
+  solved?: boolean;
+  wordLength?: number;
+  xpGained?: number;
+  error?: string;
+  locked?: boolean;
+  attemptsUsed?: number;
+  maxAttempts?: number;
+  revealWord?: string;
 }
 
 interface Props {
@@ -24,6 +37,8 @@ interface Props {
   wordCrackData: Record<string, unknown>;
   onSolved?: (xpGained?: number) => void;
   onFailed?: () => void;
+  onRoundComplete?: (payload: { status: "won" | "lost"; guesses: number; results: GuessResult[][]; xpGained?: number }) => void;
+  onStateChange?: (payload: { guesses: GuessResult[][]; status: WordScryGameStatus }) => void;
   alreadySolved?: boolean;
   warzMode?: boolean;
   failedAttempts?: number;
@@ -31,6 +46,15 @@ interface Props {
   onHintUsed?: () => Promise<boolean>;
   xpReward?: number;
   pointsReward?: number;
+  submitGuessRequest?: (guess: string) => Promise<SubmitGuessResponse>;
+  initialGuesses?: GuessResult[][];
+  initialStatus?: WordScryGameStatus;
+  showHints?: boolean;
+  disableRetry?: boolean;
+  recordGameLossOnFailure?: boolean;
+  showHeader?: boolean;
+  showAttemptMeter?: boolean;
+  showAnimatedBackdrops?: boolean;
 }
 
 // â”€â”€â”€ Keyboard layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -43,7 +67,7 @@ const KEYBOARD_ROWS = [
 
 // â”€â”€â”€ Colour palette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// CRACKED = right letter, right spot  |  CLOSE = in word, wrong spot  |  COLD = not in word
+// CORRECT = right letter, right spot  |  CLOSE = in word, wrong spot  |  COLD = not in word
 const COLORS = {
   correct: { bg: "#38D399", border: "#10b981", glow: "rgba(56,211,153,0.65)", text: "#04190f" },
   present: { bg: "#FDE74C", border: "#d97706", glow: "rgba(253,231,76,0.65)", text: "#3b2b00" },
@@ -102,15 +126,15 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
         {/* Title */}
         <div className="text-center mb-5">
           <div className="text-4xl mb-2">⚡</div>
-          <h2 className="text-2xl font-black tracking-widest" style={{ color: "#38D399" }}>HOW TO CRACK IT</h2>
-          <p className="text-sm mt-1" style={{ color: "#9ca3af" }}>Decode the hidden {wordLength}-letter word.</p>
+          <h2 className="text-2xl font-black tracking-widest" style={{ color: "#38D399" }}>HOW TO PLAY</h2>
+          <p className="text-sm mt-1" style={{ color: "#9ca3af" }}>Find the hidden {wordLength}-letter word.</p>
         </div>
 
         {/* Rules */}
         <ul className="space-y-3 text-sm mb-6">
           <li className="flex items-start gap-3">
             <span className="text-lg">🎯</span>
-            <span>You have <strong className="text-white">{maxGuesses} attempts</strong> to break the {wordLength}-letter code.</span>
+            <span>You have <strong className="text-white">{maxGuesses} guesses</strong> to find the {wordLength}-letter word.</span>
           </li>
           <li className="flex items-start gap-3">
             <span className="text-lg">⌨️</span>
@@ -118,7 +142,7 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
           </li>
           <li className="flex items-start gap-3">
             <span className="text-lg">📊</span>
-            <span>Crack faster for a better <strong className="text-white">grade</strong> — S, A, B, C, or D.</span>
+            <span>Solve faster for a better <strong className="text-white">grade</strong> — S, A, B, C, or D.</span>
           </li>
         </ul>
 
@@ -130,7 +154,7 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
             <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg text-black"
               style={{ background: COLORS.correct.bg, boxShadow: `0 0 12px ${COLORS.correct.glow}` }}>C</div>
             <span className="text-sm">
-              🔓 <strong className="text-white">CRACKED</strong>
+              ✅ <strong className="text-white">CORRECT</strong>
               <span style={{ color: "#9ca3af" }}> — right letter, right position</span>
             </span>
           </div>
@@ -163,7 +187,7 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
             color: "#020202",
           }}
         >
-          START CRACKING ⚡
+          START PLAYING ⚡
         </button>
       </div>
     </div>
@@ -172,17 +196,41 @@ function InstructionsModal({ wordLength, maxGuesses, onClose }: { wordLength: nu
 
 // â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onFailed, alreadySolved, warzMode, failedAttempts: initialFailedAttempts = 0, hintTokens = 0, onHintUsed, xpReward = 50, pointsReward = 100 }: Props) {
+export default function WordCrackPuzzle({
+  puzzleId,
+  wordCrackData,
+  onSolved,
+  onFailed,
+  onRoundComplete,
+  onStateChange,
+  alreadySolved,
+  warzMode,
+  failedAttempts: initialFailedAttempts = 0,
+  hintTokens = 0,
+  onHintUsed,
+  xpReward = 50,
+  pointsReward = 100,
+  submitGuessRequest,
+  initialGuesses = [],
+  initialStatus,
+  showHints = true,
+  disableRetry = false,
+  recordGameLossOnFailure = true,
+  showHeader = true,
+  showAttemptMeter = true,
+  showAnimatedBackdrops: showAnimatedBackdropsOverride,
+}: Props) {
   const skin = usePuzzleSkin();
   const wordLength = Math.max(3, Math.min(10, Number(wordCrackData.wordLength ?? 5)));
   const maxGuesses = Math.max(1, Math.min(10, Number(wordCrackData.maxGuesses ?? 6)));
   const hint = String(wordCrackData.hint ?? "");
   const MAX_ATTEMPTS = 2;
+  const initialGameStatus = initialStatus ?? (alreadySolved ? "won" : "playing");
 
-  const [showInstructions, setShowInstructions] = useState(!alreadySolved);
-  const [guesses, setGuesses] = useState<GuessResult[][]>([]);
+  const [showInstructions, setShowInstructions] = useState(!alreadySolved && initialGuesses.length === 0 && initialGameStatus === "playing");
+  const [guesses, setGuesses] = useState<GuessResult[][]>(initialGuesses);
   const [currentInput, setCurrentInput] = useState<string>("");
-  const [gameStatus, setGameStatus] = useState<"playing" | "won" | "lost">(alreadySolved ? "won" : "playing");
+  const [gameStatus, setGameStatus] = useState<WordScryGameStatus>(initialGameStatus);
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [shakingRow, setShakingRow] = useState(false);
@@ -228,7 +276,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   const revealBaseMs = prefersReducedMotion ? 120 : 400;
   const keyboardKeyHeight = isCompactMobile ? 42 : 44;
   // Keep theme backgrounds visible on mobile; only disable motion when the user requests reduced motion.
-  const showAnimatedBackdrops = !prefersReducedMotion;
+  const showAnimatedBackdrops = (showAnimatedBackdropsOverride ?? true) && !prefersReducedMotion;
   const onSolvedFired = useRef(false);
   const isLongWord = wordLength >= 7;
   const tileGapPx = isCompactMobile
@@ -301,6 +349,10 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   }, []);
 
   useEffect(() => {
+    onStateChange?.({ guesses, status: gameStatus });
+  }, [gameStatus, guesses, onStateChange]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     const compactQuery = window.matchMedia("(max-width: 640px)");
@@ -361,22 +413,37 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     setSubmitting(true);
 
     try {
-      const resp = await fetch(`/api/puzzles/${puzzleId}/word_crack`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guess: word, ...(warzMode && { warzMode: true }) }),
-        credentials: "same-origin",
-      });
+      let data: SubmitGuessResponse;
 
-      const data = await resp.json();
+      if (submitGuessRequest) {
+        data = await submitGuessRequest(word);
+      } else {
+        const resp = await fetch(`/api/puzzles/${puzzleId}/word_crack`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ guess: word, ...(warzMode && { warzMode: true }) }),
+          credentials: "same-origin",
+        });
 
-      if (!resp.ok) {
-        setError(data.error ?? "Something went wrong");
-        setShakingRow(true);
-        triggerHaptic([12, 30, 12]);
-        setTimeout(() => { setShakingRow(false); setError(""); }, 700);
-        setSubmitting(false);
-        return;
+        data = await resp.json();
+
+        if (!resp.ok) {
+          if (data.locked) {
+            setFailedAttempts(data.attemptsUsed ?? MAX_ATTEMPTS);
+            setRevealedWord(data.revealWord ?? null);
+            setGameStatus("lost");
+          }
+          setError(data.error ?? "Something went wrong");
+          setShakingRow(true);
+          triggerHaptic([12, 30, 12]);
+          setTimeout(() => { setShakingRow(false); setError(""); }, 700);
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      if (!data.result || typeof data.solved !== "boolean") {
+        throw new Error("Invalid Hidden Word response");
       }
 
       const newGuesses = [...guesses, data.result as GuessResult[]];
@@ -399,6 +466,12 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
           setConfetti(makeConfetti(prefersReducedMotion ? 0 : isCompactMobile ? 28 : 60));
           triggerHaptic([15, 45, 15]);
           setBounceWin(true);
+          onRoundComplete?.({
+            status: "won",
+            guesses: newGuesses.length,
+            results: newGuesses,
+            xpGained: data.xpGained,
+          });
           if (!onSolvedFired.current) {
             onSolvedFired.current = true;
             setTimeout(() => onSolved?.(data.xpGained), 1800);
@@ -408,9 +481,10 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         setTimeout(() => {
           setGameStatus("lost");
           triggerHaptic(25);
+          onRoundComplete?.({ status: "lost", guesses: newGuesses.length, results: newGuesses });
           if (warzMode) {
             onFailed?.();
-          } else if (!gameLossRecorded.current) {
+          } else if (!disableRetry && recordGameLossOnFailure && !gameLossRecorded.current) {
             gameLossRecorded.current = true;
             fetch(`/api/puzzles/${puzzleId}/progress`, {
               method: "POST",
@@ -436,14 +510,18 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
     currentInput,
     guesses,
     isCompactMobile,
+    disableRetry,
     isPlaying,
     maxGuesses,
     onFailed,
+    onRoundComplete,
     onSolved,
     prefersReducedMotion,
     puzzleId,
+    recordGameLossOnFailure,
     revealBaseMs,
     revealStepMs,
+    submitGuessRequest,
     submitting,
     triggerHaptic,
     warzMode,
@@ -581,7 +659,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
   });
 
   // â”€â”€ Guess quality label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const PRAISE = ["⚡ LEGENDARY!", "🔓 MASTERCRACK!", "💥 IMPRESSIVE!", "👏 NICE WORK!", "😅 BARELY CRACKED!", "😤 BY A THREAD!"];
+  const PRAISE = ["⚡ LEGENDARY!", "🔮 SHARP EYE!", "💥 IMPRESSIVE!", "👏 NICE WORK!", "😅 JUST MADE IT!", "😤 BY A THREAD!"];
   const praiseIndex = Math.min(guesses.length - 1, PRAISE.length - 1);
 
   const getGrade = (count: number, max: number): { grade: string; color: string } => {
@@ -684,6 +762,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         } as React.CSSProperties}
       >
         {/* â”€â”€ Header â”€â”€ */}
+        {showHeader && (
         <div className="text-center relative w-full px-8">
           <h2
             className="text-2xl sm:text-3xl font-black tracking-[0.25em] mb-1"
@@ -729,7 +808,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
               };
             })()}
           >
-            WORD CRACK
+            HIDDEN WORD
           </h2>
           <button
             onClick={() => setShowInstructions(true)}
@@ -748,12 +827,13 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             </p>
           )}
         </div>
+        )}
 
-        {/* ─── Crack Meter ─── */}
-        {gameStatus === "playing" && (
+        {/* ─── Attempt Meter ─── */}
+        {showAttemptMeter && gameStatus === "playing" && (
           <div className="w-full px-4" style={{ maxWidth: "320px" }}>
             <div className="flex justify-between text-xs mb-1.5" style={{ color: "#9ca3af" }}>
-              <span className="font-bold tracking-widest">CRACK METER</span>
+              <span className="font-bold tracking-widest">ATTEMPT METER</span>
               <span>{guesses.length} / {maxGuesses}</span>
             </div>
             <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
@@ -789,7 +869,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
               letterSpacing: submitting ? "0.15em" : undefined,
             }}
           >
-            {submitting ? "⚡ DECRYPTING..." : error}
+            {submitting ? "⚡ CHECKING..." : error}
           </div>
         )}
 
@@ -813,7 +893,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                 {grade.grade}
               </div>
               <div className="text-sm" style={{ color: "#9ca3af" }}>
-                Cracked in {guesses.length}<br />
+                Solved in {guesses.length}<br />
                 {guesses.length === 1 ? "attempt" : "attempts"}
               </div>
             </div>
@@ -830,8 +910,9 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             }}
           >
             <div className="text-2xl mb-1">💀</div>
-            <div className="font-black" style={{ color: "#f87171" }}>CODE NOT CRACKED</div>
+            <div className="font-black" style={{ color: "#f87171" }}>WORD NOT SOLVED</div>
             {!warzMode && failedAttempts < MAX_ATTEMPTS && (
+              !disableRetry ? (
               <>
                 <div className="text-sm mt-1" style={{ color: "#f97316" }}>
                   ⚠️ 1 retry remaining — rewards will be halved
@@ -844,6 +925,9 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
                   TRY AGAIN
                 </button>
               </>
+              ) : (
+                <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>No more guesses left for this Hidden Word.</div>
+              )
             )}
             {!warzMode && failedAttempts >= MAX_ATTEMPTS && (
               <div className="text-sm mt-1" style={{ color: "#9ca3af" }}>Both attempts used — puzzle failed</div>
@@ -855,7 +939,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
         )}
 
         {/* ── Retry confirmation modal ── */}
-        {showRetryModal && (
+        {!disableRetry && showRetryModal && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: "rgba(0,0,0,0.75)" }}
@@ -1036,7 +1120,7 @@ export default function WordCrackPuzzle({ puzzleId, wordCrackData, onSolved, onF
             ))}
           </div>
         )}
-        {gameStatus === "playing" && (
+        {showHints && gameStatus === "playing" && (
           <div className="mt-3 flex flex-col items-center gap-2">
             {/* Token-gated letter reveal */}
             {hintLevel === 0 && (

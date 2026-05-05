@@ -63,7 +63,7 @@ const PUZZLE_TYPES = [
   { value: 'gridlock_file', label: 'Gridlock File 🔐' },
   { value: 'debrief', label: 'The Debrief 📋' },
   { value: 'crack_safe', label: 'Crack the Safe 🔐' },
-  { value: 'word_crack', label: 'Word Crack 🟩' },
+  { value: 'word_crack', label: 'Hidden Word 🟩' },
   { value: 'word_search', label: 'Word Search 🔍' },
   { value: 'crossword', label: 'Crossword ✏️' },
   { value: 'anagram_blitz', label: 'Anagram Blitz 🔀' },
@@ -1142,17 +1142,17 @@ export default function AdminPuzzlesPage() {
                     </div>
                   )}
 
-                  {/* Gridlock File: release date scheduler */}
+                  {/* Gridlock File: optional daily scheduler */}
                   {formData.puzzleType === 'gridlock_file' && (
                     <div>
-                      <label className="block text-sm font-semibold text-gray-300 mb-2">📅 Go-Live Date &amp; Time (your local time)</label>
+                      <label className="block text-sm font-semibold text-gray-300 mb-2">📅 Daily Gridlock Release Date &amp; Time (optional)</label>
                       <input
                         type="datetime-local"
                         value={formData.gridlockReleaseAt}
                         onChange={e => setFormData(prev => ({ ...prev, gridlockReleaseAt: e.target.value }))}
                         className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white"
                       />
-                      <p className="text-xs text-gray-500 mt-1">Leave blank to make it live immediately. The time is in <strong className="text-gray-400">your local timezone</strong> — set to tomorrow midnight to queue for tomorrow.</p>
+                      <p className="text-xs text-gray-500 mt-1">Leave blank to publish this as a normal catalog puzzle. Add a time in <strong className="text-gray-400">your local timezone</strong> only when this file should drive the daily Gridlock slot.</p>
                     </div>
                   )}
 
@@ -1460,7 +1460,7 @@ export default function AdminPuzzlesPage() {
                             <option value="jigsaw">Jigsaw</option>
                             <option value="puzzle">Puzzle</option>
                             <option value="challenge">Challenge</option>
-                            <option value="word_crack">Word Crack</option>
+                            <option value="word_crack">Hidden Word</option>
                             <option value="word_search">Word Search</option>
                             <option value="anagram_blitz">Anagram Blitz</option>
                             <option value="blackout">Blackout</option>
@@ -1485,7 +1485,7 @@ export default function AdminPuzzlesPage() {
                             <option value="jigsaw">Jigsaw</option>
                             <option value="puzzle">Puzzle</option>
                             <option value="challenge">Challenge</option>
-                            <option value="word_crack">Word Crack</option>
+                            <option value="word_crack">Hidden Word</option>
                             <option value="word_search">Word Search</option>
                             <option value="anagram_blitz">Anagram Blitz</option>
                             <option value="blackout">Blackout</option>

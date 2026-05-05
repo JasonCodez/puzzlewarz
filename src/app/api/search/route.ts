@@ -30,13 +30,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ puzzles: [], total: 0 });
     }
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      isActive: true,
+      isWarzExclusive: false,
+      AND: [
+        {
+          OR: [
+            { puzzleType: { not: "gridlock_file" } },
+            { puzzleType: "gridlock_file", schedule: null },
+          ],
+        },
+      ],
+    };
 
     if (q) {
-      where.OR = [
-        { title: { contains: q, mode: "insensitive" } },
-        { description: { contains: q, mode: "insensitive" } },
-      ];
+      (where.AND as Array<Record<string, unknown>>).push({
+        OR: [
+          { title: { contains: q, mode: "insensitive" } },
+          { description: { contains: q, mode: "insensitive" } },
+        ],
+      });
     }
     if (type) where.puzzleType = type;
     if (difficulty) where.difficulty = difficulty;

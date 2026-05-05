@@ -43,6 +43,8 @@ type Direction = "across" | "down";
 
 const WORD_SOLVED_ANIMATION_MS = 1400;
 const PUZZLE_COMPLETE_ANIMATION_MS = 2600;
+const GRID_BORDER_PX = 2;
+const GRID_PADDING_PX = 2;
 
 interface ActiveClue {
   direction: Direction;
@@ -57,6 +59,200 @@ interface CellState {
   userLetter: string;
   correctLetter: string; // only populated for already-solved
   revealed?: boolean;    // hint-revealed
+}
+
+interface SavedCrosswordProgress {
+  signature: string;
+  letters: string[][];
+  revealedCells: string[];
+  activeClue: ActiveClue | null;
+  savedAt: number;
+}
+
+interface CrosswordProgressPayload {
+  solvedClues?: unknown;
+  letters?: unknown;
+  revealedCells?: unknown;
+  activeClue?: unknown;
+  allSolved?: unknown;
+  savedAt?: unknown;
+}
+
+function createEmptyLetters(rows: number, cols: number): string[][] {
+  return Array.from({ length: rows }, () => Array(cols).fill(""));
+}
+
+function getCrosswordProgressSignature(data: CrosswordData | null): string {
+  if (!data) return "invalid";
+  const serialize = (direction: Direction, clue: CrosswordClue) =>
+    `${direction}:${clue.number}:${clue.row}:${clue.col}:${clue.length}`;
+  return [
+    ...data.clues.across.map((clue) => serialize("across", clue)),
+    ...data.clues.down.map((clue) => serialize("down", clue)),
+  ].join("|");
+}
+
+function getCrosswordProgressStorageKey(puzzleId: string): string {
+  return `crossword-progress:${puzzleId}`;
+}
+
+function normalizeStoredLetters(
+  value: unknown,
+  rows: number,
+  cols: number,
+  grid: CellState[][]
+): string[][] | null {
+  if (!Array.isArray(value) || value.length !== rows) return null;
+
+  const normalized = createEmptyLetters(rows, cols);
+  for (let rowIndex = 0; rowIndex < rows; rowIndex++) {
+    const rawRow = value[rowIndex];
+    const rowValues = typeof rawRow === "string"
+      ? rawRow.split("")
+      : Array.isArray(rawRow)
+        ? rawRow
+        : null;
+
+    if (!rowValues || rowValues.length !== cols) return null;
+
+    for (let colIndex = 0; colIndex < cols; colIndex++) {
+      const cell = grid[rowIndex]?.[colIndex];
+      const rawLetter = String(rowValues[colIndex] ?? "").trim().toUpperCase();
+      normalized[rowIndex][colIndex] = cell && !cell.isBlack && /^[A-Z]$/.test(rawLetter) ? rawLetter : "";
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeStoredCellKeys(value: unknown, rows: number, cols: number, grid: CellState[][]): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const keys = new Set<string>();
+  for (const rawValue of value) {
+    if (typeof rawValue !== "string") continue;
+    const match = /^(\d+),(\d+)$/.exec(rawValue);
+    if (!match) continue;
+
+    const row = Number(match[1]);
+    const col = Number(match[2]);
+    if (!Number.isInteger(row) || !Number.isInteger(col)) continue;
+    if (row < 0 || row >= rows || col < 0 || col >= cols) continue;
+    if (grid[row]?.[col]?.isBlack) continue;
+
+    keys.add(`${row},${col}`);
+  }
+
+  return [...keys];
+}
+
+function normalizeStoredActiveClue(value: unknown, data: CrosswordData | null): ActiveClue | null {
+  if (!data || !value || typeof value !== "object") return null;
+  const raw = value as { direction?: unknown; number?: unknown };
+  const direction = raw.direction;
+  const number = raw.number;
+  if (direction !== "across" && direction !== "down") return null;
+  if (typeof number !== "number" || !Number.isInteger(number) || number <= 0) return null;
+
+  const clues = direction === "across" ? data.clues.across : data.clues.down;
+  return clues.some((clue) => clue.number === number) ? { direction, number } : null;
+}
+
+function hasCrosswordProgress(snapshot: SavedCrosswordProgress): boolean {
+  return Boolean(
+    snapshot.activeClue ||
+    snapshot.revealedCells.length > 0 ||
+    snapshot.letters.some((row) => row.some(Boolean))
+  );
+}
+
+function loadLocalCrosswordProgress(
+  storageKey: string,
+  signature: string,
+  rows: number,
+  cols: number,
+  grid: CellState[][],
+  data: CrosswordData | null
+): SavedCrosswordProgress | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed.signature !== signature) {
+      localStorage.removeItem(storageKey);
+      return null;
+    }
+
+    const letters = normalizeStoredLetters(parsed.letters, rows, cols, grid);
+    if (!letters) return null;
+
+    const progress: SavedCrosswordProgress = {
+      signature,
+      letters,
+      revealedCells: normalizeStoredCellKeys(parsed.revealedCells, rows, cols, grid),
+      activeClue: normalizeStoredActiveClue(parsed.activeClue, data),
+      savedAt: typeof parsed.savedAt === "number" && Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0,
+    };
+
+    return hasCrosswordProgress(progress) ? progress : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSolvedClueKeys(value: unknown, data: CrosswordData | null): Set<string> {
+  const solved = new Set<string>();
+  if (!data || !Array.isArray(value)) return solved;
+
+  const validKeys = new Set([
+    ...data.clues.across.map((clue) => `across:${clue.number}`),
+    ...data.clues.down.map((clue) => `down:${clue.number}`),
+  ]);
+
+  for (const rawKey of value) {
+    if (typeof rawKey !== "string") continue;
+    const colonKey = rawKey.replace("-", ":");
+    if (!validKeys.has(colonKey)) continue;
+    solved.add(colonKey.replace(":", "-"));
+  }
+
+  return solved;
+}
+
+function applySolvedCluesToLetters(letters: string[][], data: CrosswordData | null, solvedClues: Set<string>): string[][] {
+  if (!data || solvedClues.size === 0) return letters;
+
+  const next = letters.map((row) => [...row]);
+  const fillClue = (direction: Direction, clue: CrosswordClue) => {
+    if (!solvedClues.has(`${direction}-${clue.number}`)) return;
+    for (let offset = 0; offset < clue.answer.length; offset++) {
+      const row = direction === "across" ? clue.row : clue.row + offset;
+      const col = direction === "across" ? clue.col + offset : clue.col;
+      if (next[row]?.[col] !== undefined) next[row][col] = clue.answer[offset] ?? "";
+    }
+  };
+
+  data.clues.across.forEach((clue) => fillClue("across", clue));
+  data.clues.down.forEach((clue) => fillClue("down", clue));
+  return next;
+}
+
+function buildSavedCrosswordProgress(
+  signature: string,
+  letters: string[][],
+  revealed: Set<string>,
+  activeClue: ActiveClue | null
+): SavedCrosswordProgress {
+  return {
+    signature,
+    letters: letters.map((row) => row.map((letter) => letter || "")),
+    revealedCells: [...revealed],
+    activeClue,
+    savedAt: Date.now(),
+  };
 }
 
 // ─── Grid builder ─────────────────────────────────────────────────────────────
@@ -120,23 +316,70 @@ function buildGrid(data: CrosswordData): { grid: CellState[][]; rows: number; co
 
 // ─── Cell sizing ──────────────────────────────────────────────────────────────
 
+function getGridGap(cols: number): number {
+  return cols >= 19 ? 0 : 1;
+}
+
+function getGridChrome(trackCount: number, gap: number): number {
+  return (GRID_BORDER_PX * 2) + (GRID_PADDING_PX * 2) + Math.max(0, trackCount - 1) * gap;
+}
+
+function getGridOuterChrome(cols: number): number {
+  return getGridChrome(cols, getGridGap(cols));
+}
+
+function getGridPixelWidth(cols: number, cellSize: number): number {
+  if (cols <= 0) return 0;
+  return cols * cellSize + getGridOuterChrome(cols);
+}
+
+function getInitialCellSize(cols: number): number {
+  if (cols <= 0) return 32;
+  const phoneWidth = 336;
+  const cellBudget = Math.floor((phoneWidth - getGridOuterChrome(cols)) / cols);
+  return Math.max(8, Math.min(36, cellBudget));
+}
+
 function useCellSize(
   containerRef: React.RefObject<HTMLDivElement | null>,
-  cols: number
+  cols: number,
+  rows: number
 ): number {
-  const [size, setSize] = useState(36);
+  const [size, setSize] = useState(() => getInitialCellSize(cols));
+
   useEffect(() => {
     const update = () => {
+      if (cols <= 0) return;
       if (!containerRef.current) return;
-      const available = containerRef.current.clientWidth - 4; // 2px border each side
-      const s = Math.max(24, Math.min(44, Math.floor(available / cols)));
-      setSize(s);
+
+      const availableWidth = Math.max(120, containerRef.current.clientWidth);
+      const gridGap = getGridGap(cols);
+      const chromeWidth = getGridChrome(cols, gridGap);
+      const byWidth = Math.floor((availableWidth - chromeWidth) / cols);
+
+      const isMobileWidth = typeof window !== "undefined" && window.innerWidth < 768;
+      const heightBudget = typeof window !== "undefined" && isMobileWidth
+        ? Math.max(260, window.innerHeight * 0.58)
+        : Number.POSITIVE_INFINITY;
+      const byHeight = rows > 0 && Number.isFinite(heightBudget)
+        ? Math.floor((heightBudget - getGridChrome(rows, gridGap)) / rows)
+        : Number.POSITIVE_INFINITY;
+
+      const maxCellSize = isMobileWidth ? 36 : 44;
+      const fittedCellSize = Math.min(maxCellSize, byWidth, byHeight);
+      setSize(Math.max(5, fittedCellSize));
     };
+
     update();
     const ro = new ResizeObserver(update);
     if (containerRef.current) ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, [containerRef, cols]);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [containerRef, cols, rows]);
+
   return size;
 }
 
@@ -321,10 +564,26 @@ export default function CrosswordPuzzle({
     () => (data ? buildGrid(data) : { grid: [], rows: 0, cols: 0 }),
     [data]
   );
+  const progressSignature = useMemo(() => getCrosswordProgressSignature(data), [data]);
+  const progressStorageKey = useMemo(() => getCrosswordProgressStorageKey(puzzleId), [puzzleId]);
+  const localProgressRef = useRef<SavedCrosswordProgress | null>(null);
+  const localProgressLoadedRef = useRef(false);
+
+  if (!localProgressLoadedRef.current && !alreadySolved && data && initialGrid.length > 0) {
+    localProgressLoadedRef.current = true;
+    localProgressRef.current = loadLocalCrosswordProgress(
+      progressStorageKey,
+      progressSignature,
+      rows,
+      cols,
+      initialGrid,
+      data
+    );
+  }
 
   // Mutable cell letters stored in state
   const [letters, setLetters] = useState<string[][]>(() =>
-    Array.from({ length: rows }, () => Array(cols).fill(""))
+    alreadySolved ? createEmptyLetters(rows, cols) : localProgressRef.current?.letters ?? createEmptyLetters(rows, cols)
   );
   // Track which clues are correctly solved
   const [solvedClues, setSolvedClues] = useState<Set<string>>(() => {
@@ -338,37 +597,84 @@ export default function CrosswordPuzzle({
   });
   const solvedCluesRef = useRef<Set<string>>(solvedClues);
   // Hint-revealed cells
-  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [revealed, setRevealed] = useState<Set<string>>(() =>
+    alreadySolved ? new Set() : new Set(localProgressRef.current?.revealedCells ?? [])
+  );
 
-  const [activeClue, setActiveClue] = useState<ActiveClue | null>(null);
+  const [activeClue, setActiveClue] = useState<ActiveClue | null>(() =>
+    alreadySolved ? null : localProgressRef.current?.activeClue ?? null
+  );
+  const [cluePanelDirection, setCluePanelDirection] = useState<Direction>("across");
   const [gameStatus, setGameStatus] = useState<"playing" | "won">(
     alreadySolved ? "won" : "playing"
   );
-  const [showInstructions, setShowInstructions] = useState(!alreadySolved);
+  const [showInstructions, setShowInstructions] = useState(!alreadySolved && !localProgressRef.current);
   const [hintLoading, setHintLoading] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [justSolvedClues, setJustSolvedClues] = useState<Set<string>>(new Set());
   const [latestSolvedClue, setLatestSolvedClue] = useState<ActiveClue | null>(null);
   const [completionAnimating, setCompletionAnimating] = useState(false);
+  const [showRestoreNotice, setShowRestoreNotice] = useState(() =>
+    !alreadySolved && Boolean(localProgressRef.current)
+  );
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const cellSize = useCellSize(containerRef, cols);
+  const cellSize = useCellSize(containerRef, cols, rows);
+  const gridGap = getGridGap(cols);
+  const gridPixelWidth = getGridPixelWidth(cols, cellSize);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const checkingCluesRef = useRef<Map<string, string>>(new Map());
   const checkQueueRef = useRef<Promise<void>>(Promise.resolve());
   const solvedAnimationTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoreNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completionNotifiedRef = useRef(false);
+  const lettersRef = useRef<string[][]>(letters);
+  const revealedRef = useRef<Set<string>>(revealed);
+  const activeClueRef = useRef<ActiveClue | null>(activeClue);
+  const lastSavedPayloadRef = useRef<string>("");
+
+  const showRestoredProgressBanner = useCallback(() => {
+    if (restoreNoticeTimerRef.current) clearTimeout(restoreNoticeTimerRef.current);
+    setShowRestoreNotice(true);
+    restoreNoticeTimerRef.current = setTimeout(() => {
+      setShowRestoreNotice(false);
+      restoreNoticeTimerRef.current = null;
+    }, 2600);
+  }, []);
 
   useEffect(() => {
     solvedCluesRef.current = solvedClues;
   }, [solvedClues]);
 
   useEffect(() => {
+    lettersRef.current = letters;
+  }, [letters]);
+
+  useEffect(() => {
+    revealedRef.current = revealed;
+  }, [revealed]);
+
+  useEffect(() => {
+    activeClueRef.current = activeClue;
+  }, [activeClue]);
+
+  useEffect(() => {
+    if (activeClue) setCluePanelDirection(activeClue.direction);
+  }, [activeClue]);
+
+  useEffect(() => {
+    if (localProgressRef.current) showRestoredProgressBanner();
+  }, [showRestoredProgressBanner]);
+
+  useEffect(() => {
     return () => {
       solvedAnimationTimersRef.current.forEach((timer) => clearTimeout(timer));
       if (completionTimerRef.current) clearTimeout(completionTimerRef.current);
+      if (restoreNoticeTimerRef.current) clearTimeout(restoreNoticeTimerRef.current);
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
   }, []);
 
@@ -401,6 +707,85 @@ export default function CrosswordPuzzle({
     setGameStatus("won");
     setShowInstructions(false);
   }, [alreadySolved, data]);
+
+  useEffect(() => {
+    if (alreadySolved || warzMode || !data || !initialGrid.length) return;
+
+    let cancelled = false;
+
+    const hydrateProgress = async () => {
+      try {
+        const response = await fetch(`/api/puzzles/${puzzleId}/crossword`, {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as CrosswordProgressPayload;
+        if (cancelled) return;
+
+        const serverSolved = normalizeSolvedClueKeys(payload.solvedClues, data);
+        const hasNewSolved = [...serverSolved].some((key) => !solvedCluesRef.current.has(key));
+        const savedAt = typeof payload.savedAt === "number" && Number.isFinite(payload.savedAt)
+          ? payload.savedAt
+          : 0;
+        const serverLetters = normalizeStoredLetters(payload.letters, rows, cols, initialGrid);
+        const serverRevealed = normalizeStoredCellKeys(payload.revealedCells, rows, cols, initialGrid);
+        const serverActiveClue = normalizeStoredActiveClue(payload.activeClue, data);
+        const serverSnapshot = serverLetters
+          ? {
+              signature: progressSignature,
+              letters: serverLetters,
+              revealedCells: serverRevealed,
+              activeClue: serverActiveClue,
+              savedAt,
+            }
+          : null;
+        const shouldUseServerSnapshot = Boolean(
+          serverSnapshot &&
+          hasCrosswordProgress(serverSnapshot) &&
+          savedAt >= (localProgressRef.current?.savedAt ?? 0)
+        );
+
+        if (serverSolved.size > 0) {
+          const nextSolved = new Set([...solvedCluesRef.current, ...serverSolved]);
+          solvedCluesRef.current = nextSolved;
+          setSolvedClues(nextSolved);
+        }
+
+        if (shouldUseServerSnapshot && serverSnapshot) {
+          localProgressRef.current = serverSnapshot;
+          lastSavedPayloadRef.current = JSON.stringify({
+            letters: serverSnapshot.letters,
+            revealedCells: serverSnapshot.revealedCells,
+            activeClue: serverSnapshot.activeClue,
+          });
+          setLetters(applySolvedCluesToLetters(serverSnapshot.letters, data, serverSolved));
+          setRevealed(new Set(serverSnapshot.revealedCells));
+          setActiveClue(serverSnapshot.activeClue);
+          setShowInstructions(false);
+          showRestoredProgressBanner();
+        } else if (hasNewSolved) {
+          setLetters((current) => applySolvedCluesToLetters(current, data, serverSolved));
+          showRestoredProgressBanner();
+        }
+
+        if (payload.allSolved === true) {
+          completionNotifiedRef.current = true;
+          setGameStatus("won");
+          setShowInstructions(false);
+        }
+      } catch {
+        // Local progress is still available if the server hydrate fails.
+      }
+    };
+
+    hydrateProgress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [alreadySolved, warzMode, data, initialGrid, puzzleId, rows, cols, progressSignature, showRestoredProgressBanner]);
 
   // ── Compute active word cells ──────────────────────────────────────────────
   const activeWordCells = useMemo<Set<string>>(() => {
@@ -534,8 +919,92 @@ export default function CrosswordPuzzle({
     checkFilledClues(letters);
   }, [letters, checkFilledClues]);
 
+  const persistCrosswordProgress = useCallback(
+    (sendServer: boolean, keepalive = false) => {
+      if (alreadySolved || warzMode || !data || !initialGrid.length || gameStatus !== "playing") return;
+
+      const snapshot = buildSavedCrosswordProgress(
+        progressSignature,
+        lettersRef.current,
+        revealedRef.current,
+        activeClueRef.current
+      );
+      const hasProgress = hasCrosswordProgress(snapshot);
+
+      try {
+        if (hasProgress) {
+          localStorage.setItem(progressStorageKey, JSON.stringify(snapshot));
+          localProgressRef.current = snapshot;
+        } else {
+          localStorage.removeItem(progressStorageKey);
+          localProgressRef.current = null;
+        }
+      } catch {
+        // Storage can fail in private browsing or restricted environments.
+      }
+
+      if (!sendServer) return;
+      if (!hasProgress && lastSavedPayloadRef.current === "") return;
+
+      const requestBody = JSON.stringify({
+        letters: snapshot.letters,
+        revealedCells: snapshot.revealedCells,
+        activeClue: snapshot.activeClue,
+      });
+      if (!keepalive && requestBody === lastSavedPayloadRef.current) return;
+      lastSavedPayloadRef.current = requestBody;
+
+      void fetch(`/api/puzzles/${puzzleId}/crossword`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        keepalive,
+        body: requestBody,
+      }).catch(() => undefined);
+    },
+    [alreadySolved, warzMode, data, initialGrid, gameStatus, progressSignature, progressStorageKey, puzzleId]
+  );
+
+  useEffect(() => {
+    if (alreadySolved || warzMode || !data || gameStatus !== "playing") return;
+
+    persistCrosswordProgress(false);
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      persistCrosswordProgress(true);
+      autosaveTimerRef.current = null;
+    }, 700);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [letters, revealed, activeClue, alreadySolved, warzMode, data, gameStatus, persistCrosswordProgress]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handlePageHide = () => persistCrosswordProgress(true, true);
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [persistCrosswordProgress]);
+
   // ── Move cursor to next empty cell in word ─────────────────────────────────
   const [cursorCell, setCursorCell] = useState<{ row: number; col: number } | null>(null);
+
+  useEffect(() => {
+    if (!activeClue || cursorCell || !data || !initialGrid.length) return;
+
+    const clue = activeClue.direction === "across"
+      ? data.clues.across.find((entry) => entry.number === activeClue.number)
+      : data.clues.down.find((entry) => entry.number === activeClue.number);
+    if (!clue) return;
+
+    const cells = getWordCells(initialGrid, clue.row, clue.col, activeClue.direction);
+    const firstEmpty = cells.find((cell) => !letters[cell.row]?.[cell.col]);
+    setCursorCell(firstEmpty ?? cells[0] ?? { row: clue.row, col: clue.col });
+  }, [activeClue, cursorCell, data, initialGrid, letters]);
 
   const advanceCursor = useCallback(
     (row: number, col: number, direction: Direction) => {
@@ -730,6 +1199,7 @@ export default function CrosswordPuzzle({
   const handleClueClick = useCallback(
     (direction: Direction, number: number) => {
       if (gameStatus !== "playing") return;
+      setCluePanelDirection(direction);
       setActiveClue({ direction, number });
       if (data) {
         const clue =
@@ -810,6 +1280,10 @@ export default function CrosswordPuzzle({
 
   const acrossClues = [...data.clues.across].sort((a, b) => a.number - b.number);
   const downClues = [...data.clues.down].sort((a, b) => a.number - b.number);
+  const panelClues = cluePanelDirection === "across" ? acrossClues : downClues;
+  const panelSolvedCount = panelClues.filter((clue) => solvedClues.has(`${cluePanelDirection}-${clue.number}`)).length;
+  const acrossSolvedCount = acrossClues.filter((clue) => solvedClues.has(`across-${clue.number}`)).length;
+  const downSolvedCount = downClues.filter((clue) => solvedClues.has(`down-${clue.number}`)).length;
   const completionOverlay = completionAnimating && typeof document !== "undefined"
     ? createPortal(<CrosswordCompletionOverlay />, document.body)
     : null;
@@ -887,6 +1361,32 @@ export default function CrosswordPuzzle({
         .crossword-completion-bar {
           transform-origin: left center;
           animation: crossword-completion-bar ${PUZZLE_COMPLETE_ANIMATION_MS}ms linear both;
+        }
+
+        .crossword-clue-panel-scroll {
+          max-height: min(340px, 42vh);
+          scrollbar-width: thin;
+          scrollbar-color: rgba(129, 140, 248, 0.5) rgba(15, 23, 42, 0.35);
+        }
+
+        .crossword-clue-panel-scroll::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .crossword-clue-panel-scroll::-webkit-scrollbar-track {
+          background: rgba(15, 23, 42, 0.35);
+          border-radius: 999px;
+        }
+
+        .crossword-clue-panel-scroll::-webkit-scrollbar-thumb {
+          background: rgba(129, 140, 248, 0.5);
+          border-radius: 999px;
+        }
+
+        @media (min-width: 1024px) {
+          .crossword-clue-panel-scroll {
+            max-height: min(62vh, 520px);
+          }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -974,11 +1474,18 @@ export default function CrosswordPuzzle({
             </div>
           )}
 
+          {showRestoreNotice && gameStatus === "playing" && (
+            <div className="px-4 py-2 rounded-full text-xs font-black tracking-wide"
+              style={{ background: "rgba(56,211,153,0.14)", border: "1px solid rgba(56,211,153,0.45)", color: "#bbf7d0" }}>
+              Progress restored from your last session
+            </div>
+          )}
+
           {/* Main layout: grid + clues */}
-          <div className="w-full px-2 flex flex-col lg:flex-row gap-4 items-start justify-center">
+          <div className="w-full min-w-0 max-w-full px-2 flex flex-col lg:flex-row gap-4 items-start justify-center overflow-hidden">
 
             {/* Grid */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex w-full min-w-0 max-w-full flex-col items-center gap-2 lg:w-auto lg:flex-none">
               {/* Active clue banner */}
               <div style={{ position: "relative", width: "100%", maxWidth: "24rem" }}>
               {latestSolvedClue && (
@@ -1025,17 +1532,25 @@ export default function CrosswordPuzzle({
               {/* Grid container */}
               <div
                 ref={containerRef}
+                className="flex w-full min-w-0 justify-center"
                 style={{
+                  maxWidth: "min(100%, calc(100vw - 1rem))",
+                }}
+              >
+              <div
+                style={{
+                  boxSizing: "border-box",
                   display: "inline-grid",
                   gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`,
                   gridTemplateRows: `repeat(${rows}, ${cellSize}px)`,
-                  gap: "1px",
+                  gap: gridGap,
                   background: "#1a1a2e",
-                  border: `2px solid ${skin.boardBorder ?? "rgba(255,255,255,0.12)"}`,
+                  border: `${GRID_BORDER_PX}px solid ${skin.boardBorder ?? "rgba(255,255,255,0.12)"}`,
                   borderRadius: "8px",
-                  padding: "2px",
-                  width: "100%",
-                  maxWidth: `${cols * cellSize + cols + 8}px`,
+                  padding: GRID_PADDING_PX,
+                  width: gridPixelWidth > 0 ? `${gridPixelWidth}px` : "100%",
+                  maxWidth: "100%",
+                  overflow: "hidden",
                 }}
                 onClick={() => inputRef.current?.focus()}
               >
@@ -1073,9 +1588,10 @@ export default function CrosswordPuzzle({
                             {cell.clueNumber !== undefined && (
                               <span style={{
                                 position: "absolute",
-                                top: 1,
-                                left: 2,
-                                fontSize: Math.max(7, cellSize * 0.22),
+                                top: cellSize < 12 ? 0 : 1,
+                                left: cellSize < 12 ? 1 : 2,
+                                display: cellSize < 9 ? "none" : undefined,
+                                fontSize: Math.max(5, Math.min(9, cellSize * 0.24)),
                                 lineHeight: 1,
                                 color: status.isSolved ? "#86efac" : "#94a3b8",
                                 fontWeight: 700,
@@ -1085,7 +1601,7 @@ export default function CrosswordPuzzle({
                               </span>
                             )}
                             <span style={{
-                              fontSize: Math.max(12, cellSize * 0.5),
+                              fontSize: Math.min(Math.max(6, cellSize * 0.58), Math.max(4, cellSize - 1)),
                               fontWeight: 900,
                               color: cellTextColor(r, c),
                               lineHeight: 1,
@@ -1100,6 +1616,7 @@ export default function CrosswordPuzzle({
                     );
                   })
                 )}
+              </div>
               </div>
 
               {/* Hidden input to capture keyboard on mobile */}
@@ -1128,57 +1645,77 @@ export default function CrosswordPuzzle({
               )}
             </div>
 
-            {/* Clue lists */}
-            <div className="flex flex-row lg:flex-col gap-4 w-full lg:w-auto lg:max-w-xs overflow-x-auto lg:overflow-visible">
-              {/* Across */}
-              <div className="min-w-[140px] flex-1 lg:flex-none">
-                <div className="text-xs font-black tracking-widest mb-2" style={{ color: "#818cf8" }}>ACROSS</div>
-                <div className="flex flex-col gap-0.5">
-                  {acrossClues.map((clue) => {
-                    const solved = solvedClues.has(`across-${clue.number}`);
-                    const justSolved = justSolvedClues.has(`across-${clue.number}`);
-                    const isActive = activeClue?.direction === "across" && activeClue.number === clue.number;
+            {/* Clue panel */}
+            <div
+              className="w-full min-w-0 max-w-full lg:w-[22rem] lg:flex-none"
+              style={{
+                borderRadius: 12,
+                border: "1px solid rgba(129,140,248,0.28)",
+                background: "rgba(15,23,42,0.58)",
+                boxShadow: "0 14px 38px rgba(0,0,0,0.18)",
+                overflow: "hidden",
+              }}
+            >
+              <div className="flex items-center justify-between gap-2 px-3 py-2" style={{ borderBottom: "1px solid rgba(148,163,184,0.18)" }}>
+                <div>
+                  <div className="text-xs font-black tracking-widest" style={{ color: "#e2e8f0" }}>CLUES</div>
+                  <div className="text-[11px] font-semibold" style={{ color: "#94a3b8" }}>
+                    {panelSolvedCount}/{panelClues.length} {cluePanelDirection}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 rounded-lg p-1" style={{ background: "rgba(2,6,23,0.5)", border: "1px solid rgba(148,163,184,0.18)" }}>
+                  {(["across", "down"] as const).map((direction) => {
+                    const active = cluePanelDirection === direction;
+                    const solvedCount = direction === "across" ? acrossSolvedCount : downSolvedCount;
+                    const totalCount = direction === "across" ? acrossClues.length : downClues.length;
                     return (
                       <button
-                        key={clue.number}
-                        onClick={() => handleClueClick("across", clue.number)}
-                        className={`text-left px-2 py-1 rounded text-xs transition-all${justSolved ? " crossword-clue-success" : ""}`}
+                        key={direction}
+                        type="button"
+                        onClick={() => setCluePanelDirection(direction)}
+                        className="px-2.5 py-1 rounded-md text-[11px] font-black uppercase transition-all"
                         style={{
-                          background: isActive ? "rgba(99,102,241,0.25)" : solved ? "rgba(34,197,94,0.1)" : "transparent",
-                          border: `1px solid ${isActive ? "rgba(99,102,241,0.5)" : solved ? "rgba(34,197,94,0.3)" : "transparent"}`,
-                          color: solved ? "#4ade80" : isActive ? "#c7d2fe" : "#9ca3af",
-                          textDecoration: solved ? "line-through" : undefined,
+                          background: active
+                            ? direction === "across" ? "rgba(99,102,241,0.32)" : "rgba(192,132,252,0.28)"
+                            : "transparent",
+                          color: active ? "#f8fafc" : "#94a3b8",
+                          border: `1px solid ${active ? direction === "across" ? "rgba(129,140,248,0.5)" : "rgba(216,180,254,0.45)" : "transparent"}`,
                         }}
                       >
-                        <span className="font-black mr-1" style={{ color: solved ? "#4ade80" : isActive ? "#818cf8" : "#6b7280" }}>{clue.number}.</span>
-                        {clue.text}
+                        {direction} {solvedCount}/{totalCount}
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Down */}
-              <div className="min-w-[140px] flex-1 lg:flex-none">
-                <div className="text-xs font-black tracking-widest mb-2" style={{ color: "#c084fc" }}>DOWN</div>
-                <div className="flex flex-col gap-0.5">
-                  {downClues.map((clue) => {
-                    const solved = solvedClues.has(`down-${clue.number}`);
-                    const justSolved = justSolvedClues.has(`down-${clue.number}`);
-                    const isActive = activeClue?.direction === "down" && activeClue.number === clue.number;
+              <div className="crossword-clue-panel-scroll overflow-y-auto p-2">
+                <div className="grid gap-1">
+                  {panelClues.map((clue) => {
+                    const key = `${cluePanelDirection}-${clue.number}`;
+                    const solved = solvedClues.has(key);
+                    const justSolved = justSolvedClues.has(key);
+                    const isActive = activeClue?.direction === cluePanelDirection && activeClue.number === clue.number;
+                    const activeBorder = cluePanelDirection === "across" ? "rgba(129,140,248,0.55)" : "rgba(216,180,254,0.5)";
+                    const activeText = cluePanelDirection === "across" ? "#c7d2fe" : "#e9d5ff";
+
                     return (
                       <button
                         key={clue.number}
-                        onClick={() => handleClueClick("down", clue.number)}
-                        className={`text-left px-2 py-1 rounded text-xs transition-all${justSolved ? " crossword-clue-success" : ""}`}
+                        type="button"
+                        onClick={() => handleClueClick(cluePanelDirection, clue.number)}
+                        className={`text-left px-2.5 py-2 rounded-lg text-xs transition-all${justSolved ? " crossword-clue-success" : ""}`}
                         style={{
-                          background: isActive ? "rgba(192,132,252,0.25)" : solved ? "rgba(34,197,94,0.1)" : "transparent",
-                          border: `1px solid ${isActive ? "rgba(192,132,252,0.5)" : solved ? "rgba(34,197,94,0.3)" : "transparent"}`,
-                          color: solved ? "#4ade80" : isActive ? "#e9d5ff" : "#9ca3af",
+                          background: isActive ? "rgba(99,102,241,0.18)" : solved ? "rgba(34,197,94,0.1)" : "rgba(15,23,42,0.26)",
+                          border: `1px solid ${isActive ? activeBorder : solved ? "rgba(34,197,94,0.3)" : "rgba(148,163,184,0.12)"}`,
+                          color: solved ? "#4ade80" : isActive ? activeText : "#cbd5e1",
                           textDecoration: solved ? "line-through" : undefined,
+                          overflowWrap: "anywhere",
+                          width: "100%",
+                          lineHeight: 1.25,
                         }}
                       >
-                        <span className="font-black mr-1" style={{ color: solved ? "#4ade80" : isActive ? "#c084fc" : "#6b7280" }}>{clue.number}.</span>
+                        <span className="font-black mr-1" style={{ color: solved ? "#4ade80" : isActive ? activeText : "#94a3b8" }}>{clue.number}.</span>
                         {clue.text}
                       </button>
                     );

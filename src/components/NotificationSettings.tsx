@@ -267,14 +267,15 @@ export default function NotificationSettings() {
               disabled={saving}
               className="w-full mt-2 px-4 py-2 rounded-lg border"
               style={{
-                backgroundColor: "rgba(56, 145, 166, 0.1)",
+                backgroundColor: "#0f172a",
                 borderColor: "#3891A6",
-                color: "#DDDBF1",
+                color: "#F8FAFC",
+                colorScheme: "dark",
               }}
             >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
+              <option value="daily" style={{ backgroundColor: "#0f172a", color: "#F8FAFC" }}>Daily</option>
+              <option value="weekly" style={{ backgroundColor: "#0f172a", color: "#F8FAFC" }}>Weekly</option>
+              <option value="monthly" style={{ backgroundColor: "#0f172a", color: "#F8FAFC" }}>Monthly</option>
             </select>
           </div>
         )}

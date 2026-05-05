@@ -5,7 +5,7 @@ export type PuzzleAccessState = {
   // Core state
   isSolved: boolean;
 
-  // Attempt-limit lock (non-Sudoku puzzles: Word Crack, riddle, etc.)
+  // Attempt-limit lock (non-Sudoku puzzles: WordScry, riddle, etc.)
   isAttemptLocked: boolean;
   attemptsUsed: number;
   attemptsRemaining: number;

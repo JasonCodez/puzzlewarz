@@ -17,6 +17,11 @@ export async function GET(request: NextRequest) {
             puzzles: {
               where: {
                 isActive: true,
+                isWarzExclusive: false,
+                OR: [
+                  { puzzleType: { not: 'gridlock_file' } },
+                  { puzzleType: 'gridlock_file', schedule: null },
+                ],
               },
             },
           },

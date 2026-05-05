@@ -8,6 +8,7 @@ import FilterBar from "@/components/puzzle/FilterBar";
 import { StarRating } from "@/components/puzzle/StarRating";
 import { detectWebGLSupport } from "@/lib/webglSupport";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { getPuzzleTypeLabel } from "@/lib/puzzleTypeLabels";
 
 interface Puzzle {
   id: string;
@@ -83,6 +84,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   puzzle: "🎲",
   challenge: "🏆",
   word_crack: "💬",
+  gridlock_file: "🔐",
   word_search: "🔍",
   crossword: "✏️",
   anagram_blitz: "🔀",
@@ -1108,7 +1110,7 @@ export default function PuzzlesList({ initialCategory = "all" }: { initialCatego
                 {descriptionModal.difficulty.charAt(0) + descriptionModal.difficulty.slice(1).toLowerCase()}
               </span>
               <span className="text-xs px-2 py-1 rounded capitalize font-medium" style={{ backgroundColor: 'rgba(56,145,166,0.15)', color: '#3891A6' }}>
-                {descriptionModal.puzzleType?.replace(/_/g, ' ')}
+                {descriptionModal.puzzleType ? getPuzzleTypeLabel(descriptionModal.puzzleType) : 'Puzzle'}
               </span>
             </div>
             {getDisplayDescription(descriptionModal) ? (

@@ -158,14 +158,23 @@ export async function POST(request: NextRequest) {
     // Credit any XP/points earned as a guest — look up actual DB records by anonId
     if (anonId) {
       try {
-        const guestSolves = await prisma.gridlockSolve.findMany({
-          where: { anonId, userId: null },
-          include: { puzzle: { select: { xpReward: true } } },
-        });
-        if (guestSolves.length > 0) {
-          const totalXp = guestSolves.reduce((sum, s) => sum + (s.puzzle.xpReward ?? 100), 0);
-          const totalPoints = guestSolves.length * 100;
+        const [guestSolves, guestDailyWordSolves] = await Promise.all([
+          prisma.gridlockSolve.findMany({
+            where: { anonId, userId: null },
+            include: { puzzle: { select: { xpReward: true } } },
+          }),
+          prisma.guestDailyWordSolve.findMany({
+            where: { anonId, userId: null },
+            select: { dayNumber: true, guesses: true, rewardXp: true, rewardPoints: true },
+          }),
+        ]);
 
+        const totalXp = guestSolves.reduce((sum, solve) => sum + (solve.puzzle.xpReward ?? 100), 0)
+          + guestDailyWordSolves.reduce((sum, solve) => sum + solve.rewardXp, 0);
+        const totalPoints = guestSolves.length * 100
+          + guestDailyWordSolves.reduce((sum, solve) => sum + solve.rewardPoints, 0);
+
+        if (totalXp > 0 || totalPoints > 0) {
           if (requireVerification) {
             // Rewards are held until email is confirmed — store for later crediting
             await prisma.user.update({
@@ -179,16 +188,36 @@ export async function POST(request: NextRequest) {
           } else {
             // Dev / non-production: credit immediately since email is auto-verified
             const { level, title } = calcLevel(totalXp);
-            await prisma.$transaction([
-              prisma.user.update({
+            await prisma.$transaction(async (tx) => {
+              await tx.user.update({
                 where: { id: user.id },
                 data: { xp: totalXp, level, xpTitle: title, totalPoints },
-              }),
-              prisma.gridlockSolve.updateMany({
+              });
+
+              await tx.gridlockSolve.updateMany({
                 where: { anonId, userId: null },
                 data: { userId: user.id },
-              }),
-            ]);
+              });
+
+              await tx.guestDailyWordSolve.updateMany({
+                where: { anonId, userId: null },
+                data: { userId: user.id },
+              });
+
+              if (guestDailyWordSolves.length > 0) {
+                await tx.dailyWordRecord.createMany({
+                  data: guestDailyWordSolves.map((solve) => ({
+                    userId: user.id,
+                    dayNumber: solve.dayNumber,
+                    won: true,
+                    guesses: solve.guesses,
+                    skipped: false,
+                    shieldUsed: false,
+                  })),
+                  skipDuplicates: true,
+                });
+              }
+            });
           }
         }
       } catch (err) {

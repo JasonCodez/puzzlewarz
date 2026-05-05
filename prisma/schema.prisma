@@ -128,6 +128,7 @@ model User {
   prelaunchAnonId        String?
   prelaunchRewardXp      Int                        @default(0)
   prelaunchRewardPoints  Int                        @default(0)
+  guestDailyWordSolves   GuestDailyWordSolve[]
 
   @@map("users")
 }
@@ -1132,6 +1133,24 @@ model DailyWordRecord {
   @@unique([userId, dayNumber])
   @@index([userId])
   @@map("daily_word_records")
+}
+
+model GuestDailyWordSolve {
+  id           String   @id @default(cuid())
+  anonId       String
+  userId       String?
+  dayNumber    Int
+  guesses      Int
+  rewardXp     Int
+  rewardPoints Int
+  streakDay    Int
+  solvedAt     DateTime @default(now())
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([anonId, dayNumber])
+  @@index([anonId])
+  @@index([userId])
+  @@map("guest_daily_word_solves")
 }
 
 model Activity {

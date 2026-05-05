@@ -58,7 +58,10 @@ export default function CategoriesPage() {
   const categoryEmojis: Record<string, string> = {
     'anagram': '🔤',
     'general': '🎲',
+    'hidden word': '💥',
     'word crack': '💥',
+    'word scry': '💥',
+    'wordscry': '💥',
     'word search': '🔎',
     'logic': '🧠',
     'math': '🔢',
@@ -87,6 +90,9 @@ export default function CategoriesPage() {
     // Check longer/more-specific names first
     const orderedMappings: [string, string][] = [
       ['anagram', '🔤'],
+      ['hidden word', '💥'],
+      ['wordscry', '💥'],
+      ['word scry', '💥'],
       ['word crack', '💥'],
       ['word search', '🔎'],
       ['word', '📝'],
@@ -118,6 +124,11 @@ export default function CategoriesPage() {
   }
 
   function formatCategoryName(name: string) {
+    const normalized = name.toLowerCase().replace(/_/g, ' ');
+    if (normalized === 'hidden word' || normalized === 'word crack' || normalized === 'word scry' || normalized === 'wordscry') {
+      return 'Hidden Word';
+    }
+
     return name
       .replace(/_/g, ' ')
       .replace(/\b\w/g, c => c.toUpperCase());
@@ -126,7 +137,10 @@ export default function CategoriesPage() {
   const categoryDescriptions: Record<string, string> = {
     'anagram': 'Unscramble letters to form words before time runs out. Fast thinking and sharp vocabulary win the day.',
     'general': 'A mix of everything — trivia, logic, wordplay, and lateral thinking all in one grab bag.',
-    'word crack': 'Find hidden words from a scrambled set of letters. The more words you find, the higher you score.',
+    'hidden word': 'Guess the hidden word before you run out of tries. Every guess sharpens the board and narrows the field.',
+    'word crack': 'Guess the hidden word before you run out of tries. Every guess sharpens the board and narrows the field.',
+    'word scry': 'Guess the hidden word before you run out of tries. Every guess sharpens the board and narrows the field.',
+    'wordscry': 'Guess the hidden word before you run out of tries. Every guess sharpens the board and narrows the field.',
     'word search': 'Scan the grid and find every hidden word. Race against time or take it slow — just don\'t miss any.',
     'logic': 'Pure reasoning puzzles that test your ability to think step-by-step and eliminate possibilities.',
     'math': 'Number-crunching challenges ranging from arithmetic tricks to advanced problem-solving.',

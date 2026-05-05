@@ -92,7 +92,7 @@ export async function PUT(
 
   // Normalise snake_case category values coming from the admin dropdown to display names
   const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
-    word_crack:     'Word Crack',
+    word_crack:     'Hidden Word',
     word_search:    'Word Search',
     anagram_blitz:  'Anagram Blitz',
     crack_safe:     'Crack Safe',
@@ -381,14 +381,18 @@ export async function PUT(
     }
   });
 
-  // Upsert PuzzleSchedule.releaseAt for gridlock_file puzzles
+  // Gridlock files only join the daily rotation when explicitly scheduled.
   if (puzzleType === 'gridlock_file') {
-    const releaseAt = gridlockReleaseAt ? new Date(gridlockReleaseAt) : new Date();
-    await prisma.puzzleSchedule.upsert({
-      where: { puzzleId },
-      create: { puzzleId, releaseAt, schedulingType: 'scheduled' },
-      update: { releaseAt },
-    });
+    if (gridlockReleaseAt) {
+      const releaseAt = new Date(gridlockReleaseAt);
+      await prisma.puzzleSchedule.upsert({
+        where: { puzzleId },
+        create: { puzzleId, releaseAt, schedulingType: 'scheduled' },
+        update: { releaseAt, schedulingType: 'scheduled' },
+      });
+    } else {
+      await prisma.puzzleSchedule.deleteMany({ where: { puzzleId } });
+    }
   }
   // Upsert PuzzleSchedule.releaseAt for debrief puzzles
   if (puzzleType === 'debrief') {

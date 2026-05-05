@@ -30,21 +30,26 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Puzzle Warz — Daily Puzzles, Leaderboards & Multiplayer Challenges",
+    default: "Puzzle Warz — Daily Hidden Word, Puzzle Library & Multiplayer Challenges",
     template: "%s | Puzzle Warz",
   },
   description:
-    "Crack the daily Gridlock File, race the clock on word puzzles, and challenge rivals in Warz mode. Earn points, climb leaderboards, and unlock achievements — free to play.",
+    "Start with the daily Hidden Word, then move into Gridlock files, crosswords, and competitive puzzle runs across the full Puzzle Warz library.",
   keywords: [
     "daily puzzle",
+    "daily word game",
+    "hidden word",
+    "daily hidden word",
     "logic puzzles online",
     "word puzzle game",
+    "crossword puzzles online",
     "multiplayer puzzle game",
     "team puzzles",
     "puzzle competition",
     "leaderboard puzzles",
     "brain teasers online",
     "gridlock puzzle",
+    "puzzle library",
     "puzzle battle",
   ],
   authors: [{ name: "Puzzle Warz", url: siteUrl }],
@@ -61,15 +66,15 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: "Puzzle Warz",
-    title: "Puzzle Warz — Daily Puzzles, Leaderboards & Multiplayer Challenges",
+    title: "Puzzle Warz — Daily Hidden Word, Puzzle Library & Multiplayer Challenges",
     description:
-      "Crack the daily Gridlock File, race the clock on word puzzles, and challenge rivals in Warz mode. Earn points, climb leaderboards, and unlock achievements.",
+      "Start with the daily Hidden Word, then move into Gridlock files, crosswords, and competitive puzzle runs across the full Puzzle Warz library.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Puzzle Warz — Daily Puzzles, Leaderboards & Multiplayer Challenges",
+    title: "Puzzle Warz — Daily Hidden Word, Puzzle Library & Multiplayer Challenges",
     description:
-      "Crack the daily Gridlock File, race the clock on word puzzles, and challenge rivals in Warz mode. Earn points, climb leaderboards, and unlock achievements.",
+      "Start with the daily Hidden Word, then move into Gridlock files, crosswords, and competitive puzzle runs across the full Puzzle Warz library.",
   },
   icons: {
     icon: "/images/puzzle_warz_logo.png",
@@ -85,7 +90,7 @@ const jsonLd = {
       "@id": `${siteUrl}/#website`,
       name: "Puzzle Warz",
       url: siteUrl,
-      description: "Daily logic puzzles, word challenges, and multiplayer battles. Compete for the top spot on Puzzle Warz.",
+      description: "Daily Hidden Word, Gridlock files, crosswords, and competitive puzzle battles. Compete for the top spot on Puzzle Warz.",
       potentialAction: {
         "@type": "SearchAction",
         target: { "@type": "EntryPoint", urlTemplate: `${siteUrl}/puzzles?q={search_term_string}` },
