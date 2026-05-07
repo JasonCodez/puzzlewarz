@@ -3,7 +3,7 @@ Runs a local Postgres container, waits for readiness, runs Prisma generate,
 migrate dev, and seed.
 
 Usage (PowerShell elevated):
-  cd D:\projects\puzzlewarz
+  cd C:\puzzlewarz
   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
   .\scripts\run-local-setup.ps1
 #>

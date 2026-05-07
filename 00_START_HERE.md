@@ -191,7 +191,7 @@ http://localhost:3000/admin/puzzles
 ## 📁 PROJECT STRUCTURE
 
 ```
-d:\projects\puzzlewarz\
+c:\puzzlewarz\
 ├── 📚 Documentation (10 markdown files)
 │   ├── EXEC_SUMMARY.md
 │   ├── README_MEDIA.md

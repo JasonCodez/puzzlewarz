@@ -25,10 +25,14 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
+  themeColor: "#3891A6",
+  colorScheme: "dark",
 };
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  applicationName: "Puzzle Warz",
+  manifest: "/manifest.webmanifest",
   title: {
     default: "Puzzle Warz — Daily Hidden Word, Puzzle Library & Multiplayer Challenges",
     template: "%s | Puzzle Warz",
@@ -55,6 +59,12 @@ export const metadata: Metadata = {
   authors: [{ name: "Puzzle Warz", url: siteUrl }],
   creator: "Puzzle Warz",
   publisher: "Puzzle Warz",
+  category: "games",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Puzzle Warz",
+  },
   robots: {
     index: true,
     follow: true,
@@ -77,8 +87,9 @@ export const metadata: Metadata = {
       "Start with the daily Hidden Word, then move into Gridlock files, crosswords, and competitive puzzle runs across the full Puzzle Warz library.",
   },
   icons: {
-    icon: "/images/puzzle_warz_logo.png",
-    apple: "/apple-icon.png",
+    icon: [{ url: "/icon.png", type: "image/png" }],
+    apple: [{ url: "/apple-icon.png", type: "image/png" }],
+    shortcut: [{ url: "/icon.png", type: "image/png" }],
   },
 };
 
