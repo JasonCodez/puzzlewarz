@@ -127,6 +127,12 @@ export default function HomeClient() {
             grid-template-columns: 1fr !important;
             gap: 28px !important;
           }
+          .hw-hero-copy {
+            order: 2 !important;
+          }
+          .hw-preview-card {
+            order: 1 !important;
+          }
         }
         @media (max-width: 700px) {
           .hero-btns { flex-direction: column !important; align-items: stretch !important; }
@@ -162,7 +168,7 @@ export default function HomeClient() {
           </div>
 
           <div className="hw-hero-grid" style={{ maxWidth: 1160, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0,1.1fr) minmax(340px,0.9fr)", gap: 40, alignItems: "center", position: "relative" }}>
-            <div>
+            <div className="hw-hero-copy">
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 999, background: "rgba(56,211,153,0.08)", border: "1px solid rgba(56,211,153,0.24)", marginBottom: 28, ...fade(heroVisible, 0) }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#38D399", animation: "pw-pulse-dot 1.5s ease-in-out infinite" }} />
                 <span className="hw-badge" style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#38D399" }}>
