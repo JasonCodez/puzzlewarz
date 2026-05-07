@@ -6,6 +6,9 @@ This repo now includes the web-side groundwork for a Trusted Web Activity:
 - Website-to-app association endpoint at `/.well-known/assetlinks.json`
 - Bubblewrap helper scripts in `package.json`
 
+The generated Android wrapper module lives in `android-app/`.
+It was intentionally moved off a root `app/` folder because Next.js ignores `src/app` when a root `app/` directory exists.
+
 ## 1. Choose Android app identity
 
 Decide these values before generating the wrapper app:
@@ -69,6 +72,9 @@ If you use the repo helper:
 ```powershell
 npm run twa:init
 ```
+
+If you open the Android wrapper in Android Studio, open the repo root Gradle project.
+Gradle still exposes the module as `:app`, but its files now live under `android-app/`.
 
 ## 5. Build and install locally
 

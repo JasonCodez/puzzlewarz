@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   reactCompiler: !isDev,
   poweredByHeader: false,
   experimental: {
-    webpackBuildWorker: true,
+    webpackBuildWorker: !isDev,
   },
   images: {
     remotePatterns: [

@@ -22,6 +22,8 @@ C:/tmp/puzzlewarz-next
 
 # production
 /build
+local.properties
+app-release-unsigned-aligned.apk
 
 # misc
 .DS_Store

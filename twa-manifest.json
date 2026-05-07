@@ -1,0 +1,65 @@
+{
+  "packageId": "com.puzzlewarz.app",
+  "host": "www.puzzlewarz.com",
+  "name": "Puzzle Warz",
+  "launcherName": "Puzzle Warz",
+  "display": "standalone",
+  "themeColor": "#3891A6",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#020202",
+  "enableNotifications": true,
+  "startUrl": "/?source=pwa",
+  "iconUrl": "https://www.puzzlewarz.com/icon.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "C:\\puzzlewarz\\android\\puzzlewarz-upload-keystore.jks",
+    "alias": "puzzlewarz-upload"
+  },
+  "appVersionName": "2",
+  "appVersionCode": 2,
+  "shortcuts": [
+    {
+      "name": "Play Daily Hidden Word",
+      "shortName": "Daily",
+      "url": "https://www.puzzlewarz.com/daily?source=pwa",
+      "chosenIconUrl": "https://www.puzzlewarz.com/icon.png"
+    },
+    {
+      "name": "Browse Puzzle Library",
+      "shortName": "Library",
+      "url": "https://www.puzzlewarz.com/puzzles?source=pwa",
+      "chosenIconUrl": "https://www.puzzlewarz.com/icon.png"
+    },
+    {
+      "name": "View Leaderboards",
+      "shortName": "Leaderboards",
+      "url": "https://www.puzzlewarz.com/leaderboards?source=pwa",
+      "chosenIconUrl": "https://www.puzzlewarz.com/icon.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://www.puzzlewarz.com/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://www.puzzlewarz.com/",
+  "minSdkVersion": 21,
+  "orientation": "any",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "2"
+}
