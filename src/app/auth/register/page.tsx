@@ -21,7 +21,7 @@ const TOS_SECTIONS = [
   { title: "12. Termination", body: `You may close your account at any time by contacting us at support@puzzlewarz.com. PuzzleWarz reserves the right to suspend or permanently terminate your account at any time for violation of these Terms or for any other reason at our sole discretion. Upon termination, your right to use the Service ceases immediately.` },
   { title: "13. Governing Law", body: `These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which PuzzleWarz operates, without regard to its conflict-of-law provisions. Any disputes arising under these Terms shall be subject to the exclusive jurisdiction of the courts located in that jurisdiction.` },
   { title: "14. Changes to These Terms", body: `We may update these Terms from time to time. When we do, we will revise the "Last Updated" date below and, where the changes are material, notify registered users by email or an in-app notice. Your continued use of the Service after any changes constitutes acceptance of the new Terms.` },
-  { title: "15. Contact Us", body: `If you have questions about these Terms, please contact us at:\n\nPuzzleWarz Support\nadmin@puzzlewarz.com` },
+  { title: "15. Contact Us", body: `If you have questions about these Terms, please contact us at:\n\nPuzzleWarz Support\nsupport@puzzlewarz.com` },
 ];
 
 function RegisterForm() {

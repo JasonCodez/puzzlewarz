@@ -114,7 +114,7 @@ const CATEGORIES = [
       },
       {
         q: "How do I delete my account?",
-        a: "Account deletion can be requested by emailing admin@puzzlewarz.com with the subject line 'Account Deletion Request'. We will process your request within 14 days. Deleted accounts cannot be recovered.",
+        a: "Account deletion can be requested by emailing support@puzzlewarz.com with the subject line 'Account Deletion Request'. We will process your request within 14 days. Deleted accounts cannot be recovered.",
       },
       {
         q: "How do I opt out of marketing emails?",
@@ -179,7 +179,7 @@ export default function FAQPage() {
             <h1 className="text-4xl font-black mb-4" style={{ color: "#fff" }}>Frequently Asked Questions</h1>
             <p className="text-sm leading-relaxed" style={{ color: "#888" }}>
               Can't find what you're looking for? Email us at{" "}
-              <span style={{ color: "#3891A6" }}>admin@puzzlewarz.com</span>{" "}
+              <span style={{ color: "#3891A6" }}>support@puzzlewarz.com</span>{" "}
               and we'll get back to you.
             </p>
           </div>

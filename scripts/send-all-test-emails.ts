@@ -23,7 +23,7 @@ for (const f of [".env.local", ".env"]) {
 }
 
 const BASE = "https://puzzlewarz.com";
-const TO = process.argv[2] || "admin@puzzlewarz.com";
+const TO = process.argv[2] || "support@puzzlewarz.com";
 
 interface TestEmail {
   subject: string;

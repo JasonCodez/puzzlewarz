@@ -37,6 +37,6 @@ async function upsertAdmin(email: string, password: string) {
   }
 }
 
-const email = process.argv[2] || "admin@puzzlewarz.com";
+const email = process.argv[2] || "support@puzzlewarz.com";
 const password = process.argv[3] || "Arm4469nine2686tee!";
 upsertAdmin(email, password);

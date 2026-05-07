@@ -7,7 +7,7 @@ config({ path: resolve(process.cwd(), '.env.local') });
 
 const prisma = new PrismaClient();
 
-const email = process.argv[2] || 'admin@puzzlewarz.com';
+const email = process.argv[2] || 'support@puzzlewarz.com';
 const password = process.argv[3] || 'Admin1234!';
 
 const hash = await bcrypt.hash(password, 12);
