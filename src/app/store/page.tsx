@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { THEME_CONFIGS, FRAME_CONFIGS, type ThemeConfig } from "@/lib/profileThemes";
 import { SKIN_TOKENS, getSkinTokens, type PuzzleSkinTokens } from "@/lib/puzzleSkins";
+import { findWordInGrid } from "@/lib/wordSearchCore";
 import dynamic from "next/dynamic";
 import Tooltip from "@/components/Tooltip";
 import { FEATURE_STORE_ENABLED } from "@/lib/featureFlags";
@@ -226,7 +227,7 @@ function CosmeticPreview({ item }: { item: StoreItem }) {
     const skinDefs: Record<string, SkinDef> = {
       retro:   { bg: "#0a0020",  border: "#B43CFF", cell: "#B43CFF",  cellGlow: "rgba(180,60,255,0.7)",  alt: "#120030", label: "#00FF88", accent: "rgba(0,255,136,0.6)", shadow: "0 0 0 2px #B43CFF, 0 0 18px rgba(180,60,255,0.5)" },
       minimal: { bg: "#080808",  border: "rgba(255,255,255,0.12)", cell: "rgba(255,255,255,0.55)", cellGlow: "none", alt: "rgba(255,255,255,0.05)", label: "#aaaaaa", accent: "rgba(255,255,255,0.3)", shadow: "none" },
-      neon:    { bg: "#010012",  border: "#00FFE5", cell: "#00FFE5",  cellGlow: "rgba(0,255,229,0.8)",  alt: "rgba(0,255,229,0.06)", label: "#00FFE5", accent: "rgba(255,0,204,0.7)", shadow: "0 0 0 2px #00FFE5, 0 0 18px rgba(0,255,229,0.55)" },
+      neon:    { bg: "#050d1c",  border: "#4FE5FF", cell: "#35DDFF",  cellGlow: "rgba(79,229,255,0.45)",  alt: "rgba(79,229,255,0.08)", label: "#B7F5FF", accent: "rgba(217,77,255,0.56)", shadow: "0 0 0 1px rgba(79,229,255,0.55), 0 0 14px rgba(79,229,255,0.28), inset 0 0 14px rgba(217,77,255,0.14)" },
       lava:    { bg: "#060100",  border: "#FF5500", cell: "#FF5500",  cellGlow: "rgba(255,85,0,0.75)",  alt: "rgba(255,85,0,0.07)",  label: "#FF9030", accent: "rgba(255,160,0,0.65)", shadow: "0 0 0 2px #FF5500, 0 0 18px rgba(255,85,0,0.5)" },
       galaxy:  { bg: "#04001a",  border: "#8B5CF6", cell: "#8B5CF6",  cellGlow: "rgba(139,92,246,0.75)", alt: "rgba(139,92,246,0.08)", label: "#D8B4FE", accent: "rgba(200,0,255,0.6)", shadow: "0 0 0 2px #8B5CF6, 0 0 18px rgba(139,92,246,0.55)" },
       christmas: { bg: "#000d1f",  border: "#67E8F9", cell: "#67E8F9",  cellGlow: "rgba(103,232,249,0.7)", alt: "rgba(103,232,249,0.06)", label: "#E0F9FF", accent: "rgba(103,232,249,0.5)", shadow: "0 0 0 2px #67E8F9, 0 0 18px rgba(103,232,249,0.45)" },
@@ -444,15 +445,16 @@ function SkinPreviewContent({ skinKey }: { skinKey: string }) {
   const resolvedKey = resolvedKeyRaw === "ice" ? "christmas" : resolvedKeyRaw;
   const hasAnimatedBg = ["lava", "galaxy", "christmas", "ice", "neon", "retro"].includes(resolvedKey);
   const grid = [
-    ["P", "U", "Z", "Z", "L"],
-    ["W", "A", "R", "Z", "E"],
-    ["Q", "I", "X", "M", "B"],
-    ["E", "S", "T", "N", "O"],
-    ["G", "R", "I", "D", "S"],
+    ["P", "U", "Z", "Z", "L", "E"],
+    ["W", "Q", "R", "T", "Y", "C"],
+    ["A", "A", "G", "B", "N", "O"],
+    ["R", "H", "R", "D", "F", "D"],
+    ["Z", "I", "I", "S", "X", "E"],
+    ["J", "L", "D", "P", "Q", "R"],
   ];
 
-  const words = ["PUZZLE", "GRID", "WARS", "CODE"]; 
-  const foundWords = new Set(["PUZZLE", "GRID"]);
+  const words = ["PUZZLE", "WARZ", "GRID", "CODE"]; 
+  const foundWords = new Set(["PUZZLE", "WARZ"]);
   const wordColors = [
     { bg: "rgba(34,197,94,0.28)", border: "#22c55e", text: "#4ade80" },
     { bg: "rgba(59,130,246,0.28)", border: "#3b82f6", text: "#60a5fa" },
@@ -461,16 +463,17 @@ function SkinPreviewContent({ skinKey }: { skinKey: string }) {
   ];
 
   const foundCellMap = new Map<string, number>();
-  // PUZZLE path (row 0 col 0-4, then row 1 col 4)
-  [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [1, 4]].forEach(([r, c]) => {
-    foundCellMap.set(`${r},${c}`, 0);
-  });
-  // GRID path (row 4 col 0-3)
-  [[4, 0], [4, 1], [4, 2], [4, 3]].forEach(([r, c]) => {
-    foundCellMap.set(`${r},${c}`, 1);
-  });
+  for (let wi = 0; wi < words.length; wi++) {
+    const word = words[wi];
+    if (!foundWords.has(word)) continue;
+    const cells = findWordInGrid(word, grid);
+    if (!cells) continue;
+    for (const { row, col } of cells) {
+      foundCellMap.set(`${row},${col}`, wi);
+    }
+  }
 
-  const activeCell = "1,2";
+  const activeCell = "";
 
   return (
     <div className="w-full">

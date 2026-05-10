@@ -7,6 +7,7 @@ import { sendEmail, generateEmailVerificationEmail } from "@/lib/mail";
 import { enforceRateLimit, getClientAddress } from "@/lib/requestSecurity";
 import { isAllowedDisplayName } from "@/lib/display-name-validator";
 import { calcLevel } from "@/lib/levels";
+import { BETA_ONLY_MODE, BETA_REGISTER_ERROR, isBetaAllowlistedEmail } from "@/lib/betaAccess";
 
 const RegisterSchema = z.object({
   name: z.string().min(1).max(100),
@@ -42,6 +43,14 @@ export async function POST(request: NextRequest) {
     const name = parsed.name.trim();
     const email = parsed.email.trim().toLowerCase();
     const { password, referralCode, anonId } = parsed;
+    const betaAllowlisted = isBetaAllowlistedEmail(email);
+
+    if (BETA_ONLY_MODE && !betaAllowlisted) {
+      return NextResponse.json(
+        { error: BETA_REGISTER_ERROR },
+        { status: 403 }
+      );
+    }
 
     // Validate display name against profanity + reserved words
     const nameCheck = isAllowedDisplayName(name);
@@ -111,6 +120,7 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
         marketingOptIn: body.marketingOptIn === true,
         isFounder,
+        betaApproved: betaAllowlisted,
         // In non-production, keep dev flow simple if SMTP isn't configured.
         ...(requireVerification ? {} : { emailVerified: new Date() }),
       },

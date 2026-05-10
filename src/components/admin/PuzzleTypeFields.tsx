@@ -1976,44 +1976,52 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
     if (puzzleType !== 'parasite_code') return;
     const existing = (puzzleData as any)?.parasiteCode;
     const template = {
-      caseTitle: 'The Overtime Ghost',
-      programName: 'payroll_v4.prg',
-      contextNarrative: 'Accounts Payable flagged an anomaly last quarter: a $12,000 overpayment that the payroll system claimed never happened. The program has been running unchanged for three years. Last week the same amount disappeared again — this time from payroll batch #1209. You have a copy of the source. Find the lines that should not be there.',
-      strainFamily: 'output-manipulator',
-      activationCondition: 'Triggers when DEPT equals "EXEC" AND BASE_PAY exceeds 10000',
-      parasiteLineIds: ['L09', 'L10', 'L11'],
+      caseTitle: 'The Refund Siphon',
+      programName: 'refund_router_v2.prg',
+      contextNarrative: 'Customer success reported that a handful of VIP refunds are settling a little short, but only on larger payouts. The service logs look normal, and the code review history shows no recent feature work in the refund path. You have the runtime cases and the source snapshot. Find the lines that siphon money out of the payout calculation.',
+      strainFamily: 'input-triggered-sleeper',
+      activationCondition: 'Triggers when TIER equals "VIP" AND AMOUNT exceeds 500',
+      parasiteLineIds: ['L10', 'L11'],
       program: [
-        { id: 'L01', lineNumber: 1,  opcode: 'LOAD', operands: ['R0', 'DEPT'],        comment: 'load department code' },
-        { id: 'L02', lineNumber: 2,  opcode: 'LOAD', operands: ['R1', 'BASE_PAY'],    comment: 'load base salary' },
-        { id: 'L03', lineNumber: 3,  opcode: 'LOAD', operands: ['R2', 'BONUS_PCT'],   comment: 'bonus percentage' },
-        { id: 'L04', lineNumber: 4,  opcode: 'MUL',  operands: ['R3', 'R1', 'R2'],   comment: 'R3 = bonus amount' },
-        { id: 'L05', lineNumber: 5,  opcode: 'ADD',  operands: ['R4', 'R1', 'R3'],   comment: 'R4 = total pay' },
-        { id: 'L06', lineNumber: 6,  opcode: 'SET',  operands: ['R5', 'EXEC'],        comment: '' },
-        { id: 'L07', lineNumber: 7,  opcode: 'CMP',  operands: ['R0', 'R5'],          comment: 'compare dept to EXEC' },
-        { id: 'L08', lineNumber: 8,  opcode: 'IF',   operands: ['FLAG', '!=', '1'],   comment: 'skip if not EXEC dept' },
-        { id: 'L09', lineNumber: 9,  opcode: 'SET',  operands: ['R6', '12000'],       comment: '', isParasite: true },
-        { id: 'L10', lineNumber: 10, opcode: 'ADD',  operands: ['R4', 'R4', 'R6'],   comment: '', isParasite: true },
-        { id: 'L11', lineNumber: 11, opcode: 'OUT',  operands: ['R6'],                comment: '', isParasite: true },
-        { id: 'L12', lineNumber: 12, opcode: 'OUT',  operands: ['R4'],                comment: 'output final pay' },
-        { id: 'L13', lineNumber: 13, opcode: 'HALT', operands: [],                    comment: '' },
+        { id: 'L01', lineNumber: 1,  opcode: 'LOAD', operands: ['R0', 'TIER'],        comment: 'load customer tier' },
+        { id: 'L02', lineNumber: 2,  opcode: 'LOAD', operands: ['R1', 'AMOUNT'],      comment: 'load requested refund amount' },
+        { id: 'L03', lineNumber: 3,  opcode: 'SET',  operands: ['R2', '0.02'],        comment: 'standard processing fee rate' },
+        { id: 'L04', lineNumber: 4,  opcode: 'MUL',  operands: ['R3', 'R1', 'R2'],    comment: 'R3 = standard fee' },
+        { id: 'L05', lineNumber: 5,  opcode: 'SET',  operands: ['R4', 'VIP'],         comment: '' },
+        { id: 'L06', lineNumber: 6,  opcode: 'CMP',  operands: ['R0', 'R4'],          comment: 'FLAG = tier is VIP' },
+        { id: 'L07', lineNumber: 7,  opcode: 'IF',   operands: ['FLAG', '==', '1'],   comment: 'VIP refunds waive the fee' },
+        { id: 'L08', lineNumber: 8,  opcode: 'SET',  operands: ['R3', '0'],           comment: '' },
+        { id: 'L09', lineNumber: 9,  opcode: 'IF',   operands: ['R1', '>', '500'],    comment: 'high-value branch' },
+        { id: 'L10', lineNumber: 10, opcode: 'SET',  operands: ['R5', '12.5'],        comment: '', isParasite: true },
+        { id: 'L11', lineNumber: 11, opcode: 'ADD',  operands: ['R3', 'R3', 'R5'],    comment: '', isParasite: true },
+        { id: 'L12', lineNumber: 12, opcode: 'SUB',  operands: ['R6', 'R1', 'R3'],    comment: 'R6 = payout after fee adjustments' },
+        { id: 'L13', lineNumber: 13, opcode: 'OUT',  operands: ['R6'],                comment: 'emit refund payout' },
+        { id: 'L14', lineNumber: 14, opcode: 'HALT', operands: [],                    comment: '' },
       ],
       testInputs: [
         {
           id: 'T1',
-          label: 'Standard employee — Dept: SALES, Pay: $4,200',
-          values: { DEPT: 'SALES', BASE_PAY: 4200, BONUS_PCT: 0.05 },
-          expectedOutput: '$4,410',
+          label: 'Standard customer refund — Tier: STANDARD, Amount: 250',
+          values: { TIER: 'STANDARD', AMOUNT: 250 },
+          expectedOutput: '245',
           activatesParasite: false,
         },
         {
           id: 'T2',
-          label: 'Executive — Dept: EXEC, Pay: $14,500',
-          values: { DEPT: 'EXEC', BASE_PAY: 14500, BONUS_PCT: 0.1 },
-          expectedOutput: '$15,950',
+          label: 'VIP goodwill refund — Tier: VIP, Amount: 120',
+          values: { TIER: 'VIP', AMOUNT: 120 },
+          expectedOutput: '120',
+          activatesParasite: false,
+        },
+        {
+          id: 'T3',
+          label: 'VIP escalation refund — Tier: VIP, Amount: 900',
+          values: { TIER: 'VIP', AMOUNT: 900 },
+          expectedOutput: '900',
           activatesParasite: true,
         },
       ],
-      retentionUnlock: 'INTERNAL AUDIT — CASE #PR-0044\n\nThe overflow was traced to a contractor who had read access to the payroll service repo. The $12,000 figure was routed to an external ACH account registered under a shell entity.\n\nContracting relationship terminated. Matter referred to financial crimes unit.',
+      retentionUnlock: 'INCIDENT NOTES — CASE RF-118\n\nThe extra fee was routed into a dormant ledger bucket that reconciled to a third-party settlement account every Friday night. The ledger name matched an abandoned migration artifact, which is why dashboards treated it as harmless noise.\n\nAccess keys rotated. Finance and platform security notified.',
     };
     try {
       const next = existing && typeof existing === 'object' ? existing : template;
@@ -2040,7 +2048,7 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
         <div><span className="text-yellow-400 font-semibold">program[].isParasite</span> — <code>true</code> on parasite lines; stripped before sending to client</div>
         <div><span className="text-yellow-400 font-semibold">parasiteLineIds</span> — array of IDs that form the correct quarantine answer</div>
         <div><span className="text-yellow-400 font-semibold">strainFamily</span> — one of: <code>timing-parasite input-triggered-sleeper obfuscated-redirect logic-bomb data-exfil privilege-escalation output-manipulator persistence-hook covert-channel</code></div>
-        <div><span className="text-yellow-400 font-semibold">testInputs[].activatesParasite</span> — <code>true</code> shows a red warning when the player runs that input</div>
+        <div><span className="text-yellow-400 font-semibold">testInputs[].activatesParasite</span> — marks the server-side trigger case; hidden from the player so they must infer it from output and trace evidence</div>
         <div><span className="text-yellow-400 font-semibold">activationCondition</span> — revealed to the player <em>only after</em> they solve the puzzle</div>
         <div><span className="text-yellow-400 font-semibold">retentionUnlock</span> — optional declassified lore text shown after solve</div>
       </div>

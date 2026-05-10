@@ -23,6 +23,8 @@ model User {
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
   role                   String                     @default("user")
+  // Private beta access flag, enforced only when BETA_ONLY_MODE=true.
+  betaApproved           Boolean                    @default(false)
   xp                     Int                        @default(0)
   level                  Int                        @default(1)
   xpTitle                String                     @default("Newcomer")

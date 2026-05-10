@@ -99,6 +99,13 @@ interface TraceComparisonSummary {
   uniqueBaselineCount: number;
 }
 
+interface InvestigationRun {
+  inputId: string;
+  inputLabel: string;
+  executedAt: number;
+  diagnostics: InputDiagnostics;
+}
+
 function parseNumericValue(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value !== 'string') return null;
@@ -448,16 +455,20 @@ function BriefingScreen({
 function ProgramLineRow({
   line,
   flagged,
+  inspected,
   tracing,
   visited,
   solved,
+  onInspect,
   onClick,
 }: {
   line: ParasiteCodeClientCase['program'][number];
   flagged: boolean;
+  inspected: boolean;
   tracing: boolean;
   visited: boolean;
   solved: boolean;
+  onInspect: (lineId: string) => void;
   onClick: () => void;
 }) {
   const opcodeColor = OPCODE_COLORS[line.opcode] ?? '#e2e8f0';
@@ -465,10 +476,15 @@ function ProgramLineRow({
     <motion.div
       layout
       onClick={solved ? undefined : onClick}
+      onMouseEnter={() => onInspect(line.id)}
+      onFocus={() => onInspect(line.id)}
       className="flex items-start gap-3 px-3 py-1.5 rounded cursor-pointer select-none transition-colors"
+      tabIndex={0}
       style={{
         background: flagged
           ? 'rgba(255, 96, 96, 0.15)'
+          : inspected
+          ? 'rgba(253, 231, 76, 0.08)'
           : tracing
           ? 'rgba(125, 249, 170, 0.08)'
           : visited
@@ -476,6 +492,8 @@ function ProgramLineRow({
           : 'transparent',
         borderLeft: flagged
           ? '2px solid #FF6060'
+          : inspected
+          ? '2px solid rgba(253,231,76,0.45)'
           : tracing
           ? '2px solid #7DF9AA'
           : visited
@@ -565,21 +583,38 @@ function TestInputPanel({
   inputs,
   activeId,
   diagnostics,
+  runs,
+  comparisonId,
   onActivate,
+  onSelectComparison,
 }: {
   inputs: ParasiteCodeClientCase['testInputs'];
   activeId: string | null;
   diagnostics: InputDiagnostics | null;
+  runs: InvestigationRun[];
+  comparisonId: string | null;
   onActivate: (id: string) => void;
+  onSelectComparison: (id: string | null) => void;
 }) {
+  const runMap = useMemo(() => {
+    return new Map(runs.map((run) => [run.inputId, run]));
+  }, [runs]);
+
   return (
     <div className="space-y-2">
-      <div className="text-xs font-mono text-gray-500 tracking-widest uppercase">TEST INPUTS</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-mono text-gray-500 tracking-widest uppercase">EXECUTION CASES</div>
+        <div className="text-[11px] font-mono text-gray-600">
+          Run cases, then compare traces.
+        </div>
+      </div>
       {inputs.map(inp => {
         const active = inp.id === activeId;
-        const diagnosticsForInput = active ? diagnostics : null;
+        const comparison = inp.id === comparisonId && inp.id !== activeId;
+        const priorRun = runMap.get(inp.id) ?? null;
+        const diagnosticsForInput = active ? diagnostics ?? priorRun?.diagnostics ?? null : priorRun?.diagnostics ?? null;
         const tracePreview = diagnosticsForInput
-          ? diagnosticsForInput.visitedLineIds.slice(0, 14)
+          ? diagnosticsForInput.visitedLineIds.slice(0, active ? 14 : 8)
           : [];
         const hasTraceOverflow = diagnosticsForInput
           ? diagnosticsForInput.visitedLineIds.length > tracePreview.length
@@ -589,14 +624,58 @@ function TestInputPanel({
             key={inp.id}
             className="border rounded p-3 space-y-1 cursor-pointer transition-colors"
             style={{
-              borderColor: active ? '#60FFF0' : '#374151',
-              background: active ? 'rgba(96,255,240,0.05)' : 'transparent',
+              borderColor: active ? '#60FFF0' : comparison ? '#FDE74C' : '#374151',
+              background: active ? 'rgba(96,255,240,0.05)' : comparison ? 'rgba(253,231,76,0.05)' : 'transparent',
             }}
             onClick={() => onActivate(inp.id)}
           >
-            <div className="text-xs font-mono font-bold" style={{ color: active ? '#60FFF0' : '#9ca3af' }}>
-              {inp.label}
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-xs font-mono font-bold" style={{ color: active ? '#60FFF0' : comparison ? '#FDE74C' : '#9ca3af' }}>
+                {inp.label}
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onActivate(inp.id);
+                  }}
+                  className="px-2 py-1 rounded border text-[11px] font-mono transition-colors"
+                  style={{
+                    borderColor: active ? 'rgba(96,255,240,0.45)' : 'rgba(255,255,255,0.12)',
+                    color: active ? '#60FFF0' : '#d1d5db',
+                    background: active ? 'rgba(96,255,240,0.08)' : 'rgba(255,255,255,0.03)',
+                  }}
+                >
+                  {active ? 'RUNNING VIEW' : priorRun ? 'OPEN RUN' : 'RUN CASE'}
+                </button>
+                {priorRun && !active && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectComparison(comparison ? null : inp.id);
+                    }}
+                    className="px-2 py-1 rounded border text-[11px] font-mono transition-colors"
+                    style={{
+                      borderColor: comparison ? 'rgba(253,231,76,0.45)' : 'rgba(255,255,255,0.12)',
+                      color: comparison ? '#FDE74C' : '#9ca3af',
+                      background: comparison ? 'rgba(253,231,76,0.08)' : 'rgba(255,255,255,0.02)',
+                    }}
+                  >
+                    {comparison ? 'COMPARE ON' : 'USE AS COMPARE'}
+                  </button>
+                )}
+              </div>
             </div>
+            {priorRun && !active && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono text-gray-500">
+                <span style={{ color: priorRun.diagnostics.matchedExpected ? '#7DF9AA' : '#FFB86B' }}>
+                  {priorRun.diagnostics.matchedExpected ? 'Expected output matched' : 'Output drift detected'}
+                </span>
+                <span>Visited {priorRun.diagnostics.visitedLineIds.length} lines</span>
+              </div>
+            )}
             {active && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -645,14 +724,9 @@ function TestInputPanel({
                       </div>
                     )}
                     <div className="text-[11px] font-mono text-gray-500">
-                      Analyst cue: compare this trace against a different input to find where control flow diverges.
+                      Save this trace in your head, then compare it against another case to see where behavior branches.
                     </div>
                   </>
-                )}
-                {inp.activatesParasite && (
-                  <div className="text-xs font-mono text-red-400">
-                    ⚠ This input activates an anomalous execution path
-                  </div>
                 )}
               </motion.div>
             )}
@@ -663,13 +737,12 @@ function TestInputPanel({
   );
 }
 
-// ── Investigation guide panel ───────────────────────────────────────────────
-function InvestigationGuidePanel({
-  activeInputLabel,
-  activeInputAnomalous,
-  diagnostics,
-  baselineLabel,
+// ── Investigation workbench panel ───────────────────────────────────────────
+function InvestigationWorkbenchPanel({
+  activeRun,
+  compareRun,
   traceComparison,
+  totalRuns,
   flaggedCount,
   flaggedVisitedCount,
   flaggedUnvisitedCount,
@@ -677,11 +750,10 @@ function InvestigationGuidePanel({
   maxAttempts,
   locked,
 }: {
-  activeInputLabel: string | null;
-  activeInputAnomalous: boolean | null;
-  diagnostics: InputDiagnostics | null;
-  baselineLabel: string | null;
+  activeRun: InvestigationRun | null;
+  compareRun: InvestigationRun | null;
   traceComparison: TraceComparisonSummary | null;
+  totalRuns: number;
   flaggedCount: number;
   flaggedVisitedCount: number;
   flaggedUnvisitedCount: number;
@@ -689,26 +761,28 @@ function InvestigationGuidePanel({
   maxAttempts: number;
   locked: boolean;
 }) {
-  const hasRunInput = Boolean(activeInputLabel && diagnostics);
+  const diagnostics = activeRun?.diagnostics ?? null;
   const hasAnyFlagged = flaggedCount > 0;
 
   return (
     <div className="border border-cyan-500/20 rounded-lg p-3 bg-cyan-900/10 space-y-2">
       <div className="text-xs font-mono tracking-widest uppercase text-cyan-300/80">
-        INVESTIGATION FLOW
+        INVESTIGATION WORKBENCH
       </div>
 
-      {!hasRunInput ? (
+      {!activeRun ? (
         <div className="text-xs font-mono text-gray-300 leading-relaxed">
-          Step 1: Run a control input first, then an anomalous input. Use their traces to locate branch points before flagging lines.
+          No evidence captured yet. Run a case to collect output, registers, and a line trace.
         </div>
       ) : (
-        <div className="text-xs font-mono text-gray-300 leading-relaxed space-y-1">
+        <div className="border border-gray-700/60 rounded p-2 bg-black/25 text-[11px] font-mono text-gray-300 leading-relaxed space-y-1">
           <div>
-            Active input: <span style={{ color: '#60FFF0' }}>{activeInputLabel}</span>
-            {' '}
-            <span style={{ color: activeInputAnomalous ? '#FF8A8A' : '#7DF9AA' }}>
-              ({activeInputAnomalous ? 'anomalous path' : 'control path'})
+            Current run: <span style={{ color: '#60FFF0' }}>{activeRun.inputLabel}</span>
+          </div>
+          <div>
+            Output status:{' '}
+            <span style={{ color: diagnostics?.matchedExpected ? '#7DF9AA' : '#FFB86B' }}>
+              {diagnostics?.matchedExpected ? 'matches expected result' : 'drifts from expected result'}
             </span>
           </div>
           <div>
@@ -717,31 +791,41 @@ function InvestigationGuidePanel({
         </div>
       )}
 
-      {traceComparison && baselineLabel && (
+      {compareRun && (
         <div className="border border-gray-700/60 rounded p-2 bg-black/25 text-[11px] font-mono text-gray-300 leading-relaxed space-y-1">
           <div>
-            Shared prefix with baseline <span style={{ color: '#7DF9AA' }}>{baselineLabel}</span>:
-            {' '}
-            {traceComparison.sharedPrefixCount} step{traceComparison.sharedPrefixCount === 1 ? '' : 's'}.
+            Comparison run: <span style={{ color: '#FDE74C' }}>{compareRun.inputLabel}</span>
           </div>
-          <div>
-            First divergence:
-            {' '}
-            baseline {traceComparison.firstBaselineOnlyLine ?? 'END'}
-            {' vs '}
-            current {traceComparison.firstActiveOnlyLine ?? 'END'}.
-          </div>
-          <div>
-            Current path touched {traceComparison.uniqueActiveCount} line
-            {traceComparison.uniqueActiveCount === 1 ? '' : 's'} not seen in baseline.
-          </div>
+          {traceComparison ? (
+            <>
+              <div>
+                Shared prefix: {traceComparison.sharedPrefixCount} step{traceComparison.sharedPrefixCount === 1 ? '' : 's'}.
+              </div>
+              <div>
+                Divergence starts around current {traceComparison.firstActiveOnlyLine ?? 'END'} vs compare {traceComparison.firstBaselineOnlyLine ?? 'END'}.
+              </div>
+              <div>
+                Unique line count: current {traceComparison.uniqueActiveCount}, compare {traceComparison.uniqueBaselineCount}.
+              </div>
+            </>
+          ) : (
+            <div>
+              Run a different case or switch your compare target to see where control flow changes.
+            </div>
+          )}
+        </div>
+      )}
+
+      {!compareRun && totalRuns === 1 && (
+        <div className="text-[11px] font-mono text-gray-500 leading-relaxed">
+          One run logged. Capture a second case to see where the program starts behaving differently.
         </div>
       )}
 
       <div className="text-[11px] font-mono text-gray-400 leading-relaxed space-y-1">
         {!hasAnyFlagged && (
           <div>
-            Step 2: Quarantine the smallest suspicious cluster first, not the whole branch.
+            Quarantine the smallest cluster that best explains the bad output, not every line in the neighborhood.
           </div>
         )}
         {hasAnyFlagged && (
@@ -772,6 +856,97 @@ function InvestigationGuidePanel({
           ? `Final retry warning: ${attemptsRemaining}/${maxAttempts} remaining.`
           : `Retries remaining: ${attemptsRemaining}/${maxAttempts}.`}
       </div>
+    </div>
+  );
+}
+
+// ── Line evidence panel ─────────────────────────────────────────────────────
+function LineEvidencePanel({
+  line,
+  activeRun,
+  compareRun,
+  runs,
+  flagged,
+}: {
+  line: ParasiteCodeClientCase['program'][number] | null;
+  activeRun: InvestigationRun | null;
+  compareRun: InvestigationRun | null;
+  runs: InvestigationRun[];
+  flagged: boolean;
+}) {
+  if (!line) {
+    return (
+      <div className="border border-yellow-500/20 rounded-lg p-3 bg-yellow-900/10 space-y-2">
+        <div className="text-xs font-mono tracking-widest uppercase text-yellow-300/80">LINE INSPECTOR</div>
+        <div className="text-[11px] font-mono text-gray-400 leading-relaxed">
+          Hover a code line to inspect its role across your collected runs.
+        </div>
+      </div>
+    );
+  }
+
+  const touchedRuns = runs.filter((run) => run.diagnostics.visitedLineIds.includes(line.id));
+  const driftRuns = touchedRuns.filter((run) => !run.diagnostics.matchedExpected);
+  const stableRuns = touchedRuns.filter((run) => run.diagnostics.matchedExpected);
+  const activeVisited = Boolean(activeRun?.diagnostics.visitedLineIds.includes(line.id));
+  const compareVisited = Boolean(compareRun?.diagnostics.visitedLineIds.includes(line.id));
+
+  let evidenceSummary = 'This line has not been reached in any run yet.';
+  if (touchedRuns.length > 0 && driftRuns.length > 0 && stableRuns.length === 0) {
+    evidenceSummary = 'This line has only appeared in runs where the output drifted.';
+  } else if (touchedRuns.length > 0 && stableRuns.length > 0 && driftRuns.length === 0) {
+    evidenceSummary = 'This line has only appeared in runs that behaved as expected.';
+  } else if (touchedRuns.length > 0) {
+    evidenceSummary = 'This line appears in both stable and unstable runs, so context matters more than presence alone.';
+  }
+
+  return (
+    <div className="border border-yellow-500/20 rounded-lg p-3 bg-yellow-900/10 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-mono tracking-widest uppercase text-yellow-300/80">LINE INSPECTOR</div>
+        {flagged && <div className="text-[11px] font-mono text-red-300">QUARANTINED</div>}
+      </div>
+
+      <div className="border border-gray-700/60 rounded p-2 bg-black/25 space-y-1">
+        <div className="flex items-center gap-2 text-xs font-mono">
+          <span className="text-yellow-200">{line.id}</span>
+          <span style={{ color: OPCODE_COLORS[line.opcode] ?? '#e2e8f0' }}>{line.opcode}</span>
+        </div>
+        <div className="text-[11px] font-mono text-gray-300 break-words">
+          {line.operands.join(' ')}
+        </div>
+        <div className="text-[11px] font-mono text-gray-500">
+          {OPCODE_DESCRIPTIONS[line.opcode]}
+        </div>
+        {line.comment && (
+          <div className="text-[11px] font-mono text-gray-400">
+            Comment: {line.comment}
+          </div>
+        )}
+      </div>
+
+      <div className="text-[11px] font-mono text-gray-300 leading-relaxed space-y-1">
+        <div>{evidenceSummary}</div>
+        <div>Runs touching this line: <span className="text-yellow-200">{touchedRuns.length}</span></div>
+        <div>Drift runs: <span className="text-orange-300">{driftRuns.length}</span> · Stable runs: <span className="text-green-300">{stableRuns.length}</span></div>
+      </div>
+
+      <div className="border border-gray-700/60 rounded p-2 bg-black/25 text-[11px] font-mono text-gray-300 leading-relaxed space-y-1">
+        <div>
+          Current run: <span style={{ color: activeVisited ? '#60FFF0' : '#6b7280' }}>{activeVisited ? 'visited' : 'not visited'}</span>
+        </div>
+        {compareRun && (
+          <div>
+            Compare run: <span style={{ color: compareVisited ? '#FDE74C' : '#6b7280' }}>{compareVisited ? 'visited' : 'not visited'}</span>
+          </div>
+        )}
+      </div>
+
+      {touchedRuns.length > 0 && (
+        <div className="text-[11px] font-mono text-gray-500 leading-relaxed">
+          Seen in: {touchedRuns.map((run) => run.inputLabel).join(' · ')}
+        </div>
+      )}
     </div>
   );
 }
@@ -1006,11 +1181,12 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none ml-4">✕</button>
         </div>
         <div className="space-y-3 text-sm text-gray-300">
-          <p>🧫 <strong>Goal:</strong> Analyze the infected program and quarantine the lines that trigger the parasite.</p>
-          <p>📝 <strong>Read the program</strong> listing carefully. Use the Opcode Guide to understand each instruction.</p>
-          <p>🔍 <strong>Trace execution:</strong> Follow the test inputs through the program to see which lines activate the parasite condition.</p>
-          <p>🚩 <strong>Flag lines</strong> you believe are responsible by clicking them in the listing.</p>
-          <p>🚀 <strong>Submit</strong> your analysis when ready. Your score depends on how few attempts you need — fewer attempts = better rank.</p>
+          <p>🧫 <strong>Goal:</strong> Investigate why the program behaves incorrectly and quarantine the smallest set of lines that explains the bad behavior.</p>
+          <p>📝 <strong>Read the program</strong> listing and use the Opcode Guide when you need a quick reminder.</p>
+          <p>🔍 <strong>Run cases:</strong> execute different inputs, compare their traces, and look for the point where behavior splits.</p>
+          <p>🧠 <strong>Inspect evidence:</strong> hover lines to see which runs touched them and whether those runs were stable or drifting.</p>
+          <p>🚩 <strong>Quarantine lines</strong> by clicking them in the listing once your hypothesis is strong enough.</p>
+          <p>🚀 <strong>Submit</strong> when your quarantine set is tight. Fewer wrong attempts earns a better rank.</p>
           <p>📈 Ranks go from <strong>F</strong> (many attempts) up to <strong>S</strong> (first try).</p>
         </div>
         <div className="mt-5 text-right">
@@ -1036,6 +1212,9 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
   const [tracingLine, setTracingLine] = useState<string | null>(null);
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [activeDiagnostics, setActiveDiagnostics] = useState<InputDiagnostics | null>(null);
+  const [runHistory, setRunHistory] = useState<InvestigationRun[]>([]);
+  const [comparisonInputId, setComparisonInputId] = useState<string | null>(null);
+  const [inspectedLineId, setInspectedLineId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -1095,14 +1274,11 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
 
   // ── Tracer + runtime diagnostics ───────────────────────────────────────────
   const handleActivateInput = useCallback((inputId: string) => {
-    if (activeInput === inputId) {
-      setActiveInput(null);
-      setActiveDiagnostics(null);
-      stopTraceAnimation();
-      return;
-    }
-
     setActiveInput(inputId);
+    setComparisonInputId((prev) => {
+      if (prev && prev !== inputId) return prev;
+      return activeInput && activeInput !== inputId ? activeInput : prev;
+    });
 
     const puzzle = serverState?.puzzle;
     if (!puzzle?.program?.length) {
@@ -1124,6 +1300,15 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
       selectedInput.expectedOutput,
     );
     setActiveDiagnostics(diagnostics);
+    setRunHistory((prev) => {
+      const nextRun: InvestigationRun = {
+        inputId: selectedInput.id,
+        inputLabel: selectedInput.label,
+        executedAt: Date.now(),
+        diagnostics,
+      };
+      return [nextRun, ...prev.filter((run) => run.inputId !== selectedInput.id)];
+    });
 
     stopTraceAnimation();
     if (diagnostics.executedLineIds.length === 0) return;
@@ -1163,27 +1348,27 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
     return puzzleData.testInputs.find(inp => inp.id === activeInput) ?? null;
   }, [activeInput, puzzleData]);
 
-  const baselineInputConfig = useMemo(() => {
-    if (!puzzleData?.testInputs?.length) return null;
-    return puzzleData.testInputs.find(inp => !inp.activatesParasite) ?? puzzleData.testInputs[0] ?? null;
-  }, [puzzleData]);
+  const activeRun = useMemo(() => {
+    if (!activeInput) return null;
+    return runHistory.find((run) => run.inputId === activeInput) ?? null;
+  }, [activeInput, runHistory]);
 
-  const baselineDiagnostics = useMemo(() => {
-    if (!puzzleData || !baselineInputConfig) return null;
-    return simulateProgramExecution(
-      puzzleData.program,
-      baselineInputConfig.values,
-      baselineInputConfig.expectedOutput,
-    );
-  }, [baselineInputConfig, puzzleData]);
+  const compareRun = useMemo(() => {
+    if (runHistory.length === 0) return null;
+    if (comparisonInputId && comparisonInputId !== activeInput) {
+      const explicit = runHistory.find((run) => run.inputId === comparisonInputId);
+      if (explicit) return explicit;
+    }
+    return runHistory.find((run) => run.inputId !== activeInput) ?? null;
+  }, [activeInput, comparisonInputId, runHistory]);
 
   const traceComparison = useMemo<TraceComparisonSummary | null>(() => {
-    if (!activeDiagnostics || !baselineDiagnostics || !activeInputConfig?.activatesParasite) {
+    if (!activeDiagnostics || !compareRun) {
       return null;
     }
 
     const activeTrace = activeDiagnostics.executedLineIds;
-    const baselineTrace = baselineDiagnostics.executedLineIds;
+    const baselineTrace = compareRun.diagnostics.executedLineIds;
     let sharedPrefixCount = 0;
 
     while (
@@ -1195,7 +1380,7 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
     }
 
     const activeVisited = new Set(activeDiagnostics.visitedLineIds);
-    const baselineVisited = new Set(baselineDiagnostics.visitedLineIds);
+    const baselineVisited = new Set(compareRun.diagnostics.visitedLineIds);
     let uniqueActiveCount = 0;
     let uniqueBaselineCount = 0;
 
@@ -1213,7 +1398,7 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
       uniqueActiveCount,
       uniqueBaselineCount,
     };
-  }, [activeDiagnostics, activeInputConfig, baselineDiagnostics]);
+  }, [activeDiagnostics, compareRun]);
 
   const flaggedTraceStats = useMemo(() => {
     let flaggedVisitedCount = 0;
@@ -1337,6 +1522,8 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
     );
   }
 
+  const inspectedLine = puzzle.program.find((line) => line.id === (inspectedLineId ?? tracingLine)) ?? null;
+
   // ── Analysis layout ─────────────────────────────────────────────────────────
   return (
     <div className="font-mono space-y-4">
@@ -1368,7 +1555,7 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
 
       <div className="border border-gray-800 rounded-lg px-4 py-2 bg-black/35">
         <div className="text-[11px] font-mono text-gray-400 leading-relaxed">
-          Workflow: choose a test input, inspect output + trace, compare against a control run, then quarantine only the lines that consistently explain the anomalous path.
+          Build evidence like a debugger: run cases, compare their traces, inspect which lines only appear when behavior drifts, then quarantine the smallest suspicious cluster.
         </div>
       </div>
 
@@ -1398,9 +1585,11 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
                 key={line.id}
                 line={line}
                 flagged={flaggedIds.has(line.id)}
+                inspected={inspectedLine?.id === line.id}
                 tracing={tracingLine === line.id}
                 visited={visitedLineIds.has(line.id)}
                 solved={serverState.solved}
+                onInspect={setInspectedLineId}
                 onClick={() => toggleFlag(line.id)}
               />
             ))}
@@ -1422,12 +1611,11 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
 
         {/* RIGHT — sidebar */}
         <div className="space-y-5">
-          <InvestigationGuidePanel
-            activeInputLabel={activeInputConfig?.label ?? null}
-            activeInputAnomalous={activeInputConfig?.activatesParasite ?? null}
-            diagnostics={activeDiagnostics}
-            baselineLabel={baselineInputConfig?.label ?? null}
+          <InvestigationWorkbenchPanel
+            activeRun={activeRun}
+            compareRun={compareRun}
             traceComparison={traceComparison}
+            totalRuns={runHistory.length}
             flaggedCount={flaggedIds.size}
             flaggedVisitedCount={flaggedTraceStats.flaggedVisitedCount}
             flaggedUnvisitedCount={flaggedTraceStats.flaggedUnvisitedCount}
@@ -1436,12 +1624,23 @@ export default function ParasiteCodePuzzle({ puzzleId, onSolved }: ParasiteCodeP
             locked={serverState.locked}
           />
 
+          <LineEvidencePanel
+            line={inspectedLine}
+            activeRun={activeRun}
+            compareRun={compareRun}
+            runs={runHistory}
+            flagged={Boolean(inspectedLine && flaggedIds.has(inspectedLine.id))}
+          />
+
           {/* Test inputs */}
           <TestInputPanel
             inputs={puzzle.testInputs}
             activeId={activeInput}
             diagnostics={activeDiagnostics}
+            runs={runHistory}
+            comparisonId={compareRun?.inputId ?? null}
             onActivate={handleActivateInput}
+            onSelectComparison={setComparisonInputId}
           />
 
           {/* Quarantine workspace */}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { BETA_ONLY_MODE, hasBetaAccess } from "@/lib/betaAccess";
 
 // ── Coming-soon gate ──────────────────────────────────────────────────────────
 // Set COMING_SOON=true in env to redirect all visitors to /coming-soon.
@@ -26,6 +27,24 @@ const COMING_SOON_ALLOWED = [
   '/favicon',
   '/images',
   '/uploads',
+];
+
+const BETA_PUBLIC_PATHS = [
+  '/coming-soon',
+  '/auth',
+  '/invite',
+  '/api/auth',
+  '/api/waitlist',
+  '/api/founder-count',
+  '/api/user/referral/lookup',
+  '/_next',
+  '/favicon',
+  '/images',
+  '/uploads',
+  '/manifest',
+  '/icon',
+  '/apple-icon',
+  '/sw.js',
 ];
 
 // Paths that require authentication
@@ -61,6 +80,32 @@ export async function proxy(request: NextRequest) {
   }
 
   const token = await getToken({ req: request });
+
+  if (BETA_ONLY_MODE && !BETA_PUBLIC_PATHS.some((path) => pathname.startsWith(path))) {
+    if (!token) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/auth/signin';
+      url.searchParams.set('beta', '1');
+      return NextResponse.redirect(url);
+    }
+
+    const betaToken = token as {
+      email?: string | null;
+      role?: string | null;
+      betaApproved?: boolean;
+    };
+
+    if (!hasBetaAccess({
+      email: betaToken.email,
+      role: betaToken.role,
+      betaApproved: betaToken.betaApproved === true,
+    })) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/coming-soon';
+      url.searchParams.set('beta', '1');
+      return NextResponse.redirect(url);
+    }
+  }
 
   // Check if accessing protected paths
   const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path));

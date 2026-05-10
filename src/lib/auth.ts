@@ -6,6 +6,11 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { checkLocalRateLimit } from "@/lib/requestSecurity";
+import {
+  BETA_ACCESS_ERROR,
+  hasBetaAccess,
+  isBetaAllowlistedEmail,
+} from "@/lib/betaAccess";
 
 const requireEmailVerification =
   process.env.NODE_ENV === "production" ||
@@ -92,11 +97,27 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid password");
         }
 
+        let betaApproved = user.betaApproved;
+
+        if (isBetaAllowlistedEmail(email) && !betaApproved) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { betaApproved: true },
+          });
+          betaApproved = true;
+        }
+
+        if (!hasBetaAccess({ email: user.email, role: user.role, betaApproved })) {
+          throw new Error(BETA_ACCESS_ERROR);
+        }
+
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           image: user.image,
+          role: user.role,
+          betaApproved,
         };
       },
     }),
@@ -122,13 +143,27 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        const signedInUser = user as {
+          id?: string;
+          role?: string;
+          betaApproved?: boolean;
+        };
+        token.id = signedInUser.id;
+        token.role = signedInUser.role ?? "user";
+        token.betaApproved = signedInUser.betaApproved === true;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as { id?: string }).id = token.id as string;
+        const sessionUser = session.user as {
+          id?: string;
+          role?: string;
+          betaApproved?: boolean;
+        };
+        sessionUser.id = token.id as string;
+        sessionUser.role = typeof token.role === "string" ? token.role : "user";
+        sessionUser.betaApproved = token.betaApproved === true;
       }
       return session;
     },

@@ -1,0 +1,2 @@
+ALTER TABLE "users"
+ADD COLUMN "betaApproved" BOOLEAN NOT NULL DEFAULT false;

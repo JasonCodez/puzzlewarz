@@ -19,8 +19,8 @@
     "path": "C:\\puzzlewarz\\android\\puzzlewarz-upload-keystore.jks",
     "alias": "puzzlewarz-upload"
   },
-  "appVersionName": "2",
-  "appVersionCode": 2,
+  "appVersionName": "1.0",
+  "appVersionCode": 9,
   "shortcuts": [
     {
       "name": "Play Daily Hidden Word",
@@ -61,5 +61,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "2"
+  "appVersion": "1.0"
 }

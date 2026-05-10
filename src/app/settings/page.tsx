@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import NotificationSettings from "@/components/NotificationSettings";
@@ -20,6 +20,12 @@ export default function SettingsPage() {
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwSuccess, setPwSuccess] = useState(false);
+
+  // Account deletion
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -91,6 +97,46 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleDeleteAccount(e: React.FormEvent) {
+    e.preventDefault();
+    setDeleteError(null);
+
+    if (deleteConfirmationText.trim().toUpperCase() !== "DELETE") {
+      setDeleteError("Type DELETE to confirm account deletion.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "This permanently deletes your account and associated data. This cannot be undone. Continue?"
+    );
+
+    if (!confirmed) return;
+
+    setDeleteSaving(true);
+    try {
+      const res = await fetch("/api/user/delete-account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmationText: deleteConfirmationText,
+          currentPassword: deletePassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error ?? "Failed to delete account.");
+        return;
+      }
+
+      await signOut({ callbackUrl: "/auth/signin?deleted=1" });
+    } catch {
+      setDeleteError("Network error. Please try again.");
+    } finally {
+      setDeleteSaving(false);
+    }
+  }
+
   if (status === "loading" || status === "unauthenticated") {
     return null;
   }
@@ -101,7 +147,7 @@ export default function SettingsPage() {
       <main className="min-h-screen pt-24 pb-20 px-4" style={{ backgroundColor: "#020202" }}>
         <div className="max-w-2xl mx-auto">
           <h1 className="text-2xl font-bold text-white mb-2">Settings</h1>
-          <p className="text-sm mb-8" style={{ color: "#888" }}>Manage your notification and email preferences</p>
+          <p className="text-sm mb-8" style={{ color: "#888" }}>Manage your account, security, and email preferences</p>
 
           {/* Notification Preferences */}
           <NotificationSettings />
@@ -193,6 +239,57 @@ export default function SettingsPage() {
                 style={{ background: "#3891A6", color: "#fff" }}
               >
                 {pwSaving ? "Saving…" : "Update Password"}
+              </button>
+            </form>
+          </div>
+
+          {/* Delete Account */}
+          <div
+            className="mt-8 p-6 rounded-lg border"
+            style={{
+              backgroundColor: "rgba(239, 68, 68, 0.08)",
+              borderColor: "rgba(239, 68, 68, 0.4)",
+            }}
+          >
+            <h2 className="text-lg font-semibold text-red-300 mb-1">Delete Account</h2>
+            <p className="text-sm mb-5" style={{ color: "#fca5a5" }}>
+              Permanently delete your account and associated data. This action cannot be undone.
+            </p>
+            <form onSubmit={handleDeleteAccount} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-red-200">Type DELETE to confirm</label>
+                <input
+                  type="text"
+                  value={deleteConfirmationText}
+                  onChange={(e) => setDeleteConfirmationText(e.target.value)}
+                  className="rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-red-400"
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
+                  placeholder="DELETE"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-red-200">Current Password (required for email/password accounts)</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-red-400"
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
+                />
+              </div>
+
+              {deleteError && <p className="text-sm text-red-300">{deleteError}</p>}
+
+              <button
+                type="submit"
+                disabled={deleteSaving}
+                className="self-start px-5 py-2 rounded-lg text-sm font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                style={{ background: "#dc2626", color: "#fff" }}
+              >
+                {deleteSaving ? "Deleting…" : "Delete My Account"}
               </button>
             </form>
           </div>

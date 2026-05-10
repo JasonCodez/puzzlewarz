@@ -9,6 +9,7 @@ function SignInForm() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
+  const betaOnly = searchParams.get("beta") === "1";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -120,6 +121,12 @@ function SignInForm() {
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 6, letterSpacing: "-0.02em" }}>Welcome back</h1>
             <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>Sign in to continue your puzzle journey</p>
 
+            {betaOnly && (
+              <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "rgba(56,145,166,0.12)", border: "1px solid rgba(56,145,166,0.3)", color: "#9BD1D6", fontSize: 14 }}>
+                Private beta access only. Sign in with an approved tester account or register with an invited email address.
+              </div>
+            )}
+
             {error && (
               <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", fontSize: 14 }}>
                 {error}
@@ -170,7 +177,7 @@ function SignInForm() {
             <div style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
               <p style={{ fontSize: 14, color: "#6B7280" }}>
                 Don&apos;t have an account?{" "}
-                <Link href="/auth/register" style={{ color: "#FDE74C", fontWeight: 700, textDecoration: "none" }}
+                <Link href={betaOnly ? "/auth/register?beta=1" : "/auth/register"} style={{ color: "#FDE74C", fontWeight: 700, textDecoration: "none" }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
                   onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
                   Sign up free
@@ -180,7 +187,7 @@ function SignInForm() {
           </div>
 
           <div style={{ textAlign: "center", marginTop: 20 }}>
-            <Link href="/" style={{ fontSize: 13, color: "#6B7280", textDecoration: "none" }}
+            <Link href={betaOnly ? "/coming-soon?beta=1" : "/"} style={{ fontSize: 13, color: "#6B7280", textDecoration: "none" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#9CA3AF")}
               onMouseLeave={e => (e.currentTarget.style.color = "#6B7280")}>
               ← Back to home

@@ -36,7 +36,7 @@ const SECTIONS = [
   },
   {
     title: "8. Your Choices and Rights",
-    body: `You may request access to, correction of, or deletion of your account information by contacting us. You can also request account deletion by emailing support@puzzlewarz.com. We may retain limited records where required for security, fraud prevention, accounting, tax, or legal compliance.`,
+    body: `You may request access to, correction of, or deletion of your account information by contacting us. You can delete your account directly in Settings, or request help by emailing support@puzzlewarz.com if you cannot sign in. We may retain limited records where required for security, fraud prevention, accounting, tax, or legal compliance.`,
   },
   {
     title: "9. Children's Privacy",

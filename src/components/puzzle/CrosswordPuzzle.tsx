@@ -365,7 +365,7 @@ function useCellSize(
         ? Math.floor((heightBudget - getGridChrome(rows, gridGap)) / rows)
         : Number.POSITIVE_INFINITY;
 
-      const maxCellSize = isMobileWidth ? 36 : 44;
+      const maxCellSize = isMobileWidth ? 36 : 52;
       const fittedCellSize = Math.min(maxCellSize, byWidth, byHeight);
       setSize(Math.max(5, fittedCellSize));
     };
@@ -1485,9 +1485,9 @@ export default function CrosswordPuzzle({
           <div className="w-full min-w-0 max-w-full px-2 flex flex-col lg:flex-row gap-4 items-start justify-center overflow-hidden">
 
             {/* Grid */}
-            <div className="flex w-full min-w-0 max-w-full flex-col items-center gap-2 lg:w-auto lg:flex-none">
+            <div className="flex w-full min-w-0 max-w-full flex-col items-center gap-2 lg:flex-1">
               {/* Active clue banner */}
-              <div style={{ position: "relative", width: "100%", maxWidth: "24rem" }}>
+              <div style={{ position: "relative", width: "100%", maxWidth: gridPixelWidth > 0 ? `${gridPixelWidth}px` : "24rem" }}>
               {latestSolvedClue && (
                 <div
                   className="crossword-word-toast"
@@ -1548,6 +1548,7 @@ export default function CrosswordPuzzle({
                   border: `${GRID_BORDER_PX}px solid ${skin.boardBorder ?? "rgba(255,255,255,0.12)"}`,
                   borderRadius: "8px",
                   padding: GRID_PADDING_PX,
+                  opacity: 0.9,
                   width: gridPixelWidth > 0 ? `${gridPixelWidth}px` : "100%",
                   maxWidth: "100%",
                   overflow: "hidden",

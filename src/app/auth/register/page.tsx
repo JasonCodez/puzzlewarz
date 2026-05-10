@@ -27,6 +27,7 @@ const TOS_SECTIONS = [
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const betaOnly = searchParams.get("beta") === "1";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -150,7 +151,15 @@ function RegisterForm() {
           {/* Card */}
           <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(56,145,166,0.25)", borderRadius: 20, padding: "36px 32px", backdropFilter: "blur(12px)" }}>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 6, letterSpacing: "-0.02em" }}>Create your account</h1>
-            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>Free to join. Start solving in seconds.</p>
+            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>
+              {betaOnly ? "Private beta: only invited tester emails can register." : "Free to join. Start solving in seconds."}
+            </p>
+
+            {betaOnly && (
+              <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "rgba(56,145,166,0.12)", border: "1px solid rgba(56,145,166,0.3)", color: "#9BD1D6", fontSize: 14 }}>
+                Use the same email address you approved for your private beta invite.
+              </div>
+            )}
 
             {error && (
               <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", fontSize: 14 }}>
@@ -215,7 +224,7 @@ function RegisterForm() {
             <div style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
               <p style={{ fontSize: 14, color: "#6B7280" }}>
                 Already have an account?{" "}
-                <Link href="/auth/signin" style={{ color: "#FDE74C", fontWeight: 700, textDecoration: "none" }}
+                <Link href={betaOnly ? "/auth/signin?beta=1" : "/auth/signin"} style={{ color: "#FDE74C", fontWeight: 700, textDecoration: "none" }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
                   onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
                   Sign in
@@ -225,7 +234,7 @@ function RegisterForm() {
           </div>
 
           <div style={{ textAlign: "center", marginTop: 20 }}>
-            <Link href="/" style={{ fontSize: 13, color: "#6B7280", textDecoration: "none" }}
+            <Link href={betaOnly ? "/coming-soon?beta=1" : "/"} style={{ fontSize: 13, color: "#6B7280", textDecoration: "none" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#9CA3AF")}
               onMouseLeave={e => (e.currentTarget.style.color = "#6B7280")}>
               ← Back to home

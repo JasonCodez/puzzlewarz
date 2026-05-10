@@ -108,24 +108,25 @@ export default function PuzzleCompletionRatingModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 flex items-start overflow-y-auto py-4 justify-center z-50 backdrop-blur-sm"
+        className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       >
-        {/* Modal Content */}
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.5, opacity: 0, y: 20 }}
-          transition={{ type: "spring", stiffness: 200, damping: 25 }}
-          className="bg-gray-900 rounded-lg border p-5 sm:p-8 w-full sm:max-w-md mx-4 my-auto shadow-2xl"
-          style={{
-            backgroundColor: "rgba(2, 2, 2, 0.95)",
-            borderColor: "#FDE74C",
-            borderWidth: "2px",
-            fontFamily: "var(--font-geist-sans, sans-serif)",
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="flex min-h-[100dvh] items-center justify-center px-4 py-4">
+          {/* Modal Content */}
+          <motion.div
+            initial={{ scale: 0.5, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.5, opacity: 0, y: 20 }}
+            transition={{ type: "spring", stiffness: 200, damping: 25 }}
+            className="w-full max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border bg-gray-900 p-5 shadow-2xl sm:max-w-md sm:p-8"
+            style={{
+              backgroundColor: "rgba(2, 2, 2, 0.95)",
+              borderColor: "#FDE74C",
+              borderWidth: "2px",
+              fontFamily: "var(--font-geist-sans, sans-serif)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -285,7 +286,8 @@ export default function PuzzleCompletionRatingModal({
               Continue
             </button>
           )}
-        </motion.div>
+          </motion.div>
+        </div>
       </motion.div>
     </>
   );

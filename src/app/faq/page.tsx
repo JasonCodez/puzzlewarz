@@ -114,7 +114,7 @@ const CATEGORIES = [
       },
       {
         q: "How do I delete my account?",
-        a: "Account deletion can be requested by emailing support@puzzlewarz.com with the subject line 'Account Deletion Request'. We will process your request within 14 days. Deleted accounts cannot be recovered.",
+        a: "Go to Settings and use the Delete Account section to permanently remove your account. You can also email support@puzzlewarz.com if you cannot access your account. Deleted accounts cannot be recovered.",
       },
       {
         q: "How do I opt out of marketing emails?",
