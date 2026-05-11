@@ -35,7 +35,7 @@ interface Props {
   alreadySolved?: boolean;
   hintTokens?: number;
   onHintUsed?: () => Promise<boolean>;
-  onSolved?: () => void;
+  onSolved?: (elapsedSeconds?: number) => void;
   warzMode?: boolean;
 }
 
@@ -66,6 +66,7 @@ interface SavedCrosswordProgress {
   letters: string[][];
   revealedCells: string[];
   activeClue: ActiveClue | null;
+  elapsedMs: number;
   savedAt: number;
 }
 
@@ -74,6 +75,7 @@ interface CrosswordProgressPayload {
   letters?: unknown;
   revealedCells?: unknown;
   activeClue?: unknown;
+  elapsedMs?: unknown;
   allSolved?: unknown;
   savedAt?: unknown;
 }
@@ -162,7 +164,8 @@ function hasCrosswordProgress(snapshot: SavedCrosswordProgress): boolean {
   return Boolean(
     snapshot.activeClue ||
     snapshot.revealedCells.length > 0 ||
-    snapshot.letters.some((row) => row.some(Boolean))
+    snapshot.letters.some((row) => row.some(Boolean)) ||
+    snapshot.elapsedMs > 0
   );
 }
 
@@ -194,6 +197,9 @@ function loadLocalCrosswordProgress(
       letters,
       revealedCells: normalizeStoredCellKeys(parsed.revealedCells, rows, cols, grid),
       activeClue: normalizeStoredActiveClue(parsed.activeClue, data),
+      elapsedMs: typeof parsed.elapsedMs === "number" && Number.isFinite(parsed.elapsedMs)
+        ? Math.max(0, Math.round(parsed.elapsedMs))
+        : 0,
       savedAt: typeof parsed.savedAt === "number" && Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0,
     };
 
@@ -244,15 +250,30 @@ function buildSavedCrosswordProgress(
   signature: string,
   letters: string[][],
   revealed: Set<string>,
-  activeClue: ActiveClue | null
+  activeClue: ActiveClue | null,
+  elapsedMs: number
 ): SavedCrosswordProgress {
   return {
     signature,
     letters: letters.map((row) => row.map((letter) => letter || "")),
     revealedCells: [...revealed],
     activeClue,
+    elapsedMs: Math.max(0, Math.round(elapsedMs)),
     savedAt: Date.now(),
   };
+}
+
+function formatElapsedStopwatch(elapsedMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 // ─── Grid builder ─────────────────────────────────────────────────────────────
@@ -604,6 +625,9 @@ export default function CrosswordPuzzle({
   const [activeClue, setActiveClue] = useState<ActiveClue | null>(() =>
     alreadySolved ? null : localProgressRef.current?.activeClue ?? null
   );
+  const [elapsedMs, setElapsedMs] = useState<number>(() =>
+    alreadySolved ? 0 : Math.max(0, localProgressRef.current?.elapsedMs ?? 0)
+  );
   const [cluePanelDirection, setCluePanelDirection] = useState<Direction>("across");
   const [gameStatus, setGameStatus] = useState<"playing" | "won">(
     alreadySolved ? "won" : "playing"
@@ -634,6 +658,8 @@ export default function CrosswordPuzzle({
   const lettersRef = useRef<string[][]>(letters);
   const revealedRef = useRef<Set<string>>(revealed);
   const activeClueRef = useRef<ActiveClue | null>(activeClue);
+  const elapsedMsRef = useRef<number>(elapsedMs);
+  const timerAnchorRef = useRef<number | null>(null);
   const lastSavedPayloadRef = useRef<string>("");
 
   const showRestoredProgressBanner = useCallback(() => {
@@ -660,6 +686,46 @@ export default function CrosswordPuzzle({
   useEffect(() => {
     activeClueRef.current = activeClue;
   }, [activeClue]);
+
+  useEffect(() => {
+    elapsedMsRef.current = elapsedMs;
+  }, [elapsedMs]);
+
+  useEffect(() => {
+    if (alreadySolved || warzMode || gameStatus !== "playing") {
+      timerAnchorRef.current = null;
+      return;
+    }
+
+    timerAnchorRef.current = Date.now();
+    const timer = setInterval(() => {
+      const anchor = timerAnchorRef.current;
+      if (!anchor) return;
+
+      const now = Date.now();
+      const delta = Math.max(0, now - anchor);
+      timerAnchorRef.current = now;
+
+      if (delta > 0) {
+        setElapsedMs((prev) => prev + delta);
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+      timerAnchorRef.current = null;
+    };
+  }, [alreadySolved, warzMode, gameStatus]);
+
+  const getElapsedSnapshotMs = useCallback(() => {
+    const base = elapsedMsRef.current;
+    if (gameStatus !== "playing") return base;
+
+    const anchor = timerAnchorRef.current;
+    if (!anchor) return base;
+
+    return base + Math.max(0, Date.now() - anchor);
+  }, [gameStatus]);
 
   useEffect(() => {
     if (activeClue) setCluePanelDirection(activeClue.direction);
@@ -729,6 +795,9 @@ export default function CrosswordPuzzle({
         const savedAt = typeof payload.savedAt === "number" && Number.isFinite(payload.savedAt)
           ? payload.savedAt
           : 0;
+        const serverElapsedMs = typeof payload.elapsedMs === "number" && Number.isFinite(payload.elapsedMs)
+          ? Math.max(0, Math.round(payload.elapsedMs))
+          : 0;
         const serverLetters = normalizeStoredLetters(payload.letters, rows, cols, initialGrid);
         const serverRevealed = normalizeStoredCellKeys(payload.revealedCells, rows, cols, initialGrid);
         const serverActiveClue = normalizeStoredActiveClue(payload.activeClue, data);
@@ -738,6 +807,7 @@ export default function CrosswordPuzzle({
               letters: serverLetters,
               revealedCells: serverRevealed,
               activeClue: serverActiveClue,
+              elapsedMs: serverElapsedMs,
               savedAt,
             }
           : null;
@@ -759,10 +829,12 @@ export default function CrosswordPuzzle({
             letters: serverSnapshot.letters,
             revealedCells: serverSnapshot.revealedCells,
             activeClue: serverSnapshot.activeClue,
+            elapsedMs: serverSnapshot.elapsedMs,
           });
           setLetters(applySolvedCluesToLetters(serverSnapshot.letters, data, serverSolved));
           setRevealed(new Set(serverSnapshot.revealedCells));
           setActiveClue(serverSnapshot.activeClue);
+          setElapsedMs(serverSnapshot.elapsedMs);
           setShowInstructions(false);
           showRestoredProgressBanner();
         } else if (hasNewSolved) {
@@ -773,6 +845,9 @@ export default function CrosswordPuzzle({
         if (payload.allSolved === true) {
           completionNotifiedRef.current = true;
           setGameStatus("won");
+          if (serverElapsedMs > 0) {
+            setElapsedMs((current) => Math.max(current, serverElapsedMs));
+          }
           setShowInstructions(false);
         }
       } catch {
@@ -822,16 +897,20 @@ export default function CrosswordPuzzle({
 
   const startCompletionAnimation = useCallback(() => {
     if (completionNotifiedRef.current) return;
+
+    const finalElapsedMs = Math.max(0, Math.round(getElapsedSnapshotMs()));
     completionNotifiedRef.current = true;
+    timerAnchorRef.current = null;
+    setElapsedMs(finalElapsedMs);
     setGameStatus("won");
     setCompletionAnimating(true);
 
     if (completionTimerRef.current) clearTimeout(completionTimerRef.current);
     completionTimerRef.current = setTimeout(() => {
       setCompletionAnimating(false);
-      onSolved?.();
+      onSolved?.(Math.round(finalElapsedMs / 1000));
     }, PUZZLE_COMPLETE_ANIMATION_MS);
-  }, [onSolved]);
+  }, [getElapsedSnapshotMs, onSolved]);
 
   // ── Check a word against the server ───────────────────────────────────────
   const checkWord = useCallback(
@@ -927,7 +1006,8 @@ export default function CrosswordPuzzle({
         progressSignature,
         lettersRef.current,
         revealedRef.current,
-        activeClueRef.current
+        activeClueRef.current,
+        getElapsedSnapshotMs()
       );
       const hasProgress = hasCrosswordProgress(snapshot);
 
@@ -950,6 +1030,7 @@ export default function CrosswordPuzzle({
         letters: snapshot.letters,
         revealedCells: snapshot.revealedCells,
         activeClue: snapshot.activeClue,
+        elapsedMs: snapshot.elapsedMs,
       });
       if (!keepalive && requestBody === lastSavedPayloadRef.current) return;
       lastSavedPayloadRef.current = requestBody;
@@ -962,7 +1043,7 @@ export default function CrosswordPuzzle({
         body: requestBody,
       }).catch(() => undefined);
     },
-    [alreadySolved, warzMode, data, initialGrid, gameStatus, progressSignature, progressStorageKey, puzzleId]
+    [alreadySolved, warzMode, data, initialGrid, gameStatus, progressSignature, progressStorageKey, puzzleId, getElapsedSnapshotMs]
   );
 
   useEffect(() => {
@@ -1066,6 +1147,23 @@ export default function CrosswordPuzzle({
     }
   }, [activeClue, sortedClues, data]);
 
+  const isLockedCell = useCallback(
+    (row: number, col: number): boolean => {
+      const cell = initialGrid[row]?.[col];
+      if (!cell || cell.isBlack) return false;
+
+      const acrossLocked = cell.acrossNumber
+        ? solvedCluesRef.current.has(`across-${cell.acrossNumber}`)
+        : false;
+      const downLocked = cell.downNumber
+        ? solvedCluesRef.current.has(`down-${cell.downNumber}`)
+        : false;
+
+      return acrossLocked || downLocked;
+    },
+    [initialGrid]
+  );
+
   // ── Cell click ─────────────────────────────────────────────────────────────
   const handleCellClick = useCallback(
     (row: number, col: number) => {
@@ -1107,6 +1205,7 @@ export default function CrosswordPuzzle({
       if (gameStatus !== "playing" || !activeClue || !cursorCell) return;
       const { row, col } = cursorCell;
       const key = e.key.toUpperCase();
+      const currentLocked = isLockedCell(row, col);
 
       if (e.key === "Tab" || e.key === "Enter") {
         e.preventDefault();
@@ -1116,7 +1215,7 @@ export default function CrosswordPuzzle({
 
       if (e.key === "Backspace") {
         e.preventDefault();
-        if (letters[row][col]) {
+        if (letters[row][col] && !currentLocked) {
           // erase current
           setLetters((prev) => {
             const next = prev.map((r) => [...r]);
@@ -1129,10 +1228,11 @@ export default function CrosswordPuzzle({
           const pr = activeClue.direction === "across" ? row : row - 1;
           const pc = activeClue.direction === "across" ? col - 1 : col;
           if (pr >= 0 && pc >= 0 && !initialGrid[pr]?.[col === 0 ? col : pc]?.isBlack) {
+            const tr = activeClue.direction === "across" ? row : pr;
+            const tc = activeClue.direction === "across" ? pc : col;
+            if (isLockedCell(tr, tc)) return;
             setLetters((prev) => {
               const next = prev.map((r) => [...r]);
-              const tr = activeClue.direction === "across" ? row : pr;
-              const tc = activeClue.direction === "across" ? pc : col;
               if (tr >= 0 && tc >= 0) next[tr][tc] = "";
               return next;
             });
@@ -1149,6 +1249,10 @@ export default function CrosswordPuzzle({
 
       if (/^[A-Z]$/.test(key)) {
         e.preventDefault();
+        if (currentLocked) {
+          advanceCursor(row, col, activeClue.direction);
+          return;
+        }
         setLetters((prev) => {
           const next = prev.map((r) => [...r]);
           next[row][col] = key;
@@ -1157,7 +1261,7 @@ export default function CrosswordPuzzle({
         advanceCursor(row, col, activeClue.direction);
       }
     },
-    [gameStatus, activeClue, cursorCell, letters, initialGrid, goToNextClue, retreatCursor, advanceCursor]
+    [gameStatus, activeClue, cursorCell, letters, initialGrid, goToNextClue, retreatCursor, advanceCursor, isLockedCell]
   );
 
   // ── Hint: reveal a letter in the current cell ──────────────────────────────
@@ -1454,6 +1558,9 @@ export default function CrosswordPuzzle({
             >?</button>
             <p className="text-xs mt-1 font-medium" style={{ color: "#e2e8f0", textShadow: "0 1px 6px rgba(0,0,0,0.8)" }}>
               {acrossClues.length + downClues.length} clues · {solvedClues.size} solved
+            </p>
+            <p className="text-[11px] mt-1 font-semibold" style={{ color: "#94a3b8", textShadow: "0 1px 4px rgba(0,0,0,0.65)" }}>
+              Elapsed {formatElapsedStopwatch(elapsedMs)}
             </p>
           </div>
 

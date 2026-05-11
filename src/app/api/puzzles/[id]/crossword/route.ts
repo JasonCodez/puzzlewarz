@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/lib/requireAuthenticatedUser";
 import { validateSameOrigin } from "@/lib/requestSecurity";
-import { calcLevel } from "@/lib/levels";
-import { awardSeasonXp } from "@/lib/seasonXp";
-import { getXpMultiplier } from "@/lib/getXpMultiplier";
 import {
   type CrosswordNormalizedData,
   normalizeCrosswordAnswer,
@@ -120,8 +117,13 @@ function serializeLetterRows(letters: string[][]): string[] {
   return letters.map((row) => row.map((letter) => letter || ".").join(""));
 }
 
-function hasSavedState(letters: string[][], revealedCells: string[], activeClue: { direction: Direction; number: number } | null): boolean {
-  return activeClue !== null || revealedCells.length > 0 || letters.some((row) => row.some(Boolean));
+function hasSavedState(
+  letters: string[][],
+  revealedCells: string[],
+  activeClue: { direction: Direction; number: number } | null,
+  elapsedMs: number,
+): boolean {
+  return activeClue !== null || revealedCells.length > 0 || letters.some((row) => row.some(Boolean)) || elapsedMs > 0;
 }
 
 function parseSavedState(
@@ -135,6 +137,7 @@ function parseSavedState(
   letters: string[][];
   revealedCells: string[];
   activeClue: { direction: Direction; number: number } | null;
+  elapsedMs: number;
   savedAt: number;
 } | null {
   try {
@@ -144,11 +147,14 @@ function parseSavedState(
 
     const revealedCells = normalizeCellKeys(parsed.revealedCells, rows, cols, whiteCells);
     const activeClue = normalizeActiveClue(parsed.activeClue, allClueKeys);
+    const elapsedMs = typeof parsed.elapsedMs === "number" && Number.isFinite(parsed.elapsedMs)
+      ? Math.max(0, Math.round(parsed.elapsedMs))
+      : 0;
     const savedAt = typeof parsed.savedAt === "number" && Number.isFinite(parsed.savedAt)
       ? parsed.savedAt
       : submittedAt.getTime();
 
-    return { letters, revealedCells, activeClue, savedAt };
+    return { letters, revealedCells, activeClue, elapsedMs, savedAt };
   } catch {
     return null;
   }
@@ -229,6 +235,7 @@ export async function GET(
       letters: savedState?.letters ?? null,
       revealedCells: savedState?.revealedCells ?? [],
       activeClue: savedState?.activeClue ?? null,
+      elapsedMs: savedState?.elapsedMs ?? 0,
       savedAt: savedState?.savedAt ?? null,
     });
   } catch (err) {
@@ -284,7 +291,11 @@ export async function PATCH(
 
     const revealedCells = normalizeCellKeys((body as Record<string, unknown>)?.revealedCells, rows, cols, whiteCells);
     const activeClue = normalizeActiveClue((body as Record<string, unknown>)?.activeClue, allClueKeySet);
-    const shouldSaveState = hasSavedState(letters, revealedCells, activeClue);
+    const elapsedMsRaw = (body as Record<string, unknown>)?.elapsedMs;
+    const elapsedMs = typeof elapsedMsRaw === "number" && Number.isFinite(elapsedMsRaw)
+      ? Math.max(0, Math.round(elapsedMsRaw))
+      : 0;
+    const shouldSaveState = hasSavedState(letters, revealedCells, activeClue, elapsedMs);
     const now = new Date();
 
     const solvedSubmissions = await prisma.puzzleSubmission.findMany({
@@ -335,6 +346,7 @@ export async function PATCH(
               rows: serializeLetterRows(letters),
               revealedCells,
               activeClue,
+              elapsedMs,
               savedAt: now.getTime(),
             }),
             isCorrect: false,
@@ -379,7 +391,7 @@ export async function POST(
 
     const puzzle = await prisma.puzzle.findUnique({
       where: { id: puzzleId },
-      select: { data: true, puzzleType: true, xpReward: true, solutions: { select: { points: true }, take: 1 } },
+      select: { data: true, puzzleType: true },
     });
 
     if (!puzzle || puzzle.puzzleType !== "crossword") {
@@ -414,11 +426,6 @@ export async function POST(
     if (!correct) {
       return NextResponse.json({ correct: false });
     }
-
-    const progress = await prisma.userPuzzleProgress.findUnique({
-      where: { userId_puzzleId: { userId: currentUser.id, puzzleId } },
-      select: { solved: true, completionPercentage: true, id: true },
-    });
 
     const allClueKeys = getAllClueKeys(crossword.normalized);
     const clueKey = `${direction}:${number}`;
@@ -467,77 +474,28 @@ export async function POST(
     const now = new Date();
 
     try {
-      if (!progress) {
-        const firstCorrectForClue = !existingCorrectSubmission;
-        await prisma.userPuzzleProgress.create({
-          data: {
-            userId: currentUser.id,
+      await prisma.userPuzzleProgress.upsert({
+        where: { userId_puzzleId: { userId: currentUser.id, puzzleId } },
+        create: {
+          userId: currentUser.id,
+          puzzleId,
+          completionPercentage: completionPct,
+          lastAttemptAt: now,
+        },
+        update: {
+          completionPercentage: completionPct,
+          lastAttemptAt: now,
+        },
+      });
+
+      if (allSolved) {
+        await prisma.puzzleSubmission.deleteMany({
+          where: {
             puzzleId,
-            attempts: firstCorrectForClue ? 1 : 0,
-            lastAttemptAt: now,
-            completionPercentage: completionPct,
-            ...(allSolved && { solved: true, solvedAt: now, successfulAttempts: 1 }),
+            userId: currentUser.id,
+            feedback: CROSSWORD_PROGRESS_FEEDBACK,
           },
         });
-      } else if (!progress.solved) {
-        const firstCorrectForClue = !existingCorrectSubmission;
-        const progressUpdate: Record<string, unknown> = {
-          lastAttemptAt: now,
-          completionPercentage: completionPct,
-        };
-
-        if (firstCorrectForClue) {
-          progressUpdate.attempts = { increment: 1 };
-        }
-
-        if (allSolved) {
-          progressUpdate.solved = true;
-          progressUpdate.solvedAt = now;
-          progressUpdate.successfulAttempts = { increment: 1 };
-        }
-
-        await prisma.userPuzzleProgress.update({
-          where: { id: progress.id },
-          data: progressUpdate,
-        });
-      }
-
-      if (allSolved && !progress?.solved) {
-        const awardPoints = puzzle.solutions?.[0]?.points ?? 100;
-
-        await prisma.user.update({
-          where: { id: currentUser.id },
-          data: { totalPoints: { increment: awardPoints } },
-        });
-
-        const existing = await prisma.globalLeaderboard.findFirst({
-          where: { userId: currentUser.id },
-        });
-        if (existing) {
-          await prisma.globalLeaderboard.update({
-            where: { id: existing.id },
-            data: { totalPoints: { increment: awardPoints } },
-          });
-        } else {
-          await prisma.globalLeaderboard.create({
-            data: { userId: currentUser.id, totalPoints: awardPoints },
-          });
-        }
-
-        const baseXp = puzzle.xpReward ?? 50;
-        const xpMultiplier = await getXpMultiplier(currentUser.id);
-        const xpGain = baseXp * xpMultiplier;
-        const freshUser = await prisma.user.findUnique({
-          where: { id: currentUser.id },
-          select: { xp: true },
-        });
-        const newXp = (freshUser?.xp ?? 0) + xpGain;
-        const { level, title } = calcLevel(newXp);
-        await prisma.user.update({
-          where: { id: currentUser.id },
-          data: { xp: newXp, level, xpTitle: title },
-        });
-        await awardSeasonXp(currentUser.id, xpGain);
       }
     } catch (persistErr) {
       console.error("[crossword] Failed to persist progress:", persistErr);

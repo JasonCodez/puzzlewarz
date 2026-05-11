@@ -269,7 +269,7 @@ export function PuzzleTypeRenderer({
           alreadySolved={progress?.solved ?? false}
           hintTokens={effectiveHintTokens}
           onHintUsed={onHintUsed}
-          onSolved={() => onSolved()}
+          onSolved={(elapsedSeconds) => onSolved(elapsedSeconds)}
         />
       </div>
     );
