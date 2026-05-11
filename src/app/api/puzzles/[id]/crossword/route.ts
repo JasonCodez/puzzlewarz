@@ -487,16 +487,6 @@ export async function POST(
           lastAttemptAt: now,
         },
       });
-
-      if (allSolved) {
-        await prisma.puzzleSubmission.deleteMany({
-          where: {
-            puzzleId,
-            userId: currentUser.id,
-            feedback: CROSSWORD_PROGRESS_FEEDBACK,
-          },
-        });
-      }
     } catch (persistErr) {
       console.error("[crossword] Failed to persist progress:", persistErr);
     }

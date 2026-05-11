@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
+import { TegakiRenderer, type TegakiBundle } from "tegaki";
+import caveat from "../../../node_modules/tegaki/dist/fonts/caveat/bundle.mjs";
 import { usePuzzleSkin } from "@/hooks/usePuzzleSkin";
 
 const LavaBackground = dynamic(() => import("@/components/LavaBackground"), { ssr: false });
@@ -10,6 +12,7 @@ const GalaxyBackground = dynamic(() => import("@/components/GalaxyBackground"), 
 const IceBackground = dynamic(() => import("@/components/IceBackground"), { ssr: false });
 const NeonBackground = dynamic(() => import("@/components/NeonBackground"), { ssr: false });
 const RetroBackground = dynamic(() => import("@/components/RetroBackground"), { ssr: false });
+const tegakiCaveatBundle = caveat as unknown as TegakiBundle;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,9 +45,16 @@ interface Props {
 type Direction = "across" | "down";
 
 const WORD_SOLVED_ANIMATION_MS = 1400;
+const WORD_SOLVED_STAGGER_MS = 55;
+const LETTER_DRAW_ANIMATION_MS = 520;
 const PUZZLE_COMPLETE_ANIMATION_MS = 2600;
 const GRID_BORDER_PX = 2;
 const GRID_PADDING_PX = 2;
+const DEFAULT_PENCIL_SFX_URL = "/audio/pencil_sound.mp3";
+const PENCIL_SFX_VOLUME = 0.22;
+const PENCIL_SFX_COOLDOWN_MS = 48;
+const DEFAULT_SUCCESS_ANSWER_SFX_URL = "/audio/success_answer.mp3";
+const SUCCESS_ANSWER_SFX_VOLUME = 0.4;
 
 interface ActiveClue {
   direction: Direction;
@@ -78,6 +88,18 @@ interface CrosswordProgressPayload {
   elapsedMs?: unknown;
   allSolved?: unknown;
   savedAt?: unknown;
+}
+
+interface LetterDrawToken {
+  id: string;
+  isAnimating: boolean;
+  durationMs: number;
+  drawStartY: number;
+  drawMidY: number;
+  drawStartRotate: number;
+  drawMidRotate: number;
+  drawStartScale: number;
+  drawMidScale: number;
 }
 
 function createEmptyLetters(rows: number, cols: number): string[][] {
@@ -638,6 +660,7 @@ export default function CrosswordPuzzle({
   const [submitting, setSubmitting] = useState(false);
   const [justSolvedClues, setJustSolvedClues] = useState<Set<string>>(new Set());
   const [latestSolvedClue, setLatestSolvedClue] = useState<ActiveClue | null>(null);
+  const [letterDrawTokens, setLetterDrawTokens] = useState<Record<string, LetterDrawToken>>({});
   const [completionAnimating, setCompletionAnimating] = useState(false);
   const [showRestoreNotice, setShowRestoreNotice] = useState(() =>
     !alreadySolved && Boolean(localProgressRef.current)
@@ -651,6 +674,7 @@ export default function CrosswordPuzzle({
   const checkingCluesRef = useRef<Map<string, string>>(new Map());
   const checkQueueRef = useRef<Promise<void>>(Promise.resolve());
   const solvedAnimationTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const letterDrawTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -660,6 +684,10 @@ export default function CrosswordPuzzle({
   const activeClueRef = useRef<ActiveClue | null>(activeClue);
   const elapsedMsRef = useRef<number>(elapsedMs);
   const timerAnchorRef = useRef<number | null>(null);
+  const onSolvedRef = useRef<Props["onSolved"]>(onSolved);
+  const pencilAudioContextRef = useRef<AudioContext | null>(null);
+  const lastPencilSfxAtRef = useRef(0);
+  const lastPencilSfxClueKeyRef = useRef<string | null>(null);
   const lastSavedPayloadRef = useRef<string>("");
 
   const showRestoredProgressBanner = useCallback(() => {
@@ -670,6 +698,135 @@ export default function CrosswordPuzzle({
       restoreNoticeTimerRef.current = null;
     }, 2600);
   }, []);
+
+  const isPencilSfxEnabled = useCallback(() => {
+    if (typeof window === "undefined") return false;
+
+    try {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+      const userPrefsRaw = window.localStorage.getItem("userPreferences");
+      if (userPrefsRaw) {
+        const prefs = JSON.parse(userPrefsRaw) as { reduceAnimations?: boolean };
+        if (prefs?.reduceAnimations) return false;
+      }
+
+      // Optional user override for crossword SFX.
+      if (window.localStorage.getItem("crosswordSoundEffectsEnabled") === "false") return false;
+    } catch {
+      // Fall through to enabled.
+    }
+
+    return true;
+  }, []);
+
+  const getPencilSfxUrl = useCallback(() => {
+    if (typeof window === "undefined") return DEFAULT_PENCIL_SFX_URL;
+
+    try {
+      const customUrl = window.localStorage.getItem("crosswordPencilSfxUrl");
+      if (typeof customUrl === "string" && customUrl.trim()) return customUrl.trim();
+    } catch {
+      // Fall back to default path.
+    }
+
+    return DEFAULT_PENCIL_SFX_URL;
+  }, []);
+
+  const playProceduralPencilSfx = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      const ctx = pencilAudioContextRef.current ?? new AudioCtx();
+      pencilAudioContextRef.current = ctx;
+      if (ctx.state === "suspended") {
+        void ctx.resume().catch(() => {
+          // Ignore resume failures.
+        });
+      }
+
+      const now = ctx.currentTime;
+      const duration = 0.055 + Math.random() * 0.045;
+      const sampleRate = ctx.sampleRate;
+      const length = Math.max(1, Math.floor(sampleRate * duration));
+      const buffer = ctx.createBuffer(1, length, sampleRate);
+      const channel = buffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+        const t = i / length;
+        const envelope = 1 - t * 0.55;
+        channel[i] = (Math.random() * 2 - 1) * envelope;
+      }
+
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+
+      const highpass = ctx.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.setValueAtTime(560 + Math.random() * 240, now);
+
+      const bandpass = ctx.createBiquadFilter();
+      bandpass.type = "bandpass";
+      bandpass.frequency.setValueAtTime(1680 + Math.random() * 820, now);
+      bandpass.Q.setValueAtTime(0.72 + Math.random() * 0.4, now);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.03, now + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      src.connect(highpass);
+      highpass.connect(bandpass);
+      bandpass.connect(gain);
+      gain.connect(ctx.destination);
+
+      src.start(now);
+      src.stop(now + duration + 0.01);
+    } catch {
+      // Ignore Web Audio failures.
+    }
+  }, []);
+
+  const playPencilWriteSfx = useCallback(() => {
+    if (!isPencilSfxEnabled()) return;
+
+    const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (nowMs - lastPencilSfxAtRef.current < PENCIL_SFX_COOLDOWN_MS) return;
+    lastPencilSfxAtRef.current = nowMs;
+
+    const soundUrl = getPencilSfxUrl();
+    if (!soundUrl) {
+      playProceduralPencilSfx();
+      return;
+    }
+
+    try {
+      const clip = new Audio(soundUrl);
+      clip.preload = "auto";
+      clip.volume = PENCIL_SFX_VOLUME;
+      void clip.play().catch(() => {
+        // Fall back if custom file is missing/blocked.
+        playProceduralPencilSfx();
+      });
+    } catch {
+      playProceduralPencilSfx();
+    }
+  }, [getPencilSfxUrl, isPencilSfxEnabled, playProceduralPencilSfx]);
+
+  const playSuccessAnswerSfx = useCallback(() => {
+    if (!isPencilSfxEnabled()) return;
+
+    try {
+      const clip = new Audio(DEFAULT_SUCCESS_ANSWER_SFX_URL);
+      clip.preload = "auto";
+      clip.volume = SUCCESS_ANSWER_SFX_VOLUME;
+      void clip.play().catch(() => {
+        // Ignore playback failures.
+      });
+    } catch {
+      // Ignore playback failures.
+    }
+  }, [isPencilSfxEnabled]);
 
   useEffect(() => {
     solvedCluesRef.current = solvedClues;
@@ -686,6 +843,19 @@ export default function CrosswordPuzzle({
   useEffect(() => {
     activeClueRef.current = activeClue;
   }, [activeClue]);
+
+  useEffect(() => {
+    const clueKey = activeClue ? `${activeClue.direction}-${activeClue.number}` : null;
+    if (clueKey && clueKey !== lastPencilSfxClueKeyRef.current) {
+      // Ensure the first typed letter in a newly selected word is not skipped by SFX cooldown.
+      lastPencilSfxAtRef.current = Number.NEGATIVE_INFINITY;
+    }
+    lastPencilSfxClueKeyRef.current = clueKey;
+  }, [activeClue]);
+
+  useEffect(() => {
+    onSolvedRef.current = onSolved;
+  }, [onSolved]);
 
   useEffect(() => {
     elapsedMsRef.current = elapsedMs;
@@ -738,9 +908,16 @@ export default function CrosswordPuzzle({
   useEffect(() => {
     return () => {
       solvedAnimationTimersRef.current.forEach((timer) => clearTimeout(timer));
+      letterDrawTimersRef.current.forEach((timer) => clearTimeout(timer));
       if (completionTimerRef.current) clearTimeout(completionTimerRef.current);
       if (restoreNoticeTimerRef.current) clearTimeout(restoreNoticeTimerRef.current);
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      if (pencilAudioContextRef.current) {
+        void pencilAudioContextRef.current.close().catch(() => {
+          // Ignore close failures.
+        });
+        pencilAudioContextRef.current = null;
+      }
     };
   }, []);
 
@@ -849,6 +1026,8 @@ export default function CrosswordPuzzle({
             setElapsedMs((current) => Math.max(current, serverElapsedMs));
           }
           setShowInstructions(false);
+          const elapsedSeconds = serverElapsedMs > 0 ? Math.round(serverElapsedMs / 1000) : undefined;
+          onSolvedRef.current?.(elapsedSeconds);
         }
       } catch {
         // Local progress is still available if the server hydrate fails.
@@ -875,6 +1054,12 @@ export default function CrosswordPuzzle({
   }, [activeClue, initialGrid, data]);
 
   const triggerSolvedClueAnimation = useCallback((key: string, direction: Direction, number: number) => {
+    const solvedClue = direction === "across"
+      ? data?.clues.across.find((entry) => entry.number === number)
+      : data?.clues.down.find((entry) => entry.number === number);
+    const staggerTailMs = solvedClue ? Math.max(0, solvedClue.length - 1) * WORD_SOLVED_STAGGER_MS : 0;
+    const cleanupDelayMs = WORD_SOLVED_ANIMATION_MS + staggerTailMs + 120;
+
     setJustSolvedClues((prev) => {
       const next = new Set(prev);
       next.add(key);
@@ -891,9 +1076,9 @@ export default function CrosswordPuzzle({
       setLatestSolvedClue((current) => (
         current?.direction === direction && current.number === number ? null : current
       ));
-    }, WORD_SOLVED_ANIMATION_MS);
+    }, cleanupDelayMs);
     solvedAnimationTimersRef.current.push(timer);
-  }, []);
+  }, [data]);
 
   const startCompletionAnimation = useCallback(() => {
     if (completionNotifiedRef.current) return;
@@ -911,6 +1096,47 @@ export default function CrosswordPuzzle({
       onSolved?.(Math.round(finalElapsedMs / 1000));
     }, PUZZLE_COMPLETE_ANIMATION_MS);
   }, [getElapsedSnapshotMs, onSolved]);
+
+  const triggerLetterDrawAnimation = useCallback((row: number, col: number) => {
+    if (typeof window === "undefined") return;
+
+    const pick = (min: number, max: number, precision = 2) =>
+      Number((Math.random() * (max - min) + min).toFixed(precision));
+
+    const cellKey = `${row},${col}`;
+    const tokenId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const token: LetterDrawToken = {
+      id: tokenId,
+      isAnimating: true,
+      durationMs: pick(360, 520, 0),
+      drawStartY: pick(0.9, 2.3),
+      drawMidY: pick(-0.45, 0.18),
+      drawStartRotate: pick(-2.8, 1.8),
+      drawMidRotate: pick(-0.7, 0.5),
+      drawStartScale: pick(0.93, 0.98),
+      drawMidScale: pick(1.0, 1.03),
+    };
+
+    // Keep Tegaki mounted for this cell so the final letter style does not swap out.
+    setLetterDrawTokens((prev) => ({ ...prev, [cellKey]: token }));
+    playPencilWriteSfx();
+
+    const timer = setTimeout(() => {
+      setLetterDrawTokens((prev) => {
+        const current = prev[cellKey];
+        if (!current || current.id !== tokenId || !current.isAnimating) return prev;
+        return {
+          ...prev,
+          [cellKey]: {
+            ...current,
+            isAnimating: false,
+          },
+        };
+      });
+    }, Math.max(LETTER_DRAW_ANIMATION_MS, token.durationMs) + 110);
+
+    letterDrawTimersRef.current.push(timer);
+  }, [playPencilWriteSfx]);
 
   // ── Check a word against the server ───────────────────────────────────────
   const checkWord = useCallback(
@@ -945,6 +1171,7 @@ export default function CrosswordPuzzle({
               solvedCluesRef.current = next;
               setSolvedClues(next);
               triggerSolvedClueAnimation(key, direction, number);
+              playSuccessAnswerSfx();
             }
             setError("");
             if (json.allSolved) {
@@ -965,7 +1192,7 @@ export default function CrosswordPuzzle({
       checkQueueRef.current = queuedCheck;
       await queuedCheck;
     },
-    [puzzleId, startCompletionAnimation, triggerSolvedClueAnimation]
+    [playSuccessAnswerSfx, puzzleId, startCompletionAnimation, triggerSolvedClueAnimation]
   );
 
   const checkFilledClues = useCallback(
@@ -1258,10 +1485,11 @@ export default function CrosswordPuzzle({
           next[row][col] = key;
           return next;
         });
+        triggerLetterDrawAnimation(row, col);
         advanceCursor(row, col, activeClue.direction);
       }
     },
-    [gameStatus, activeClue, cursorCell, letters, initialGrid, goToNextClue, retreatCursor, advanceCursor, isLockedCell]
+    [gameStatus, activeClue, cursorCell, letters, initialGrid, goToNextClue, retreatCursor, advanceCursor, isLockedCell, triggerLetterDrawAnimation]
   );
 
   // ── Hint: reveal a letter in the current cell ──────────────────────────────
@@ -1335,19 +1563,55 @@ export default function CrosswordPuzzle({
     };
   };
 
-  const cellTextColor = (row: number, col: number): string => {
-    const { isSolved } = getCellStatus(row, col);
-    if (isSolved) return "#166534";
-    if (revealed.has(`${row},${col}`)) return "#92400e";
-    return "#111827";
+  const getSolvedCellAnimationDelayMs = (
+    row: number,
+    col: number,
+    status: { isSolved: boolean; isJustSolved: boolean }
+  ): number => {
+    if (!status.isJustSolved || !latestSolvedClue || !data) return 0;
+
+    const clue = latestSolvedClue.direction === "across"
+      ? data.clues.across.find((entry) => entry.number === latestSolvedClue.number)
+      : data.clues.down.find((entry) => entry.number === latestSolvedClue.number);
+    if (!clue) return 0;
+
+    if (latestSolvedClue.direction === "across") {
+      if (row !== clue.row) return 0;
+      if (col < clue.col || col >= clue.col + clue.length) return 0;
+      return (col - clue.col) * WORD_SOLVED_STAGGER_MS;
+    }
+
+    if (col !== clue.col) return 0;
+    if (row < clue.row || row >= clue.row + clue.length) return 0;
+    return (row - clue.row) * WORD_SOLVED_STAGGER_MS;
   };
 
-  // ── Cell colour ────────────────────────────────────────────────────────────
-  function cellStyle(row: number, col: number, status = getCellStatus(row, col)): React.CSSProperties {
+  function getCellPalette(
+    row: number,
+    col: number,
+    status = getCellStatus(row, col)
+  ): {
+    isBlack: boolean;
+    bg: string;
+    borderColor: string;
+    textColor: string;
+    clueColor: string;
+    isActive: boolean;
+    isSolved: boolean;
+  } {
     const cell = initialGrid[row]?.[col];
     if (!cell || cell.isBlack) {
-      return { background: skin.tileBg === "transparent" ? "#111" : "#0a0a0f", border: "1px solid #222" };
+      return {
+        isBlack: true,
+        bg: skin.tileBg === "transparent" ? "#111" : "#0a0a0f",
+        borderColor: "#222",
+        textColor: "#e2e8f0",
+        clueColor: "#94a3b8",
+        isActive: false,
+        isSolved: false,
+      };
     }
+
     const key = `${row},${col}`;
     const isActive = cursorCell?.row === row && cursorCell?.col === col;
     const isInWord = activeWordCells.has(key);
@@ -1355,19 +1619,72 @@ export default function CrosswordPuzzle({
 
     let bg = "#ffffff";
     let borderColor = "#cbd5e1";
+    let textColor = "#0f172a";
+    let clueColor = "#64748b";
 
-    if (isInWord)     { bg = "rgba(99,140,248,0.25)";    borderColor = "#6366f1"; }
-    if (isRevealed)   { bg = "rgba(253,231,76,0.18)";    borderColor = "#FDE74C"; }
-    if (status.isSolved) { bg = "rgba(34,197,94,0.22)";  borderColor = "#22c55e"; }
-    if (isActive)     { borderColor = status.isSolved ? "#86efac" : "#818cf8"; }
+    if (isInWord) {
+      bg = "#e0e7ff";
+      borderColor = "#6366f1";
+      textColor = "#1f2937";
+      clueColor = "#4f46e5";
+    }
+    if (isRevealed) {
+      bg = "#fef3c7";
+      borderColor = "#f59e0b";
+      textColor = "#78350f";
+      clueColor = "#92400e";
+    }
+    if (status.isSolved) {
+      bg = "#dcfce7";
+      borderColor = "#22c55e";
+      textColor = "#14532d";
+      clueColor = "#15803d";
+    }
+
+    if (isActive) {
+      if (status.isSolved) {
+        bg = "#bbf7d0";
+        borderColor = "#16a34a";
+      } else if (isRevealed) {
+        bg = "#fde68a";
+        borderColor = "#d97706";
+      } else {
+        bg = "#c7d2fe";
+        borderColor = "#4f46e5";
+        textColor = "#0f172a";
+        clueColor = "#4338ca";
+      }
+    }
 
     return {
-      background: bg,
-      border: `2px solid ${borderColor}`,
-      boxShadow: isActive
-        ? status.isSolved
-          ? "0 0 0 2px rgba(134,239,172,0.32)"
-          : "0 0 0 2px #818cf840"
+      isBlack: false,
+      bg,
+      borderColor,
+      textColor,
+      clueColor,
+      isActive,
+      isSolved: status.isSolved,
+    };
+  }
+
+  // ── Cell colour ────────────────────────────────────────────────────────────
+  function cellStyle(
+    row: number,
+    col: number,
+    status = getCellStatus(row, col),
+    palette = getCellPalette(row, col, status)
+  ): React.CSSProperties {
+    if (palette.isBlack) {
+      return { background: palette.bg, border: `1px solid ${palette.borderColor}` };
+    }
+
+    return {
+      background: palette.bg,
+      border: `2px solid ${palette.borderColor}`,
+      boxShadow: palette.isActive
+        ? palette.isSolved
+          ? "0 0 0 2px rgba(34,197,94,0.28)"
+          : "0 0 0 2px rgba(79,70,229,0.28)"
         : undefined,
       cursor: "pointer",
       position: "relative",
@@ -1396,10 +1713,22 @@ export default function CrosswordPuzzle({
     <>
       <style jsx global>{`
         @keyframes crossword-cell-success {
-          0% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 0 rgba(74, 222, 128, 0); }
-          18% { transform: scale(1.18); filter: brightness(1.75); box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.35), 0 0 26px rgba(74, 222, 128, 0.95); }
-          42% { transform: scale(1.05); filter: brightness(1.35); box-shadow: 0 0 0 2px rgba(253, 231, 76, 0.26), 0 0 18px rgba(253, 231, 76, 0.42); }
-          100% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 0 rgba(74, 222, 128, 0); }
+          0% { filter: brightness(1); box-shadow: 0 0 0 rgba(74, 222, 128, 0); }
+          18% { filter: brightness(1.75); box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.35), 0 0 26px rgba(74, 222, 128, 0.95); }
+          42% { filter: brightness(1.35); box-shadow: 0 0 0 2px rgba(253, 231, 76, 0.26), 0 0 18px rgba(253, 231, 76, 0.42); }
+          100% { filter: brightness(1); box-shadow: 0 0 0 rgba(74, 222, 128, 0); }
+        }
+
+        @keyframes crossword-cell-burst {
+          0% { opacity: 0; transform: scale(0.4); box-shadow: 0 0 0 rgba(16,185,129,0); }
+          22% { opacity: 1; transform: scale(1.08); box-shadow: 0 0 20px rgba(16,185,129,0.45), 0 0 10px rgba(253,231,76,0.42); }
+          100% { opacity: 0; transform: scale(1.3); box-shadow: 0 0 0 rgba(16,185,129,0); }
+        }
+
+        @keyframes crossword-cell-shine {
+          0% { opacity: 0; transform: translateX(-130%) skewX(-20deg); }
+          24% { opacity: 0.85; }
+          100% { opacity: 0; transform: translateX(165%) skewX(-20deg); }
         }
 
         @keyframes crossword-cell-finish {
@@ -1437,9 +1766,80 @@ export default function CrosswordPuzzle({
           100% { transform: scaleX(1); }
         }
 
+        @keyframes crossword-letter-settle {
+          0% {
+            opacity: 0;
+            transform: translateY(var(--cw-draw-start-y, 1.6px)) rotate(var(--cw-draw-start-rot, -2deg)) scale(var(--cw-draw-start-scale, 0.95));
+            filter: blur(0.4px);
+          }
+          44% {
+            opacity: 1;
+            transform: translateY(var(--cw-draw-mid-y, -0.28px)) rotate(var(--cw-draw-mid-rot, -0.4deg)) scale(var(--cw-draw-mid-scale, 1.02));
+            filter: blur(0.04px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) rotate(0deg) scale(1);
+            filter: none;
+          }
+        }
+
         .crossword-cell-success {
-          animation: crossword-cell-success ${WORD_SOLVED_ANIMATION_MS}ms ease-out;
+          --cw-cell-delay: 0ms;
+          animation: crossword-cell-success ${WORD_SOLVED_ANIMATION_MS}ms ease-out both;
+          animation-delay: var(--cw-cell-delay);
           z-index: 2;
+          overflow: hidden;
+        }
+
+        .crossword-cell-success::before {
+          content: "";
+          position: absolute;
+          inset: -2px;
+          border-radius: inherit;
+          border: 2px solid rgba(52, 211, 153, 0.7);
+          pointer-events: none;
+          animation: crossword-cell-burst 760ms ease-out both;
+          animation-delay: calc(var(--cw-cell-delay) + 80ms);
+        }
+
+        .crossword-cell-success::after {
+          content: "";
+          position: absolute;
+          top: -20%;
+          bottom: -20%;
+          left: -40%;
+          width: 42%;
+          border-radius: 999px;
+          background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.72), rgba(255,255,255,0));
+          pointer-events: none;
+          animation: crossword-cell-shine 680ms ease-out both;
+          animation-delay: calc(var(--cw-cell-delay) + 110ms);
+        }
+
+        .crossword-letter-draw {
+          --cw-write-duration: ${LETTER_DRAW_ANIMATION_MS}ms;
+          --cw-draw-start-y: 1.6px;
+          --cw-draw-mid-y: -0.28px;
+          --cw-draw-start-rot: -2deg;
+          --cw-draw-mid-rot: -0.4deg;
+          --cw-draw-start-scale: 0.95;
+          --cw-draw-mid-scale: 1.02;
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transform-origin: center 74%;
+          will-change: transform, opacity, filter;
+          animation: crossword-letter-settle var(--cw-write-duration) cubic-bezier(0.22, 0.72, 0.2, 1) both;
+        }
+
+        .crossword-tegaki-letter {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
+          color: inherit;
         }
 
         .crossword-cell-finish {
@@ -1448,6 +1848,7 @@ export default function CrosswordPuzzle({
 
         .crossword-clue-success {
           animation: crossword-clue-success ${WORD_SOLVED_ANIMATION_MS}ms ease-out;
+          box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.45), 0 0 24px rgba(74, 222, 128, 0.18);
         }
 
         .crossword-completion-card {
@@ -1501,6 +1902,22 @@ export default function CrosswordPuzzle({
           .crossword-completion-ring,
           .crossword-word-toast,
           .crossword-completion-bar {
+            animation: none !important;
+          }
+
+          .crossword-letter-draw,
+          .crossword-tegaki-letter {
+            animation: none !important;
+          }
+
+          .crossword-letter-draw {
+            transform: none !important;
+            filter: none !important;
+            opacity: 1 !important;
+          }
+
+          .crossword-cell-success::before,
+          .crossword-cell-success::after {
             animation: none !important;
           }
         }
@@ -1655,7 +2072,7 @@ export default function CrosswordPuzzle({
                   border: `${GRID_BORDER_PX}px solid ${skin.boardBorder ?? "rgba(255,255,255,0.12)"}`,
                   borderRadius: "8px",
                   padding: GRID_PADDING_PX,
-                  opacity: 0.9,
+                  opacity: 1,
                   width: gridPixelWidth > 0 ? `${gridPixelWidth}px` : "100%",
                   maxWidth: "100%",
                   overflow: "hidden",
@@ -1665,6 +2082,28 @@ export default function CrosswordPuzzle({
                 {initialGrid.map((rowArr, r) =>
                   rowArr.map((cell, c) => {
                     const status = getCellStatus(r, c);
+                    const palette = getCellPalette(r, c, status);
+                    const solvedDelayMs = getSolvedCellAnimationDelayMs(r, c, status);
+                    const cellKey = `${r},${c}`;
+                    const letterDrawToken = letterDrawTokens[cellKey];
+                    const letterDrawTokenId = letterDrawToken?.id;
+                    const hasLetter = Boolean(letters[r][c]);
+                    const shouldAnimateLetterDraw = Boolean(letterDrawToken?.isAnimating && hasLetter);
+                    const shouldRenderTegaki = hasLetter;
+                    const isCompactCell = cellSize <= 28;
+                    const tegakiClipStrength = isCompactCell ? 2.95 : 2.45;
+                    const tegakiSegmentSize = isCompactCell ? 1.1 : 1.4;
+                    const letterDrawVars = shouldAnimateLetterDraw && letterDrawToken
+                      ? ({
+                          ["--cw-write-duration" as any]: `${letterDrawToken.durationMs}ms`,
+                          ["--cw-draw-start-y" as any]: `${letterDrawToken.drawStartY}px`,
+                          ["--cw-draw-mid-y" as any]: `${letterDrawToken.drawMidY}px`,
+                          ["--cw-draw-start-rot" as any]: `${letterDrawToken.drawStartRotate}deg`,
+                          ["--cw-draw-mid-rot" as any]: `${letterDrawToken.drawMidRotate}deg`,
+                          ["--cw-draw-start-scale" as any]: String(letterDrawToken.drawStartScale),
+                          ["--cw-draw-mid-scale" as any]: String(letterDrawToken.drawMidScale),
+                        } as React.CSSProperties)
+                      : undefined;
                     const cellClasses = [
                       status.isJustSolved ? "crossword-cell-success" : "",
                       completionAnimating && !cell.isBlack ? "crossword-cell-finish" : "",
@@ -1677,12 +2116,10 @@ export default function CrosswordPuzzle({
                         style={{
                           width: cellSize,
                           height: cellSize,
-                          ...cellStyle(r, c, status),
-                          animation: status.isJustSolved
-                            ? `crossword-cell-success ${WORD_SOLVED_ANIMATION_MS}ms ease-out`
-                            : completionAnimating && !cell.isBlack
-                              ? "crossword-cell-finish 900ms ease-in-out 2"
-                              : undefined,
+                          ...cellStyle(r, c, status, palette),
+                          ...(status.isJustSolved
+                            ? ({ ["--cw-cell-delay" as any]: `${solvedDelayMs}ms` } as React.CSSProperties)
+                            : {}),
                           borderRadius: "3px",
                           display: "flex",
                           alignItems: "center",
@@ -1701,22 +2138,67 @@ export default function CrosswordPuzzle({
                                 display: cellSize < 9 ? "none" : undefined,
                                 fontSize: Math.max(5, Math.min(9, cellSize * 0.24)),
                                 lineHeight: 1,
-                                color: status.isSolved ? "#86efac" : "#94a3b8",
+                                color: palette.clueColor,
                                 fontWeight: 700,
+                                textShadow: "0 1px 0 rgba(255,255,255,0.35), 0 0 2px rgba(15,23,42,0.12)",
                                 pointerEvents: "none",
                               }}>
                                 {cell.clueNumber}
                               </span>
                             )}
-                            <span style={{
+                            <span
+                              key={`letter-${r}-${c}-${letterDrawTokenId ?? "static"}`}
+                              className={shouldAnimateLetterDraw ? "crossword-letter-draw" : undefined}
+                              style={{
+                              ...letterDrawVars,
                               fontSize: Math.min(Math.max(6, cellSize * 0.58), Math.max(4, cellSize - 1)),
                               fontWeight: 900,
-                              color: cellTextColor(r, c),
+                              fontFamily: "Caveat, var(--font-handwriting), 'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive",
+                              letterSpacing: "0.01em",
+                              color: palette.textColor,
                               lineHeight: 1,
+                              display: "inline-block",
                               transition: "color 180ms ease, text-shadow 180ms ease",
-                              textShadow: status.isSolved ? "0 0 10px rgba(74,222,128,0.38)" : "none",
-                            }}>
-                              {letters[r][c]}
+                              textShadow: status.isSolved
+                                ? "0 0 8px rgba(22,163,74,0.24), 0 1px 0 rgba(255,255,255,0.35)"
+                                : "0 1px 0 rgba(255,255,255,0.45), 0 0 2px rgba(15,23,42,0.16)",
+                            }}
+                            >
+                              {shouldRenderTegaki ? (
+                                <TegakiRenderer
+                                  as="span"
+                                  className="crossword-tegaki-letter"
+                                  font={tegakiCaveatBundle}
+                                  time={
+                                    shouldAnimateLetterDraw && letterDrawToken
+                                      ? {
+                                          mode: "uncontrolled",
+                                          duration: Math.max(0.28, letterDrawToken.durationMs / 1000),
+                                          loop: false,
+                                          playing: true,
+                                        }
+                                      : {
+                                          mode: "controlled",
+                                          value: 1,
+                                          unit: "progress",
+                                        }
+                                  }
+                                  quality={{
+                                    clipText: tegakiClipStrength,
+                                    smoothing: true,
+                                    segmentSize: tegakiSegmentSize,
+                                  }}
+                                  style={{
+                                    display: "inline-block",
+                                    fontSize: "1em",
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  {letters[r][c]}
+                                </TegakiRenderer>
+                              ) : (
+                                null
+                              )}
                             </span>
                           </>
                         )}

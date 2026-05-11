@@ -64,6 +64,7 @@
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "stripe": "^22.0.0",
+    "tegaki": "^0.17.1",
     "the-big-username-blacklist": "^1.0.0",
     "ts-jest": "^29.4.6",
     "uuid": "^13.0.0",

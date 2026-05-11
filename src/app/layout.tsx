@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Kalam } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/providers";
 import CookieBanner from "@/components/CookieBanner";
@@ -14,6 +14,14 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+
+const handwriting = Kalam({
+  variable: "--font-handwriting",
+  subsets: ["latin"],
+  weight: ["400", "700"],
   display: "swap",
   preload: false,
 });
@@ -135,7 +143,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${handwriting.variable} antialiased`}
       >
         <Providers>{children}</Providers>
         <CookieBanner />
