@@ -1233,9 +1233,9 @@ export default function CrosswordPuzzle({
 
   const cellTextColor = (row: number, col: number): string => {
     const { isSolved } = getCellStatus(row, col);
-    if (isSolved) return "#4ade80";
-    if (revealed.has(`${row},${col}`)) return "#FDE74C";
-    return "#f8fafc";
+    if (isSolved) return "#166534";
+    if (revealed.has(`${row},${col}`)) return "#92400e";
+    return "#111827";
   };
 
   // ── Cell colour ────────────────────────────────────────────────────────────
@@ -1249,8 +1249,8 @@ export default function CrosswordPuzzle({
     const isInWord = activeWordCells.has(key);
     const isRevealed = revealed.has(key);
 
-    let bg = "rgba(255,255,255,0.06)";
-    let borderColor = "rgba(255,255,255,0.15)";
+    let bg = "#ffffff";
+    let borderColor = "#cbd5e1";
 
     if (isInWord)     { bg = "rgba(99,140,248,0.25)";    borderColor = "#6366f1"; }
     if (isRevealed)   { bg = "rgba(253,231,76,0.18)";    borderColor = "#FDE74C"; }

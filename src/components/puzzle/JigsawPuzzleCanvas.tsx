@@ -297,6 +297,17 @@ interface JigsawPuzzleProps {
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const dist2 = (dx: number, dy: number) => Math.hypot(dx, dy);
 
+function formatElapsed(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds));
+  const hrs = Math.floor(safe / 3600);
+  const mins = Math.floor((safe % 3600) / 60);
+  const secs = safe % 60;
+  if (hrs > 0) {
+    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -418,6 +429,7 @@ export default function JigsawPuzzleSVGWithTray({
   const completedRef  = useRef(false);
   const [showCongrats, setShowCongrats]     = useState(false);
   const [awardedPoints, setAwardedPoints]   = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef  = useRef(Date.now());
   const storageKeyRef = useRef("");
 
@@ -636,6 +648,8 @@ export default function JigsawPuzzleSVGWithTray({
       finalPieces = initial;
     }
 
+    setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000)));
+
     completedRef.current = false;
     piecesRef.current = finalPieces;
     setPiecesState(finalPieces);
@@ -848,6 +862,17 @@ export default function JigsawPuzzleSVGWithTray({
   }, [pieces]);
   const isSolvedRef = useRef(false);
   isSolvedRef.current = isSolved;
+
+  // Live stopwatch (no countdown): tracks elapsed time until solve.
+  useEffect(() => {
+    if (isSolved || completedRef.current) return;
+    const tick = () => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000)));
+    };
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [isSolved, rows, cols, imageUrl, puzzleId]);
 
   // ── rAF render loop ──────────────────────────────────────────────────────
 
@@ -1377,7 +1402,8 @@ export default function JigsawPuzzleSVGWithTray({
     dirtyRef.current = true;
     dirtyRef.current = true;
     clearJigsawProgress(storageKeyRef.current);
-    const elapsed = Math.max(0, Math.round((Date.now() - startTimeRef.current) / 1000));
+    const elapsed = Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000));
+    setElapsedSeconds(elapsed);
 
     (async () => {
       try {
@@ -1516,6 +1542,7 @@ export default function JigsawPuzzleSVGWithTray({
         completedRef.current = false;
         startTimeRef.current = Date.now();
         savedElapsedRef.current = 0;
+        setElapsedSeconds(0);
         setPieces(fresh);
       },
       sendLooseToTray: () => sendLooseRef.current(),
@@ -1763,6 +1790,11 @@ export default function JigsawPuzzleSVGWithTray({
         {/* Stats */}
         <div style={{ position: "absolute", top: 10, left: 10, zIndex: 200,
                       display: "flex", gap: 8, alignItems: "center", pointerEvents: "none" }}>
+          <div style={{ background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.86)", fontSize: 11,
+                        fontWeight: 700, padding: "4px 10px", borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.12)", letterSpacing: "0.02em" }}>
+            ⏱ {formatElapsed(elapsedSeconds)}
+          </div>
           <div style={{ background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.8)", fontSize: 11,
                         fontWeight: 600, padding: "4px 10px", borderRadius: 12,
                         border: "1px solid rgba(255,255,255,0.1)", letterSpacing: "0.02em" }}>
