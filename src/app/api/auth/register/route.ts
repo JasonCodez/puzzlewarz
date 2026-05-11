@@ -158,8 +158,13 @@ export async function POST(request: NextRequest) {
       if (!verificationSent) {
         await prisma.verificationToken.deleteMany({ where: { identifier: email } });
         await prisma.user.delete({ where: { id: user.id } });
+
+        const registrationError = BETA_ONLY_MODE
+          ? BETA_REGISTER_ERROR
+          : 'Email verification is temporarily unavailable. Please try again later.';
+
         return NextResponse.json(
-          { error: 'Email verification is temporarily unavailable. Please try again later.' },
+          { error: registrationError },
           { status: 503 }
         );
       }

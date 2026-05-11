@@ -4,7 +4,7 @@ export const BETA_ACCESS_ERROR =
   "This private beta is limited to approved tester accounts.";
 
 export const BETA_REGISTER_ERROR =
-  "This private beta is invite-only. Use an approved tester email address to register.";
+  "Closed Testing in progress. If you would like to be a tester please email support@puzzlewarz.com.";
 
 const betaAllowlistEmails = new Set(
   (process.env.BETA_ALLOWLIST_EMAILS ?? "")
