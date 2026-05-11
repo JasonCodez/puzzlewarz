@@ -13,21 +13,6 @@ export interface DebriefScenario {
   questions: WitnessQuestion[];
 }
 
-export interface DeadDropClue {
-  clue: string;
-  hint: string; // shown after one wrong guess
-  answer: string; // lowercase, trimmed
-  displayAnswer: string; // how it appears in the reveal
-}
-
-export interface DeadDropChallenge {
-  id: string;
-  metaQuestion: string;
-  finalAnswer: string; // lowercase, space-separated
-  finalDisplay: string; // display-cased final phrase
-  clues: [DeadDropClue, DeadDropClue, DeadDropClue];
-}
-
 // ── Witness Scenarios ─────────────────────────────────────────────────────────
 
 export const DEBRIEF_SCENARIOS: DebriefScenario[] = [
@@ -251,102 +236,12 @@ A junior colleague reported hearing raised voices from the corridor at approxima
   },
 ];
 
-// ── Dead Drop Challenges ──────────────────────────────────────────────────────
-
-export const DEAD_DROP_CHALLENGES: DeadDropChallenge[] = [
-  {
-    id: "d-001",
-    metaQuestion: "Three clues. Three words. When all three click — you'll know what every investigation ultimately demands.",
-    finalAnswer: "cold hard facts",
-    finalDisplay: "COLD HARD FACTS",
-    clues: [
-      {
-        clue: "A trail gone this way when time runs out. Also how a case feels once hope has left.",
-        hint: "The opposite of warm.",
-        answer: "cold",
-        displayAnswer: "COLD",
-      },
-      {
-        clue: "What evidence must be before a jury can convict. The kind that cannot be argued with.",
-        hint: "The opposite of soft.",
-        answer: "hard",
-        displayAnswer: "HARD",
-      },
-      {
-        clue: "Detectives collect these, not opinions. They don't care what you believe.",
-        hint: "Plural. They are objective.",
-        answer: "facts",
-        displayAnswer: "FACTS",
-      },
-    ],
-  },
-  {
-    id: "d-002",
-    metaQuestion: "Three clues. Three words. Assemble what every guilty person eventually betrays.",
-    finalAnswer: "dead give away",
-    finalDisplay: "DEAD GIVEAWAY",
-    clues: [
-      {
-        clue: "No heartbeat. No movement. Also how a spy describes radio silence.",
-        hint: "The opposite of alive.",
-        answer: "dead",
-        displayAnswer: "DEAD",
-      },
-      {
-        clue: "What a nervous glance does. What a trembling hand does. What a liar always does.",
-        hint: "To reveal or betray.",
-        answer: "give",
-        displayAnswer: "GIVE",
-      },
-      {
-        clue: "What you take, not earn. Also what the thief dashed toward when the alarms triggered.",
-        hint: "To flee.",
-        answer: "away",
-        displayAnswer: "AWAY",
-      },
-    ],
-  },
-  {
-    id: "d-003",
-    metaQuestion: "Three clues. Three words. What every shadow hides — and every detective chases.",
-    finalAnswer: "the missing link",
-    finalDisplay: "THE MISSING LINK",
-    clues: [
-      {
-        clue: "Indefinite. The one that starts every fairy tale. The one before a revelation.",
-        hint: "An article. The definitive one.",
-        answer: "the",
-        displayAnswer: "THE",
-      },
-      {
-        clue: "What a person is when they've vanished. What a puzzle isn't when all pieces are present.",
-        hint: "Absent. Gone. Not found.",
-        answer: "missing",
-        displayAnswer: "MISSING",
-      },
-      {
-        clue: "A connection in a chain. What ties two suspects together. What forensics finally established.",
-        hint: "A single connection between two things.",
-        answer: "link",
-        displayAnswer: "LINK",
-      },
-    ],
-  },
-];
-
 // Rotate by day of year so the daily scenario changes
 export function getTodaysDebriefScenario(): DebriefScenario {
   const dayOfYear = Math.floor(
     (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
   );
   return DEBRIEF_SCENARIOS[dayOfYear % DEBRIEF_SCENARIOS.length];
-}
-
-export function getTodaysDeadDropDebrief(): DeadDropChallenge {
-  const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
-  );
-  return DEAD_DROP_CHALLENGES[dayOfYear % DEAD_DROP_CHALLENGES.length];
 }
 
 /** Deterministic daily shuffle — everyone gets the same 5-of-8 questions on a given day. */

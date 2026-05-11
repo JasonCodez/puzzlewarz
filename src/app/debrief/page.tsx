@@ -14,10 +14,7 @@ type Stage =
   | "witness-intro"
   | "witness-reading"
   | "witness-questions"
-  | "witness-results"
-  | "bridge"
-  | "dead-drop"
-  | "dead-drop-results";
+  | "witness-results";
 
 interface ScenarioData {
   id: string;
@@ -28,18 +25,9 @@ interface ScenarioData {
   questions: { question: string; options: string[] }[];
 }
 
-interface DeadDropData {
-  id: string;
-  metaQuestion: string;
-  clues: { clue: string; hint: string }[];
-}
-
 interface Stats {
   totalPlays: number;
   scoreDist: number[];
-  ddTotal: number;
-  ddSolved: number;
-  ddSolveRate: number;
 }
 
 interface SubmitResult {
@@ -53,14 +41,6 @@ interface SubmitResult {
     xp: number;
     granted: boolean;
   };
-}
-
-interface DeadDropResult {
-  clueResults: { correct: boolean; displayAnswer: string }[];
-  finalAnswer: string | null;
-  solved: boolean;
-  solveRate: number;
-  total: number;
 }
 
 // ── Timers ───────────────────────────────────────────────────────────────────
@@ -271,139 +251,6 @@ function OptionButton({
       </span>
       {label}
     </button>
-  );
-}
-
-function ClueInput({
-  clue,
-  hint,
-  index,
-  value,
-  onChange,
-  state,
-  onSubmit,
-  showHint,
-}: {
-  clue: string;
-  hint: string;
-  index: number;
-  value: string;
-  onChange: (v: string) => void;
-  state: "idle" | "correct" | "wrong";
-  onSubmit: () => void;
-  showHint: boolean;
-}) {
-  const border =
-    state === "correct" ? `${SUCCESS}70` : state === "wrong" ? `${DANGER}70` : BORDER;
-  const ORDINALS = ["ONE", "TWO", "THREE"];
-
-  return (
-    <div
-      style={{
-        ...cardStyle,
-        padding: "24px",
-        borderColor: border,
-        transition: "border-color 0.3s",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <span
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontWeight: 800,
-            flexShrink: 0,
-            backgroundColor: state === "correct" ? `${SUCCESS}25` : `${PURPLE}25`,
-            border: `1px solid ${state === "correct" ? `${SUCCESS}55` : `${PURPLE}55`}`,
-            color: state === "correct" ? SUCCESS : PURPLE_LIGHT,
-          }}
-        >
-          {state === "correct" ? "✓" : index + 1}
-        </span>
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: MUTED,
-          }}
-        >
-          Word {ORDINALS[index]}
-        </span>
-      </div>
-      <p style={{ color: TEXT, fontSize: 15, lineHeight: 1.6, marginBottom: showHint ? 8 : 18 }}>
-        {clue}
-      </p>
-      {showHint && (
-        <p style={{ color: GOLD, fontSize: 13, fontStyle: "italic", marginBottom: 14 }}>
-          Hint: {hint}
-        </p>
-      )}
-      {state !== "correct" ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSubmit();
-          }}
-          style={{ display: "flex", gap: 8 }}
-        >
-          <input
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Single word…"
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(255,255,255,0.05)",
-              border: `1px solid ${state === "wrong" ? DANGER + "70" : BORDER}`,
-              borderRadius: 8,
-              color: TEXT,
-              fontSize: 15,
-              padding: "10px 14px",
-              outline: "none",
-              fontFamily: "inherit",
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!value.trim()}
-            style={{
-              padding: "10px 18px",
-              borderRadius: 8,
-              fontWeight: 700,
-              fontSize: 13,
-              color: "#fff",
-              backgroundColor: PURPLE,
-              border: "none",
-              cursor: value.trim() ? "pointer" : "default",
-              opacity: value.trim() ? 1 : 0.4,
-            }}
-          >
-            Lock In
-          </button>
-        </form>
-      ) : (
-        <div
-          style={{
-            padding: "10px 16px",
-            borderRadius: 8,
-            backgroundColor: `${SUCCESS}15`,
-            border: `1px solid ${SUCCESS}40`,
-            color: SUCCESS,
-            fontWeight: 700,
-            fontSize: 15,
-            letterSpacing: "0.08em",
-          }}
-        >
-          ✓ Confirmed
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -874,7 +721,6 @@ export default function WitnessPage() {
   const router = useRouter();
   const [stage, setStage] = useState<Stage>("loading");
   const [scenario, setScenario] = useState<ScenarioData | null>(null);
-  const [deadDrop, setDeadDrop] = useState<DeadDropData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
 
   // Witness reading
@@ -904,13 +750,6 @@ export default function WitnessPage() {
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
   const [compareModalOpen, setCompareModalOpen] = useState(false);
 
-  // Dead drop
-  const [clueValues, setClueValues] = useState(["", "", ""]);
-  const [clueStates, setClueStates] = useState<("idle" | "correct" | "wrong")[]>(["idle", "idle", "idle"]);
-  const [hintShown, setHintShown] = useState([false, false, false]);
-  const [ddResult, setDdResult] = useState<DeadDropResult | null>(null);
-  const [ddSubmitting, setDdSubmitting] = useState(false);
-
   // Shared animation helper
   const [visible, setVisible] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -932,7 +771,6 @@ export default function WitnessPage() {
       .then((r) => r.json())
       .then((data) => {
         setScenario(data.scenario);
-        setDeadDrop(data.deadDrop);
         setStats(data.stats);
         // sessionStorage gate — prevent re-reading in the same browser session
         const gate = sessionStorage.getItem(`witness_${data.scenario.id}`) as "reading" | "complete" | null;
@@ -1097,72 +935,6 @@ export default function WitnessPage() {
     [answerLocked, answers, currentQ, scenario, fadeIn]
   );
 
-  // ── Dead-drop handlers ─────────────────────────────────────────────────
-
-  const handleClueSubmit = useCallback(
-    (index: number) => {
-      if (!deadDrop || clueStates[index] === "correct") return;
-      const val = clueValues[index].trim().toLowerCase();
-
-      // Validate server-side via the route (avoids leaking answers in GET response)
-      // For immediate UX we do client-side first then confirm server
-      fetch("/api/debrief/dead-drop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          challengeId: deadDrop.id,
-          clueAnswers: clueValues.map((v, i) =>
-            i === index ? val : clueStates[i] === "correct" ? "__already_correct__" : ""
-          ),
-        }),
-      })
-        .then((r) => r.json())
-        .then((data: DeadDropResult) => {
-          const thisResult = data.clueResults[index];
-          const newStates = [...clueStates] as ("idle" | "correct" | "wrong")[];
-          newStates[index] = thisResult.correct ? "correct" : "wrong";
-          setClueStates(newStates);
-
-          if (!thisResult.correct) {
-            // Show hint after first wrong
-            const newHints = [...hintShown];
-            newHints[index] = true;
-            setHintShown(newHints);
-          }
-
-          // Check if all three correct
-          if (newStates.every((s) => s === "correct")) {
-            setDdResult(data);
-            setTimeout(() => {
-              setStage("dead-drop-results");
-              fadeIn();
-            }, 800);
-          }
-        });
-    },
-    [clueStates, clueValues, deadDrop, hintShown, fadeIn]
-  );
-
-  const handleRevealAll = useCallback(() => {
-    if (!deadDrop) return;
-    setDdSubmitting(true);
-    fetch("/api/debrief/dead-drop", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        challengeId: deadDrop.id,
-        clueAnswers: ["__give_up__", "__give_up__", "__give_up__"],
-      }),
-    })
-      .then((r) => r.json())
-      .then((data: DeadDropResult) => {
-        setDdResult(data);
-        setStage("dead-drop-results");
-        fadeIn();
-      })
-      .finally(() => setDdSubmitting(false));
-  }, [deadDrop, fadeIn]);
-
   // ── Transitions ────────────────────────────────────────────────────────────
 
   const goReading = useCallback(() => {
@@ -1171,20 +943,6 @@ export default function WitnessPage() {
     fadeIn();
     setTimeout(startTimer, 400);
   }, [fadeIn, startTimer, scenario]);
-
-  const goBridge = useCallback(() => {
-    setStage("bridge");
-    fadeIn();
-  }, [fadeIn]);
-
-  const goDeadDrop = useCallback(() => {
-    setStage("dead-drop");
-    setClueValues(["", "", ""]);
-    setClueStates(["idle", "idle", "idle"]);
-    setHintShown([false, false, false]);
-    setDdResult(null);
-    fadeIn();
-  }, [fadeIn]);
 
   // ── Share ──────────────────────────────────────────────────────────────────
 
@@ -1240,7 +998,6 @@ export default function WitnessPage() {
         }
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { font-family: 'Inter', system-ui, sans-serif; }
-        .clue-input:focus { outline: none; box-shadow: 0 0 0 2px ${PURPLE}60; }
       `}</style>
 
       <Navbar />
@@ -1982,324 +1739,6 @@ export default function WitnessPage() {
                   </>
                 );
               })()}
-            </div>
-          )}
-
-          {/* ── BRIDGE ─────────────────────────────────────────────────── */}
-          {stage === "bridge" && (
-            <div style={{ ...fadeStyle, textAlign: "center" }}>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 16px",
-                  borderRadius: 999,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: TEAL,
-                  backgroundColor: `${TEAL}12`,
-                  border: `1px solid ${TEAL}35`,
-                  marginBottom: 32,
-                }}
-              >
-                <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: TEAL }} />
-                Stage 1 Complete
-              </div>
-
-              <h2 style={{ fontSize: "clamp(28px, 5vw, 48px)", fontWeight: 900, color: "#fff", marginBottom: 16, letterSpacing: "-0.02em", lineHeight: 1.1 }}>
-                Stage 2:<br />
-                <span style={{ color: GOLD }}>Dead Drop</span>
-              </h2>
-
-              <p style={{ color: MUTED, fontSize: 16, lineHeight: 1.7, maxWidth: 460, margin: "0 auto 16px" }}>
-                Three cryptic clues. Each resolves to a single word. When all three click — you&apos;ll know.
-              </p>
-              <p style={{ color: `${MUTED}70`, fontSize: 14, marginBottom: 40 }}>
-                Only {stats?.ddSolveRate ?? 31}% of players complete the drop.
-              </p>
-
-              {/* Morse-code style dots visual */}
-              <div style={{ display: "flex", justifyContent: "center", gap: 16, marginBottom: 48 }}>
-                {[1, 0, 1, 1, 0, 1].map((on, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      backgroundColor: on ? GOLD : "rgba(253,231,76,0.15)",
-                      boxShadow: on ? `0 0 8px ${GOLD}` : "none",
-                    }}
-                  />
-                ))}
-              </div>
-
-              <button
-                onClick={goDeadDrop}
-                style={{
-                  padding: "16px 40px",
-                  borderRadius: 10,
-                  fontWeight: 800,
-                  fontSize: 16,
-                  color: "#1a1200",
-                  backgroundColor: GOLD,
-                  border: "none",
-                  cursor: "pointer",
-                  boxShadow: `0 0 32px ${GOLD}45`,
-                  letterSpacing: "0.03em",
-                }}
-              >
-                Begin the Drop →
-              </button>
-            </div>
-          )}
-
-          {/* ── DEAD DROP ─────────────────────────────────────────────── */}
-          {stage === "dead-drop" && deadDrop && (
-            <div style={fadeStyle}>
-              <div style={{ textAlign: "center", marginBottom: 36 }}>
-                <Badge color={GOLD}>
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: GOLD }} />
-                  Stage 2 — Dead Drop
-                </Badge>
-                <h2 style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, color: "#fff", marginTop: 16, marginBottom: 12, letterSpacing: "-0.02em" }}>
-                  Decode the Message
-                </h2>
-                <p style={{ color: MUTED, fontSize: 14, lineHeight: 1.6, maxWidth: 440, margin: "0 auto" }}>
-                  {deadDrop.metaQuestion}
-                </p>
-              </div>
-
-              {/* Word assembly preview */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  justifyContent: "center",
-                  marginBottom: 32,
-                  flexWrap: "wrap",
-                }}
-              >
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    style={{
-                      minWidth: 100,
-                      padding: "10px 18px",
-                      borderRadius: 8,
-                      border: `1px solid ${clueStates[i] === "correct" ? `${SUCCESS}60` : BORDER}`,
-                      backgroundColor:
-                        clueStates[i] === "correct" ? `${SUCCESS}12` : "rgba(255,255,255,0.03)",
-                      textAlign: "center",
-                      fontSize: 18,
-                      fontWeight: 800,
-                      letterSpacing: "0.12em",
-                      color: clueStates[i] === "correct" ? SUCCESS : `${MUTED}50`,
-                      fontFamily: "'IBM Plex Mono', monospace",
-                      transition: "all 0.3s",
-                      animation:
-                        clueStates[i] === "correct" ? "word-appear 0.4s ease forwards" : "none",
-                    }}
-                  >
-                    {clueStates[i] === "correct"
-                      ? (clueValues[i] || "?").toUpperCase()
-                      : ["_ _ _ _", "_ _ _ _", "_ _ _ _"][i]}
-                  </div>
-                ))}
-              </div>
-
-              {/* Clue inputs */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
-                {deadDrop.clues.map((clue, i) => (
-                  <ClueInput
-                    key={i}
-                    clue={clue.clue}
-                    hint={clue.hint}
-                    index={i}
-                    value={clueValues[i]}
-                    onChange={(v) => {
-                      const newVals = [...clueValues];
-                      newVals[i] = v;
-                      setClueValues(newVals);
-                      // clear wrong state when they retype
-                      if (clueStates[i] === "wrong") {
-                        const newStates = [...clueStates] as typeof clueStates;
-                        newStates[i] = "idle";
-                        setClueStates(newStates);
-                      }
-                    }}
-                    state={clueStates[i]}
-                    onSubmit={() => handleClueSubmit(i)}
-                    showHint={hintShown[i]}
-                  />
-                ))}
-              </div>
-
-              <button
-                onClick={handleRevealAll}
-                disabled={ddSubmitting}
-                style={{
-                  width: "100%",
-                  padding: "11px",
-                  borderRadius: 8,
-                  color: MUTED,
-                  backgroundColor: "transparent",
-                  border: `1px solid ${BORDER}`,
-                  cursor: ddSubmitting ? "default" : "pointer",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  opacity: ddSubmitting ? 0.5 : 1,
-                }}
-              >
-                Reveal the answer (give up)
-              </button>
-            </div>
-          )}
-
-          {/* ── DEAD DROP RESULTS ─────────────────────────────────────── */}
-          {stage === "dead-drop-results" && ddResult && (
-            <div style={{ ...fadeStyle, textAlign: "center" }}>
-              {/* Stamp */}
-              <div
-                style={{
-                  display: "inline-block",
-                  padding: "10px 24px",
-                  border: `3px solid ${ddResult.solved ? SUCCESS : DANGER}`,
-                  borderRadius: 6,
-                  color: ddResult.solved ? SUCCESS : DANGER,
-                  fontSize: 20,
-                  fontWeight: 900,
-                  letterSpacing: "0.18em",
-                  textTransform: "uppercase",
-                  marginBottom: 32,
-                  animation: "stamp-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards",
-                  boxShadow: `0 0 24px ${ddResult.solved ? SUCCESS : DANGER}40`,
-                }}
-              >
-                {ddResult.solved ? "CLEARED" : "COMPROMISED"}
-              </div>
-
-              {/* Final phrase reveal */}
-              <div style={{ marginBottom: 36 }}>
-                <p style={{ color: MUTED, fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 }}>
-                  The message was
-                </p>
-                <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-                  {ddResult.clueResults.map((r, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        padding: "12px 20px",
-                        borderRadius: 10,
-                        border: `1px solid ${r.correct ? `${SUCCESS}55` : `${DANGER}55`}`,
-                        backgroundColor: r.correct ? `${SUCCESS}10` : `${DANGER}10`,
-                        color: r.correct ? SUCCESS : DANGER,
-                        fontSize: 20,
-                        fontWeight: 900,
-                        letterSpacing: "0.14em",
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        animation: `word-appear 0.4s ease ${i * 0.15}s both`,
-                      }}
-                    >
-                      {r.displayAnswer}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {ddResult.solved ? (
-                <p style={{ color: TEXT, fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-                  You cracked the drop.
-                </p>
-              ) : (
-                <p style={{ color: MUTED, fontSize: 15, marginBottom: 8 }}>
-                  The message is above. Study it.
-                </p>
-              )}
-              <p style={{ color: MUTED, fontSize: 13, marginBottom: 48 }}>
-                {ddResult.solved
-                  ? `Only ${ddResult.solveRate}% of players reach this. You're one of them.`
-                  : `${ddResult.solveRate}% of players decode it. Come back tomorrow.`}
-              </p>
-
-              {/* Final CTA */}
-              <div
-                style={{
-                  ...cardStyle,
-                  borderColor: `${PURPLE}35`,
-                  marginBottom: 16,
-                  textAlign: "left",
-                }}
-              >
-                <p style={{ color: TEXT, fontWeight: 700, fontSize: 16, marginBottom: 8 }}>
-                  {ddResult.solved
-                    ? "You passed both stages."
-                    : "The test is over — for today."}
-                </p>
-                <p style={{ color: MUTED, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-                  {ddResult.solved
-                    ? "Create a free account to save your score, track your streaks, and compete on the global leaderboard. New reports and drops every day."
-                    : "Create an account to get notified when tomorrow's drop goes live. New scenarios every day — sharper each time."}
-                </p>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <Link
-                    href="/auth/register"
-                    style={{
-                      flex: 1,
-                      padding: "14px 20px",
-                      borderRadius: 10,
-                      fontWeight: 800,
-                      fontSize: 14,
-                      color: "#fff",
-                      backgroundColor: PURPLE,
-                      textDecoration: "none",
-                      textAlign: "center",
-                      boxShadow: `0 0 24px ${PURPLE}40`,
-                    }}
-                  >
-                    Create Free Account →
-                  </Link>
-                  <Link
-                    href="/daily"
-                    style={{
-                      flex: 1,
-                      padding: "14px 20px",
-                      borderRadius: 10,
-                      fontWeight: 600,
-                      fontSize: 14,
-                      color: TEAL,
-                      border: `1px solid ${TEAL}40`,
-                      textDecoration: "none",
-                      textAlign: "center",
-                    }}
-                  >
-                    Try Daily Word
-                  </Link>
-                </div>
-              </div>
-
-              <button
-                onClick={() => {
-                  setStage("witness-intro");
-                  setAnswers([]);
-                  setCurrentQ(0);
-                  setSubmitResult(null);
-                  fadeIn();
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: MUTED,
-                  fontSize: 12,
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
-              >
-                Start again from Stage 1
-              </button>
             </div>
           )}
 

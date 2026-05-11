@@ -1864,7 +1864,7 @@ model FrequencySubmission {
   @@map("frequency_submissions")
 }
 
-// ── Witness + Dead Drop hook puzzle ───────────────────────────────────────────
+// ── Witness Debrief puzzle ───────────────────────────────────────────────────
 
 model WitnessResult {
   id         String   @id @default(cuid())
@@ -1876,16 +1876,6 @@ model WitnessResult {
   @@index([scenarioId])
   @@index([userId, scenarioId])
   @@map("witness_results")
-}
-
-model DeadDropResult {
-  id          String   @id @default(cuid())
-  challengeId String
-  solved      Boolean
-  createdAt   DateTime @default(now())
-
-  @@index([challengeId])
-  @@map("dead_drop_results")
 }
 
 // ── User Safety — Block & Report ─────────────────────────────────────────────

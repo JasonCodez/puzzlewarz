@@ -1,8 +1,8 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { getTodaysDebriefScenario, getTodaysDeadDropDebrief, getTodaysDebriefQuestionIndices, DebriefScenario, DeadDropChallenge } from "@/lib/debrief-content";
+import { getTodaysDebriefScenario, getTodaysDebriefQuestionIndices, DebriefScenario } from "@/lib/debrief-content";
 
 export const dynamic = 'force-dynamic';
 
@@ -33,21 +33,17 @@ export async function GET() {
     }
 
     let scenario: DebriefScenario;
-    let deadDrop: DeadDropChallenge;
 
     if (dbPuzzle?.data) {
       const d = dbPuzzle.data as any;
-      if (d?.debrief?.scenario && d?.debrief?.deadDrop) {
+      if (d?.debrief?.scenario) {
         scenario = d.debrief.scenario as DebriefScenario;
-        deadDrop = d.debrief.deadDrop as DeadDropChallenge;
       } else {
         // fallback to hardcoded
         scenario = getTodaysDebriefScenario();
-        deadDrop = getTodaysDeadDropDebrief();
       }
     } else {
       scenario = getTodaysDebriefScenario();
-      deadDrop = getTodaysDeadDropDebrief();
     }
 
     // Aggregate score distribution for this scenario
@@ -69,14 +65,6 @@ export async function GET() {
         }))
       : false;
 
-    // Dead drop solve rate
-    const ddTotal = await prisma.deadDropResult.count({
-      where: { challengeId: deadDrop.id },
-    });
-    const ddSolved = await prisma.deadDropResult.count({
-      where: { challengeId: deadDrop.id, solved: true },
-    });
-
     // Pick today's 5 questions from the pool (deterministic by day)
     const indices = getTodaysDebriefQuestionIndices(scenario, 5);
     const sanitizedQuestions = indices.map((i) => ({
@@ -93,21 +81,9 @@ export async function GET() {
         report: scenario.report,
         questions: sanitizedQuestions,
       },
-      deadDrop: {
-        id: deadDrop.id,
-        metaQuestion: deadDrop.metaQuestion,
-        clues: deadDrop.clues.map((c) => ({
-          clue: c.clue,
-          hint: c.hint,
-          // answer is NOT sent to client
-        })),
-      },
       stats: {
         totalPlays,
         scoreDist,
-        ddTotal,
-        ddSolved,
-        ddSolveRate: ddTotal > 0 ? Math.round((ddSolved / ddTotal) * 100) : 31,
       },
       completed,
     });

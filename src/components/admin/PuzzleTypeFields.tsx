@@ -2206,17 +2206,6 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
         { question: "Question 5?", options: ["Option A", "Option B", "Option C", "Option D"], correctIndex: 0 },
       ],
     },
-    deadDrop: {
-      id: "dd-001",
-      metaQuestion: "What is the meta answer?",
-      finalAnswer: "answer",
-      finalDisplay: "Answer",
-      clues: [
-        { clue: "First clue text", hint: "Hint after one wrong guess", answer: "clue1answer", displayAnswer: "Clue 1 Answer" },
-        { clue: "Second clue text", hint: "Hint after one wrong guess", answer: "clue2answer", displayAnswer: "Clue 2 Answer" },
-        { clue: "Third clue text", hint: "Hint after one wrong guess", answer: "clue3answer", displayAnswer: "Clue 3 Answer" },
-      ],
-    },
   };
 
   useEffect(() => {
@@ -2232,13 +2221,11 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
   const renderDebriefFields = () => (
     <div className="space-y-4">
       <div className="text-sm text-gray-300">
-        Configure <span className="font-semibold">The Debrief</span> daily puzzle. The player reads a classified report for 35 seconds, then answers 5 recall questions (18s each), then solves a Dead Drop cipher.
+        Configure <span className="font-semibold">The Debrief</span> daily puzzle. The player reads a classified report for 35 seconds, then answers 5 recall questions (18s each).
       </div>
       <div className="text-xs text-gray-500 space-y-1">
         <div><span className="text-yellow-400 font-semibold">scenario.id</span> — unique string ID for this scenario (e.g. <code>"debrief-001"</code>)</div>
         <div><span className="text-yellow-400 font-semibold">scenario.questions</span> — array of at least 5 questions; each has <code>question</code>, <code>options[4]</code>, <code>correctIndex</code></div>
-        <div><span className="text-yellow-400 font-semibold">deadDrop.clues</span> — exactly 3 clues; each has <code>clue</code>, <code>hint</code>, <code>answer</code> (lowercase), <code>displayAnswer</code></div>
-        <div><span className="text-yellow-400 font-semibold">deadDrop.finalAnswer</span> — lowercase space-separated phrase the player must deduce from clue answers</div>
       </div>
       <textarea
         value={debriefJson}
@@ -2247,8 +2234,8 @@ export default function PuzzleTypeFields({ puzzleType, puzzleData, onDataChange 
           setDebriefJson(next);
           try {
             const parsed = JSON.parse(next);
-            if (!parsed?.scenario?.id || !Array.isArray(parsed?.scenario?.questions) || !parsed?.deadDrop?.clues) {
-              setDebriefJsonError('JSON must include scenario.id, scenario.questions[], deadDrop.clues[], and deadDrop.finalAnswer.');
+            if (!parsed?.scenario?.id || !Array.isArray(parsed?.scenario?.questions) || parsed.scenario.questions.length < 5) {
+              setDebriefJsonError('JSON must include scenario.id and at least 5 scenario.questions entries.');
               return;
             }
             onDataChange('debrief', parsed);
