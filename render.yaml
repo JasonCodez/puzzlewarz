@@ -7,6 +7,11 @@ services:
     buildCommand: "npm ci && npm run build"
     startCommand: "npx prisma migrate deploy && npm run start"
     autoDeploy: true
+    envVars:
+      - key: BETA_ONLY_MODE
+        value: "true"
+      - key: BETA_ALLOWLIST_EMAILS
+        value: ""
 
 # ── Leaderboard settlement cron jobs ─────────────────────────────────────────
 # Uncomment when you upgrade to a paid Render plan (cron jobs require paid tier).

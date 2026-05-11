@@ -11,6 +11,8 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-false}
       RUN_SEED: ${RUN_SEED:-false}
+      BETA_ONLY_MODE: ${BETA_ONLY_MODE:-true}
+      BETA_ALLOWLIST_EMAILS: ${BETA_ALLOWLIST_EMAILS:-}
     depends_on:
       - db
 

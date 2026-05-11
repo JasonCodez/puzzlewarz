@@ -65,6 +65,8 @@ npm install
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/puzzlewarz"
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="replace-this-with-a-long-random-secret"
+BETA_ONLY_MODE="true"
+BETA_ALLOWLIST_EMAILS="tester1@example.com,tester2@example.com"
 ```
 
 3. Apply migrations and generate the Prisma client.
@@ -104,6 +106,8 @@ npm run dev
 | `NEXTAUTH_SECRET` | Secret used to sign auth tokens | Yes |
 | `NEXT_PUBLIC_SOCKET_URL` | Client socket endpoint | No |
 | `REQUIRE_EMAIL_VERIFICATION` | Force email verification outside production | No |
+| `BETA_ONLY_MODE` | Restrict access to approved beta testers only | No |
+| `BETA_ALLOWLIST_EMAILS` | Comma-separated tester emails granted beta access | No |
 
 Additional email, storage, and deployment variables may be required depending on which subsystems you enable.
 
