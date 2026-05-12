@@ -447,6 +447,8 @@ export default function JigsawPuzzleSVGWithTray({
   const [mobileHintDismissed, setMobileHintDismissed]   = useState(false);
   const [showPreview, setShowPreview]                   = useState(false);
   const controlsAssignedRef = useRef(false);
+  // Keeps non-fullscreen mobile height stable while browser bars show/hide during scroll.
+  const mobileViewportBaseRef = useRef<{ w: number; h: number } | null>(null);
 
   // Viewport: on mobile we zoom into the board area rather than showing the full scatter stage.
   // viewOff is the top-left corner of the viewport in stage logical coordinates.
@@ -713,13 +715,16 @@ export default function JigsawPuzzleSVGWithTray({
 
     const update = () => {
       const isMobile = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 720;
-      const availW = Math.min(wrapper.clientWidth || boardWidth, window.innerWidth);
+      const viewportW = Math.round(window.visualViewport?.width ?? window.innerWidth ?? window.screen.width ?? boardWidth);
+      const viewportH = Math.round(window.visualViewport?.height ?? window.innerHeight ?? window.screen.height ?? boardHeight);
+      const availW = Math.min(wrapper.clientWidth || boardWidth, viewportW);
       let physW: number, physH: number, s: number;
       let newStageW: number, newStageH: number;
 
       if (isFullscreen) {
-        const fsW = window.innerWidth  || window.screen.width;
-        const fsH = window.innerHeight || window.screen.height;
+        mobileViewportBaseRef.current = null;
+        const fsW = viewportW;
+        const fsH = viewportH;
         if (isMobile) {
           // Mobile fullscreen: fill the screen; board centred with ~12% margin per side
           s         = Math.min(fsW * 0.88 / boardWidth, fsH * 0.88 / boardHeight);
@@ -738,12 +743,21 @@ export default function JigsawPuzzleSVGWithTray({
       } else if (isMobile) {
         // Mobile non-fullscreen: canvas fills available width × a large portion of screen height.
         // Stage adapts to those exact CSS dimensions so pieces scatter over the full visible area.
-        const isLandscape = window.innerWidth > window.innerHeight;
+        const base = mobileViewportBaseRef.current;
+        if (!base || Math.abs(viewportW - base.w) > 24) {
+          mobileViewportBaseRef.current = { w: viewportW, h: viewportH };
+        } else if (viewportH > base.h + 140) {
+          // Large jumps are likely orientation/layout changes, not URL bar animation.
+          base.h = viewportH;
+        }
+
+        const stableViewportH = mobileViewportBaseRef.current?.h ?? viewportH;
+        const isLandscape = viewportW > stableViewportH;
         const containerMaxH = wrapper.style.maxHeight ? parseInt(wrapper.style.maxHeight) : Infinity;
         const availH      = Math.min(
           isLandscape
-            ? Math.max(180, window.innerHeight - 90)  // landscape — leave room for tray + nav
-            : window.innerHeight * 0.78,              // portrait  — 78 % of screen height
+            ? Math.max(180, stableViewportH - 90)  // landscape — leave room for tray + nav
+            : stableViewportH * 0.78,              // portrait  — 78 % of screen height
           containerMaxH
         );
         s         = Math.min(availW * 0.88 / boardWidth, availH * 0.88 / boardHeight);
@@ -752,6 +766,7 @@ export default function JigsawPuzzleSVGWithTray({
         newStageW = availW / s;
         newStageH = availH / s;
       } else {
+        mobileViewportBaseRef.current = null;
         // Desktop non-fullscreen: fixed STAGE_SCALE, letterboxed into wrapper
         const stageAspect = boardWidth / boardHeight; // STAGE_SCALE cancels out
         const availH = Math.min(window.innerHeight * 0.62, Math.max(320, availW / stageAspect));
@@ -830,11 +845,20 @@ export default function JigsawPuzzleSVGWithTray({
     const ro = new ResizeObserver(update);
     ro.observe(wrapper);
     const onOrient = () => setTimeout(update, 150);
-    window.addEventListener("resize", update);
+    const onResize = () => {
+      const mobileNow = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 720;
+      if (mobileNow && !isFullscreen) {
+        const base = mobileViewportBaseRef.current;
+        const nextW = Math.round(window.visualViewport?.width ?? window.innerWidth ?? window.screen.width ?? boardWidth);
+        if (base && Math.abs(nextW - base.w) < 2) return;
+      }
+      update();
+    };
+    window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onOrient);
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", update);
+      window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onOrient);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

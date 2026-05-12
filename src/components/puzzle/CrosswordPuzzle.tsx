@@ -1391,12 +1391,21 @@ export default function CrosswordPuzzle({
     [initialGrid]
   );
 
+  const focusKeyboardInput = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus({ preventScroll: true });
+  }, []);
+
   // ── Cell click ─────────────────────────────────────────────────────────────
   const handleCellClick = useCallback(
     (row: number, col: number) => {
       if (gameStatus !== "playing") return;
       const cell = initialGrid[row]?.[col];
       if (!cell || cell.isBlack) return;
+
+      // Keep focus tied to direct touch/click so mobile virtual keyboards open reliably.
+      focusKeyboardInput();
 
       const hasAcross = !!cell.acrossNumber;
       const hasDown = !!cell.downNumber;
@@ -1421,9 +1430,64 @@ export default function CrosswordPuzzle({
           setActiveClue({ direction: "down", number: cell.downNumber! });
         }
       }
-      inputRef.current?.focus();
     },
-    [gameStatus, initialGrid, cursorCell, activeClue]
+    [gameStatus, initialGrid, cursorCell, activeClue, focusKeyboardInput]
+  );
+
+  const handleDeleteAtCursor = useCallback(() => {
+    if (gameStatus !== "playing" || !activeClue || !cursorCell) return;
+
+    const { row, col } = cursorCell;
+    const currentLocked = isLockedCell(row, col);
+    if (letters[row][col] && !currentLocked) {
+      // erase current
+      setLetters((prev) => {
+        const next = prev.map((r) => [...r]);
+        next[row][col] = "";
+        return next;
+      });
+      return;
+    }
+
+    // move back and erase
+    retreatCursor(row, col, activeClue.direction);
+    const pr = activeClue.direction === "across" ? row : row - 1;
+    const pc = activeClue.direction === "across" ? col - 1 : col;
+    if (pr >= 0 && pc >= 0 && !initialGrid[pr]?.[col === 0 ? col : pc]?.isBlack) {
+      const tr = activeClue.direction === "across" ? row : pr;
+      const tc = activeClue.direction === "across" ? pc : col;
+      if (isLockedCell(tr, tc)) return;
+      setLetters((prev) => {
+        const next = prev.map((r) => [...r]);
+        if (tr >= 0 && tc >= 0) next[tr][tc] = "";
+        return next;
+      });
+    }
+  }, [gameStatus, activeClue, cursorCell, isLockedCell, letters, retreatCursor, initialGrid]);
+
+  const handleLetterEntry = useCallback(
+    (rawKey: string) => {
+      if (gameStatus !== "playing" || !activeClue || !cursorCell) return;
+
+      const { row, col } = cursorCell;
+      const key = rawKey.toUpperCase();
+      if (!/^[A-Z]$/.test(key)) return;
+
+      const currentLocked = isLockedCell(row, col);
+      if (currentLocked) {
+        advanceCursor(row, col, activeClue.direction);
+        return;
+      }
+
+      setLetters((prev) => {
+        const next = prev.map((r) => [...r]);
+        next[row][col] = key;
+        return next;
+      });
+      triggerLetterDrawAnimation(row, col);
+      advanceCursor(row, col, activeClue.direction);
+    },
+    [gameStatus, activeClue, cursorCell, isLockedCell, advanceCursor, triggerLetterDrawAnimation]
   );
 
   // ── Keyboard handling ─────────────────────────────────────────────────────
@@ -1432,7 +1496,6 @@ export default function CrosswordPuzzle({
       if (gameStatus !== "playing" || !activeClue || !cursorCell) return;
       const { row, col } = cursorCell;
       const key = e.key.toUpperCase();
-      const currentLocked = isLockedCell(row, col);
 
       if (e.key === "Tab" || e.key === "Enter") {
         e.preventDefault();
@@ -1442,29 +1505,7 @@ export default function CrosswordPuzzle({
 
       if (e.key === "Backspace") {
         e.preventDefault();
-        if (letters[row][col] && !currentLocked) {
-          // erase current
-          setLetters((prev) => {
-            const next = prev.map((r) => [...r]);
-            next[row][col] = "";
-            return next;
-          });
-        } else {
-          // move back and erase
-          retreatCursor(row, col, activeClue.direction);
-          const pr = activeClue.direction === "across" ? row : row - 1;
-          const pc = activeClue.direction === "across" ? col - 1 : col;
-          if (pr >= 0 && pc >= 0 && !initialGrid[pr]?.[col === 0 ? col : pc]?.isBlack) {
-            const tr = activeClue.direction === "across" ? row : pr;
-            const tc = activeClue.direction === "across" ? pc : col;
-            if (isLockedCell(tr, tc)) return;
-            setLetters((prev) => {
-              const next = prev.map((r) => [...r]);
-              if (tr >= 0 && tc >= 0) next[tr][tc] = "";
-              return next;
-            });
-          }
-        }
+        handleDeleteAtCursor();
         return;
       }
 
@@ -1476,20 +1517,35 @@ export default function CrosswordPuzzle({
 
       if (/^[A-Z]$/.test(key)) {
         e.preventDefault();
-        if (currentLocked) {
-          advanceCursor(row, col, activeClue.direction);
-          return;
-        }
-        setLetters((prev) => {
-          const next = prev.map((r) => [...r]);
-          next[row][col] = key;
-          return next;
-        });
-        triggerLetterDrawAnimation(row, col);
-        advanceCursor(row, col, activeClue.direction);
+        handleLetterEntry(key);
       }
     },
-    [gameStatus, activeClue, cursorCell, letters, initialGrid, goToNextClue, retreatCursor, advanceCursor, isLockedCell, triggerLetterDrawAnimation]
+    [gameStatus, activeClue, cursorCell, initialGrid, goToNextClue, retreatCursor, advanceCursor, handleDeleteAtCursor, handleLetterEntry]
+  );
+
+  const handleHiddenInputBeforeInput = useCallback(
+    (e: React.FormEvent<HTMLInputElement>) => {
+      const native = e.nativeEvent as InputEvent;
+      if (native.inputType === "deleteContentBackward") {
+        e.preventDefault();
+        handleDeleteAtCursor();
+        e.currentTarget.value = "";
+      }
+    },
+    [handleDeleteAtCursor]
+  );
+
+  const handleHiddenInputInput = useCallback(
+    (e: React.FormEvent<HTMLInputElement>) => {
+      const raw = e.currentTarget.value ?? "";
+      if (!raw) return;
+      e.currentTarget.value = "";
+
+      const nextLetter = raw.toUpperCase().replace(/[^A-Z]/g, "").slice(-1);
+      if (!nextLetter) return;
+      handleLetterEntry(nextLetter);
+    },
+    [handleLetterEntry]
   );
 
   // ── Hint: reveal a letter in the current cell ──────────────────────────────
@@ -1545,9 +1601,9 @@ export default function CrosswordPuzzle({
           setCursorCell(firstEmpty ?? cells[0] ?? { row: clue.row, col: clue.col });
         }
       }
-      inputRef.current?.focus();
+      focusKeyboardInput();
     },
-    [gameStatus, data, initialGrid, letters]
+    [gameStatus, data, initialGrid, letters, focusKeyboardInput]
   );
 
   const getCellStatus = (row: number, col: number): { isSolved: boolean; isJustSolved: boolean } => {
@@ -2077,7 +2133,8 @@ export default function CrosswordPuzzle({
                   maxWidth: "100%",
                   overflow: "hidden",
                 }}
-                onClick={() => inputRef.current?.focus()}
+                onClick={focusKeyboardInput}
+                onTouchStart={focusKeyboardInput}
               >
                 {initialGrid.map((rowArr, r) =>
                   rowArr.map((cell, c) => {
@@ -2212,9 +2269,17 @@ export default function CrosswordPuzzle({
               {/* Hidden input to capture keyboard on mobile */}
               <input
                 ref={inputRef}
-                className="sr-only"
-                readOnly
+                type="text"
+                className="absolute w-px h-px opacity-0 pointer-events-none"
                 onKeyDown={handleKeyDown}
+                onBeforeInput={handleHiddenInputBeforeInput}
+                onInput={handleHiddenInputInput}
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                enterKeyHint="next"
                 aria-label="Crossword input"
               />
 
